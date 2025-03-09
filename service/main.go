@@ -4,12 +4,15 @@ import (
 	"embed"
 	"fmt"
 	"io"
+
+	grpcviewv1 "github.com/ramilmsh/grpcview/service/proto/v1"
 )
 
 //go:embed index.html
 var frontend embed.FS
 
 func main() {
+	fmt.Println(grpcviewv1.Hello{})
 	f, err := frontend.Open("index.html")
 	if err != nil {
 		panic(err)
@@ -19,5 +22,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(data))
+	fmt.Println(len(data))
 }

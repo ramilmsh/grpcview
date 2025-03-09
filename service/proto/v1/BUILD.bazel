@@ -1,0 +1,28 @@
+load("@aspect_rules_ts//ts:proto.bzl", "ts_proto_library")
+load("@rules_go//proto:def.bzl", "go_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+
+proto_library(
+    name = "grpcviewv1_proto",
+    srcs = ["service.proto"],
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "grpcviewv1_go_proto",
+    compilers = [
+        "@rules_go//proto:go_proto",
+        "//tools:connect_go_proto_compiler",
+    ],
+    importpath = "github.com/ramilmsh/grpcview/service/proto/v1",
+    proto = ":grpcviewv1_proto",
+    visibility = ["//visibility:public"],
+)
+
+ts_proto_library(
+    name = "grpcviewv1_ts_proto",
+    node_modules = "//:node_modules",
+    proto = ":grpcviewv1_proto",
+    proto_srcs = ["service.proto"],
+    visibility = ["//frontend:__pkg__"],
+)

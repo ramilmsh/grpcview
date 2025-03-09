@@ -13,6 +13,7 @@ go_library(
     embedsrcs = ["index.html"],
     importpath = "github.com/ramilmsh/grpcview/service",
     visibility = ["//visibility:private"],
+    deps = ["//service/proto/v1:grpcviewv1_go_proto"],
 )
 
 go_binary(

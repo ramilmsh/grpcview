@@ -2,5 +2,10 @@
     "name": "grpcview",
     "devDependencies": {
         "vite": "^6.2.1"
+    },
+    "dependencies": {
+        "@bufbuild/protobuf": "^2.2.3",
+        "@bufbuild/protoc-gen-es": "^2.2.3",
+        "@connectrpc/protoc-gen-connect-es": "^1.6.1"
     }
 }

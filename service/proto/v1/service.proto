@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package grpcview.v1;
+
+option go_package = "github.com/ramilmsh/grpcview/service/proto/v1;grpcviewv1";
+
+message Hello {
+    string a = 1;
+}
+
+service Service {
+    rpc SayHello(Hello) returns (Hello);
+}
