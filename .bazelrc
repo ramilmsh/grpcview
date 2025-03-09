@@ -1,1 +1,2 @@
 common --incompatible_strict_action_env
+common --enable_platform_specific_config

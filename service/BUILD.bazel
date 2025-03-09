@@ -1,23 +1,9 @@
-load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
-
-copy_file(
-    name = "frontend",
-    src = "//frontend",
-    out = "index.html",
-)
+load("@rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "service_lib",
-    srcs = ["main.go"],
-    embedsrcs = ["index.html"],
-    importpath = "github.com/ramilmsh/grpcview/service",
-    visibility = ["//visibility:private"],
-    deps = ["//service/proto/v1:grpcviewv1_go_proto"],
-)
-
-go_binary(
     name = "service",
-    embed = [":service_lib"],
+    srcs = ["service.go"],
+    importpath = "github.com/ramilmsh/grpcview/service",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_mattn_go_sqlite3//:go-sqlite3"],
 )
