@@ -1,0 +1,53 @@
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//:vite/package_json.bzl", vite_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+filegroup(
+    name = "srcs",
+    srcs = glob(
+        [
+            "src/**/*",
+            "public/**/*",
+        ],
+        allow_empty = True,
+    ),
+)
+
+BUILD_DEPS = [":node_modules/" + d for d in [
+    "vite",
+    "@sveltejs/vite-plugin-svelte",
+    "@tsconfig/svelte",
+    "svelte",
+    "svelte-check",
+    "typescript",
+    "vite-plugin-singlefile",
+]]
+
+DATA = [
+    "index.html",
+    "package.json",
+    "svelte.config.js",
+    "tsconfig.json",
+    "vite.config.ts",
+    ":srcs",
+] + BUILD_DEPS
+
+vite_bin.vite(
+    name = "frontend",
+    srcs = DATA,
+    outs = [
+        "dist/index.html",
+    ],
+    args = ["build"],
+    chdir = package_name(),
+    visibility = ["//visibility:public"],
+)
+
+vite_bin.vite_binary(
+    name = "serve",
+    args = ["serve"],
+    chdir = package_name(),
+    data = DATA,
+    tags = ["ibazel_notify_changes"],
+)

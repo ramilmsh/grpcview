@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "inspector",
+    srcs = ["inspector.go"],
+    importpath = "github.com/ramilmsh/grpcview/inspector",
+    visibility = ["//visibility:public"],
+    deps = ["@org_golang_google_protobuf//types/descriptorpb"],
+)
