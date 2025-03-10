@@ -1,6 +1,6 @@
 import { mount } from "svelte";
 import App from "./App.svelte";
-import "@frontend/editor/workers";
+import "@frontend/components/editor/workers";
 
 const app = mount(App, {
   target: document.getElementById("app")!,

@@ -21,17 +21,12 @@ BUILD_DEPS = [":node_modules/" + d for d in [
     "@sveltejs/vite-plugin-svelte",
     "@tsconfig/svelte",
     "svelte-check",
-    "tailwind-merge",
-    "tailwind-variants",
-    "tailwindcss-animate",
-    "@tailwindcss/vite",
     "clsx",
     "typescript",
     "@bufbuild/protobuf",
     "@connectrpc/connect",
     "@connectrpc/connect-web",
     "monaco-editor",
-    "tailwindcss",
 ]]
 
 DATA = [
@@ -40,7 +35,6 @@ DATA = [
     "tsconfig.json",
     "svelte.config.js",
     "vite.config.ts",
-    "tailwind.config.ts",
     ":srcs",
     "//service/proto/v1:grpcviewv1_ts_proto",
 ] + BUILD_DEPS
