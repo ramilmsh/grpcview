@@ -1,0 +1,782 @@
+{
+    "$ref": "#/$defs/proto3_unittest.TestHasbits",
+    "$defs": {
+        "proto2_unittest_import.ImportMessage": {
+            "$id": "proto2_unittest_import.ImportMessage",
+            "properties": {
+                "d": {
+                    "type": "integer"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto2_unittest_import.PublicImportMessage": {
+            "$id": "proto2_unittest_import.PublicImportMessage",
+            "properties": {
+                "e": {
+                    "type": "integer"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.ForeignMessage": {
+            "$id": "proto3_unittest.ForeignMessage",
+            "properties": {
+                "c": {
+                    "type": "integer"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.NestedTestAllTypes": {
+            "$id": "proto3_unittest.NestedTestAllTypes",
+            "properties": {
+                "child": {
+                    "$ref": "#/$defs/proto3_unittest.NestedTestAllTypes"
+                },
+                "payload": {
+                    "$ref": "#/$defs/proto3_unittest.TestAllTypes"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestAllTypes": {
+            "$id": "proto3_unittest.TestAllTypes",
+            "properties": {
+                "optionalInt32": {
+                    "type": "integer"
+                },
+                "optionalInt64": {
+                    "type": "integer"
+                },
+                "optionalUint32": {
+                    "type": "integer"
+                },
+                "optionalUint64": {
+                    "type": "integer"
+                },
+                "optionalSint32": {
+                    "type": "integer"
+                },
+                "optionalSint64": {
+                    "type": "integer"
+                },
+                "optionalFixed32": {
+                    "type": "number"
+                },
+                "optionalFixed64": {
+                    "type": "number"
+                },
+                "optionalSfixed32": {
+                    "type": "number"
+                },
+                "optionalSfixed64": {
+                    "type": "number"
+                },
+                "optionalFloat": {
+                    "type": "number"
+                },
+                "optionalDouble": {
+                    "type": "number"
+                },
+                "optionalBool": {
+                    "type": "boolean"
+                },
+                "optionalString": {
+                    "type": "string"
+                },
+                "optionalBytes": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                },
+                "optionalNestedMessage": {
+                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                },
+                "optionalForeignMessage": {
+                    "$ref": "#/$defs/proto3_unittest.ForeignMessage"
+                },
+                "optionalImportMessage": {
+                    "$ref": "#/$defs/proto2_unittest_import.ImportMessage"
+                },
+                "optionalNestedEnum": {
+                    "enum": [
+                        "ZERO",
+                        "FOO",
+                        "BAR",
+                        "BAZ",
+                        "NEG"
+                    ]
+                },
+                "optionalForeignEnum": {
+                    "enum": [
+                        "FOREIGN_ZERO",
+                        "FOREIGN_FOO",
+                        "FOREIGN_BAR",
+                        "FOREIGN_BAZ",
+                        "FOREIGN_LARGE"
+                    ]
+                },
+                "optionalStringPiece": {
+                    "type": "string"
+                },
+                "optionalCord": {
+                    "type": "string"
+                },
+                "optionalPublicImportMessage": {
+                    "$ref": "#/$defs/proto2_unittest_import.PublicImportMessage"
+                },
+                "optionalLazyMessage": {
+                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                },
+                "optionalUnverifiedLazyMessage": {
+                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                },
+                "optionalLazyImportMessage": {
+                    "$ref": "#/$defs/proto2_unittest_import.ImportMessage"
+                },
+                "repeatedInt32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedInt64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedUint32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedUint64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedSint32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedSint64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedFixed32": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedFixed64": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedSfixed32": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedSfixed64": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedFloat": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedDouble": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedBool": {
+                    "items": {
+                        "type": "boolean"
+                    },
+                    "type": "array"
+                },
+                "repeatedString": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "repeatedBytes": {
+                    "items": {
+                        "type": "string",
+                        "contentEncoding": "base64"
+                    },
+                    "type": "array"
+                },
+                "repeatedNestedMessage": {
+                    "items": {
+                        "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                    },
+                    "type": "array"
+                },
+                "repeatedForeignMessage": {
+                    "items": {
+                        "$ref": "#/$defs/proto3_unittest.ForeignMessage"
+                    },
+                    "type": "array"
+                },
+                "repeatedImportMessage": {
+                    "items": {
+                        "$ref": "#/$defs/proto2_unittest_import.ImportMessage"
+                    },
+                    "type": "array"
+                },
+                "repeatedNestedEnum": {
+                    "items": {
+                        "enum": [
+                            "ZERO",
+                            "FOO",
+                            "BAR",
+                            "BAZ",
+                            "NEG"
+                        ]
+                    },
+                    "type": "array"
+                },
+                "repeatedForeignEnum": {
+                    "items": {
+                        "enum": [
+                            "FOREIGN_ZERO",
+                            "FOREIGN_FOO",
+                            "FOREIGN_BAR",
+                            "FOREIGN_BAZ",
+                            "FOREIGN_LARGE"
+                        ]
+                    },
+                    "type": "array"
+                },
+                "repeatedStringPiece": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "repeatedCord": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "repeatedLazyMessage": {
+                    "items": {
+                        "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                    },
+                    "type": "array"
+                },
+                "oneofUint32": {
+                    "type": "integer"
+                },
+                "oneofNestedMessage": {
+                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                },
+                "oneofString": {
+                    "type": "string"
+                },
+                "oneofBytes": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestAllTypes.NestedMessage": {
+            "$id": "proto3_unittest.TestAllTypes.NestedMessage",
+            "properties": {
+                "bb": {
+                    "type": "integer"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestEmptyMessage": {
+            "$id": "proto3_unittest.TestEmptyMessage",
+            "properties": {
+                "a": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "type": "object"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestEmptyMessage.AEntry": {
+            "$id": "proto3_unittest.TestEmptyMessage.AEntry",
+            "properties": {
+                "key": {
+                    "type": "integer"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestHasbits": {
+            "$id": "proto3_unittest.TestHasbits",
+            "properties": {
+                "b1": {
+                    "type": "boolean"
+                },
+                "b2": {
+                    "type": "boolean"
+                },
+                "b3": {
+                    "type": "boolean"
+                },
+                "b4": {
+                    "type": "boolean"
+                },
+                "b5": {
+                    "type": "boolean"
+                },
+                "b6": {
+                    "type": "boolean"
+                },
+                "b7": {
+                    "type": "boolean"
+                },
+                "b8": {
+                    "type": "boolean"
+                },
+                "b9": {
+                    "type": "boolean"
+                },
+                "b10": {
+                    "type": "boolean"
+                },
+                "b11": {
+                    "type": "boolean"
+                },
+                "b12": {
+                    "type": "boolean"
+                },
+                "b13": {
+                    "type": "boolean"
+                },
+                "b14": {
+                    "type": "boolean"
+                },
+                "b15": {
+                    "type": "boolean"
+                },
+                "b16": {
+                    "type": "boolean"
+                },
+                "b17": {
+                    "type": "boolean"
+                },
+                "b18": {
+                    "type": "boolean"
+                },
+                "b19": {
+                    "type": "boolean"
+                },
+                "b20": {
+                    "type": "boolean"
+                },
+                "b21": {
+                    "type": "boolean"
+                },
+                "b22": {
+                    "type": "boolean"
+                },
+                "b23": {
+                    "type": "boolean"
+                },
+                "b24": {
+                    "type": "boolean"
+                },
+                "b25": {
+                    "type": "boolean"
+                },
+                "b26": {
+                    "type": "boolean"
+                },
+                "b27": {
+                    "type": "boolean"
+                },
+                "b28": {
+                    "type": "boolean"
+                },
+                "b29": {
+                    "type": "boolean"
+                },
+                "b30": {
+                    "type": "boolean"
+                },
+                "b31": {
+                    "type": "boolean"
+                },
+                "b32": {
+                    "type": "boolean"
+                },
+                "b33": {
+                    "type": "boolean"
+                },
+                "b34": {
+                    "type": "boolean"
+                },
+                "b35": {
+                    "type": "boolean"
+                },
+                "b36": {
+                    "type": "boolean"
+                },
+                "b37": {
+                    "type": "boolean"
+                },
+                "b38": {
+                    "type": "boolean"
+                },
+                "b39": {
+                    "type": "boolean"
+                },
+                "b40": {
+                    "type": "boolean"
+                },
+                "b41": {
+                    "type": "boolean"
+                },
+                "b42": {
+                    "type": "boolean"
+                },
+                "b43": {
+                    "type": "boolean"
+                },
+                "b44": {
+                    "type": "boolean"
+                },
+                "b45": {
+                    "type": "boolean"
+                },
+                "b46": {
+                    "type": "boolean"
+                },
+                "b47": {
+                    "type": "boolean"
+                },
+                "b48": {
+                    "type": "boolean"
+                },
+                "b49": {
+                    "type": "boolean"
+                },
+                "b50": {
+                    "type": "boolean"
+                },
+                "b51": {
+                    "type": "boolean"
+                },
+                "b52": {
+                    "type": "boolean"
+                },
+                "b53": {
+                    "type": "boolean"
+                },
+                "b54": {
+                    "type": "boolean"
+                },
+                "b55": {
+                    "type": "boolean"
+                },
+                "b56": {
+                    "type": "boolean"
+                },
+                "b57": {
+                    "type": "boolean"
+                },
+                "b58": {
+                    "type": "boolean"
+                },
+                "b59": {
+                    "type": "boolean"
+                },
+                "b60": {
+                    "type": "boolean"
+                },
+                "b61": {
+                    "type": "boolean"
+                },
+                "b62": {
+                    "type": "boolean"
+                },
+                "b63": {
+                    "type": "boolean"
+                },
+                "b64": {
+                    "type": "boolean"
+                },
+                "b65": {
+                    "type": "boolean"
+                },
+                "b66": {
+                    "type": "boolean"
+                },
+                "b67": {
+                    "type": "boolean"
+                },
+                "b68": {
+                    "type": "boolean"
+                },
+                "b69": {
+                    "type": "boolean"
+                },
+                "child": {
+                    "$ref": "#/$defs/proto3_unittest.TestAllTypes"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestMessageWithDummy": {
+            "$id": "proto3_unittest.TestMessageWithDummy",
+            "properties": {
+                "dummy": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestOneof2": {
+            "$id": "proto3_unittest.TestOneof2",
+            "properties": {
+                "fooEnum": {
+                    "enum": [
+                        "UNKNOWN",
+                        "FOO",
+                        "BAR",
+                        "BAZ"
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestPackedTypes": {
+            "$id": "proto3_unittest.TestPackedTypes",
+            "properties": {
+                "packedInt32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "packedInt64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "packedUint32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "packedUint64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "packedSint32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "packedSint64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "packedFixed32": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "packedFixed64": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "packedSfixed32": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "packedSfixed64": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "packedFloat": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "packedDouble": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "packedBool": {
+                    "items": {
+                        "type": "boolean"
+                    },
+                    "type": "array"
+                },
+                "packedEnum": {
+                    "items": {
+                        "enum": [
+                            "FOREIGN_ZERO",
+                            "FOREIGN_FOO",
+                            "FOREIGN_BAR",
+                            "FOREIGN_BAZ",
+                            "FOREIGN_LARGE"
+                        ]
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "proto3_unittest.TestUnpackedTypes": {
+            "$id": "proto3_unittest.TestUnpackedTypes",
+            "properties": {
+                "repeatedInt32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedInt64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedUint32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedUint64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedSint32": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedSint64": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "repeatedFixed32": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedFixed64": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedSfixed32": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedSfixed64": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedFloat": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedDouble": {
+                    "items": {
+                        "type": "number"
+                    },
+                    "type": "array"
+                },
+                "repeatedBool": {
+                    "items": {
+                        "type": "boolean"
+                    },
+                    "type": "array"
+                },
+                "repeatedNestedEnum": {
+                    "items": {
+                        "enum": [
+                            "ZERO",
+                            "FOO",
+                            "BAR",
+                            "BAZ",
+                            "NEG"
+                        ]
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        }
+    }
+}

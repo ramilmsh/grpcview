@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ramilmsh/grpcview/inspector"
 	"github.com/ramilmsh/grpcview/service"
 	grpcviewv1 "github.com/ramilmsh/grpcview/service/proto/v1"
 )
@@ -13,6 +14,7 @@ import (
 var frontend embed.FS
 
 func main() {
+	inspector.Load(nil)
 	service.A()
 	fmt.Println(grpcviewv1.Hello{})
 	f, err := frontend.Open("index.html")

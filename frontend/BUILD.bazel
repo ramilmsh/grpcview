@@ -22,6 +22,10 @@ BUILD_DEPS = [":node_modules/" + d for d in [
     "svelte-check",
     "typescript",
     "vite-plugin-singlefile",
+    "@bufbuild/protobuf",
+    "@connectrpc/connect",
+    "@connectrpc/connect-web",
+    "monaco-editor",
 ]]
 
 DATA = [

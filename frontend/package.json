@@ -11,5 +11,11 @@
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
     "vite-plugin-singlefile": "^2.1.0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
+    "@connectrpc/connect": "^2.0.2",
+    "@connectrpc/connect-web": "^2.0.2",
+    "monaco-editor": "^0.52.2"
   }
 }

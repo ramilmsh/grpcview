@@ -1,9 +1,35 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+copy_file(
+    name = "unittest_proto3_descriptor_set",
+    src = "//inspector/unittest_proto3:unittest_proto3_descriptor_set",
+    out = "unittest_proto3_descriptor_set.pb",
+)
 
 go_library(
     name = "inspector",
     srcs = ["inspector.go"],
     importpath = "github.com/ramilmsh/grpcview/inspector",
     visibility = ["//visibility:public"],
-    deps = ["@org_golang_google_protobuf//types/descriptorpb"],
+    deps = [
+        "@com_github_invopop_jsonschema//:jsonschema",
+        "@com_github_wk8_go_ordered_map_v2//:go-ordered-map",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//reflect/protoregistry",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)
+
+go_test(
+    name = "inspector_test",
+    srcs = ["inspector_test.go"],
+    embed = [":inspector"],
+    embedsrcs = ["unittest_proto3_descriptor_set.pb"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
 )
