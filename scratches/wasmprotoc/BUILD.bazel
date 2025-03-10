@@ -1,0 +1,37 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+copy_file(
+    name = "protoc-gen-openapiv2-wasm",
+    src = "@com_github_grpc_ecosystem_grpc_gateway_v2//protoc-gen-openapiv2:protoc-gen-openapiv2-wasip1",
+    out = "protoc-gen-openapiv2.wasm",
+)
+
+go_library(
+    name = "wasmprotoc",
+    srcs = ["wasmprotoc.go"],
+    embedsrcs = ["protoc-gen-openapiv2.wasm"],
+    importpath = "github.com/ramilmsh/grpcview/scratches/wasmprotoc",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_bytecodealliance_wasmtime_go_v30//:go_default_library"],
+)
+
+copy_file(
+    name = "unittest_proto3_descriptor_set",
+    src = "//inspector/unittest_proto3:unittest_proto3_descriptor_set",
+    out = "unittest_proto3_descriptor_set.pb",
+)
+
+go_test(
+    name = "wasmprotoc_test",
+    srcs = ["wasmprotoc_test.go"],
+    embed = [":wasmprotoc"],
+    embedsrcs = ["unittest_proto3_descriptor_set.pb"],
+    deps = [
+        "//service",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//types/pluginpb",
+    ],
+)

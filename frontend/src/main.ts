@@ -1,5 +1,6 @@
 import { mount } from "svelte";
 import App from "./App.svelte";
+import "bootstrap";
 import "@frontend/components/editor/workers";
 
 const app = mount(App, {

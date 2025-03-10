@@ -14,7 +14,6 @@ go_library(
     importpath = "github.com/ramilmsh/grpcview/service/cmd",
     visibility = ["//visibility:private"],
     deps = [
-        "//inspector",
         "//service",
         "//service/proto/v1:grpcviewv1_go_proto",
     ],

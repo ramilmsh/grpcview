@@ -27,6 +27,9 @@ BUILD_DEPS = [":node_modules/" + d for d in [
     "@connectrpc/connect",
     "@connectrpc/connect-web",
     "monaco-editor",
+    "bootstrap",
+    "@popperjs/core",
+    "sass-embedded",
 ]]
 
 DATA = [

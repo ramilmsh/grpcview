@@ -1,0 +1,18 @@
+--- a/protoc-gen-openapiv2/BUILD.bazel
++++ b/protoc-gen-openapiv2/BUILD.bazel
+@@ -23,6 +23,14 @@ go_binary(
+     visibility = ["//visibility:public"],
+ )
+ 
++go_binary(
++    name = "protoc-gen-openapiv2-wasip1",
++    embed = [":protoc-gen-openapiv2_lib"],
++    visibility = ["//visibility:public"],
++    goarch = "wasm",
++    goos = "wasip1",
++)
++
+ go_test(
+     name = "protoc-gen-openapiv2_test",
+     size = "small",
+-- 

@@ -1,8 +1,6 @@
 package inspector
 
 import (
-	"encoding/json"
-	"fmt"
 	"testing"
 
 	_ "embed"
@@ -12,6 +10,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
+
+var defaultGoPackage string = "a.b"
 
 //go:embed unittest_proto3_descriptor_set.pb
 var descriptorRaw []byte
@@ -29,13 +29,8 @@ func TestLoad(t *testing.T) {
 		schemas = append(schemas, schema)
 	}
 
-	schema := &jsonschema.Schema{
+	_ = &jsonschema.Schema{
 		Ref:         "#/$defs/proto3_unittest.TestHasbits",
 		Definitions: definitions,
 	}
-
-	data, err := json.MarshalIndent(schema, "", "  ")
-	require.NoError(t, err)
-
-	fmt.Println(string(data))
 }

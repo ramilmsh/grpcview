@@ -4,19 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "devDependencies": {
-    "vite": "^6.2.0",
-    "vite-plugin-singlefile": "^2.1.0",
-    "svelte": "^5.20.2",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tsconfig/svelte": "^5.0.4",
-    "svelte-check": "^4.1.4",
     "clsx": "^2.1.1",
-    "typescript": "~5.7.2"
+    "svelte": "^5.20.2",
+    "svelte-check": "^4.1.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0",
+    "vite-plugin-singlefile": "^2.1.0"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.2.3",
     "@connectrpc/connect": "^2.0.2",
     "@connectrpc/connect-web": "^2.0.2",
-    "monaco-editor": "^0.52.2"
+    "@popperjs/core": "^2.11.8",
+    "bootstrap": "^5.3.3",
+    "monaco-editor": "^0.52.2",
+    "sass-embedded": "^1.85.1"
   }
 }

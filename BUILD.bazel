@@ -2,6 +2,8 @@ load("@gazelle//:def.bzl", "gazelle")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//:vite/package_json.bzl", vite_bin = "bin")
 
+#gazelle:resolve go go github.com/bytecodealliance/wasmtime-go/v30 @com_github_bytecodealliance_wasmtime_go_v30//:go_default_library
+
 gazelle(name = "gazelle")
 
 npm_link_all_packages(name = "node_modules")
