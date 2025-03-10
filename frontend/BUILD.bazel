@@ -16,24 +16,31 @@ filegroup(
 
 BUILD_DEPS = [":node_modules/" + d for d in [
     "vite",
+    "vite-plugin-singlefile",
+    "svelte",
     "@sveltejs/vite-plugin-svelte",
     "@tsconfig/svelte",
-    "svelte",
     "svelte-check",
+    "tailwind-merge",
+    "tailwind-variants",
+    "tailwindcss-animate",
+    "@tailwindcss/vite",
+    "clsx",
     "typescript",
-    "vite-plugin-singlefile",
     "@bufbuild/protobuf",
     "@connectrpc/connect",
     "@connectrpc/connect-web",
     "monaco-editor",
+    "tailwindcss",
 ]]
 
 DATA = [
     "index.html",
     "package.json",
-    "svelte.config.js",
     "tsconfig.json",
+    "svelte.config.js",
     "vite.config.ts",
+    "tailwind.config.ts",
     ":srcs",
     "//service/proto/v1:grpcviewv1_ts_proto",
 ] + BUILD_DEPS

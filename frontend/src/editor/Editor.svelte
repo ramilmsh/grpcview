@@ -20,9 +20,22 @@
   onMount(() => {
     var model = monaco.editor.createModel("{}", "json", modelUri);
 
-    monaco.editor.create(document.getElementById("container")!, {
+    const editor = monaco.editor.create(document.getElementById("container")!, {
       model: model,
+      formatOnType: true,
+      formatOnPaste: true,
+      autoIndent: "full",
     });
+
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.key === "s" && (e.metaKey || e.ctrlKey)) {
+          editor.getAction("editor.action.formatDocument")?.run();
+        }
+      },
+      false
+    );
   });
 </script>
 

@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { viteSingleFile } from "vite-plugin-singlefile";
+import tailwindcss from "@tailwindcss/vite";
 // @ts-ignore
 import path from "path";
 
@@ -12,14 +13,7 @@ export default defineConfig({
       "@grpcview": path.resolve("../service/proto"),
     },
   },
-  plugins: [svelte(), viteSingleFile()],
-  build: {
-    rollupOptions: {
-      output: {
-        entryFileNames: "bundle.js",
-      },
-    },
-  },
+  plugins: [svelte(), tailwindcss(), viteSingleFile()],
   server: {
     hmr: { overlay: true },
     watch: {
