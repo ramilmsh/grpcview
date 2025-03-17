@@ -6,6 +6,7 @@ proto_library(
     name = "grpcviewv1_proto",
     srcs = ["service.proto"],
     visibility = ["//visibility:public"],
+    deps = ["@com_google_protobuf//:descriptor_proto"],
 )
 
 go_proto_library(

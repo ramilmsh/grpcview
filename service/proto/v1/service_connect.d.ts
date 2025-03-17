@@ -3,22 +3,22 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { Hello } from "./service_pb.js";
+import { AddRequest, AddResponse } from "./service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * @generated from service grpcview.v1.Service
+ * @generated from service grpcview.v1.Workspace
  */
-export declare const Service: {
-  readonly typeName: "grpcview.v1.Service",
+export declare const Workspace: {
+  readonly typeName: "grpcview.v1.Workspace",
   readonly methods: {
     /**
-     * @generated from rpc grpcview.v1.Service.SayHello
+     * @generated from rpc grpcview.v1.Workspace.Add
      */
-    readonly sayHello: {
-      readonly name: "SayHello",
-      readonly I: typeof Hello,
-      readonly O: typeof Hello,
+    readonly add: {
+      readonly name: "Add",
+      readonly I: typeof AddRequest,
+      readonly O: typeof AddResponse,
       readonly kind: MethodKind.Unary,
     },
   }

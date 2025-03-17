@@ -28,7 +28,6 @@ go_test(
     embed = [":wasmprotoc"],
     embedsrcs = ["unittest_proto3_descriptor_set.pb"],
     deps = [
-        "//service",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//types/descriptorpb",

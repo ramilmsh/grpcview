@@ -2,12 +2,29 @@ syntax = "proto3";
 
 package grpcview.v1;
 
+import "google/protobuf/descriptor.proto";
+
 option go_package = "github.com/ramilmsh/grpcview/service/proto/v1;grpcviewv1";
 
-message Hello {
-    string a = 1;
+message Server {
+    message TLS {}
+
+    string host = 1;
+    int32 port = 2;
+    TLS tls = 3;
 }
 
-service Service {
-    rpc SayHello(Hello) returns (Hello);
+message AddRequest {
+    oneof source {
+        google.protobuf.FileDescriptorSet descriptor_set = 1;
+        Server reflection = 2;
+    }
+}
+
+message AddResponse {
+    google.protobuf.FileDescriptorSet descriptor_set = 1;
+}
+
+service Workspace {
+    rpc Add(AddRequest) returns (AddResponse);
 }

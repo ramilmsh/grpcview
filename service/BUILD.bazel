@@ -2,6 +2,12 @@ load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
 load("@rules_go//go:def.bzl", "go_library")
 
 copy_file(
+    name = "frontend",
+    src = "//frontend",
+    out = "index.html",
+)
+
+copy_file(
     name = "protoc-gen-openapiv2-wasm",
     src = "@com_github_grpc_ecosystem_grpc_gateway_v2//protoc-gen-openapiv2:protoc-gen-openapiv2-wasip1",
     out = "protoc-gen-openapiv2.wasm",
@@ -10,7 +16,14 @@ copy_file(
 go_library(
     name = "service",
     srcs = ["service.go"],
+    embedsrcs = ["index.html"],
     importpath = "github.com/ramilmsh/grpcview/service",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_mattn_go_sqlite3//:go-sqlite3"],
+    deps = [
+        "//service/proto/v1:grpcviewv1_go_proto",
+        "@com_connectrpc_connect//:connect",
+        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "@org_golang_x_net//http2",
+        "@org_golang_x_net//http2/h2c",
+    ],
 )

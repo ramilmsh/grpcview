@@ -4,6 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv1";
 import type { Message } from "@bufbuild/protobuf";
+import type { FileDescriptorSet } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file service/proto/v1/service.proto.
@@ -11,32 +12,98 @@ import type { Message } from "@bufbuild/protobuf";
 export declare const file_service_proto_v1_service: GenFile;
 
 /**
- * @generated from message grpcview.v1.Hello
+ * @generated from message grpcview.v1.Server
  */
-export declare type Hello = Message<"grpcview.v1.Hello"> & {
+export declare type Server = Message<"grpcview.v1.Server"> & {
   /**
-   * @generated from field: string a = 1;
+   * @generated from field: string host = 1;
    */
-  a: string;
+  host: string;
+
+  /**
+   * @generated from field: int32 port = 2;
+   */
+  port: number;
+
+  /**
+   * @generated from field: grpcview.v1.Server.TLS tls = 3;
+   */
+  tls?: Server_TLS;
 };
 
 /**
- * Describes the message grpcview.v1.Hello.
- * Use `create(HelloSchema)` to create a new message.
+ * Describes the message grpcview.v1.Server.
+ * Use `create(ServerSchema)` to create a new message.
  */
-export declare const HelloSchema: GenMessage<Hello>;
+export declare const ServerSchema: GenMessage<Server>;
 
 /**
- * @generated from service grpcview.v1.Service
+ * @generated from message grpcview.v1.Server.TLS
  */
-export declare const Service: GenService<{
+export declare type Server_TLS = Message<"grpcview.v1.Server.TLS"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.Server.TLS.
+ * Use `create(Server_TLSSchema)` to create a new message.
+ */
+export declare const Server_TLSSchema: GenMessage<Server_TLS>;
+
+/**
+ * @generated from message grpcview.v1.AddRequest
+ */
+export declare type AddRequest = Message<"grpcview.v1.AddRequest"> & {
   /**
-   * @generated from rpc grpcview.v1.Service.SayHello
+   * @generated from oneof grpcview.v1.AddRequest.source
    */
-  sayHello: {
+  source: {
+    /**
+     * @generated from field: google.protobuf.FileDescriptorSet descriptor_set = 1;
+     */
+    value: FileDescriptorSet;
+    case: "descriptorSet";
+  } | {
+    /**
+     * @generated from field: grpcview.v1.Server reflection = 2;
+     */
+    value: Server;
+    case: "reflection";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message grpcview.v1.AddRequest.
+ * Use `create(AddRequestSchema)` to create a new message.
+ */
+export declare const AddRequestSchema: GenMessage<AddRequest>;
+
+/**
+ * @generated from message grpcview.v1.AddResponse
+ */
+export declare type AddResponse = Message<"grpcview.v1.AddResponse"> & {
+  /**
+   * @generated from field: google.protobuf.FileDescriptorSet descriptor_set = 1;
+   */
+  descriptorSet?: FileDescriptorSet;
+};
+
+/**
+ * Describes the message grpcview.v1.AddResponse.
+ * Use `create(AddResponseSchema)` to create a new message.
+ */
+export declare const AddResponseSchema: GenMessage<AddResponse>;
+
+/**
+ * @generated from service grpcview.v1.Workspace
+ */
+export declare const Workspace: GenService<{
+  /**
+   * @generated from rpc grpcview.v1.Workspace.Add
+   */
+  add: {
     methodKind: "unary";
-    input: typeof HelloSchema;
-    output: typeof HelloSchema;
+    input: typeof AddRequestSchema;
+    output: typeof AddResponseSchema;
   },
 }>;
 

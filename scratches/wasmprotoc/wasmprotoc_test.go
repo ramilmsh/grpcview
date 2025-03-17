@@ -9,8 +9,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
-
-	"github.com/ramilmsh/grpcview/service"
 )
 
 var defaultGoPackage string = "example.com/pkg"
@@ -36,5 +34,5 @@ func TestLoad(t *testing.T) {
 		ProtoFile:      descriptorSet.File,
 	})
 	require.NoError(t, err)
-	require.NoError(t, service.Run(data))
+	require.NoError(t, GenOpenapiV2(data))
 }

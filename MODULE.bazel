@@ -40,15 +40,15 @@ go_deps.gazelle_override(
     path = "github.com/grpc-ecosystem/grpc-gateway/v2",
 )
 go_deps.archive_override(
-    urls = [
-        "https://github.com/bytecodealliance/wasmtime-go/archive/refs/tags/v30.0.0.tar.gz",
-    ],
     patches = [
         "//tools/patches:wasmtime-go-wasi_config_set_stdin_bytes.patch",
     ],
-    strip_prefix = "wasmtime-go-30.0.0",
     path = "github.com/bytecodealliance/wasmtime-go/v30",
     sha256 = "ce7ccecfd587c1f5e3580b4e29fc39591902323092ce6acd5b319439118a030d",
+    strip_prefix = "wasmtime-go-30.0.0",
+    urls = [
+        "https://github.com/bytecodealliance/wasmtime-go/archive/refs/tags/v30.0.0.tar.gz",
+    ],
 )
 use_repo(
     go_deps,
@@ -60,6 +60,7 @@ use_repo(
     "com_github_stretchr_testify",
     "com_github_wk8_go_ordered_map_v2",
     "org_golang_google_protobuf",
+    "org_golang_x_net",
 )
 
 bazel_dep(name = "aspect_rules_ts", version = "3.5.0")

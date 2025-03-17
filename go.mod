@@ -10,6 +10,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/stretchr/testify v1.8.1
 	github.com/wk8/go-ordered-map/v2 v2.1.8
+	golang.org/x/net v0.35.0
 	google.golang.org/protobuf v1.36.5
 )
 
