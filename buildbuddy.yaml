@@ -9,4 +9,4 @@ actions:
         branches:
           - "*"
     steps:
-      - run: "bazel test //..."
+      - run: "bazel test --config=ci //..."
