@@ -11,6 +11,10 @@ common:ci --build_metadata=ROLE=CI
 
 common:remote --enable_workspace
 
+common:remote --experimental_remote_cache_compression
+common:remote --jobs=50
+common:remote --noslim_profile --experimental_profile_include_target_label --experimental_profile_include_primary_output
+
 build:remote --remote_cache=grpcs://grpcview.buildbuddy.io
 build:remote --remote_timeout=10m
 build:remote --remote_executor=grpcs://grpcview.buildbuddy.io
