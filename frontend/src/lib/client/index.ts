@@ -4,7 +4,6 @@ import {
   type Client,
 } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
-export type { AddRequest, AddResponse } from "@grpcview/v1/service_pb";
 
 export const createClient = (): Client<typeof Workspace> => {
   return _createClient(

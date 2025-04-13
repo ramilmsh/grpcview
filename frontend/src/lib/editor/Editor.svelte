@@ -1,54 +1,44 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as monaco from "monaco-editor";
-  import { createClient, type AddRequest } from "$lib/client";
+  import type { Service } from "@grpcview/v1/service_pb";
 
   const baseUri = monaco.Uri.from({
     scheme: "grpcview",
     path: "schemas",
   });
 
-  const client = createClient();
+  const {
+    services,
+    data,
+  }: {
+    services: Service[];
+    data: string;
+  } = $props();
 
-  client
-    .add({
-      source: {
-        case: "reflection",
-        value: {
-          host: "127.0.0.1",
-          port: 10000,
-        },
-      },
-    })
-    .then((response) => {
-      console.log(response.services[0].methods[0].input?.schema);
-
-      let schemas = [];
-      for (const service of response.services) {
-        for (const method of service.methods) {
-          const uri = monaco.Uri.joinPath(
-            baseUri,
-            service.package,
-            service.name,
-            method.name
-          ).toString();
-          console.log(uri);
-          schemas.push({
-            uri: uri,
-            fileMatch: [uri],
-            schema: method.input?.schema,
-          });
-        }
-      }
-
-      monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-        validate: true,
-        schemaValidation: "error",
-        schemas: schemas,
+  let schemas = [];
+  for (const service of services) {
+    for (const method of service.methods) {
+      const uri = monaco.Uri.joinPath(
+        baseUri,
+        service.package,
+        service.name,
+        method.name
+      ).toString();
+      console.log(uri);
+      schemas.push({
+        uri: uri,
+        fileMatch: [uri],
+        schema: method.input?.schema,
       });
-    });
+    }
+  }
 
-  let { data }: { data: string } = $props();
+  monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+    validate: true,
+    schemaValidation: "error",
+    schemas: schemas,
+  });
 
   onMount(() => {
     var model = monaco.editor.createModel(

@@ -3,7 +3,7 @@
 /* eslint-disable */
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv1";
-import type { JsonObject, Message } from "@bufbuild/protobuf";
+import type { JsonObject, Message as Message$1 } from "@bufbuild/protobuf";
 import type { FileDescriptorSet } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -14,7 +14,7 @@ export declare const file_service_proto_v1_service: GenFile;
 /**
  * @generated from message grpcview.v1.Server
  */
-export declare type Server = Message<"grpcview.v1.Server"> & {
+export declare type Server = Message$1<"grpcview.v1.Server"> & {
   /**
    * @generated from field: string host = 1;
    */
@@ -40,7 +40,7 @@ export declare const ServerSchema: GenMessage<Server>;
 /**
  * @generated from message grpcview.v1.Server.TLS
  */
-export declare type Server_TLS = Message<"grpcview.v1.Server.TLS"> & {
+export declare type Server_TLS = Message$1<"grpcview.v1.Server.TLS"> & {
 };
 
 /**
@@ -50,9 +50,87 @@ export declare type Server_TLS = Message<"grpcview.v1.Server.TLS"> & {
 export declare const Server_TLSSchema: GenMessage<Server_TLS>;
 
 /**
+ * @generated from message grpcview.v1.Message
+ */
+export declare type Message = Message$1<"grpcview.v1.Message"> & {
+  /**
+   * @generated from field: string package = 1;
+   */
+  package: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional google.protobuf.Struct schema = 3;
+   */
+  schema?: JsonObject;
+};
+
+/**
+ * Describes the message grpcview.v1.Message.
+ * Use `create(MessageSchema)` to create a new message.
+ */
+export declare const MessageSchema: GenMessage<Message>;
+
+/**
+ * @generated from message grpcview.v1.Method
+ */
+export declare type Method = Message$1<"grpcview.v1.Method"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: grpcview.v1.Message input = 2;
+   */
+  input?: Message;
+
+  /**
+   * @generated from field: grpcview.v1.Message output = 3;
+   */
+  output?: Message;
+};
+
+/**
+ * Describes the message grpcview.v1.Method.
+ * Use `create(MethodSchema)` to create a new message.
+ */
+export declare const MethodSchema: GenMessage<Method>;
+
+/**
+ * @generated from message grpcview.v1.Service
+ */
+export declare type Service = Message$1<"grpcview.v1.Service"> & {
+  /**
+   * @generated from field: string package = 1;
+   */
+  package: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: repeated grpcview.v1.Method methods = 3;
+   */
+  methods: Method[];
+};
+
+/**
+ * Describes the message grpcview.v1.Service.
+ * Use `create(ServiceSchema)` to create a new message.
+ */
+export declare const ServiceSchema: GenMessage<Service>;
+
+/**
  * @generated from message grpcview.v1.AddRequest
  */
-export declare type AddRequest = Message<"grpcview.v1.AddRequest"> & {
+export declare type AddRequest = Message$1<"grpcview.v1.AddRequest"> & {
   /**
    * @generated from oneof grpcview.v1.AddRequest.source
    */
@@ -80,11 +158,11 @@ export declare const AddRequestSchema: GenMessage<AddRequest>;
 /**
  * @generated from message grpcview.v1.AddResponse
  */
-export declare type AddResponse = Message<"grpcview.v1.AddResponse"> & {
+export declare type AddResponse = Message$1<"grpcview.v1.AddResponse"> & {
   /**
-   * @generated from field: repeated grpcview.v1.AddResponse.Service services = 1;
+   * @generated from field: repeated grpcview.v1.Service services = 1;
    */
-  services: AddResponse_Service[];
+  services: Service[];
 };
 
 /**
@@ -92,84 +170,6 @@ export declare type AddResponse = Message<"grpcview.v1.AddResponse"> & {
  * Use `create(AddResponseSchema)` to create a new message.
  */
 export declare const AddResponseSchema: GenMessage<AddResponse>;
-
-/**
- * @generated from message grpcview.v1.AddResponse.Message
- */
-export declare type AddResponse_Message = Message<"grpcview.v1.AddResponse.Message"> & {
-  /**
-   * @generated from field: string package = 1;
-   */
-  package: string;
-
-  /**
-   * @generated from field: string name = 2;
-   */
-  name: string;
-
-  /**
-   * @generated from field: optional google.protobuf.Struct schema = 3;
-   */
-  schema?: JsonObject;
-};
-
-/**
- * Describes the message grpcview.v1.AddResponse.Message.
- * Use `create(AddResponse_MessageSchema)` to create a new message.
- */
-export declare const AddResponse_MessageSchema: GenMessage<AddResponse_Message>;
-
-/**
- * @generated from message grpcview.v1.AddResponse.Method
- */
-export declare type AddResponse_Method = Message<"grpcview.v1.AddResponse.Method"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-
-  /**
-   * @generated from field: grpcview.v1.AddResponse.Message input = 2;
-   */
-  input?: AddResponse_Message;
-
-  /**
-   * @generated from field: grpcview.v1.AddResponse.Message output = 3;
-   */
-  output?: AddResponse_Message;
-};
-
-/**
- * Describes the message grpcview.v1.AddResponse.Method.
- * Use `create(AddResponse_MethodSchema)` to create a new message.
- */
-export declare const AddResponse_MethodSchema: GenMessage<AddResponse_Method>;
-
-/**
- * @generated from message grpcview.v1.AddResponse.Service
- */
-export declare type AddResponse_Service = Message<"grpcview.v1.AddResponse.Service"> & {
-  /**
-   * @generated from field: string package = 1;
-   */
-  package: string;
-
-  /**
-   * @generated from field: string name = 2;
-   */
-  name: string;
-
-  /**
-   * @generated from field: repeated grpcview.v1.AddResponse.Method methods = 3;
-   */
-  methods: AddResponse_Method[];
-};
-
-/**
- * Describes the message grpcview.v1.AddResponse.Service.
- * Use `create(AddResponse_ServiceSchema)` to create a new message.
- */
-export declare const AddResponse_ServiceSchema: GenMessage<AddResponse_Service>;
 
 /**
  * @generated from service grpcview.v1.Workspace

@@ -63,7 +63,7 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 		}
 
 		response := &grpcviewv1.AddResponse{
-			Services: make([]*grpcviewv1.AddResponse_Service, len(services)),
+			Services: make([]*grpcviewv1.Service, len(services)),
 		}
 
 		for i, service := range services {
@@ -74,10 +74,10 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 
 			serviceDesc := fileDesc.FindSymbol(service).(*desc.ServiceDescriptor)
 
-			response.Services[i] = &grpcviewv1.AddResponse_Service{
+			response.Services[i] = &grpcviewv1.Service{
 				Package: serviceDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    serviceDesc.GetName(),
-				Methods: make([]*grpcviewv1.AddResponse_Method, len(serviceDesc.GetMethods())),
+				Methods: make([]*grpcviewv1.Method, len(serviceDesc.GetMethods())),
 			}
 
 			for j, methodDesc := range serviceDesc.GetMethods() {
@@ -103,9 +103,9 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 					return nil, err
 				}
 
-				response.Services[i].Methods[j] = &grpcviewv1.AddResponse_Method{
+				response.Services[i].Methods[j] = &grpcviewv1.Method{
 					Name: methodDesc.GetName(),
-					Input: &grpcviewv1.AddResponse_Message{
+					Input: &grpcviewv1.Message{
 						Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 						Name:    inputDesc.GetName(),
 						Schema:  schemaStruct,
