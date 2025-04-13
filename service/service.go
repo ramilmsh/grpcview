@@ -2,52 +2,126 @@ package service
 
 import (
 	"context"
-	"embed"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
+	"os"
+	"time"
 
 	"connectrpc.com/connect"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	"connectrpc.com/grpcreflect"
+
+	workspace "github.com/ramilmsh/grpcview/service/workspace"
+
+	connectcors "connectrpc.com/cors"
 
 	grpcviewv1 "github.com/ramilmsh/grpcview/service/proto/v1"
 )
 
-//go:embed index.html
-var frontend embed.FS
+func Run(
+	ctx context.Context,
+	indexPage io.ReadCloser,
+) error {
+	var port int
+	flag.IntVar(&port, "port", 10000, "port to start the server at")
+	flag.Parse()
 
-type Workspace struct{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-func (w *Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.AddRequest]) (*connect.Response[grpcviewv1.AddResponse], error) {
-	return connect.NewResponse(&grpcviewv1.AddResponse{}), nil
-}
+	ws, err := workspace.New(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize workspace hander: %w", err)
+	}
+	defer ws.Close(ctx)
 
-func Run(ctx context.Context) error {
-	ws := &Workspace{}
 	mux := http.NewServeMux()
 
-	mux.Handle(grpcviewv1.NewWorkspaceHandler(ws))
+	reflector := grpcreflect.NewStaticReflector("grpcview.v1.Workspace")
 
-	indexHtmlFile, err := frontend.Open("index.html")
-	if err != nil {
-		return err
-	}
-	indexHtml, err := io.ReadAll(indexHtmlFile)
+	mux.Handle(grpcreflect.NewHandlerV1(reflector))
+	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+
+	mux.Handle(grpcviewv1.NewWorkspaceHandler(
+		&ws,
+		connect.WithInterceptors(
+			connect.UnaryInterceptorFunc(
+				func(next connect.UnaryFunc) connect.UnaryFunc {
+					return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
+						start := time.Now()
+						response, responseErr := next(ctx, request)
+						end := time.Now()
+
+						latency := end.Sub(start)
+						args := []any{
+							"protocol", request.Peer().Protocol,
+							"address", request.Peer().Addr,
+							"procedure", request.Spec().Procedure,
+							"latency", latency,
+						}
+
+						if responseErr == nil {
+							logger.InfoContext(
+								ctx, "request finished",
+								append(args,
+									"status", "ok",
+								)...,
+							)
+							return response, nil
+						}
+						if connectErr := new(connect.Error); errors.As(responseErr, &connectErr) {
+							args = append(args,
+								"status", connectErr.Code(),
+							)
+						}
+
+						logger.ErrorContext(
+							ctx, "request finished",
+							append(args,
+								"status", connect.CodeUnknown,
+								"error", responseErr,
+							)...,
+						)
+						return response, responseErr
+					}
+				},
+			),
+		),
+	))
+
+	indexHtml, err := io.ReadAll(indexPage)
 	if err != nil {
 		return err
 	}
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("index.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write(indexHtml)
 	}))
+
+	server := http2.Server{}
+
+	corsPolicy := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: connectcors.AllowedMethods(),
+		AllowedHeaders: connectcors.AllowedHeaders(),
+		ExposedHeaders: connectcors.ExposedHeaders(),
+		MaxAge:         int((2 * time.Hour).Seconds()),
+	})
+
+	address := net.TCPAddr{IP: net.IPv4zero, Port: port}
+	logger.InfoContext(ctx, "starting server", "address", address.String())
 	err = http.ListenAndServe(
-		"127.0.0.1:54321",
-		h2c.NewHandler(mux, &http2.Server{}),
+		address.String(),
+		h2c.NewHandler(corsPolicy.Handler(mux), &server),
 	)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

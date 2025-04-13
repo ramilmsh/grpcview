@@ -9,7 +9,7 @@ export default defineConfig({
       usePolling: true,
     },
     fs: {
-      allow: ["/"],
+      strict: false,
     },
   },
   build: {

@@ -5,10 +5,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
-	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 func messageId(descriptor protoreflect.MessageDescriptor) string {
@@ -19,39 +16,10 @@ func messageRef(descriptor protoreflect.MessageDescriptor) string {
 	return "#/$defs/" + messageId(descriptor)
 }
 
-func Load(fileDescriptorSet *descriptorpb.FileDescriptorSet) (jsonschema.Definitions, error) {
-	definitions := make(jsonschema.Definitions)
-	registry, err := protodesc.NewFiles(fileDescriptorSet)
-	if err != nil {
-		return nil, err
-	}
-
-	var descriptors []protoreflect.MessageDescriptor
-	registry.RangeFiles(func(fileDescriptor protoreflect.FileDescriptor) bool {
-		messages := fileDescriptor.Messages()
-		for i := 0; i < messages.Len(); i++ {
-			descriptors = append(descriptors, messages.Get(i))
-		}
-		return true
-	})
-
-	for _, descriptor := range descriptors {
-		schemas, err := Convert(registry, descriptor)
-		if err != nil {
-			return nil, err
-		}
-		for _, schema := range schemas {
-			definitions[string(schema.ID)] = schema
-		}
-	}
-
-	return definitions, nil
-}
-
-func convertField(registry *protoregistry.Files, descriptor protoreflect.FieldDescriptor) (*jsonschema.Schema, error) {
+func convertField(descriptor protoreflect.FieldDescriptor, defs jsonschema.Definitions) (*jsonschema.Schema, error) {
 	switch {
 	case descriptor.IsList():
-		itemSchema, err := convertFieldType(registry, descriptor)
+		itemSchema, err := convertFieldType(descriptor, defs)
 		if err != nil {
 			return nil, err
 		}
@@ -60,7 +28,7 @@ func convertField(registry *protoregistry.Files, descriptor protoreflect.FieldDe
 			Items: itemSchema,
 		}, nil
 	case descriptor.IsMap():
-		valueSchema, err := convertFieldType(registry, descriptor.MapValue())
+		valueSchema, err := convertFieldType(descriptor.MapValue(), defs)
 		if err != nil {
 			return nil, err
 		}
@@ -69,11 +37,11 @@ func convertField(registry *protoregistry.Files, descriptor protoreflect.FieldDe
 			AdditionalProperties: valueSchema,
 		}, nil
 	default:
-		return convertFieldType(registry, descriptor)
+		return convertFieldType(descriptor, defs)
 	}
 }
 
-func convertFieldType(registry *protoregistry.Files, descriptor protoreflect.FieldDescriptor) (*jsonschema.Schema, error) {
+func convertFieldType(descriptor protoreflect.FieldDescriptor, defs jsonschema.Definitions) (*jsonschema.Schema, error) {
 	switch kind := descriptor.Kind(); kind {
 	case protoreflect.BoolKind:
 		return &jsonschema.Schema{
@@ -117,38 +85,50 @@ func convertFieldType(registry *protoregistry.Files, descriptor protoreflect.Fie
 			ContentEncoding: "base64",
 		}, nil
 	case protoreflect.MessageKind:
+		id := messageId(descriptor.Message())
+		if _, ok := defs[id]; !ok {
+			defs[id] = nil
+			schema, err := convertMessage(descriptor.Message(), defs)
+			if err != nil {
+				return nil, err
+			}
+			defs[id] = schema
+		}
 		return &jsonschema.Schema{Ref: messageRef(descriptor.Message())}, nil
 	default:
 		return nil, fmt.Errorf("unknown field kind (%s)", kind)
 	}
 }
 
-func Convert(registry *protoregistry.Files, descriptor protoreflect.MessageDescriptor) ([]*jsonschema.Schema, error) {
-	schemas := make([]*jsonschema.Schema, 0)
-	messages := descriptor.Messages()
-	for i := 0; i < messages.Len(); i++ {
-		schema, err := Convert(registry, messages.Get(i))
-		if err != nil {
-			return nil, err
-		}
-		schemas = append(schemas, schema...)
-	}
-
+func convertMessage(descriptor protoreflect.MessageDescriptor, defs jsonschema.Definitions) (*jsonschema.Schema, error) {
 	schema := &jsonschema.Schema{
 		ID:                   jsonschema.ID(messageId(descriptor)),
 		Type:                 "object",
 		Properties:           orderedmap.New[string, *jsonschema.Schema](),
 		AdditionalProperties: jsonschema.FalseSchema,
 	}
+
 	fields := descriptor.Fields()
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
-		fieldSchema, err := convertField(registry, fd)
+		fieldSchema, err := convertField(fd, defs)
 		if err != nil {
 			return nil, err
 		}
 		schema.Properties.Set(fd.JSONName(), fieldSchema)
 	}
 
-	return append(schemas, schema), nil
+	return schema, nil
+}
+
+func ConvertMessage(descriptor protoreflect.MessageDescriptor) (*jsonschema.Schema, error) {
+	defs := make(jsonschema.Definitions)
+	schema, err := convertMessage(descriptor, defs)
+	if err != nil {
+		return nil, err
+	}
+
+	schema.Definitions = defs
+
+	return schema, nil
 }

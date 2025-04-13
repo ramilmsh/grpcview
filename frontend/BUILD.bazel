@@ -35,6 +35,7 @@ DATA = [
     "tsconfig.json",
     "vite.config.ts",
     ":srcs",
+    "//service/proto/v1:grpcviewv1_ts_proto",
 ] + BUILD_DEPS
 
 vite_bin.vite(

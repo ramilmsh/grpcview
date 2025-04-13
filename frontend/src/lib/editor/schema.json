@@ -1,339 +1,468 @@
 {
-    "$ref": "#/$defs/proto3_unittest.TestHasbits",
+    "$id": "grpcview.v1.AddRequest",
     "$defs": {
-        "proto2_unittest_import.ImportMessage": {
-            "$id": "proto2_unittest_import.ImportMessage",
+        "google.protobuf.DescriptorProto": {
+            "$id": "google.protobuf.DescriptorProto",
             "properties": {
-                "d": {
+                "name": {
+                    "type": "string"
+                },
+                "field": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.FieldDescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "extension": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.FieldDescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "nestedType": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.DescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "enumType": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.EnumDescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "extensionRange": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.DescriptorProto.ExtensionRange"
+                    },
+                    "type": "array"
+                },
+                "oneofDecl": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.OneofDescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.MessageOptions"
+                },
+                "reservedRange": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.DescriptorProto.ReservedRange"
+                    },
+                    "type": "array"
+                },
+                "reservedName": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.DescriptorProto.ExtensionRange": {
+            "$id": "google.protobuf.DescriptorProto.ExtensionRange",
+            "properties": {
+                "start": {
+                    "type": "integer"
+                },
+                "end": {
+                    "type": "integer"
+                },
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.ExtensionRangeOptions"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.DescriptorProto.ReservedRange": {
+            "$id": "google.protobuf.DescriptorProto.ReservedRange",
+            "properties": {
+                "start": {
+                    "type": "integer"
+                },
+                "end": {
                     "type": "integer"
                 }
             },
             "additionalProperties": false,
             "type": "object"
         },
-        "proto2_unittest_import.PublicImportMessage": {
-            "$id": "proto2_unittest_import.PublicImportMessage",
+        "google.protobuf.EnumDescriptorProto": {
+            "$id": "google.protobuf.EnumDescriptorProto",
             "properties": {
-                "e": {
+                "name": {
+                    "type": "string"
+                },
+                "value": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.EnumValueDescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.EnumOptions"
+                },
+                "reservedRange": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.EnumDescriptorProto.EnumReservedRange"
+                    },
+                    "type": "array"
+                },
+                "reservedName": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.EnumDescriptorProto.EnumReservedRange": {
+            "$id": "google.protobuf.EnumDescriptorProto.EnumReservedRange",
+            "properties": {
+                "start": {
+                    "type": "integer"
+                },
+                "end": {
                     "type": "integer"
                 }
             },
             "additionalProperties": false,
             "type": "object"
         },
-        "proto3_unittest.ForeignMessage": {
-            "$id": "proto3_unittest.ForeignMessage",
+        "google.protobuf.EnumOptions": {
+            "$id": "google.protobuf.EnumOptions",
             "properties": {
-                "c": {
-                    "type": "integer"
-                }
-            },
-            "additionalProperties": false,
-            "type": "object"
-        },
-        "proto3_unittest.NestedTestAllTypes": {
-            "$id": "proto3_unittest.NestedTestAllTypes",
-            "properties": {
-                "child": {
-                    "$ref": "#/$defs/proto3_unittest.NestedTestAllTypes"
-                },
-                "payload": {
-                    "$ref": "#/$defs/proto3_unittest.TestAllTypes"
-                }
-            },
-            "additionalProperties": false,
-            "type": "object"
-        },
-        "proto3_unittest.TestAllTypes": {
-            "$id": "proto3_unittest.TestAllTypes",
-            "properties": {
-                "optionalInt32": {
-                    "type": "integer"
-                },
-                "optionalInt64": {
-                    "type": "integer"
-                },
-                "optionalUint32": {
-                    "type": "integer"
-                },
-                "optionalUint64": {
-                    "type": "integer"
-                },
-                "optionalSint32": {
-                    "type": "integer"
-                },
-                "optionalSint64": {
-                    "type": "integer"
-                },
-                "optionalFixed32": {
-                    "type": "number"
-                },
-                "optionalFixed64": {
-                    "type": "number"
-                },
-                "optionalSfixed32": {
-                    "type": "number"
-                },
-                "optionalSfixed64": {
-                    "type": "number"
-                },
-                "optionalFloat": {
-                    "type": "number"
-                },
-                "optionalDouble": {
-                    "type": "number"
-                },
-                "optionalBool": {
+                "allowAlias": {
                     "type": "boolean"
                 },
-                "optionalString": {
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "deprecatedLegacyJsonFieldConflicts": {
+                    "type": "boolean"
+                },
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.EnumValueDescriptorProto": {
+            "$id": "google.protobuf.EnumValueDescriptorProto",
+            "properties": {
+                "name": {
                     "type": "string"
                 },
-                "optionalBytes": {
-                    "type": "string",
-                    "contentEncoding": "base64"
+                "number": {
+                    "type": "integer"
                 },
-                "optionalNestedMessage": {
-                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.EnumValueOptions"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.EnumValueOptions": {
+            "$id": "google.protobuf.EnumValueOptions",
+            "properties": {
+                "deprecated": {
+                    "type": "boolean"
                 },
-                "optionalForeignMessage": {
-                    "$ref": "#/$defs/proto3_unittest.ForeignMessage"
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
                 },
-                "optionalImportMessage": {
-                    "$ref": "#/$defs/proto2_unittest_import.ImportMessage"
+                "debugRedact": {
+                    "type": "boolean"
                 },
-                "optionalNestedEnum": {
+                "featureSupport": {
+                    "$ref": "#/$defs/google.protobuf.FieldOptions.FeatureSupport"
+                },
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.ExtensionRangeOptions": {
+            "$id": "google.protobuf.ExtensionRangeOptions",
+            "properties": {
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                },
+                "declaration": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.ExtensionRangeOptions.Declaration"
+                    },
+                    "type": "array"
+                },
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "verification": {
                     "enum": [
-                        "ZERO",
-                        "FOO",
-                        "BAR",
-                        "BAZ",
-                        "NEG"
+                        "DECLARATION",
+                        "UNVERIFIED"
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.ExtensionRangeOptions.Declaration": {
+            "$id": "google.protobuf.ExtensionRangeOptions.Declaration",
+            "properties": {
+                "number": {
+                    "type": "integer"
+                },
+                "fullName": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "reserved": {
+                    "type": "boolean"
+                },
+                "repeated": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.FeatureSet": {
+            "$id": "google.protobuf.FeatureSet",
+            "properties": {
+                "fieldPresence": {
+                    "enum": [
+                        "FIELD_PRESENCE_UNKNOWN",
+                        "EXPLICIT",
+                        "IMPLICIT",
+                        "LEGACY_REQUIRED"
                     ]
                 },
-                "optionalForeignEnum": {
+                "enumType": {
                     "enum": [
-                        "FOREIGN_ZERO",
-                        "FOREIGN_FOO",
-                        "FOREIGN_BAR",
-                        "FOREIGN_BAZ",
-                        "FOREIGN_LARGE"
+                        "ENUM_TYPE_UNKNOWN",
+                        "OPEN",
+                        "CLOSED"
                     ]
                 },
-                "optionalStringPiece": {
+                "repeatedFieldEncoding": {
+                    "enum": [
+                        "REPEATED_FIELD_ENCODING_UNKNOWN",
+                        "PACKED",
+                        "EXPANDED"
+                    ]
+                },
+                "utf8Validation": {
+                    "enum": [
+                        "UTF8_VALIDATION_UNKNOWN",
+                        "VERIFY",
+                        "NONE"
+                    ]
+                },
+                "messageEncoding": {
+                    "enum": [
+                        "MESSAGE_ENCODING_UNKNOWN",
+                        "LENGTH_PREFIXED",
+                        "DELIMITED"
+                    ]
+                },
+                "jsonFormat": {
+                    "enum": [
+                        "JSON_FORMAT_UNKNOWN",
+                        "ALLOW",
+                        "LEGACY_BEST_EFFORT"
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.FieldDescriptorProto": {
+            "$id": "google.protobuf.FieldDescriptorProto",
+            "properties": {
+                "name": {
                     "type": "string"
                 },
-                "optionalCord": {
+                "number": {
+                    "type": "integer"
+                },
+                "label": {
+                    "enum": [
+                        "LABEL_OPTIONAL",
+                        "LABEL_REPEATED",
+                        "LABEL_REQUIRED"
+                    ]
+                },
+                "type": {
+                    "enum": [
+                        "TYPE_DOUBLE",
+                        "TYPE_FLOAT",
+                        "TYPE_INT64",
+                        "TYPE_UINT64",
+                        "TYPE_INT32",
+                        "TYPE_FIXED64",
+                        "TYPE_FIXED32",
+                        "TYPE_BOOL",
+                        "TYPE_STRING",
+                        "TYPE_GROUP",
+                        "TYPE_MESSAGE",
+                        "TYPE_BYTES",
+                        "TYPE_UINT32",
+                        "TYPE_ENUM",
+                        "TYPE_SFIXED32",
+                        "TYPE_SFIXED64",
+                        "TYPE_SINT32",
+                        "TYPE_SINT64"
+                    ]
+                },
+                "typeName": {
                     "type": "string"
                 },
-                "optionalPublicImportMessage": {
-                    "$ref": "#/$defs/proto2_unittest_import.PublicImportMessage"
+                "extendee": {
+                    "type": "string"
                 },
-                "optionalLazyMessage": {
-                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                "defaultValue": {
+                    "type": "string"
                 },
-                "optionalUnverifiedLazyMessage": {
-                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
+                "oneofIndex": {
+                    "type": "integer"
                 },
-                "optionalLazyImportMessage": {
-                    "$ref": "#/$defs/proto2_unittest_import.ImportMessage"
+                "jsonName": {
+                    "type": "string"
                 },
-                "repeatedInt32": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.FieldOptions"
                 },
-                "repeatedInt64": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "proto3Optional": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.FieldOptions": {
+            "$id": "google.protobuf.FieldOptions",
+            "properties": {
+                "ctype": {
+                    "enum": [
+                        "STRING",
+                        "CORD",
+                        "STRING_PIECE"
+                    ]
                 },
-                "repeatedUint32": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "packed": {
+                    "type": "boolean"
                 },
-                "repeatedUint64": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "jstype": {
+                    "enum": [
+                        "JS_NORMAL",
+                        "JS_STRING",
+                        "JS_NUMBER"
+                    ]
                 },
-                "repeatedSint32": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "lazy": {
+                    "type": "boolean"
                 },
-                "repeatedSint64": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "unverifiedLazy": {
+                    "type": "boolean"
                 },
-                "repeatedFixed32": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "deprecated": {
+                    "type": "boolean"
                 },
-                "repeatedFixed64": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "weak": {
+                    "type": "boolean"
                 },
-                "repeatedSfixed32": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "debugRedact": {
+                    "type": "boolean"
                 },
-                "repeatedSfixed64": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "retention": {
+                    "enum": [
+                        "RETENTION_UNKNOWN",
+                        "RETENTION_RUNTIME",
+                        "RETENTION_SOURCE"
+                    ]
                 },
-                "repeatedFloat": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
-                },
-                "repeatedDouble": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
-                },
-                "repeatedBool": {
-                    "items": {
-                        "type": "boolean"
-                    },
-                    "type": "array"
-                },
-                "repeatedString": {
-                    "items": {
-                        "type": "string"
-                    },
-                    "type": "array"
-                },
-                "repeatedBytes": {
-                    "items": {
-                        "type": "string",
-                        "contentEncoding": "base64"
-                    },
-                    "type": "array"
-                },
-                "repeatedNestedMessage": {
-                    "items": {
-                        "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
-                    },
-                    "type": "array"
-                },
-                "repeatedForeignMessage": {
-                    "items": {
-                        "$ref": "#/$defs/proto3_unittest.ForeignMessage"
-                    },
-                    "type": "array"
-                },
-                "repeatedImportMessage": {
-                    "items": {
-                        "$ref": "#/$defs/proto2_unittest_import.ImportMessage"
-                    },
-                    "type": "array"
-                },
-                "repeatedNestedEnum": {
+                "targets": {
                     "items": {
                         "enum": [
-                            "ZERO",
-                            "FOO",
-                            "BAR",
-                            "BAZ",
-                            "NEG"
+                            "TARGET_TYPE_UNKNOWN",
+                            "TARGET_TYPE_FILE",
+                            "TARGET_TYPE_EXTENSION_RANGE",
+                            "TARGET_TYPE_MESSAGE",
+                            "TARGET_TYPE_FIELD",
+                            "TARGET_TYPE_ONEOF",
+                            "TARGET_TYPE_ENUM",
+                            "TARGET_TYPE_ENUM_ENTRY",
+                            "TARGET_TYPE_SERVICE",
+                            "TARGET_TYPE_METHOD"
                         ]
                     },
                     "type": "array"
                 },
-                "repeatedForeignEnum": {
+                "editionDefaults": {
                     "items": {
-                        "enum": [
-                            "FOREIGN_ZERO",
-                            "FOREIGN_FOO",
-                            "FOREIGN_BAR",
-                            "FOREIGN_BAZ",
-                            "FOREIGN_LARGE"
-                        ]
+                        "$ref": "#/$defs/google.protobuf.FieldOptions.EditionDefault"
                     },
                     "type": "array"
                 },
-                "repeatedStringPiece": {
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "featureSupport": {
+                    "$ref": "#/$defs/google.protobuf.FieldOptions.FeatureSupport"
+                },
+                "uninterpretedOption": {
                     "items": {
-                        "type": "string"
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
                     },
                     "type": "array"
-                },
-                "repeatedCord": {
-                    "items": {
-                        "type": "string"
-                    },
-                    "type": "array"
-                },
-                "repeatedLazyMessage": {
-                    "items": {
-                        "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
-                    },
-                    "type": "array"
-                },
-                "oneofUint32": {
-                    "type": "integer"
-                },
-                "oneofNestedMessage": {
-                    "$ref": "#/$defs/proto3_unittest.TestAllTypes.NestedMessage"
-                },
-                "oneofString": {
-                    "type": "string"
-                },
-                "oneofBytes": {
-                    "type": "string",
-                    "contentEncoding": "base64"
                 }
             },
             "additionalProperties": false,
             "type": "object"
         },
-        "proto3_unittest.TestAllTypes.NestedMessage": {
-            "$id": "proto3_unittest.TestAllTypes.NestedMessage",
+        "google.protobuf.FieldOptions.EditionDefault": {
+            "$id": "google.protobuf.FieldOptions.EditionDefault",
             "properties": {
-                "bb": {
-                    "type": "integer"
-                }
-            },
-            "additionalProperties": false,
-            "type": "object"
-        },
-        "proto3_unittest.TestEmptyMessage": {
-            "$id": "proto3_unittest.TestEmptyMessage",
-            "properties": {
-                "a": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
-                    "type": "object"
-                }
-            },
-            "additionalProperties": false,
-            "type": "object"
-        },
-        "proto3_unittest.TestEmptyMessage.AEntry": {
-            "$id": "proto3_unittest.TestEmptyMessage.AEntry",
-            "properties": {
-                "key": {
-                    "type": "integer"
+                "edition": {
+                    "enum": [
+                        "EDITION_UNKNOWN",
+                        "EDITION_LEGACY",
+                        "EDITION_PROTO2",
+                        "EDITION_PROTO3",
+                        "EDITION_2023",
+                        "EDITION_2024",
+                        "EDITION_1_TEST_ONLY",
+                        "EDITION_2_TEST_ONLY",
+                        "EDITION_99997_TEST_ONLY",
+                        "EDITION_99998_TEST_ONLY",
+                        "EDITION_99999_TEST_ONLY",
+                        "EDITION_MAX"
+                    ]
                 },
                 "value": {
                     "type": "string"
@@ -342,338 +471,150 @@
             "additionalProperties": false,
             "type": "object"
         },
-        "proto3_unittest.TestHasbits": {
-            "$id": "proto3_unittest.TestHasbits",
+        "google.protobuf.FieldOptions.FeatureSupport": {
+            "$id": "google.protobuf.FieldOptions.FeatureSupport",
             "properties": {
-                "b1": {
-                    "type": "boolean"
-                },
-                "b2": {
-                    "type": "boolean"
-                },
-                "b3": {
-                    "type": "boolean"
-                },
-                "b4": {
-                    "type": "boolean"
-                },
-                "b5": {
-                    "type": "boolean"
-                },
-                "b6": {
-                    "type": "boolean"
-                },
-                "b7": {
-                    "type": "boolean"
-                },
-                "b8": {
-                    "type": "boolean"
-                },
-                "b9": {
-                    "type": "boolean"
-                },
-                "b10": {
-                    "type": "boolean"
-                },
-                "b11": {
-                    "type": "boolean"
-                },
-                "b12": {
-                    "type": "boolean"
-                },
-                "b13": {
-                    "type": "boolean"
-                },
-                "b14": {
-                    "type": "boolean"
-                },
-                "b15": {
-                    "type": "boolean"
-                },
-                "b16": {
-                    "type": "boolean"
-                },
-                "b17": {
-                    "type": "boolean"
-                },
-                "b18": {
-                    "type": "boolean"
-                },
-                "b19": {
-                    "type": "boolean"
-                },
-                "b20": {
-                    "type": "boolean"
-                },
-                "b21": {
-                    "type": "boolean"
-                },
-                "b22": {
-                    "type": "boolean"
-                },
-                "b23": {
-                    "type": "boolean"
-                },
-                "b24": {
-                    "type": "boolean"
-                },
-                "b25": {
-                    "type": "boolean"
-                },
-                "b26": {
-                    "type": "boolean"
-                },
-                "b27": {
-                    "type": "boolean"
-                },
-                "b28": {
-                    "type": "boolean"
-                },
-                "b29": {
-                    "type": "boolean"
-                },
-                "b30": {
-                    "type": "boolean"
-                },
-                "b31": {
-                    "type": "boolean"
-                },
-                "b32": {
-                    "type": "boolean"
-                },
-                "b33": {
-                    "type": "boolean"
-                },
-                "b34": {
-                    "type": "boolean"
-                },
-                "b35": {
-                    "type": "boolean"
-                },
-                "b36": {
-                    "type": "boolean"
-                },
-                "b37": {
-                    "type": "boolean"
-                },
-                "b38": {
-                    "type": "boolean"
-                },
-                "b39": {
-                    "type": "boolean"
-                },
-                "b40": {
-                    "type": "boolean"
-                },
-                "b41": {
-                    "type": "boolean"
-                },
-                "b42": {
-                    "type": "boolean"
-                },
-                "b43": {
-                    "type": "boolean"
-                },
-                "b44": {
-                    "type": "boolean"
-                },
-                "b45": {
-                    "type": "boolean"
-                },
-                "b46": {
-                    "type": "boolean"
-                },
-                "b47": {
-                    "type": "boolean"
-                },
-                "b48": {
-                    "type": "boolean"
-                },
-                "b49": {
-                    "type": "boolean"
-                },
-                "b50": {
-                    "type": "boolean"
-                },
-                "b51": {
-                    "type": "boolean"
-                },
-                "b52": {
-                    "type": "boolean"
-                },
-                "b53": {
-                    "type": "boolean"
-                },
-                "b54": {
-                    "type": "boolean"
-                },
-                "b55": {
-                    "type": "boolean"
-                },
-                "b56": {
-                    "type": "boolean"
-                },
-                "b57": {
-                    "type": "boolean"
-                },
-                "b58": {
-                    "type": "boolean"
-                },
-                "b59": {
-                    "type": "boolean"
-                },
-                "b60": {
-                    "type": "boolean"
-                },
-                "b61": {
-                    "type": "boolean"
-                },
-                "b62": {
-                    "type": "boolean"
-                },
-                "b63": {
-                    "type": "boolean"
-                },
-                "b64": {
-                    "type": "boolean"
-                },
-                "b65": {
-                    "type": "boolean"
-                },
-                "b66": {
-                    "type": "boolean"
-                },
-                "b67": {
-                    "type": "boolean"
-                },
-                "b68": {
-                    "type": "boolean"
-                },
-                "b69": {
-                    "type": "boolean"
-                },
-                "child": {
-                    "$ref": "#/$defs/proto3_unittest.TestAllTypes"
-                }
-            },
-            "additionalProperties": false,
-            "type": "object"
-        },
-        "proto3_unittest.TestMessageWithDummy": {
-            "$id": "proto3_unittest.TestMessageWithDummy",
-            "properties": {
-                "dummy": {
-                    "type": "boolean"
-                }
-            },
-            "additionalProperties": false,
-            "type": "object"
-        },
-        "proto3_unittest.TestOneof2": {
-            "$id": "proto3_unittest.TestOneof2",
-            "properties": {
-                "fooEnum": {
+                "editionIntroduced": {
                     "enum": [
-                        "UNKNOWN",
-                        "FOO",
-                        "BAR",
-                        "BAZ"
+                        "EDITION_UNKNOWN",
+                        "EDITION_LEGACY",
+                        "EDITION_PROTO2",
+                        "EDITION_PROTO3",
+                        "EDITION_2023",
+                        "EDITION_2024",
+                        "EDITION_1_TEST_ONLY",
+                        "EDITION_2_TEST_ONLY",
+                        "EDITION_99997_TEST_ONLY",
+                        "EDITION_99998_TEST_ONLY",
+                        "EDITION_99999_TEST_ONLY",
+                        "EDITION_MAX"
+                    ]
+                },
+                "editionDeprecated": {
+                    "enum": [
+                        "EDITION_UNKNOWN",
+                        "EDITION_LEGACY",
+                        "EDITION_PROTO2",
+                        "EDITION_PROTO3",
+                        "EDITION_2023",
+                        "EDITION_2024",
+                        "EDITION_1_TEST_ONLY",
+                        "EDITION_2_TEST_ONLY",
+                        "EDITION_99997_TEST_ONLY",
+                        "EDITION_99998_TEST_ONLY",
+                        "EDITION_99999_TEST_ONLY",
+                        "EDITION_MAX"
+                    ]
+                },
+                "deprecationWarning": {
+                    "type": "string"
+                },
+                "editionRemoved": {
+                    "enum": [
+                        "EDITION_UNKNOWN",
+                        "EDITION_LEGACY",
+                        "EDITION_PROTO2",
+                        "EDITION_PROTO3",
+                        "EDITION_2023",
+                        "EDITION_2024",
+                        "EDITION_1_TEST_ONLY",
+                        "EDITION_2_TEST_ONLY",
+                        "EDITION_99997_TEST_ONLY",
+                        "EDITION_99998_TEST_ONLY",
+                        "EDITION_99999_TEST_ONLY",
+                        "EDITION_MAX"
                     ]
                 }
             },
             "additionalProperties": false,
             "type": "object"
         },
-        "proto3_unittest.TestPackedTypes": {
-            "$id": "proto3_unittest.TestPackedTypes",
+        "google.protobuf.FileDescriptorProto": {
+            "$id": "google.protobuf.FileDescriptorProto",
             "properties": {
-                "packedInt32": {
+                "name": {
+                    "type": "string"
+                },
+                "package": {
+                    "type": "string"
+                },
+                "dependency": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "publicDependency": {
                     "items": {
                         "type": "integer"
                     },
                     "type": "array"
                 },
-                "packedInt64": {
+                "weakDependency": {
                     "items": {
                         "type": "integer"
                     },
                     "type": "array"
                 },
-                "packedUint32": {
+                "messageType": {
                     "items": {
-                        "type": "integer"
+                        "$ref": "#/$defs/google.protobuf.DescriptorProto"
                     },
                     "type": "array"
                 },
-                "packedUint64": {
+                "enumType": {
                     "items": {
-                        "type": "integer"
+                        "$ref": "#/$defs/google.protobuf.EnumDescriptorProto"
                     },
                     "type": "array"
                 },
-                "packedSint32": {
+                "service": {
                     "items": {
-                        "type": "integer"
+                        "$ref": "#/$defs/google.protobuf.ServiceDescriptorProto"
                     },
                     "type": "array"
                 },
-                "packedSint64": {
+                "extension": {
                     "items": {
-                        "type": "integer"
+                        "$ref": "#/$defs/google.protobuf.FieldDescriptorProto"
                     },
                     "type": "array"
                 },
-                "packedFixed32": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.FileOptions"
                 },
-                "packedFixed64": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "sourceCodeInfo": {
+                    "$ref": "#/$defs/google.protobuf.SourceCodeInfo"
                 },
-                "packedSfixed32": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "syntax": {
+                    "type": "string"
                 },
-                "packedSfixed64": {
+                "edition": {
+                    "enum": [
+                        "EDITION_UNKNOWN",
+                        "EDITION_LEGACY",
+                        "EDITION_PROTO2",
+                        "EDITION_PROTO3",
+                        "EDITION_2023",
+                        "EDITION_2024",
+                        "EDITION_1_TEST_ONLY",
+                        "EDITION_2_TEST_ONLY",
+                        "EDITION_99997_TEST_ONLY",
+                        "EDITION_99998_TEST_ONLY",
+                        "EDITION_99999_TEST_ONLY",
+                        "EDITION_MAX"
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.FileDescriptorSet": {
+            "$id": "google.protobuf.FileDescriptorSet",
+            "properties": {
+                "file": {
                     "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
-                },
-                "packedFloat": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
-                },
-                "packedDouble": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
-                },
-                "packedBool": {
-                    "items": {
-                        "type": "boolean"
-                    },
-                    "type": "array"
-                },
-                "packedEnum": {
-                    "items": {
-                        "enum": [
-                            "FOREIGN_ZERO",
-                            "FOREIGN_FOO",
-                            "FOREIGN_BAR",
-                            "FOREIGN_BAZ",
-                            "FOREIGN_LARGE"
-                        ]
+                        "$ref": "#/$defs/google.protobuf.FileDescriptorProto"
                     },
                     "type": "array"
                 }
@@ -681,102 +622,352 @@
             "additionalProperties": false,
             "type": "object"
         },
-        "proto3_unittest.TestUnpackedTypes": {
-            "$id": "proto3_unittest.TestUnpackedTypes",
+        "google.protobuf.FileOptions": {
+            "$id": "google.protobuf.FileOptions",
             "properties": {
-                "repeatedInt32": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "javaPackage": {
+                    "type": "string"
                 },
-                "repeatedInt64": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "javaOuterClassname": {
+                    "type": "string"
                 },
-                "repeatedUint32": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "javaMultipleFiles": {
+                    "type": "boolean"
                 },
-                "repeatedUint64": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "javaGenerateEqualsAndHash": {
+                    "type": "boolean"
                 },
-                "repeatedSint32": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "javaStringCheckUtf8": {
+                    "type": "boolean"
                 },
-                "repeatedSint64": {
-                    "items": {
-                        "type": "integer"
-                    },
-                    "type": "array"
+                "optimizeFor": {
+                    "enum": [
+                        "SPEED",
+                        "CODE_SIZE",
+                        "LITE_RUNTIME"
+                    ]
                 },
-                "repeatedFixed32": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "goPackage": {
+                    "type": "string"
                 },
-                "repeatedFixed64": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "ccGenericServices": {
+                    "type": "boolean"
                 },
-                "repeatedSfixed32": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "javaGenericServices": {
+                    "type": "boolean"
                 },
-                "repeatedSfixed64": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "pyGenericServices": {
+                    "type": "boolean"
                 },
-                "repeatedFloat": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "deprecated": {
+                    "type": "boolean"
                 },
-                "repeatedDouble": {
-                    "items": {
-                        "type": "number"
-                    },
-                    "type": "array"
+                "ccEnableArenas": {
+                    "type": "boolean"
                 },
-                "repeatedBool": {
-                    "items": {
-                        "type": "boolean"
-                    },
-                    "type": "array"
+                "objcClassPrefix": {
+                    "type": "string"
                 },
-                "repeatedNestedEnum": {
+                "csharpNamespace": {
+                    "type": "string"
+                },
+                "swiftPrefix": {
+                    "type": "string"
+                },
+                "phpClassPrefix": {
+                    "type": "string"
+                },
+                "phpNamespace": {
+                    "type": "string"
+                },
+                "phpMetadataNamespace": {
+                    "type": "string"
+                },
+                "rubyPackage": {
+                    "type": "string"
+                },
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "uninterpretedOption": {
                     "items": {
-                        "enum": [
-                            "ZERO",
-                            "FOO",
-                            "BAR",
-                            "BAZ",
-                            "NEG"
-                        ]
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
                     },
                     "type": "array"
                 }
             },
             "additionalProperties": false,
             "type": "object"
+        },
+        "google.protobuf.MessageOptions": {
+            "$id": "google.protobuf.MessageOptions",
+            "properties": {
+                "messageSetWireFormat": {
+                    "type": "boolean"
+                },
+                "noStandardDescriptorAccessor": {
+                    "type": "boolean"
+                },
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "mapEntry": {
+                    "type": "boolean"
+                },
+                "deprecatedLegacyJsonFieldConflicts": {
+                    "type": "boolean"
+                },
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.MethodDescriptorProto": {
+            "$id": "google.protobuf.MethodDescriptorProto",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "inputType": {
+                    "type": "string"
+                },
+                "outputType": {
+                    "type": "string"
+                },
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.MethodOptions"
+                },
+                "clientStreaming": {
+                    "type": "boolean"
+                },
+                "serverStreaming": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.MethodOptions": {
+            "$id": "google.protobuf.MethodOptions",
+            "properties": {
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "idempotencyLevel": {
+                    "enum": [
+                        "IDEMPOTENCY_UNKNOWN",
+                        "NO_SIDE_EFFECTS",
+                        "IDEMPOTENT"
+                    ]
+                },
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.OneofDescriptorProto": {
+            "$id": "google.protobuf.OneofDescriptorProto",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.OneofOptions"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.OneofOptions": {
+            "$id": "google.protobuf.OneofOptions",
+            "properties": {
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.ServiceDescriptorProto": {
+            "$id": "google.protobuf.ServiceDescriptorProto",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "method": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.MethodDescriptorProto"
+                    },
+                    "type": "array"
+                },
+                "options": {
+                    "$ref": "#/$defs/google.protobuf.ServiceOptions"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.ServiceOptions": {
+            "$id": "google.protobuf.ServiceOptions",
+            "properties": {
+                "features": {
+                    "$ref": "#/$defs/google.protobuf.FeatureSet"
+                },
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "uninterpretedOption": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.SourceCodeInfo": {
+            "$id": "google.protobuf.SourceCodeInfo",
+            "properties": {
+                "location": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.SourceCodeInfo.Location"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.SourceCodeInfo.Location": {
+            "$id": "google.protobuf.SourceCodeInfo.Location",
+            "properties": {
+                "path": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "span": {
+                    "items": {
+                        "type": "integer"
+                    },
+                    "type": "array"
+                },
+                "leadingComments": {
+                    "type": "string"
+                },
+                "trailingComments": {
+                    "type": "string"
+                },
+                "leadingDetachedComments": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.UninterpretedOption": {
+            "$id": "google.protobuf.UninterpretedOption",
+            "properties": {
+                "name": {
+                    "items": {
+                        "$ref": "#/$defs/google.protobuf.UninterpretedOption.NamePart"
+                    },
+                    "type": "array"
+                },
+                "identifierValue": {
+                    "type": "string"
+                },
+                "positiveIntValue": {
+                    "type": "integer"
+                },
+                "negativeIntValue": {
+                    "type": "integer"
+                },
+                "doubleValue": {
+                    "type": "number"
+                },
+                "stringValue": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                },
+                "aggregateValue": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "google.protobuf.UninterpretedOption.NamePart": {
+            "$id": "google.protobuf.UninterpretedOption.NamePart",
+            "properties": {
+                "namePart": {
+                    "type": "string"
+                },
+                "isExtension": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "grpcview.v1.Server": {
+            "$id": "grpcview.v1.Server",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "port": {
+                    "type": "integer"
+                },
+                "tls": {
+                    "$ref": "#/$defs/grpcview.v1.Server.TLS"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object"
+        },
+        "grpcview.v1.Server.TLS": {
+            "$id": "grpcview.v1.Server.TLS",
+            "properties": {},
+            "additionalProperties": false,
+            "type": "object"
         }
-    }
+    },
+    "properties": {
+        "descriptorSet": {
+            "$ref": "#/$defs/google.protobuf.FileDescriptorSet"
+        },
+        "reflection": {
+            "$ref": "#/$defs/grpcview.v1.Server"
+        }
+    },
+    "additionalProperties": false,
+    "type": "object"
 }

@@ -1,23 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"embed"
 	"fmt"
+	"io"
 
 	"github.com/ramilmsh/grpcview/service"
 )
 
-//go:embed index.html
-var frontend embed.FS
-
 func run(ctx context.Context) error {
-	indexPageFile, err := frontend.Open("index.html")
-	if err != nil {
-		return fmt.Errorf("failed to open index page: %w", err)
-	}
+	b := bytes.Buffer{}
+	b.WriteString("<h1>dummy</h1>")
 
-	if err := service.Run(ctx, indexPageFile); err != nil {
+	if err := service.Run(ctx, io.NopCloser(&b)); err != nil {
 		return fmt.Errorf("failed to run server: %w", err)
 	}
 

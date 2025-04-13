@@ -14,6 +14,11 @@ vite_bin.vite_binary(
     data = ["//:node_modules"],
 )
 
+alias(
+    name = "go",
+    actual = "@rules_go//go:go",
+)
+
 # gazelle:resolve proto proto google/api/annotations.proto                   @googleapis//google/api:annotations_proto
 # gazelle:resolve proto go    google/api/annotations.proto                   @org_golang_google_genproto_googleapis_api//annotations
 # gazelle:resolve proto proto google/api/client.proto                        @googleapis//google/api:client_proto
