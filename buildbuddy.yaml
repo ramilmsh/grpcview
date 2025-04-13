@@ -1,0 +1,12 @@
+actions:
+  - name: "Test all targets"
+    container_image: "ubuntu-22.04"
+    triggers:
+      push:
+        branches:
+          - "trunk"
+      pull_request:
+        branches:
+          - "*"
+    steps:
+      - run: "bazel test //..."

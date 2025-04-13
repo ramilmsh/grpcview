@@ -1,5 +1,5 @@
 """
-Grpc view
+grpcview
 """
 
 module(name = "grpcview")
@@ -22,41 +22,12 @@ go_sdk.download(
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
-go_deps.module_override(
-    patch_strip = 1,
-    patches = [
-        "//tools/patches:protoc-gen-openapiv2-wasip1.patch",
-    ],
-    path = "github.com/grpc-ecosystem/grpc-gateway/v2",
-)
-go_deps.gazelle_override(
-    build_file_generation = "on",
-    directives = [
-        "gazelle:go_generate_proto false",
-        "gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/v2/internal/descriptor/apiconfig //internal/descriptor/apiconfig",
-        "gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/v2/internal/descriptor/openapiconfig //internal/descriptor/openapiconfig",
-        "gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options //protoc-gen-openapiv2/options",
-    ],
-    path = "github.com/grpc-ecosystem/grpc-gateway/v2",
-)
-go_deps.archive_override(
-    patches = [
-        "//tools/patches:wasmtime-go-wasi_config_set_stdin_bytes.patch",
-    ],
-    path = "github.com/bytecodealliance/wasmtime-go/v30",
-    sha256 = "ce7ccecfd587c1f5e3580b4e29fc39591902323092ce6acd5b319439118a030d",
-    strip_prefix = "wasmtime-go-30.0.0",
-    urls = [
-        "https://github.com/bytecodealliance/wasmtime-go/archive/refs/tags/v30.0.0.tar.gz",
-    ],
-)
 use_repo(
     go_deps,
     "com_connectrpc_connect",
     "com_connectrpc_cors",
     "com_connectrpc_grpcreflect",
     "com_github_bytecodealliance_wasmtime_go_v30",
-    "com_github_grpc_ecosystem_grpc_gateway_v2",
     "com_github_invopop_jsonschema",
     "com_github_jhump_protoreflect",
     "com_github_mattn_go_sqlite3",
@@ -83,6 +54,3 @@ npm.npm_translate_lock(
     verify_node_modules_ignored = "//:.bazelignore",
 )
 use_repo(npm, "npm")
-
-download_sqlite = use_extension("//third_party/sqlite:extension.bzl", "download")
-use_repo(download_sqlite, "sqlite")

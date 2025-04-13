@@ -1,2 +1,30 @@
+common --enable_platform_specific_config
 common --incompatible_strict_action_env
 common --enable_platform_specific_config
+
+build --workspace_status_command=$(pwd)/tools/workspace_status.sh
+
+common:linux --config=ci
+
+common:ci --config=remote
+common:ci --build_metadata=ROLE=CI
+
+common:remote --enable_workspace
+
+build:remote --remote_cache=grpcs://grpcview.buildbuddy.io
+build:remote --remote_timeout=10m
+build:remote --remote_executor=grpcs://grpcview.buildbuddy.io
+
+build:remote --host_platform=@buildbuddy_toolchain//:platform
+build:remote --platforms=@buildbuddy_toolchain//:platform
+build:remote --extra_execution_platforms=@buildbuddy_toolchain//:platform
+
+build:remote --crosstool_top=@buildbuddy_toolchain//:toolchain
+build:remote --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+
+build:remote --java_language_version=11
+build:remote --tool_java_language_version=11
+build:remote --java_runtime_version=remotejdk_11
+build:remote --tool_java_runtime_version=remotejdk_11
+
+build:remote --define=EXECUTOR=remote
