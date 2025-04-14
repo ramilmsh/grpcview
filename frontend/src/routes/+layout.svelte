@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "$lib/editor/worker";
+  import "$lib/editor/workers";
 </script>
 
 <slot></slot>

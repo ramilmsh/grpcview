@@ -1,14 +1,14 @@
 import * as monaco from "monaco-editor";
 // @ts-ignore
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker&inline";
 // @ts-ignore
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker&inline";
 // @ts-ignore
-import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
+import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker&inline";
 // @ts-ignore
-import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
+import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker&inline";
 // @ts-ignore
-import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline";
 
 // @ts-ignore
 self.MonacoEnvironment = {
