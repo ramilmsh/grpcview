@@ -9,10 +9,12 @@ common --host_per_file_copt=external/.*grpc.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUIL
 
 build --workspace_status_command=$(pwd)/tools/workspace_status.sh
 
-common:ci --config=remote
+common:ci --config=remote-linux-amd64
 common:ci --build_metadata=ROLE=CI
 
-common:remote --enable_workspace
+common:remote-linux-amd64 --config=remote
+common:remote-linux-amd64 --platforms=@toolchains_buildbuddy//platforms:linux_x86_64
+common:remote-linux-amd64 --extra_execution_platforms=@toolchains_buildbuddy//platforms:linux_x86_64
 
 common:remote --remote_cache_compression
 common:remote --jobs=50
@@ -22,12 +24,6 @@ build:remote --remote_cache=grpcs://grpcview.buildbuddy.io
 build:remote --remote_timeout=10m
 build:remote --remote_executor=grpcs://grpcview.buildbuddy.io
 
-build:remote --host_platform=@buildbuddy_toolchain//:platform
-build:remote --platforms=@buildbuddy_toolchain//:platform
-build:remote --extra_execution_platforms=@buildbuddy_toolchain//:platform
-
-build:remote --crosstool_top=@buildbuddy_toolchain//:toolchain
-build:remote --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
 
 build:remote --java_language_version=11
 build:remote --tool_java_language_version=11
