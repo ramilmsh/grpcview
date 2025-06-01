@@ -1,16 +1,10 @@
 import * as monaco from "monaco-editor";
-// @ts-ignore
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker&inline";
-// @ts-ignore
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker&inline";
-// @ts-ignore
 import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker&inline";
-// @ts-ignore
 import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker&inline";
-// @ts-ignore
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline";
 
-// @ts-ignore
 self.MonacoEnvironment = {
   getWorker(_: any, label: string) {
     if (label === "json") {

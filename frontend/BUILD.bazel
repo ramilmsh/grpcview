@@ -1,55 +1,56 @@
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load("@npm//:vite/package_json.bzl", vite_bin = "bin")
+load("@npm//frontend:vite/package_json.bzl", vite_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
 filegroup(
-    name = "srcs",
-    srcs = glob(
-        [
-            "src/**/*",
-            "static/**/*",
-        ],
-        allow_empty = True,
-    ),
+    name = "src",
+    srcs = glob(["src/**/*"]),
 )
 
 BUILD_DEPS = [":node_modules/" + d for d in [
-    "@sveltejs/adapter-static",
-    "@sveltejs/kit",
-    "@sveltejs/vite-plugin-svelte",
-    "svelte",
-    "svelte-check",
-    "typescript",
-    "vite",
+    "@types/node",
     "@bufbuild/protobuf",
     "@connectrpc/connect",
     "@connectrpc/connect-web",
     "monaco-editor",
+    "vue",
+    "pinia",
+    "pinia-plugin-persistedstate",
+    "vue-router",
+    "vite",
+    "@vitejs/plugin-vue",
+    "@vue/tsconfig",
+    "typescript",
+    "vite-plugin-singlefile",
+    "vite-plugin-vue-devtools",
+    "vue-tsc",
 ]]
 
-DATA = [
-    ".npmrc",
+DATA = BUILD_DEPS + [
+    "env.d.ts",
     "package.json",
-    "svelte.config.js",
     "tsconfig.json",
     "vite.config.ts",
-    ":srcs",
+    "index.html",
+    ":src",
     "//service/proto/v1:grpcviewv1_ts_proto",
-] + BUILD_DEPS
+]
 
 vite_bin.vite(
     name = "frontend",
     srcs = DATA,
-    outs = ["build/index.html"],
-    args = ["build"],
+    outs = ["dist/index.html"],
+    args = [
+        "build",
+        "--mode=development",
+    ],
     chdir = package_name(),
     visibility = ["//visibility:public"],
 )
 
 vite_bin.vite_binary(
-    name = "serve",
-    args = ["serve"],
+    name = "dev",
     chdir = package_name(),
     data = DATA,
     tags = ["ibazel_notify_changes"],

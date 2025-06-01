@@ -1,18 +1,23 @@
-import { sveltekit } from "@sveltejs/kit/vite";
-import { defineConfig } from "vite";
+import { fileURLToPath, URL } from "node:url";
 
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import vueDevTools from "vite-plugin-vue-devtools";
+import { viteSingleFile } from "vite-plugin-singlefile";
+
+// https://vite.dev/config/
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [vue(), vueDevTools({}), viteSingleFile()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@grpcview": fileURLToPath(new URL("../service/proto", import.meta.url)),
+    },
+  },
   server: {
-    hmr: { overlay: true },
+    // hmr: { overlay: true },
     watch: {
       usePolling: true,
     },
-    fs: {
-      strict: false,
-    },
-  },
-  build: {
-    assetsInlineLimit: Infinity,
   },
 });
