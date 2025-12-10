@@ -1,3 +1,4 @@
+load("@bazel_env.bzl", "bazel_env")
 load("@gazelle//:def.bzl", "gazelle")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 
@@ -5,9 +6,13 @@ npm_link_all_packages(name = "node_modules")
 
 gazelle(name = "gazelle")
 
-alias(
-    name = "go",
-    actual = "@rules_go//go:go",
+bazel_env(
+    name = "bazel_env",
+    tools = {
+        "buildifier": "@buildifier_prebuilt//:buildifier",
+        "buildozer": "@buildozer//:buildozer",
+        "go": "@rules_go//go",
+    },
 )
 
 # gazelle:resolve proto proto google/api/annotations.proto                   @googleapis//google/api:annotations_proto

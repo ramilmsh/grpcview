@@ -1,6 +1,7 @@
 common --enable_platform_specific_config
 common --incompatible_strict_action_env
 common --incompatible_enable_proto_toolchain_resolution
+common --incompatible_use_plus_in_repo_names
 
 common --per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
 common --host_per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
@@ -8,6 +9,10 @@ common --per_file_copt=external/.*grpc.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
 common --host_per_file_copt=external/.*grpc.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
 
 build --workspace_status_command=$(pwd)/tools/workspace_status.sh
+
+build:linux --sandbox_add_mount_pair=/tmp
+build:macos --sandbox_add_mount_pair=/var/tmp
+build:windows --sandbox_add_mount_pair=C:\Temp
 
 common:ci --config=remote-linux-amd64
 common:ci --build_metadata=ROLE=CI
