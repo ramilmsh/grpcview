@@ -11,9 +11,15 @@ bazel_env(
     tools = {
         "buildifier": "@buildifier_prebuilt//:buildifier",
         "buildozer": "@buildozer//:buildozer",
+        "buf": "@rules_buf_toolchains//:buf",
+        "pnpm": "@pnpm//:pnpm",
         "go": "@rules_go//go",
+        "gazelle": "//:gazelle",
     },
 )
+
+# gazelle:go_grpc_compilers @rules_go//proto:go_proto,//tools:connect_go_proto_compiler
+# gazelle:go_proto_compilers @rules_go//proto:go_proto,//tools:connect_go_proto_compiler
 
 # gazelle:resolve proto proto google/api/annotations.proto                   @googleapis//google/api:annotations_proto
 # gazelle:resolve proto go    google/api/annotations.proto                   @org_golang_google_genproto_googleapis_api//annotations

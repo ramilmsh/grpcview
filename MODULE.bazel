@@ -10,7 +10,6 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.22.0")
 bazel_dep(name = "bazel_env.bzl", version = "0.5.0")
 bazel_dep(name = "buildozer", version = "8.2.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.1.1")
-
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.0.1")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
@@ -23,6 +22,7 @@ register_toolchains(
 
 bazel_dep(name = "toolchains_protoc", version = "0.6.0")
 bazel_dep(name = "protobuf", version = "33.1")
+
 protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
 protoc.toolchain(
     google_protobuf = "com_google_protobuf",
@@ -31,6 +31,12 @@ protoc.toolchain(
 use_repo(protoc, "com_google_protobuf", "toolchains_protoc_hub")
 
 register_toolchains("@toolchains_protoc_hub//:all")
+
+bazel_dep(name = "rules_buf", version = "0.5.2")
+
+buf = use_extension("@rules_buf//buf:extensions.bzl", "buf")
+buf.toolchains(version = "v1.61.0")
+use_repo(buf, "rules_buf_toolchains")
 
 bazel_dep(name = "googleapis", version = "0.0.0-20251127-8cd3749f")
 bazel_dep(name = "rules_proto", version = "7.1.0")

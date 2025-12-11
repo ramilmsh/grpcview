@@ -17,7 +17,21 @@ export const useWorkspaceStore = defineStore(
       parent.children.push(item);
     }
 
-    return { rootItem, addItem };
+    function removeItem(parent: Item, index: number): void {
+      if (parent.children && index >= 0 && index < parent.children.length) {
+        parent.children.splice(index, 1);
+      }
+    }
+
+    function renameItem(item: Item, newName: string): void {
+      item.name = newName;
+    }
+
+    function setRootItem(item: Item): void {
+      rootItem.value = item;
+    }
+
+    return { rootItem, addItem, removeItem, renameItem, setRootItem };
   },
   { persist: true }
 );

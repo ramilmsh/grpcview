@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//inspector",
-        "//service/proto/v1:grpcviewv1_go_proto",
+        "//service/proto/v1:proto",
         "@com_connectrpc_connect//:connect",
         "@com_github_jhump_protoreflect//desc",
         "@com_github_jhump_protoreflect//grpcreflect",

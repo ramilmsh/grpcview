@@ -10,7 +10,8 @@
 .container {
   padding: 0;
   margin: 0;
-  width: 100vw;
   height: 100vh;
+  font-family: "Roboto", sans-serif;
+  background-color: #fafafa;
 }
 </style>

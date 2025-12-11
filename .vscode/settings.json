@@ -14,7 +14,6 @@
   "files.insertFinalNewline": true,
   "bazel.buildifierExecutable": "@buildifier_prebuilt//:buildifier",
   "bazel.queriesShareServer": false,
-  "go.goroot": "${workspaceFolder}/bazel-${workspaceFolderBasename}/external/rules_go++go_sdk+go_sdk/",
   "go.toolsEnvVars": {
     "GOPACKAGESDRIVER": "${workspaceFolder}/tools/gopackagesdriver.sh"
   },
@@ -49,5 +48,8 @@
   "go.vetOnSave": "off",
   "[starlark]": {
     "editor.defaultFormatter": "BazelBuild.vscode-bazel"
+  },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
   }
 }

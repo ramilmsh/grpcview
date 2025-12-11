@@ -33,11 +33,13 @@ message Service {
 
 message AddRequest {
   oneof source {
-    google.protobuf.FileDescriptorSet descriptor_set = 1;
+    bytes descriptor_set = 1;
     Server reflection = 2;
   }
 }
 
 message AddResponse { repeated Service services = 1; }
 
-service Workspace { rpc Add(AddRequest) returns (AddResponse); }
+service Workspace {
+  rpc Add(AddRequest) returns (AddResponse);
+}

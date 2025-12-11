@@ -4,7 +4,6 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv1";
 import type { JsonObject, Message as Message$1 } from "@bufbuild/protobuf";
-import type { FileDescriptorSet } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file service/proto/v1/service.proto.
@@ -136,9 +135,9 @@ export declare type AddRequest = Message$1<"grpcview.v1.AddRequest"> & {
    */
   source: {
     /**
-     * @generated from field: google.protobuf.FileDescriptorSet descriptor_set = 1;
+     * @generated from field: bytes descriptor_set = 1;
      */
-    value: FileDescriptorSet;
+    value: Uint8Array;
     case: "descriptorSet";
   } | {
     /**

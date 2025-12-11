@@ -1,4 +1,5 @@
 load("@aspect_rules_ts//ts:proto.bzl", "ts_proto_library")
+load("@rules_go//go:def.bzl", "go_library")
 load("@rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
@@ -7,19 +8,27 @@ proto_library(
     srcs = ["service.proto"],
     visibility = ["//visibility:public"],
     deps = [
-        "@com_google_protobuf//:descriptor_proto",
-        "@com_google_protobuf//:struct_proto",
+        "@protobuf//:descriptor_proto",
+        "@protobuf//:struct_proto",
     ],
 )
 
 go_proto_library(
     name = "grpcviewv1_go_proto",
     compilers = [
-        "@rules_go//proto:go_proto",
         "//tools:connect_go_proto_compiler",
+        "@rules_go//proto:go_proto",
     ],
     importpath = "github.com/ramilmsh/grpcview/service/proto/v1",
     proto = ":grpcviewv1_proto",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "proto",
+    srcs = ["service.go"],
+    embed = [":grpcviewv1_go_proto"],
+    importpath = "github.com/ramilmsh/grpcview/service/proto/v1",
     visibility = ["//visibility:public"],
 )
 
