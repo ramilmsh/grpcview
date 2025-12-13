@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package grpcview.v1;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ramilmsh/grpcview/service/proto/v1;grpcviewv1";
+
+// Status is a copy of google.rpc.Status, this is a hack, because we can't import google/rpc/status.proto for rules_ts
+message Status {
+  int32 code = 1;
+  string message = 2;
+  repeated google.protobuf.Any details = 3;
+}
+
+message Server {
+  message TLS {}
+
+  string host = 1;
+  int32 port = 2;
+  optional TLS tls = 3;
+}
+
+message Message {
+  string package = 1;
+  string name = 2;
+  optional google.protobuf.Struct schema = 3;
+}
+
+message Method {
+  string name = 1;
+  Message input = 2;
+  Message output = 3;
+}
+
+message Service {
+  string package = 1;
+  string name = 2;
+  repeated Method methods = 3;
+}
+
+message DescriptorSource {
+    oneof source {
+        bytes descriptor_set = 1;
+        Server reflection = 2;
+    }
+}
+
+message Folder {
+    repeated Item items = 1;
+}
+
+message Request {
+message Response {
+    Status status = 1;
+    bytes response = 2;
+    google.protobuf.Struct metadata = 3;
+    google.protobuf.Duration latency = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+    Service service = 1;
+    Method method = 2;
+    bytes request = 3;
+    Response response = 4;
+}
+
+message Item {
+
+    string name = 1;
+    oneof content {
+        Folder folder = 2;
+        Request request = 3;
+    }
+}
+
+message WorkspaceSnapshot {
+    string name = 1;
+    repeated Item items = 2;
+    repeated DescriptorSource sources = 3;
+}
+

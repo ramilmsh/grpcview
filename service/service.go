@@ -17,6 +17,7 @@ import (
 	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	_ "google.golang.org/genproto/googleapis/rpc/status"
 
 	"connectrpc.com/grpcreflect"
 

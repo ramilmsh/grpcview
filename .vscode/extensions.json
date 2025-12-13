@@ -6,6 +6,7 @@
     "esbenp.prettier-vscode",
     "BazelBuild.vscode-bazel",
     "golang.go",
-    "mkhl.direnv"
+    "mkhl.direnv",
+    "DrBlury.protobuf-vsc"
   ]
 }

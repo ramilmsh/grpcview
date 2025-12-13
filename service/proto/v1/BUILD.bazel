@@ -5,11 +5,17 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 
 proto_library(
     name = "grpcviewv1_proto",
-    srcs = ["service.proto"],
+    srcs = [
+        "service.proto",
+        "workspace.proto",
+    ],
     visibility = ["//visibility:public"],
     deps = [
+        "@protobuf//:any_proto",
         "@protobuf//:descriptor_proto",
+        "@protobuf//:duration_proto",
         "@protobuf//:struct_proto",
+        "@protobuf//:timestamp_proto",
     ],
 )
 
@@ -34,6 +40,7 @@ go_library(
 
 ts_proto_library(
     name = "grpcviewv1_ts_proto",
+    gen_connect_query = True,
     node_modules = "//:node_modules",
     proto = ":grpcviewv1_proto",
     proto_srcs = ["service.proto"],

@@ -13,6 +13,7 @@
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
   "bazel.buildifierExecutable": "@buildifier_prebuilt//:buildifier",
+  "bazel.lsp.command": "starpls",
   "bazel.queriesShareServer": false,
   "go.toolsEnvVars": {
     "GOPACKAGESDRIVER": "${workspaceFolder}/tools/gopackagesdriver.sh"

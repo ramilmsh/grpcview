@@ -15,6 +15,7 @@ bazel_env(
         "pnpm": "@pnpm//:pnpm",
         "go": "@rules_go//go",
         "gazelle": "//:gazelle",
+        "starpls": "@multitool//tools/starpls",
     },
 )
 

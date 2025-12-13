@@ -10,7 +10,13 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.22.0")
 bazel_dep(name = "bazel_env.bzl", version = "0.5.0")
 bazel_dep(name = "buildozer", version = "8.2.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.1.1")
+bazel_dep(name = "rules_cc", version = "0.2.14")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.0.1")
+single_version_override(
+    module_name = "hermetic_cc_toolchain",
+    patch_strip = 1,
+    patches = ["tools/patches/hermetic_cc_toolchain_bazel9.patch"],
+)
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 use_repo(toolchains, "zig_sdk")
@@ -62,6 +68,7 @@ use_repo(
     "com_github_mattn_go_sqlite3",
     "com_github_rs_cors",
     "com_github_wk8_go_ordered_map_v2",
+    "org_golang_google_genproto_googleapis_rpc",
     "org_golang_google_grpc",
     "org_golang_google_protobuf",
     "org_golang_x_net",
@@ -69,6 +76,7 @@ use_repo(
 
 bazel_dep(name = "aspect_rules_ts", version = "3.7.1")
 bazel_dep(name = "aspect_rules_js", version = "2.8.3")
+bazel_dep(name = "rules_nodejs", version = "6.6.2")
 
 pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
 use_repo(pnpm, "pnpm")
@@ -85,3 +93,11 @@ use_repo(npm, "npm")
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 
 buildbuddy = use_extension("@toolchains_buildbuddy//:extensions.bzl", "buildbuddy")
+
+bazel_dep(name = "rules_multitool", version = "1.11.1")
+
+multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
+multitool.hub(
+    lockfile = "//tools:multitool.lock.json",
+)
+use_repo(multitool, "multitool")

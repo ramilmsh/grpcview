@@ -4,32 +4,11 @@ package grpcview.v1;
 
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/struct.proto";
+import "service/proto/v1/workspace.proto";
 
 option go_package = "github.com/ramilmsh/grpcview/service/proto/v1;grpcviewv1";
 
-message Server {
-  message TLS {}
 
-  string host = 1;
-  int32 port = 2;
-  optional TLS tls = 3;
-}
-
-message Message {
-  string package = 1;
-  string name = 2;
-  optional google.protobuf.Struct schema = 3;
-}
-message Method {
-  string name = 1;
-  Message input = 2;
-  Message output = 3;
-}
-message Service {
-  string package = 1;
-  string name = 2;
-  repeated Method methods = 3;
-}
 
 message AddRequest {
   oneof source {
