@@ -10,7 +10,7 @@ copy_file(
 go_library(
     name = "inspector",
     srcs = ["inspector.go"],
-    importpath = "github.com/ramilmsh/grpcview/inspector",
+    importpath = "codeberg.org/ramilmsh/grpcview/inspector",
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_invopop_jsonschema//:jsonschema",

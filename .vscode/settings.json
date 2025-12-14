@@ -15,6 +15,10 @@
   "bazel.buildifierExecutable": "@buildifier_prebuilt//:buildifier",
   "bazel.lsp.command": "starpls",
   "bazel.queriesShareServer": false,
+  "protobuf.protoSrcsDir": "${workspaceFolder}/proto",
+  "protobuf.completion.includeGoogleTypes": false,
+  "protobuf.protoc.useAbsolutePath": true,
+  "protobuf.includes": ["bazel-grpcview/external/googleapis+"],
   "go.toolsEnvVars": {
     "GOPACKAGESDRIVER": "${workspaceFolder}/tools/gopackagesdriver.sh"
   },
@@ -30,7 +34,7 @@
       "-bazel-grpcview"
     ],
     "formatting.gofumpt": true,
-    "formatting.local": "github.com/ramilmsh/grpcview",
+    "formatting.local": "codeberg.org/ramilmsh/grpcview",
     "ui.completion.usePlaceholders": true,
     "ui.semanticTokens": true,
     "ui.codelenses": {
@@ -54,6 +58,9 @@
     "editor.defaultFormatter": "golang.go"
   },
   "[proto]": {
-    "editor.defaultFormatter": "bufbuild.vscode-buf"
+    "editor.defaultFormatter": "DrBlury.protobuf-vsc"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
   }
 }

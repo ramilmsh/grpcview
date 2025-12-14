@@ -21,11 +21,11 @@ import (
 
 	"connectrpc.com/grpcreflect"
 
-	workspace "github.com/ramilmsh/grpcview/service/workspace"
+	workspace "codeberg.org/ramilmsh/grpcview/service/workspace"
 
 	connectcors "connectrpc.com/cors"
 
-	grpcviewv1 "github.com/ramilmsh/grpcview/service/proto/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
 func Run(
@@ -46,55 +46,15 @@ func Run(
 
 	mux := http.NewServeMux()
 
-	reflector := grpcreflect.NewStaticReflector("grpcview.v1.Workspace")
+	reflector := grpcreflect.NewStaticReflector("grpcview.v1.WorkspaceService")
 
 	mux.Handle(grpcreflect.NewHandlerV1(reflector))
 	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
 
-	mux.Handle(grpcviewv1.NewWorkspaceHandler(
+	mux.Handle(grpcviewv1.NewWorkspaceServiceHandler(
 		&ws,
 		connect.WithInterceptors(
-			connect.UnaryInterceptorFunc(
-				func(next connect.UnaryFunc) connect.UnaryFunc {
-					return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
-						start := time.Now()
-						response, responseErr := next(ctx, request)
-						end := time.Now()
-
-						latency := end.Sub(start)
-						args := []any{
-							"protocol", request.Peer().Protocol,
-							"address", request.Peer().Addr,
-							"procedure", request.Spec().Procedure,
-							"latency", latency,
-						}
-
-						if responseErr == nil {
-							logger.InfoContext(
-								ctx, "request finished",
-								append(args,
-									"status", "ok",
-								)...,
-							)
-							return response, nil
-						}
-						if connectErr := new(connect.Error); errors.As(responseErr, &connectErr) {
-							args = append(args,
-								"status", connectErr.Code(),
-							)
-						}
-
-						logger.ErrorContext(
-							ctx, "request finished",
-							append(args,
-								"status", connect.CodeUnknown,
-								"error", responseErr,
-							)...,
-						)
-						return response, responseErr
-					}
-				},
-			),
+			loggingInterceptor{logger: logger},
 		),
 	))
 

@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package grpcview.v1;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/struct.proto";
+import "proto/grpcview/v1/workspace.proto";
+
+option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1";
+
+message AddDescriptorSourceRequest {
+  string workspace_name = 1;
+  oneof source {
+    bytes  descriptor_set = 2;
+    Server reflection     = 3;
+  }
+}
+
+message AddDescriptorSourceResponse {
+  Workspace workspace = 1;
+}
+
+message CreateFolderRequest {
+  string workspace_name = 1;
+  repeated string path = 2;
+  string item_name = 3;
+}
+
+message CreateFolderResponse {
+  Workspace workspace = 1;
+}
+
+message CreateRequestRequest {
+  string workspace_name = 1;
+  repeated string path = 2;
+  string item_name = 3;
+  string service = 4;
+  string method = 5;
+}
+
+message CreateRequestResponse {
+  Workspace workspace = 1;
+}
+
+message DeleteRequestRequest {
+  string workspace_name = 1;
+  repeated string path = 2;
+  string item_name = 3;
+}
+
+message DeleteRequestResponse {
+  Workspace workspace = 1;
+}
+
+message UpdateRequestRequest {
+  string workspace_name = 1;
+  repeated string path = 2;
+  string item_name = 3;
+  optional string service = 4;
+  optional string method = 5;
+  optional bytes draft_body = 6;
+  optional google.protobuf.Struct draft_metadata = 7;
+}
+
+message UpdateRequestResponse {
+  Workspace workspace = 1;
+}
+
+message GetRequest {
+  string workspace_name = 1;
+}
+
+message GetResponse {
+  Workspace workspace = 1;
+}
+
+// WorkspaceService is a gRPC service that provides access to the workspace
+service WorkspaceService {
+  // AddDescriptorSource adds a descriptor source to the workspace, it is used to obtain workspace defitions
+  rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
+  // Get returns the workspace snapshot
+  rpc Get(GetRequest) returns (GetResponse);
+  // CreateFolder creates a new folder in the workspace
+  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
+  // CreateRequest creates a new request in the workspace
+  rpc CreateRequest(CreateRequestRequest) returns (CreateRequestResponse);
+  // DeleteRequest deletes a request from the workspace
+  rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);
+  // UpdateRequest updates a request in the workspace
+  rpc UpdateRequest(UpdateRequestRequest) returns (UpdateRequestResponse);
+}

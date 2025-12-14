@@ -21,7 +21,7 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
 
   const handleReflection = () => {
     const host = hostRef.current?.value || "127.0.0.1";
-    const port = parseInt(portRef.current?.value || "0", 10);
+    const port = parseInt(portRef.current?.value || "10000", 10);
     onAddReflection(host, port);
     onClose();
   };
@@ -76,7 +76,6 @@ export const AddSourceModal: React.FC<AddSourceModalProps> = ({
 
           <div className="border-t"></div>
 
-          {/* Descriptor Section */}
           <div>
             <h4 className="font-medium text-purple-600 mb-2">Descriptor Set</h4>
             <div className="flex items-center">

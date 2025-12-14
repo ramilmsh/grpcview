@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Backend (Dev)",
+            "type": "shell",
+            "command": "ibazel run //service/cmd/dev",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "grpcview-dev"
+            }
+        },
+        {
+            "label": "Run Frontend (Dev)",
+            "type": "shell",
+            "command": "ibazel run //ui:dev",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "grpcview-dev"
+            }
+        },
+        {
+            "label": "Run All (Dev)",
+            "dependsOn": [
+                "Run Backend (Dev)",
+                "Run Frontend (Dev)"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

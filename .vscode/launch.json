@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Dev",
+            "request": "launch",
+            "type": "chrome",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/ui",
+            "preLaunchTask": "Run All (Dev)",
+        }
+    ]
+}

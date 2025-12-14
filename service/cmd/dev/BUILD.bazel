@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "dev_lib",
     srcs = ["main.go"],
-    importpath = "github.com/ramilmsh/grpcview/service/cmd/dev",
+    importpath = "codeberg.org/ramilmsh/grpcview/service/cmd/dev",
     visibility = ["//visibility:public"],
     deps = ["//service"],
 )

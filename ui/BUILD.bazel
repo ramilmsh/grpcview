@@ -19,7 +19,7 @@ BUILD_DEPS = [":node_modules/" + d for d in [
     "@tanstack/react-query",
     "react",
     "react-dom",
-    "react-monaco-editor",
+    "@monaco-editor/react",
     "monaco-editor",
     "zustand",
     "clsx",
@@ -38,13 +38,12 @@ BUILD_DEPS = [":node_modules/" + d for d in [
 DATA = BUILD_DEPS + [
     "package.json",
     "tsconfig.json",
-    "tsconfig.node.json",
     "vite.config.ts",
     "tailwind.config.js",
     "postcss.config.js",
     "index.html",
     ":src",
-    "//service/proto/v1:grpcviewv1_ts_proto",
+    "//proto/grpcview/v1:grpcviewv1_ts_proto",
 ]
 
 vite_bin.vite(
@@ -53,7 +52,7 @@ vite_bin.vite(
     outs = ["dist/index.html"],
     args = [
         "build",
-        "--mode=development",
+        "--mode=release",
     ],
     chdir = package_name(),
     visibility = ["//visibility:public"],
@@ -61,6 +60,9 @@ vite_bin.vite(
 
 vite_bin.vite_binary(
     name = "dev",
+    args = [
+        "--mode=development",
+    ],
     chdir = package_name(),
     data = DATA,
     tags = ["ibazel_notify_changes"],

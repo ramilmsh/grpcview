@@ -37,14 +37,28 @@ The project uses Bazel for building, testing, proto generation, and embedding.
   Runs the backend without embedding the frontend (useful for iteration).
 
 - **Run Dev Server (Frontend)**:
+
   ```bash
-  bazel run //frontend:dev
+  bazel run //ui:dev
   ```
+
   Runs the Vite dev server for the frontend.
+
+- **Regenerate TypeScript Proto Types**:
+  ```bash
+  bazel run @@//proto/grpcview/v1:grpcviewv1_ts_proto.copy
+  ```
+  Copies regenerated TypeScript types from proto definitions to the source tree. Run this after modifying `.proto` files.
+
+> [!TIP] > **VS Code Tasks**: You can also run these servers using the configured VS Code tasks:
+>
+> - `Run Backend (Dev)`
+> - `Run Frontend (Dev)`
+> - `Run All (Dev)` (Runs both in parallel)
 
 ## Directory Structure
 
-- `frontend/`: Vue.js frontend application.
+- `ui/`: Vue.js frontend application.
   - `src/`: Source code.
   - `BUILD.bazel`: Bazel build definition for Vite build and dev server.
 - `service/`: Go backend service.

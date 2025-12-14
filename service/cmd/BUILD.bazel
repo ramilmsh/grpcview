@@ -11,7 +11,7 @@ go_library(
     name = "cmd_lib",
     srcs = ["main.go"],
     embedsrcs = ["index.html"],
-    importpath = "github.com/ramilmsh/grpcview/service/cmd",
+    importpath = "codeberg.org/ramilmsh/grpcview/service/cmd",
     visibility = ["//visibility:private"],
     deps = ["//service"],
 )

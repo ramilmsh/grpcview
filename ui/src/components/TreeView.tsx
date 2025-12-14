@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Item } from "@/lib/store";
+import { ItemWithPath } from "@/lib/store";
 import {
   ChevronRight,
   ChevronDown,
@@ -15,12 +15,12 @@ import {
 } from "lucide-react";
 
 interface TreeViewProps {
-  item: Item;
-  onAddItem: (parent: Item, item: Item) => void;
-  onRemoveItem: (parent: Item, index: number) => void;
-  onRenameItem?: (item: Item, newName: string) => void;
-  onSelect?: (item: Item) => void;
-  onStartAddRequest?: (parent: Item) => void;
+  item: ItemWithPath;
+  onAddItem: (parent: ItemWithPath, item: ItemWithPath) => void;
+  onRemoveItem: (parent: ItemWithPath | null, index: number) => void;
+  onRenameItem?: (item: ItemWithPath, newName: string) => void;
+  onSelect?: (item: ItemWithPath) => void;
+  onStartAddRequest?: (parent: ItemWithPath) => void;
 }
 
 export const TreeView: React.FC<TreeViewProps> = ({
@@ -37,16 +37,15 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const [newName, setNewName] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const isFolder = item.content.case === "folder";
-  const children =
-    item.content.case === "folder" ? item.content.value.items : [];
+  const isFolder = item.item.content.case === "folder";
+  const children = item.children || [];
 
   useEffect(() => {
     if (isRenaming && renameInputRef.current) {
       renameInputRef.current.focus();
-      setNewName(item.name);
+      setNewName(item.item.name);
     }
-  }, [isRenaming, item.name]);
+  }, [isRenaming, item.item.name]);
 
   const toggleOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -87,11 +86,16 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
   const confirmAddFolder = () => {
     if (newName.trim()) {
-      onAddItem(item, {
-        name: newName,
-        id: crypto.randomUUID(),
-        content: { case: "folder", value: { items: [] } },
-      });
+      // Create a placeholder ItemWithPath for the new folder
+      // The actual creation happens in the parent via createFolder
+      const placeholderItem: ItemWithPath = {
+        item: {
+          name: newName,
+          content: { case: "folder", value: { items: [] } },
+        } as any,
+        path: [...item.path, item.item.name],
+      };
+      onAddItem(item, placeholderItem);
     }
     cancelAdd();
   };
@@ -172,7 +176,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
           </div>
         ) : (
           <span className="flex-grow whitespace-nowrap overflow-hidden text-ellipsis font-normal text-gray-900">
-            {item.name || "Root"}
+            {item.item.name || "Root"}
           </span>
         )}
 
@@ -238,7 +242,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
       {isOpen && children.length > 0 && (
         <div className="ml-7">
           {children.map((child, index) => (
-            <div key={child.id || index} className="relative group/child">
+            <div
+              key={`${child.item.name}-${index}`}
+              className="relative group/child"
+            >
               <TreeView
                 item={child}
                 onAddItem={onAddItem}

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ramilmsh/grpcview/service"
+	"codeberg.org/ramilmsh/grpcview/service"
 )
 
 func run(ctx context.Context) error {

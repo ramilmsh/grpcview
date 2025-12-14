@@ -1,5 +1,9 @@
-import React, { useEffect, useRef } from "react";
-import MonacoEditor from "react-monaco-editor";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Editor as MonacoEditor,
+  useMonaco,
+  OnMount,
+} from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { Service } from "@grpcview/v1/workspace_pb";
 
@@ -7,49 +11,41 @@ interface EditorProps {
   services: Service[];
   data: string;
   onChange: (value: string) => void;
-  currentService?: string; // package.Service
-  currentMethod?: string; // MethodName
+  currentMethod?: { service: string; method: string };
+  theme?: string;
 }
+
+const _DEFAULT_BASE_URI_COMPONENTS = {
+  scheme: "grpcview",
+  path: "schemas",
+};
 
 export const Editor: React.FC<EditorProps> = ({
   services,
   data,
   onChange,
-  currentService,
   currentMethod,
+  theme = "vs-dark",
 }) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const monacoRef = useRef<typeof monaco | null>(null);
+  const monacoInstance = useMonaco();
+  const [isEditorReady, setIsEditorReady] = useState(false);
 
   // Register schemas
   useEffect(() => {
-    if (!monacoRef.current) return;
+    if (!monacoInstance) return;
 
-    const baseUri = monaco.Uri.from({
-      scheme: "grpcview",
-      path: "schemas",
-    });
+    const baseUri = monacoInstance.Uri.from(_DEFAULT_BASE_URI_COMPONENTS);
 
     const schemas: any[] = [];
     for (const service of services) {
       for (const method of service.methods) {
         // Construct schema URI
-        const uri = monaco.Uri.joinPath(
+        const uri = monacoInstance.Uri.joinPath(
           baseUri,
-          service.package,
-          service.name,
+          service.package + "." + service.name,
           method.name
         ).toString();
-
-        // Ensure schema is a valid JSON object
-        // The proto definition says `google.protobuf.Struct schema`.
-        // We need to convert it to a plain JS object if it's a typed Struct,
-        // or check if it's already a plain object in the generated code.
-        // In @bufbuild/protobuf, Struct is usually handled as JsonValue or Struct class.
-        // Assuming the generated code provides the raw JSON object or a toJSON compatible struct.
-        // If `method.input?.schema` is a Struct class instance, we might need `.toJson()` or similar.
-        // But for now, let's assume it passes through or we can use it.
-        // Note: Check existing frontend usage "deepToRaw" suggested it might be a reactive proxy in Vue. Use simple JSON clone here if needed.
 
         if (method.input?.schema) {
           schemas.push({
@@ -61,79 +57,59 @@ export const Editor: React.FC<EditorProps> = ({
       }
     }
 
-    monacoRef.current.languages.json.jsonDefaults.setDiagnosticsOptions({
+    monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
       validate: true,
       schemaValidation: "error",
       schemas: schemas,
+      enableSchemaRequest: true,
     });
-  }, [services]);
+  }, [monacoInstance, services]);
 
   // Update Model URI based on selection to trigger correct schema validation
   useEffect(() => {
-    if (!editorRef.current || !monacoRef.current) return;
+    if (!monacoInstance || !isEditorReady || !editorRef.current) return;
+    if (!currentMethod) return; // Guard against empty values
+    const baseUri = monacoInstance.Uri.from(_DEFAULT_BASE_URI_COMPONENTS);
 
-    const editor = editorRef.current;
-    const m = monacoRef.current;
+    const modalUri = monacoInstance.Uri.joinPath(
+      baseUri,
+      currentMethod.service,
+      currentMethod.method
+    );
 
-    const currentValue = editor.getValue();
+    let model = monacoInstance.editor.getModel(modalUri);
 
-    // If data prop changed externally and is different from editor, update it.
-    // But usually this component is controlled or semi-controlled.
-    if (data !== currentValue) {
-      // This might cause cursor jumps if typing fast, but usually we use a specific model update strategy.
-      // For simplicity:
-      // editor.setValue(data); // Done in handleEditorDidMount or below?
-    }
-
-    let modalUriStr = "grpcview:scratch.json";
-    if (currentService && currentMethod) {
-      // Must match schema match pattern
-      // baseUri/package/Service/Method
-      const parts = currentService.split(".");
-      const sName = parts.pop();
-      const pName = parts.join(".");
-      modalUriStr = `grpcview:schemas/${pName}/${sName}/${currentMethod}`;
-    } else {
-      modalUriStr = `grpcview:schemas/scratch/${Date.now()}.json`; // Random uri to avoid schema lock
-    }
-
-    const uri = m.Uri.parse(modalUriStr);
-    let model = m.editor.getModel(uri);
-
-    // Save view state of previous model? Maybe later.
+    const currentModel = editorRef.current.getModel();
+    const needsModelSwitch = currentModel !== model;
 
     if (!model) {
-      model = m.editor.createModel(data, "json", uri);
-      model.onDidChangeContent(() => {
-        onChange(model!.getValue());
-      });
-    } else {
-      // If model exists, update value if completely different context?
-      // Or just switch to it.
-      // If switching to an existing model, it might hold old state.
-      // For this app, store holds state, so we should update model value from store.
-      if (model.getValue() !== data) {
-        model.setValue(data);
-      }
+      // Create new model with current data
+      model = monacoInstance.editor.createModel(data, "json", modalUri);
+    } else if (needsModelSwitch) {
+      // Switching to existing model - update its content to current data
+      model.setValue(data);
     }
+    // If same model and no switch, don't touch content - let Monaco manage it
 
-    editor.setModel(model);
-  }, [currentService, currentMethod, data, services, onChange]); // Depend on data is tricky for cursor, usually handled via ref
+    if (needsModelSwitch) {
+      editorRef.current.setModel(model);
+    }
+  }, [monacoInstance, currentMethod, isEditorReady]); // Re-run when editor becomes ready
 
-  // We should actually NOT depend on `data` for recreating model every keystroke.
-  // We use `data` only for initial load or switching items.
-
-  const handleEditorDidMount = (
-    editor: monaco.editor.IStandaloneCodeEditor,
-    m: typeof monaco
-  ) => {
+  const handleEditorDidMount: OnMount = (editor, _monaco) => {
     editorRef.current = editor;
-    monacoRef.current = m;
+    setIsEditorReady(true);
 
     // Add format action keybinding
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
+    editor.addCommand(_monaco.KeyMod.CtrlCmd | _monaco.KeyCode.KeyS, () => {
       editor.getAction("editor.action.formatDocument")?.run();
     });
+  };
+
+  const handleChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      onChange(value);
+    }
   };
 
   return (
@@ -142,15 +118,17 @@ export const Editor: React.FC<EditorProps> = ({
         width="100%"
         height="100%"
         language="json"
-        theme="vs-light"
+        theme={theme}
+        defaultValue={data}
         options={{
           formatOnType: true,
           formatOnPaste: true,
-          autoIndent: "full",
-          quickSuggestions: true,
+          automaticLayout: true,
           minimap: { enabled: false },
+          scrollBeyondLastLine: false,
         }}
-        editorDidMount={handleEditorDidMount}
+        onMount={handleEditorDidMount}
+        onChange={handleChange}
       />
     </div>
   );

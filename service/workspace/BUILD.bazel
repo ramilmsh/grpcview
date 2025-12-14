@@ -3,18 +3,19 @@ load("@rules_go//go:def.bzl", "go_library")
 go_library(
     name = "workspace",
     srcs = ["workspace.go"],
-    importpath = "github.com/ramilmsh/grpcview/service/workspace",
+    importpath = "codeberg.org/ramilmsh/grpcview/service/workspace",
     visibility = ["//visibility:public"],
     deps = [
         "//inspector",
-        "//service/proto/v1:proto",
+        "//proto/grpcview/v1:grpcview",
         "@com_connectrpc_connect//:connect",
         "@com_github_jhump_protoreflect//desc",
         "@com_github_jhump_protoreflect//grpcreflect",
         "@com_github_mattn_go_sqlite3//:go-sqlite3",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//credentials/insecure",
-        "@org_golang_google_protobuf//types/descriptorpb",
+        "@org_golang_google_protobuf//encoding/prototext",
+        "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//types/known/structpb",
     ],
 )

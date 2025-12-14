@@ -23,9 +23,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@grpcview/*": ["../service/proto/*"]
+      "@grpcview/*": ["../proto/grpcview/*"]
     }
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src"]
 }

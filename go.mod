@@ -1,4 +1,4 @@
-module github.com/ramilmsh/grpcview
+module codeberg.org/ramilmsh/grpcview
 
 go 1.24.1
 

@@ -2,18 +2,21 @@ load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
 load("@rules_go//go:def.bzl", "go_library")
 
 copy_file(
-    name = "frontend",
-    src = "//frontend",
+    name = "ui",
+    src = "//ui",
     out = "index.html",
 )
 
 go_library(
     name = "service",
-    srcs = ["service.go"],
-    importpath = "github.com/ramilmsh/grpcview/service",
+    srcs = [
+        "logging.go",
+        "service.go",
+    ],
+    importpath = "codeberg.org/ramilmsh/grpcview/service",
     visibility = ["//visibility:public"],
     deps = [
-        "//service/proto/v1:proto",
+        "//proto/grpcview/v1:grpcview",
         "//service/workspace",
         "@com_connectrpc_connect//:connect",
         "@com_connectrpc_cors//:cors",

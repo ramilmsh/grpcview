@@ -5,14 +5,14 @@ import (
 	"embed"
 	"fmt"
 
-	"github.com/ramilmsh/grpcview/service"
+	"codeberg.org/ramilmsh/grpcview/service"
 )
 
 //go:embed index.html
-var frontend embed.FS
+var ui embed.FS
 
 func run(ctx context.Context) error {
-	indexPageFile, err := frontend.Open("index.html")
+	indexPageFile, err := ui.Open("index.html")
 	if err != nil {
 		return fmt.Errorf("failed to open index page: %w", err)
 	}

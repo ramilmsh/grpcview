@@ -1,196 +1,175 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { Service, Method } from "@grpcview/v1/workspace_pb";
+import { createClient } from "@connectrpc/connect";
+import { transport } from "./client";
+import {
+  WorkspaceService,
+  CreateFolderRequestSchema,
+  CreateRequestRequestSchema,
+  DeleteRequestRequestSchema,
+  UpdateRequestRequestSchema,
+  GetRequestSchema,
+} from "@grpcview/v1/service_pb";
+import { Service, Item, Workspace } from "@grpcview/v1/workspace_pb";
+import { create as createMessage } from "@bufbuild/protobuf";
 
-// Proto Mirrors
-// We are partially mirroring the proto structure here for the state.
-// Since we are using creating items on the client side before saving (or just keeping them in local state),
-// we need a mutable structure.
+const client = createClient(WorkspaceService, transport);
 
-export interface RequestItem {
-  service?: Service;
-  method?: Method;
-  request: string; // Stored as JSON string locally for editor
-}
-
-export interface FolderItem {
-  items: Item[];
-}
-
-export interface Item {
-  name: string;
-  id: string; // We enforce ID on the client
-  content:
-    | {
-        case: "folder";
-        value: FolderItem;
-      }
-    | {
-        case: "request";
-        value: RequestItem;
-      };
+// Extended Item with path for UI navigation
+// We track paths separately since proto Item doesn't have a path field
+export interface ItemWithPath {
+  item: Item;
+  path: string[]; // Path to this item's parent folder (empty for root items)
+  children?: ItemWithPath[]; // Populated for folders
 }
 
 interface WorkspaceState {
-  rootItems: Item[]; // Changed from single rootItem to list of items at root to match WorkspaceSnapshot.items
+  // The full workspace from the backend
+  workspace: Workspace | null;
+
+  // Flattened items for easier access (computed from workspace.item)
+  rootItems: ItemWithPath[];
   services: Service[];
 
   // Actions
-  setServices: (services: Service[]) => void;
-  setRootItems: (items: any[]) => void; // Accepts proto items and converts them
-  addItem: (parent: Item | null, item: Item) => void; // parent null = root
-  removeItem: (parent: Item | null, index: number) => void;
-  renameItem: (item: Item, newName: string) => void;
-  updateRequestData: (item: Item, data: string) => void;
+  loadWorkspace: () => Promise<void>;
+  addDescriptorSource: (req: any) => Promise<void>;
+  createFolder: (parent: ItemWithPath | null, name: string) => Promise<void>;
+  createRequest: (
+    parent: ItemWithPath | null,
+    name: string,
+    service: string,
+    method: string
+  ) => Promise<void>;
+  deleteItem: (item: ItemWithPath) => Promise<void>;
+  renameItem: (item: ItemWithPath, newName: string) => Promise<void>;
+  updateRequestData: (item: ItemWithPath, data: string) => Promise<void>;
 }
 
-// Helpers
-const ensureIds = (protoItem: any): Item => {
-  const item: Item = {
-    name: protoItem.name || "Untitled",
-    id: crypto.randomUUID(),
-    content: { case: "folder", value: { items: [] } }, // default
+// Recursively convert proto Items to ItemWithPath with path tracking
+const convertToItemWithPath = (
+  protoItem: Item,
+  parentPath: string[]
+): ItemWithPath => {
+  const result: ItemWithPath = {
+    item: protoItem,
+    path: parentPath,
   };
 
-  if (protoItem.content?.case === "folder" || protoItem.content?.value?.items) {
-    // Handle Proto conversion looseness
-    // If it came from proto, it might be nested under `folder`.
-    // But `WorkspaceSnapshot.items` is `repeated Item`.
-    // `Item` has `oneof content`.
-    const folder = protoItem.content?.value || protoItem.folder;
-    const children = folder?.items || [];
-    item.content = {
-      case: "folder",
-      value: {
-        items: children.map(ensureIds),
-      },
-    };
-  } else if (protoItem.content?.case === "request" || protoItem.request) {
-    const req = protoItem.content?.value || protoItem.request;
-    // Convert bytes request to string
-    let reqBody = "{}";
-    if (req.request instanceof Uint8Array) {
-      reqBody = new TextDecoder().decode(req.request);
-    } else if (typeof req.request === "string") {
-      // It might be base64 if coming from partial JSON
-      try {
-        reqBody = atob(req.request);
-      } catch {
-        reqBody = req.request;
+  switch (protoItem.content.case) {
+    case "folder":
+      const childPath = [...parentPath, protoItem.name];
+      result.children = protoItem.content.value.items.map((child) =>
+        convertToItemWithPath(child, childPath)
+      );
+      break;
+    default:
+      break;
+  }
+
+  return result;
+};
+
+export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
+  workspace: null,
+  rootItems: [],
+  services: [],
+
+  loadWorkspace: async () => {
+    try {
+      const req = createMessage(GetRequestSchema, { workspaceName: "default" });
+      const res = await client.get(req);
+      if (res.workspace) {
+        const ws = res.workspace;
+        set({ workspace: ws, services: ws.services });
+
+        // Convert root folder's items to ItemWithPath
+        if (ws.item && ws.item.content.case === "folder") {
+          const rootItems = ws.item.content.value.items.map((child) =>
+            convertToItemWithPath(child, [])
+          );
+          set({ rootItems });
+        } else {
+          set({ rootItems: [] });
+        }
       }
+    } catch (e) {
+      console.error("Failed to load workspace", e);
     }
+  },
 
-    item.content = {
-      case: "request",
-      value: {
-        service: req.service,
-        method: req.method,
-        request: reqBody,
-      },
-    };
-  }
-
-  return item;
-};
-
-// Recursive finder
-const findAndModify = (
-  items: Item[],
-  targetId: string,
-  action: (node: Item, parentArray: Item[], index: number) => void
-): boolean => {
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.id === targetId) {
-      action(item, items, i);
-      return true;
+  addDescriptorSource: async (reqData: any) => {
+    try {
+      reqData.workspaceName = "default";
+      await client.addDescriptorSource(reqData);
+      await get().loadWorkspace();
+    } catch (e) {
+      console.error("Add descriptor failed", e);
+      throw e;
     }
-    if (item.content.case === "folder") {
-      if (findAndModify(item.content.value.items, targetId, action))
-        return true;
+  },
+
+  createFolder: async (parent, folderName) => {
+    try {
+      const parentPath = parent ? [...parent.path, parent.item.name] : [];
+      const req = createMessage(CreateFolderRequestSchema, {
+        workspaceName: "default",
+        path: parentPath,
+        itemName: folderName,
+      });
+      await client.createFolder(req);
+      await get().loadWorkspace();
+    } catch (e) {
+      console.error("Create folder failed", e);
     }
-  }
-  return false;
-};
+  },
 
-export const useWorkspaceStore = create<WorkspaceState>()(
-  persist(
-    (set) => ({
-      rootItems: [],
-      services: [],
-
-      setServices: (services) => set({ services }),
-
-      setRootItems: (protoItems) =>
-        set({
-          rootItems: protoItems.map(ensureIds),
-        }),
-
-      addItem: (parent, newItem) =>
-        set((state) => {
-          const newRoots = JSON.parse(
-            JSON.stringify(state.rootItems)
-          ) as Item[];
-          if (!parent) {
-            // Add to root
-            newRoots.push(newItem);
-          } else {
-            // Find parent
-            findAndModify(newRoots, parent.id, (node) => {
-              if (node.content.case === "folder") {
-                node.content.value.items.push(newItem);
-              }
-            });
-          }
-          return { rootItems: newRoots };
-        }),
-
-      removeItem: (parent, index) =>
-        set((state) => {
-          const newRoots = JSON.parse(
-            JSON.stringify(state.rootItems)
-          ) as Item[];
-          if (!parent) {
-            if (index >= 0 && index < newRoots.length) {
-              newRoots.splice(index, 1);
-            }
-          } else {
-            findAndModify(newRoots, parent.id, (node) => {
-              if (node.content.case === "folder") {
-                node.content.value.items.splice(index, 1);
-              }
-            });
-          }
-          return { rootItems: newRoots };
-        }),
-
-      renameItem: (item, newName) =>
-        set((state) => {
-          const newRoots = JSON.parse(
-            JSON.stringify(state.rootItems)
-          ) as Item[];
-          findAndModify(newRoots, item.id, (node) => {
-            node.name = newName;
-          });
-          return { rootItems: newRoots };
-        }),
-
-      updateRequestData: (item, data) =>
-        set((state) => {
-          const newRoots = JSON.parse(
-            JSON.stringify(state.rootItems)
-          ) as Item[];
-          findAndModify(newRoots, item.id, (node) => {
-            if (node.content.case === "request") {
-              node.content.value.request = data;
-            }
-          });
-          return { rootItems: newRoots };
-        }),
-    }),
-    {
-      name: "workspace-storage",
-      partialize: (state) => ({ rootItems: state.rootItems }), // Don't persist services as they might be stale/large, reload on start
+  createRequest: async (parent, reqName, service, method) => {
+    try {
+      const parentPath = parent ? [...parent.path, parent.item.name] : [];
+      const req = createMessage(CreateRequestRequestSchema, {
+        workspaceName: "default",
+        path: parentPath,
+        itemName: reqName,
+        service,
+        method,
+      });
+      await client.createRequest(req);
+      await get().loadWorkspace();
+    } catch (e) {
+      console.error("Create request failed", e);
     }
-  )
-);
+  },
+
+  deleteItem: async (item) => {
+    try {
+      const req = createMessage(DeleteRequestRequestSchema, {
+        workspaceName: "default",
+        path: item.path,
+        itemName: item.item.name,
+      });
+      await client.deleteRequest(req);
+      await get().loadWorkspace();
+    } catch (e) {
+      console.error("Delete item failed", e);
+    }
+  },
+
+  renameItem: async (_item, _newName) => {
+    console.warn("Rename not fully supported by backend yet");
+  },
+
+  updateRequestData: async (item, data) => {
+    try {
+      const req = createMessage(UpdateRequestRequestSchema, {
+        workspaceName: "default",
+        path: item.path,
+        itemName: item.item.name,
+        draftBody: new TextEncoder().encode(data),
+      });
+      await client.updateRequest(req);
+      await get().loadWorkspace();
+    } catch (e) {
+      console.error("Update request failed", e);
+    }
+  },
+}));

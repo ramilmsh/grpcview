@@ -1,74 +1,28 @@
 import React, { useState, useEffect } from "react";
-import { useWorkspaceStore, Item } from "@/lib/store";
-import { createClient } from "@connectrpc/connect";
-import { useMutation } from "@tanstack/react-query";
-import {
-  AddDescriptorSourceRequestSchema,
-  Workspace,
-} from "@grpcview/v1/service_pb"; // The service definition
-// Generated types
-import { type AddDescriptorSourceRequest } from "@grpcview/v1/service_pb";
+import { useWorkspaceStore, ItemWithPath } from "@/lib/store";
+import { AddDescriptorSourceRequestSchema } from "@grpcview/v1/service_pb";
+import { create } from "@bufbuild/protobuf";
 
-import { transport } from "@/lib/client";
 import { TreeView } from "@/components/TreeView";
 import { Editor } from "@/components/Editor";
 import { AddSourceModal } from "@/components/AddSourceModal";
 import { RequestSelectorModal } from "@/components/RequestSelectorModal";
-import { create } from "@bufbuild/protobuf";
-
-const client = createClient(Workspace, transport);
+import { Service, Method } from "@grpcview/v1/workspace_pb";
 
 export const WorkspacePage: React.FC = () => {
   const store = useWorkspaceStore();
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
 
-  const [activeItem, setActiveItem] = useState<Item | null>(null);
-  const [requestTargetParent, setRequestTargetParent] = useState<Item | null>(
-    null
-  );
+  const [activeItem, setActiveItem] = useState<ItemWithPath | null>(null);
+  const [requestTargetParent, setRequestTargetParent] =
+    useState<ItemWithPath | null>(null);
 
-  // Initial Load
-  // We should probably use useQuery here, but manual fetch for now as per plan
   useEffect(() => {
-    // Fetch workspace
-    const fetchWorkspace = async () => {
-      try {
-        const res = await client.getWorkspace({ name: "default" });
-        if (res.workspace) {
-          if (res.workspace.services) store.setServices(res.workspace.services);
-          // If we want to sync items from server:
-          // store.setRootItems(res.workspace.items);
-          // But we are persisting locally, so maybe we only want services?
-          // The requirement says "tree viewer ... is displayed with that data".
-          // So we should probably respect server data if present.
-          if (res.workspace.items && res.workspace.items.length > 0) {
-            store.setRootItems(res.workspace.items);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load workspace", e);
-      }
-    };
-    fetchWorkspace();
+    store.loadWorkspace();
   }, []);
 
-  const addMutation = useMutation({
-    mutationFn: async (req: AddDescriptorSourceRequest) => {
-      return await client.addDescriptorSource(req);
-    },
-    onSuccess: (data) => {
-      if (data.workspace?.services) {
-        store.setServices(data.workspace.services);
-      }
-    },
-    onError: (error) => {
-      console.error("Add source failed", error);
-      alert("Add source failed: " + error);
-    },
-  });
-
-  const handleAddReflection = (host: string, port: number) => {
+  const handleAddReflection = async (host: string, port: number) => {
     const req = create(AddDescriptorSourceRequestSchema, {
       source: {
         case: "reflection",
@@ -78,7 +32,8 @@ export const WorkspacePage: React.FC = () => {
         },
       },
     });
-    addMutation.mutate(req);
+    await store.addDescriptorSource(req);
+    setShowSourceModal(false);
   };
 
   const handleAddDescriptor = async (file: File) => {
@@ -90,56 +45,74 @@ export const WorkspacePage: React.FC = () => {
           value: new Uint8Array(buffer),
         },
       });
-      addMutation.mutate(req);
+      await store.addDescriptorSource(req);
+      setShowSourceModal(false);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleStartAddRequest = (parent: Item) => {
+  const handleStartAddRequest = (parent: ItemWithPath | null) => {
     setRequestTargetParent(parent);
     setShowRequestModal(true);
   };
 
-  const handleRequestSelected = (service: any, method: any) => {
-    if (!requestTargetParent) return;
+  const handleRequestSelected = (service: Service, method: Method) => {
+    const serviceName = service.package + "." + service.name;
+    const methodName = method.name;
 
-    store.addItem(requestTargetParent, {
-      name: method.name,
-      id: crypto.randomUUID(),
-      content: {
-        case: "request",
-        value: {
-          service: service, // Store reduced info or full? Store expects Service
-          method: method,
-          request: "{}",
-        },
-      },
-    });
+    store.createRequest(
+      requestTargetParent,
+      methodName,
+      serviceName,
+      methodName
+    );
+
     setRequestTargetParent(null);
+    setShowRequestModal(false);
   };
 
-  const handleSelectItem = (item: Item) => {
-    if (item.content.case === "request") {
+  const handleAddItem = (parent: ItemWithPath, item: ItemWithPath) => {
+    if (item.item.content.case === "folder") {
+      store.createFolder(parent, item.item.name);
+    }
+  };
+
+  const handleRemoveItem = (parent: ItemWithPath | null, index: number) => {
+    let child: ItemWithPath | undefined;
+    if (!parent) {
+      child = store.rootItems[index];
+    } else if (parent.children) {
+      child = parent.children[index];
+    }
+
+    if (child) {
+      store.deleteItem(child);
+    }
+  };
+
+  const handleRenameItem = (item: ItemWithPath, newName: string) => {
+    store.renameItem(item, newName);
+  };
+
+  const handleSelectItem = (item: ItemWithPath) => {
+    if (item.item.content.case === "request") {
       setActiveItem(item);
     }
   };
 
-  // Editor Data
-  const editorData =
-    activeItem?.content.case === "request"
-      ? activeItem.content.value.request
-      : "{}";
+  // Editor Data - decode bytes to string for editing
+  const getEditorData = (): string => {
+    if (activeItem?.item.content.case === "request") {
+      const req = activeItem.item.content.value;
+      if (req.draftBody && req.draftBody.length > 0) {
+        return new TextDecoder().decode(req.draftBody);
+      }
+    }
+    return "{}";
+  };
 
-  const editorService =
-    activeItem?.content.case === "request"
-      ? `${activeItem.content.value.service?.package}.${activeItem.content.value.service?.name}`
-      : undefined;
-
-  const editorMethod =
-    activeItem?.content.case === "request"
-      ? activeItem.content.value.method?.name
-      : undefined;
+  const editorData = getEditorData();
 
   return (
     <div className="flex w-full h-full bg-slate-50">
@@ -152,16 +125,31 @@ export const WorkspacePage: React.FC = () => {
           >
             + Source
           </button>
+          <button
+            onClick={() => {
+              const name = prompt("Folder Name");
+              if (name) store.createFolder(null, name);
+            }}
+            className="text-gray-600 uppercase font-medium text-xs hover:bg-gray-50 px-2 py-1 rounded border border-transparent hover:border-gray-200"
+          >
+            + Folder
+          </button>
+          <button
+            onClick={() => handleStartAddRequest(null)}
+            className="text-gray-600 uppercase font-medium text-xs hover:bg-gray-50 px-2 py-1 rounded border border-transparent hover:border-gray-200"
+          >
+            + Request
+          </button>
         </div>
 
         <div className="flex-grow overflow-y-auto py-2">
-          {store.rootItems.map((item, idx) => (
+          {store.rootItems.map((item, index) => (
             <TreeView
-              key={item.id}
+              key={`${item.item.name}-${index}`}
               item={item}
-              onAddItem={store.addItem}
-              onRemoveItem={store.removeItem}
-              onRenameItem={store.renameItem}
+              onAddItem={handleAddItem}
+              onRemoveItem={handleRemoveItem}
+              onRenameItem={handleRenameItem}
               onSelect={handleSelectItem}
               onStartAddRequest={handleStartAddRequest}
             />
@@ -171,13 +159,15 @@ export const WorkspacePage: React.FC = () => {
 
       {/* Main Area */}
       <div className="flex-grow h-full bg-white relative">
-        {activeItem ? (
+        {activeItem?.item.content.case === "request" ? (
           <Editor
             services={store.services}
             data={editorData}
-            onChange={(val) => store.updateRequestData(activeItem, val)}
-            currentService={editorService}
-            currentMethod={editorMethod}
+            onChange={(val: string) => store.updateRequestData(activeItem, val)}
+            currentMethod={{
+              service: activeItem.item.content.value.service,
+              method: activeItem.item.content.value.method,
+            }}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">

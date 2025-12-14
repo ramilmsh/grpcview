@@ -4,12 +4,12 @@ import react from "@vitejs/plugin-react";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react(), viteSingleFile()],
+export default defineConfig(({ command, mode }) => ({
+  plugins: [react(), command === "build" && viteSingleFile()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "@grpcview": fileURLToPath(new URL("../service/proto", import.meta.url)),
+      "@grpcview": fileURLToPath(new URL("../proto/grpcview", import.meta.url)),
     },
   },
   server: {
@@ -17,4 +17,4 @@ export default defineConfig({
       usePolling: true,
     },
   },
-});
+}));
