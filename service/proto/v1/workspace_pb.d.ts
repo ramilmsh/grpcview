@@ -219,9 +219,9 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
   request: Uint8Array;
 
   /**
-   * @generated from field: grpcview.v1.Request.Response response = 4;
+   * @generated from field: repeated grpcview.v1.Request.Response response = 4;
    */
-  response?: Request_Response;
+  response: Request_Response[];
 };
 
 /**
@@ -317,6 +317,11 @@ export declare type WorkspaceSnapshot = Message$1<"grpcview.v1.WorkspaceSnapshot
    * @generated from field: repeated grpcview.v1.DescriptorSource sources = 3;
    */
   sources: DescriptorSource[];
+
+  /**
+   * @generated from field: repeated grpcview.v1.Service services = 4;
+   */
+  services: Service[];
 };
 
 /**

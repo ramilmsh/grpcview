@@ -1,40 +1,66 @@
-import React, { useState } from "react";
-import { useWorkspaceStore } from "@/lib/store";
+import React, { useState, useEffect } from "react";
+import { useWorkspaceStore, Item } from "@/lib/store";
 import { createClient } from "@connectrpc/connect";
 import { useMutation } from "@tanstack/react-query";
-import { Workspace } from "@grpcview/v1/service_pb";
-import { Service } from "@grpcview/v1/service_pb";
+import {
+  AddDescriptorSourceRequestSchema,
+  Workspace,
+} from "@grpcview/v1/service_pb"; // The service definition
+// Generated types
+import { type AddDescriptorSourceRequest } from "@grpcview/v1/service_pb";
+
 import { transport } from "@/lib/client";
 import { TreeView } from "@/components/TreeView";
 import { Editor } from "@/components/Editor";
 import { AddSourceModal } from "@/components/AddSourceModal";
-
-// Create a typed client for Manual usage if needed, or use useMutation from generated hooks if available.
-// The user asked for `connect-query`.
-// Usually one generates hooks like `useAdd` from the proto service definition.
-// If the user hasn't generated react-query hooks, we can't use them directly.
-// The `package.json` had `@connectrpc/protoc-gen-connect-query`.
-// So we should have generated code like `workspace-Workspace_connectquery.ts`?
-// The generated target name is `grpcviewv1_ts_proto`.
-// Let's assume standard connect-query generation output.
-// However, I don't see where the generated files are.
-// I'll stick to manual client creation wrapped in useMutation for now to be safe,
-// as I don't know the exact path of the generated query hooks.
-// Actually, using `useMutation` with the client method is standard "TanStack Query" usage even without the generated hooks.
+import { RequestSelectorModal } from "@/components/RequestSelectorModal";
+import { create } from "@bufbuild/protobuf";
 
 const client = createClient(Workspace, transport);
 
 export const WorkspacePage: React.FC = () => {
   const store = useWorkspaceStore();
-  const [services, setServices] = useState<Service[]>([]);
-  const [showModal, setShowModal] = useState(false);
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+
+  const [activeItem, setActiveItem] = useState<Item | null>(null);
+  const [requestTargetParent, setRequestTargetParent] = useState<Item | null>(
+    null
+  );
+
+  // Initial Load
+  // We should probably use useQuery here, but manual fetch for now as per plan
+  useEffect(() => {
+    // Fetch workspace
+    const fetchWorkspace = async () => {
+      try {
+        const res = await client.getWorkspace({ name: "default" });
+        if (res.workspace) {
+          if (res.workspace.services) store.setServices(res.workspace.services);
+          // If we want to sync items from server:
+          // store.setRootItems(res.workspace.items);
+          // But we are persisting locally, so maybe we only want services?
+          // The requirement says "tree viewer ... is displayed with that data".
+          // So we should probably respect server data if present.
+          if (res.workspace.items && res.workspace.items.length > 0) {
+            store.setRootItems(res.workspace.items);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load workspace", e);
+      }
+    };
+    fetchWorkspace();
+  }, []);
 
   const addMutation = useMutation({
-    mutationFn: async (req: any) => {
-      return await client.add(req);
+    mutationFn: async (req: AddDescriptorSourceRequest) => {
+      return await client.addDescriptorSource(req);
     },
     onSuccess: (data) => {
-      setServices((prev) => [...prev, ...data.services]);
+      if (data.workspace?.services) {
+        store.setServices(data.workspace.services);
+      }
     },
     onError: (error) => {
       console.error("Add source failed", error);
@@ -43,101 +69,135 @@ export const WorkspacePage: React.FC = () => {
   });
 
   const handleAddReflection = (host: string, port: number) => {
-    addMutation.mutate({
+    const req = create(AddDescriptorSourceRequestSchema, {
       source: {
         case: "reflection",
-        value: { host, port },
+        value: {
+          host,
+          port,
+        },
       },
     });
+    addMutation.mutate(req);
   };
 
   const handleAddDescriptor = async (file: File) => {
     try {
       const buffer = await file.arrayBuffer();
-      addMutation.mutate({
+      const req = create(AddDescriptorSourceRequestSchema, {
         source: {
           case: "descriptorSet",
           value: new Uint8Array(buffer),
         },
       });
+      addMutation.mutate(req);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const downloadWorkspace = () => {
-    const data = JSON.stringify(store.rootItem, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "workspace.json";
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleStartAddRequest = (parent: Item) => {
+    setRequestTargetParent(parent);
+    setShowRequestModal(true);
   };
 
-  const uploadWorkspace = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const json = JSON.parse(ev.target?.result as string);
-        store.setRootItem(json);
-      } catch (err) {
-        alert("Invalid JSON");
-      }
-    };
-    reader.readAsText(file);
+  const handleRequestSelected = (service: any, method: any) => {
+    if (!requestTargetParent) return;
+
+    store.addItem(requestTargetParent, {
+      name: method.name,
+      id: crypto.randomUUID(),
+      content: {
+        case: "request",
+        value: {
+          service: service, // Store reduced info or full? Store expects Service
+          method: method,
+          request: "{}",
+        },
+      },
+    });
+    setRequestTargetParent(null);
   };
+
+  const handleSelectItem = (item: Item) => {
+    if (item.content.case === "request") {
+      setActiveItem(item);
+    }
+  };
+
+  // Editor Data
+  const editorData =
+    activeItem?.content.case === "request"
+      ? activeItem.content.value.request
+      : "{}";
+
+  const editorService =
+    activeItem?.content.case === "request"
+      ? `${activeItem.content.value.service?.package}.${activeItem.content.value.service?.name}`
+      : undefined;
+
+  const editorMethod =
+    activeItem?.content.case === "request"
+      ? activeItem.content.value.method?.name
+      : undefined;
 
   return (
     <div className="flex w-full h-full bg-slate-50">
       {/* Sidebar */}
-      <div className="w-[280px] h-full flex flex-col border-r border-gray-200 bg-white">
+      <div className="w-[300px] h-full flex flex-col border-r border-gray-200 bg-white">
         <div className="h-12 flex items-center px-4 border-b border-gray-200 bg-white gap-2">
           <button
-            onClick={() => setShowModal(true)}
-            className="text-purple-600 uppercase font-medium text-sm hover:bg-purple-50 px-3 py-1 rounded"
+            onClick={() => setShowSourceModal(true)}
+            className="text-purple-600 uppercase font-medium text-xs hover:bg-purple-50 px-2 py-1 rounded border border-transparent hover:border-purple-100"
           >
             + Source
           </button>
-          <button
-            onClick={downloadWorkspace}
-            className="text-purple-600 uppercase font-medium text-sm hover:bg-purple-50 px-3 py-1 rounded"
-          >
-            Export
-          </button>
-          <label className="text-gray-700 uppercase font-medium text-sm hover:bg-gray-50 px-3 py-1 rounded border border-gray-200 cursor-pointer flex items-center">
-            Import
-            <input
-              type="file"
-              onChange={uploadWorkspace}
-              accept=".json"
-              className="hidden"
-            />
-          </label>
         </div>
 
         <div className="flex-grow overflow-y-auto py-2">
-          <TreeView
-            item={store.rootItem}
-            onAddItem={store.addItem}
-            onRemoveItem={store.removeItem}
-          />
+          {store.rootItems.map((item, idx) => (
+            <TreeView
+              key={item.id}
+              item={item}
+              onAddItem={store.addItem}
+              onRemoveItem={store.removeItem}
+              onRenameItem={store.renameItem}
+              onSelect={handleSelectItem}
+              onStartAddRequest={handleStartAddRequest}
+            />
+          ))}
         </div>
       </div>
 
       {/* Main Area */}
-      <div className="flex-grow h-full bg-white">
-        <Editor services={services} />
+      <div className="flex-grow h-full bg-white relative">
+        {activeItem ? (
+          <Editor
+            services={store.services}
+            data={editorData}
+            onChange={(val) => store.updateRequestData(activeItem, val)}
+            currentService={editorService}
+            currentMethod={editorMethod}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            Select a request to edit
+          </div>
+        )}
       </div>
 
       <AddSourceModal
-        show={showModal}
-        onClose={() => setShowModal(false)}
+        show={showSourceModal}
+        onClose={() => setShowSourceModal(false)}
         onAddReflection={handleAddReflection}
         onAddDescriptor={handleAddDescriptor}
+      />
+
+      <RequestSelectorModal
+        show={showRequestModal}
+        services={store.services}
+        onClose={() => setShowRequestModal(false)}
+        onSelect={handleRequestSelected}
       />
     </div>
   );

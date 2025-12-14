@@ -43,11 +43,11 @@ func (w Workspace) addFileDescriptorSet(fileDescriptorSet *descriptorpb.FileDesc
 	return nil
 }
 
-func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.AddRequest]) (*connect.Response[grpcviewv1.AddResponse], error) {
+func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
 	switch source := request.Msg.GetSource().(type) {
-	case *grpcviewv1.AddRequest_DescriptorSet:
+	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("unimplemented source type: <%T> %+v", source, source))
-	case *grpcviewv1.AddRequest_Reflection:
+	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
 		conn, err := grpc.NewClient(
 			fmt.Sprintf("%s:%d", source.Reflection.Host, source.Reflection.Port),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -62,8 +62,10 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 			return nil, fmt.Errorf("failed to list services: %w", err)
 		}
 
-		response := &grpcviewv1.AddResponse{
-			Services: make([]*grpcviewv1.Service, len(services)),
+		response := &grpcviewv1.AddDescriptorSourceResponse{
+			Workspace: &grpcviewv1.WorkspaceSnapshot{
+				Services: make([]*grpcviewv1.Service, len(services)),
+			},
 		}
 
 		for i, service := range services {
@@ -74,7 +76,7 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 
 			serviceDesc := fileDesc.FindSymbol(service).(*desc.ServiceDescriptor)
 
-			response.Services[i] = &grpcviewv1.Service{
+			response.Workspace.Services[i] = &grpcviewv1.Service{
 				Package: serviceDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    serviceDesc.GetName(),
 				Methods: make([]*grpcviewv1.Method, len(serviceDesc.GetMethods())),
@@ -103,7 +105,7 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 					return nil, err
 				}
 
-				response.Services[i].Methods[j] = &grpcviewv1.Method{
+				response.Workspace.Services[i].Methods[j] = &grpcviewv1.Method{
 					Name: methodDesc.GetName(),
 					Input: &grpcviewv1.Message{
 						Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
@@ -117,4 +119,59 @@ func (w Workspace) Add(ctx context.Context, request *connect.Request[grpcviewv1.
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}
+}
+
+func (w Workspace) GetWorkspace(ctx context.Context, request *connect.Request[grpcviewv1.GetWorkspaceRequest]) (*connect.Response[grpcviewv1.GetWorkspaceResponse], error) {
+	return connect.NewResponse(&grpcviewv1.GetWorkspaceResponse{
+		Workspace: &grpcviewv1.WorkspaceSnapshot{
+			// mock data to test ui
+			Services: []*grpcviewv1.Service{
+				{
+					Package: "grpcview.v1",
+					Name:    "Workspace",
+					Methods: []*grpcviewv1.Method{
+						{
+							Name: "AddDescriptorSource",
+							Input: &grpcviewv1.Message{
+								Package: "grpcview.v1",
+								Name:    "AddDescriptorSourceRequest",
+							},
+						},
+						{
+							Name: "GetWorkspace",
+							Input: &grpcviewv1.Message{
+								Package: "grpcview.v1",
+								Name:    "GetWorkspaceRequest",
+							},
+						},
+					},
+				},
+			},
+			Items: []*grpcviewv1.Item{
+				{
+					Name: "Workspace",
+					Content: &grpcviewv1.Item_Folder{
+						Folder: &grpcviewv1.Folder{
+							Items: []*grpcviewv1.Item{
+								{
+									Name: "AddDescriptorSource",
+									Content: &grpcviewv1.Item_Request{
+										Request: &grpcviewv1.Request{
+											Service: &grpcviewv1.Service{
+												Package: "grpcview.v1",
+												Name:    "Workspace",
+											},
+											Method: &grpcviewv1.Method{
+												Name: "AddDescriptorSource",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}), nil
 }

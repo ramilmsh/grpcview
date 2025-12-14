@@ -8,17 +8,26 @@ import "service/proto/v1/workspace.proto";
 
 option go_package = "github.com/ramilmsh/grpcview/service/proto/v1;grpcviewv1";
 
-
-
-message AddRequest {
+message AddDescriptorSourceRequest {
   oneof source {
     bytes descriptor_set = 1;
     Server reflection = 2;
   }
 }
 
-message AddResponse { repeated Service services = 1; }
+message AddDescriptorSourceResponse {
+  WorkspaceSnapshot workspace = 1;
+}
+
+message GetWorkspaceRequest {
+  string name = 1;
+}
+
+message GetWorkspaceResponse {
+  WorkspaceSnapshot workspace = 1;
+}
 
 service Workspace {
-  rpc Add(AddRequest) returns (AddResponse);
+  rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse);
 }

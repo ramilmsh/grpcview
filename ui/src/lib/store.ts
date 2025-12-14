@@ -1,97 +1,113 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { Service, Method } from "@grpcview/v1/workspace_pb";
+
+// Proto Mirrors
+// We are partially mirroring the proto structure here for the state.
+// Since we are using creating items on the client side before saving (or just keeping them in local state),
+// we need a mutable structure.
+
+export interface RequestItem {
+  service?: Service;
+  method?: Method;
+  request: string; // Stored as JSON string locally for editor
+}
+
+export interface FolderItem {
+  items: Item[];
+}
 
 export interface Item {
   name: string;
-  type: "grpc" | "folder";
-  children?: Item[];
+  id: string; // We enforce ID on the client
+  content:
+    | {
+        case: "folder";
+        value: FolderItem;
+      }
+    | {
+        case: "request";
+        value: RequestItem;
+      };
 }
 
 interface WorkspaceState {
-  rootItem: Item;
-  addItem: (parent: Item, item: Item) => void;
-  removeItem: (parent: Item, index: number) => void;
+  rootItems: Item[]; // Changed from single rootItem to list of items at root to match WorkspaceSnapshot.items
+  services: Service[];
+
+  // Actions
+  setServices: (services: Service[]) => void;
+  setRootItems: (items: any[]) => void; // Accepts proto items and converts them
+  addItem: (parent: Item | null, item: Item) => void; // parent null = root
+  removeItem: (parent: Item | null, index: number) => void;
   renameItem: (item: Item, newName: string) => void;
-  setRootItem: (item: Item) => void;
+  updateRequestData: (item: Item, data: string) => void;
 }
 
-// Helper to find and modify the nested item structure
-// Since zustand state is immutable, we need to clone.
-// But we are passing references to 'parent'.
-// In Zustand/React, we usually operate on IDs or paths.
-// The Vue implementation passed object references directly because Vue's reactivity system handles it.
-// In React/Zustand, passing object references from the state and mutating them DIRECTLY inside the store
-// might work if we use Immer or careful copying.
-// However, the `addItem` signature `(parent: Item, item: Item)` assumes we have the parent object.
-// If `parent` is a reference to an object inside the `rootItem` tree, we can mutate it if we use Immer
-// or if we manually traverse.
+// Helpers
+const ensureIds = (protoItem: any): Item => {
+  const item: Item = {
+    name: protoItem.name || "Untitled",
+    id: crypto.randomUUID(),
+    content: { case: "folder", value: { items: [] } }, // default
+  };
 
-// Simplified approach used in Vue:
-// function addItem(parent: Item, item: Item): void {
-//   parent.children = parent.children ?? [];
-//   parent.children.push(item);
-// }
-// This mutates the object.
+  if (protoItem.content?.case === "folder" || protoItem.content?.value?.items) {
+    // Handle Proto conversion looseness
+    // If it came from proto, it might be nested under `folder`.
+    // But `WorkspaceSnapshot.items` is `repeated Item`.
+    // `Item` has `oneof content`.
+    const folder = protoItem.content?.value || protoItem.folder;
+    const children = folder?.items || [];
+    item.content = {
+      case: "folder",
+      value: {
+        items: children.map(ensureIds),
+      },
+    };
+  } else if (protoItem.content?.case === "request" || protoItem.request) {
+    const req = protoItem.content?.value || protoItem.request;
+    // Convert bytes request to string
+    let reqBody = "{}";
+    if (req.request instanceof Uint8Array) {
+      reqBody = new TextDecoder().decode(req.request);
+    } else if (typeof req.request === "string") {
+      // It might be base64 if coming from partial JSON
+      try {
+        reqBody = atob(req.request);
+      } catch {
+        reqBody = req.request;
+      }
+    }
 
-// In Zustand with `persist`, we should return a NEW state.
-// We can use `immer` middleware to allow mutation syntax.
-// Or we can just trust that `parent` is a reference to the mutable object if we were using a mutable store,
-// but Zustand isn't mutable by default in that way without Immer.
-// Actually, if we pass the object from the UI, it's a reference to the read-only state. Mutating it won't trigger update.
-
-// Let's use Immer to make this easier and closer to the Vue logic.
-// But I didn't install immer.
-// I will implement a path-based or recursive find approach,
-// OR I will just assume for now I can mutate if I clone the root.
-
-// BETTER APPROACH:
-// The Vue app works by passing the item reference.
-// The React way is usually passing an ID or Path.
-// Since the Items don't have IDs, we probably rely on Path or Reference.
-// Providing a path array is safer.
-// But to keep it simple and effective:
-// I'll add an ID to every item or just use the reference if I can find it in the tree.
-
-// Let's try to stick to the Vue logic but wrap in a state update that clones.
-// Use `immer` would be best. I'll add `immer` to possible deps or just implement a deep clone helper.
-// Actually, I can use `produce` from `immer` if I install it, but I didn't.
-// Let's just implement `setRootItem` easily.
-// For `addItem`, I might need to traverse.
-// Since the tree can be deep, finding the parent by reference in a deep clone is tricky without ids.
-//
-// OPTION: Add IDs to items.
-// Check if I can add `id: string` to Item.
-// The Vue app didn't use IDs.
-// I will add a `uuid` or similar.
-
-// Let's modify `Item` to have an optional `id` for React keyING anyway.
-
-export interface ItemWithId extends Item {
-  id?: string;
-  children?: ItemWithId[];
-}
-
-export const ensureIds = (item: ItemWithId): ItemWithId => {
-  if (!item.id) item.id = crypto.randomUUID();
-  if (item.children) {
-    item.children.forEach(ensureIds);
+    item.content = {
+      case: "request",
+      value: {
+        service: req.service,
+        method: req.method,
+        request: reqBody,
+      },
+    };
   }
+
   return item;
 };
 
-// Function to find node and perform action
+// Recursive finder
 const findAndModify = (
-  root: ItemWithId,
+  items: Item[],
   targetId: string,
-  action: (node: ItemWithId) => void
+  action: (node: Item, parentArray: Item[], index: number) => void
 ): boolean => {
-  if (root.id === targetId) {
-    action(root);
-    return true;
-  }
-  if (root.children) {
-    for (const child of root.children) {
-      if (findAndModify(child, targetId, action)) return true;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.id === targetId) {
+      action(item, items, i);
+      return true;
+    }
+    if (item.content.case === "folder") {
+      if (findAndModify(item.content.value.items, targetId, action))
+        return true;
     }
   }
   return false;
@@ -100,50 +116,81 @@ const findAndModify = (
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set) => ({
-      rootItem: { name: "Root", type: "folder", id: "root", children: [] },
-      addItem: (parent: ItemWithId, item: ItemWithId) =>
-        set((state) => {
-          const newRoot = JSON.parse(JSON.stringify(state.rootItem)); // Deep clone
-          const targetId = parent.id || "root"; // Fallback to root if undefined, but should be defined.
-          ensureIds(item);
+      rootItems: [],
+      services: [],
 
-          // Find parent in newRoot
-          findAndModify(newRoot, targetId, (node) => {
-            node.children = node.children || [];
-            node.children.push(item);
-          });
+      setServices: (services) => set({ services }),
 
-          return { rootItem: newRoot };
+      setRootItems: (protoItems) =>
+        set({
+          rootItems: protoItems.map(ensureIds),
         }),
-      removeItem: (parent: ItemWithId, index: number) =>
+
+      addItem: (parent, newItem) =>
         set((state) => {
-          const newRoot = JSON.parse(JSON.stringify(state.rootItem));
-          const targetId = parent.id || "root";
-          findAndModify(newRoot, targetId, (node) => {
-            if (node.children) {
-              node.children.splice(index, 1);
+          const newRoots = JSON.parse(
+            JSON.stringify(state.rootItems)
+          ) as Item[];
+          if (!parent) {
+            // Add to root
+            newRoots.push(newItem);
+          } else {
+            // Find parent
+            findAndModify(newRoots, parent.id, (node) => {
+              if (node.content.case === "folder") {
+                node.content.value.items.push(newItem);
+              }
+            });
+          }
+          return { rootItems: newRoots };
+        }),
+
+      removeItem: (parent, index) =>
+        set((state) => {
+          const newRoots = JSON.parse(
+            JSON.stringify(state.rootItems)
+          ) as Item[];
+          if (!parent) {
+            if (index >= 0 && index < newRoots.length) {
+              newRoots.splice(index, 1);
             }
-          });
-          return { rootItem: newRoot };
+          } else {
+            findAndModify(newRoots, parent.id, (node) => {
+              if (node.content.case === "folder") {
+                node.content.value.items.splice(index, 1);
+              }
+            });
+          }
+          return { rootItems: newRoots };
         }),
-      renameItem: (item: ItemWithId, newName: string) =>
+
+      renameItem: (item, newName) =>
         set((state) => {
-          const newRoot = JSON.parse(JSON.stringify(state.rootItem));
-          const targetId = item.id;
-          if (!targetId) return {};
-          findAndModify(newRoot, targetId, (node) => {
+          const newRoots = JSON.parse(
+            JSON.stringify(state.rootItems)
+          ) as Item[];
+          findAndModify(newRoots, item.id, (node) => {
             node.name = newName;
           });
-          return { rootItem: newRoot };
+          return { rootItems: newRoots };
         }),
-      setRootItem: (item: Item) =>
-        set(() => {
-          const withIds = ensureIds(item as ItemWithId);
-          return { rootItem: withIds };
+
+      updateRequestData: (item, data) =>
+        set((state) => {
+          const newRoots = JSON.parse(
+            JSON.stringify(state.rootItems)
+          ) as Item[];
+          findAndModify(newRoots, item.id, (node) => {
+            if (node.content.case === "request") {
+              node.content.value.request = data;
+            }
+          });
+          return { rootItems: newRoots };
         }),
     }),
     {
       name: "workspace-storage",
+      partialize: (state) => ({ rootItems: state.rootItems }), // Don't persist services as they might be stale/large, reload on start
     }
   )
 );

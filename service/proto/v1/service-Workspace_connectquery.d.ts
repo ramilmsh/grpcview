@@ -5,6 +5,10 @@
 import { Workspace } from "./service_pb";
 
 /**
- * @generated from rpc grpcview.v1.Workspace.Add
+ * @generated from rpc grpcview.v1.Workspace.AddDescriptorSource
  */
-export const add: (typeof Workspace)["method"]["add"];
+export const addDescriptorSource: typeof Workspace["method"]["addDescriptorSource"];
+/**
+ * @generated from rpc grpcview.v1.Workspace.GetWorkspace
+ */
+export const getWorkspace: typeof Workspace["method"]["getWorkspace"];

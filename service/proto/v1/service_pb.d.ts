@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
-import type { Server, Service } from "./workspace_pb";
+import type { Server, WorkspaceSnapshot } from "./workspace_pb";
 
 /**
  * Describes the file service/proto/v1/service.proto.
@@ -12,11 +12,11 @@ import type { Server, Service } from "./workspace_pb";
 export declare const file_service_proto_v1_service: GenFile;
 
 /**
- * @generated from message grpcview.v1.AddRequest
+ * @generated from message grpcview.v1.AddDescriptorSourceRequest
  */
-export declare type AddRequest = Message<"grpcview.v1.AddRequest"> & {
+export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescriptorSourceRequest"> & {
   /**
-   * @generated from oneof grpcview.v1.AddRequest.source
+   * @generated from oneof grpcview.v1.AddDescriptorSourceRequest.source
    */
   source: {
     /**
@@ -34,38 +34,78 @@ export declare type AddRequest = Message<"grpcview.v1.AddRequest"> & {
 };
 
 /**
- * Describes the message grpcview.v1.AddRequest.
- * Use `create(AddRequestSchema)` to create a new message.
+ * Describes the message grpcview.v1.AddDescriptorSourceRequest.
+ * Use `create(AddDescriptorSourceRequestSchema)` to create a new message.
  */
-export declare const AddRequestSchema: GenMessage<AddRequest>;
+export declare const AddDescriptorSourceRequestSchema: GenMessage<AddDescriptorSourceRequest>;
 
 /**
- * @generated from message grpcview.v1.AddResponse
+ * @generated from message grpcview.v1.AddDescriptorSourceResponse
  */
-export declare type AddResponse = Message<"grpcview.v1.AddResponse"> & {
+export declare type AddDescriptorSourceResponse = Message<"grpcview.v1.AddDescriptorSourceResponse"> & {
   /**
-   * @generated from field: repeated grpcview.v1.Service services = 1;
+   * @generated from field: grpcview.v1.WorkspaceSnapshot workspace = 1;
    */
-  services: Service[];
+  workspace?: WorkspaceSnapshot;
 };
 
 /**
- * Describes the message grpcview.v1.AddResponse.
- * Use `create(AddResponseSchema)` to create a new message.
+ * Describes the message grpcview.v1.AddDescriptorSourceResponse.
+ * Use `create(AddDescriptorSourceResponseSchema)` to create a new message.
  */
-export declare const AddResponseSchema: GenMessage<AddResponse>;
+export declare const AddDescriptorSourceResponseSchema: GenMessage<AddDescriptorSourceResponse>;
+
+/**
+ * @generated from message grpcview.v1.GetWorkspaceRequest
+ */
+export declare type GetWorkspaceRequest = Message<"grpcview.v1.GetWorkspaceRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message grpcview.v1.GetWorkspaceRequest.
+ * Use `create(GetWorkspaceRequestSchema)` to create a new message.
+ */
+export declare const GetWorkspaceRequestSchema: GenMessage<GetWorkspaceRequest>;
+
+/**
+ * @generated from message grpcview.v1.GetWorkspaceResponse
+ */
+export declare type GetWorkspaceResponse = Message<"grpcview.v1.GetWorkspaceResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.WorkspaceSnapshot workspace = 1;
+   */
+  workspace?: WorkspaceSnapshot;
+};
+
+/**
+ * Describes the message grpcview.v1.GetWorkspaceResponse.
+ * Use `create(GetWorkspaceResponseSchema)` to create a new message.
+ */
+export declare const GetWorkspaceResponseSchema: GenMessage<GetWorkspaceResponse>;
 
 /**
  * @generated from service grpcview.v1.Workspace
  */
 export declare const Workspace: GenService<{
   /**
-   * @generated from rpc grpcview.v1.Workspace.Add
+   * @generated from rpc grpcview.v1.Workspace.AddDescriptorSource
    */
-  add: {
+  addDescriptorSource: {
     methodKind: "unary";
-    input: typeof AddRequestSchema;
-    output: typeof AddResponseSchema;
+    input: typeof AddDescriptorSourceRequestSchema;
+    output: typeof AddDescriptorSourceResponseSchema;
+  },
+  /**
+   * @generated from rpc grpcview.v1.Workspace.GetWorkspace
+   */
+  getWorkspace: {
+    methodKind: "unary";
+    input: typeof GetWorkspaceRequestSchema;
+    output: typeof GetWorkspaceResponseSchema;
   },
 }>;
 
