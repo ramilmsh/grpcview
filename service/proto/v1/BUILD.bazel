@@ -41,8 +41,17 @@ go_library(
 ts_proto_library(
     name = "grpcviewv1_ts_proto",
     gen_connect_query = True,
+    gen_connect_query_service_mapping = {
+        "service.proto": ["Workspace"],
+    },
     node_modules = "//:node_modules",
     proto = ":grpcviewv1_proto",
-    proto_srcs = ["service.proto"],
-    visibility = ["//frontend:__pkg__"],
+    proto_srcs = [
+        "service.proto",
+        "workspace.proto",
+    ],
+    visibility = [
+        "//frontend:__pkg__",
+        "//ui:__pkg__",
+    ],
 )

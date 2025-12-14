@@ -1,0 +1,67 @@
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//ui:vite/package_json.bzl", vite_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+filegroup(
+    name = "src",
+    srcs = glob(["src/**/*"]),
+)
+
+BUILD_DEPS = [":node_modules/" + d for d in [
+    "@types/node",
+    "@types/react",
+    "@types/react-dom",
+    "@bufbuild/protobuf",
+    "@connectrpc/connect",
+    "@connectrpc/connect-query",
+    "@connectrpc/connect-web",
+    "@tanstack/react-query",
+    "react",
+    "react-dom",
+    "react-monaco-editor",
+    "monaco-editor",
+    "zustand",
+    "clsx",
+    "tailwind-merge",
+    "lucide-react",
+    "react-router-dom",
+    "vite",
+    "@vitejs/plugin-react",
+    "typescript",
+    "vite-plugin-singlefile",
+    "tailwindcss",
+    "postcss",
+    "autoprefixer",
+]]
+
+DATA = BUILD_DEPS + [
+    "package.json",
+    "tsconfig.json",
+    "tsconfig.node.json",
+    "vite.config.ts",
+    "tailwind.config.js",
+    "postcss.config.js",
+    "index.html",
+    ":src",
+    "//service/proto/v1:grpcviewv1_ts_proto",
+]
+
+vite_bin.vite(
+    name = "ui",
+    srcs = DATA,
+    outs = ["dist/index.html"],
+    args = [
+        "build",
+        "--mode=development",
+    ],
+    chdir = package_name(),
+    visibility = ["//visibility:public"],
+)
+
+vite_bin.vite_binary(
+    name = "dev",
+    chdir = package_name(),
+    data = DATA,
+    tags = ["ibazel_notify_changes"],
+)
