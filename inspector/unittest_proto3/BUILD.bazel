@@ -1,4 +1,5 @@
-load("@rules_proto//proto:defs.bzl", "proto_descriptor_set", "proto_library")
+load("@protobuf//bazel:proto_descriptor_set.bzl", "proto_descriptor_set")
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
 
 # gazelle:go_generate_proto false
 # gazelle:proto file

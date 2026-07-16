@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/invopop/jsonschema"
-	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -104,7 +103,7 @@ func convertMessage(descriptor protoreflect.MessageDescriptor, defs jsonschema.D
 	schema := &jsonschema.Schema{
 		ID:                   jsonschema.ID(messageId(descriptor)),
 		Type:                 "object",
-		Properties:           orderedmap.New[string, *jsonschema.Schema](),
+		Properties:           jsonschema.NewProperties(),
 		AdditionalProperties: jsonschema.FalseSchema,
 	}
 

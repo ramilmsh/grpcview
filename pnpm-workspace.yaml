@@ -1,2 +1,7 @@
 packages:
   - ui
+
+# rules_js (aspect_rules_js 3.x) requires packages that run install/build lifecycle
+# scripts to be declared explicitly. esbuild (via vite) is the only such dependency.
+onlyBuiltDependencies:
+  - esbuild

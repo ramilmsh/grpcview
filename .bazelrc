@@ -3,16 +3,28 @@ common --incompatible_strict_action_env
 common --incompatible_enable_proto_toolchain_resolution
 common --incompatible_use_plus_in_repo_names
 
-common --per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
-common --host_per_file_copt=external/.*protobuf.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
-common --per_file_copt=external/.*grpc.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
-common --host_per_file_copt=external/.*grpc.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
+# Fail loudly if the heavy protobuf/grpc C++ runtime or compiler (protoc) is ever compiled
+# from source instead of coming from the prebuilt protoc toolchain. Scoped to .../src/... —
+# that is where libprotobuf and protoc live — so it still catches an accidental protoc build
+# but allows protobuf's trivial, dependency-free build helpers (e.g. bazel/private/file_concat,
+# used by proto_descriptor_set, which ts_proto_library needs) to compile, since no prebuilt
+# exists for them.
+common --per_file_copt=external/.*protobuf.*/src/.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
+common --host_per_file_copt=external/.*protobuf.*/src/.*@--PROTOBUF_WAS_NOT_SUPPOSED_TO_BE_BUILT
+common --per_file_copt=external/.*grpc.*/src/.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
+common --host_per_file_copt=external/.*grpc.*/src/.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
 
 build --workspace_status_command=$(pwd)/tools/workspace_status.sh
 
 build:linux --sandbox_add_mount_pair=/tmp
 build:macos --sandbox_add_mount_pair=/var/tmp
 build:windows --sandbox_add_mount_pair=C:\Temp
+
+# hermetic_cc_toolchain (zig) only supports Linux targets — it can't compile for macOS
+# because it lacks the macOS SDK (e.g. <resolv.h> for Go's cgo net/sqlite3). On a macOS
+# host, force the native Apple cc toolchain so it outranks the zig darwin toolchain that
+# the root module registers. Zig stays in use for Linux/remote builds.
+build:macos --extra_toolchains=@@apple_support++apple_cc_configure_extension+local_config_apple_cc_toolchains//:all
 
 common:ci --config=remote-linux-amd64
 common:ci --build_metadata=ROLE=CI
