@@ -1,0 +1,31 @@
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "grpcviewstorev1_proto",
+    srcs = ["storage.proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@protobuf//:descriptor_proto",
+        "@protobuf//:struct_proto",
+    ],
+)
+
+go_proto_library(
+    name = "grpcviewstorev1_go_proto",
+    compilers = [
+        "@rules_go//proto:go_proto",
+        "//tools:connect_go_proto_compiler",
+    ],
+    importpath = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1",
+    proto = ":grpcviewstorev1_proto",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "store",
+    embed = [":grpcviewstorev1_go_proto"],
+    importpath = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1",
+    visibility = ["//visibility:public"],
+)

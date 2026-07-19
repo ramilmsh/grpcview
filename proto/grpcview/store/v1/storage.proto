@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+// Package grpcview.store.v1 is the on-disk schema for a grpcview collection.
+//
+// These messages are intentionally DISTINCT from the wire messages in
+// grpcview.v1: they describe how a collection is laid out on disk (one message
+// per managed file), shaped for git-friendly protojson and minimal per-file
+// diffs rather than for the RPC surface. The store package converts between the
+// two (see service/store/convert.go); there is no requirement that they match.
+//
+// The package imports only well-known types, never grpcview.v1, so the disk
+// format can evolve independently of the API.
+package grpcview.store.v1;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1;grpcviewstorev1";
+
+// Collection is grpcview.json at the collection root: the committed manifest,
+// the root folder's child ordering, and the descriptor-source config. It
+// doubles as the root folder's config (its items are the top-level ordering).
+message Collection {
+  int32 schema_version = 1;
+  string name = 2;
+  repeated string items = 3;              // ordered root-level slugs
+  repeated DescriptorSource sources = 4;  // committed descriptor sources
+}
+
+// Folder is folder.json inside a (non-root) folder directory.
+message Folder {
+  ItemMeta meta = 1;
+  repeated string items = 2;  // ordered child slugs
+}
+
+// Request is request.json inside a request directory.
+//
+// The draft body is the raw text the user typed in the editor. It is a string
+// (not bytes) so protojson stores it as a plain JSON string rather than a base64
+// blob: the body is always UTF-8 text, and keeping it a string keeps request.json
+// human-readable.
+message Request {
+  ItemMeta meta = 1;
+  string service = 2;
+  string method = 3;
+  google.protobuf.Struct draft_metadata = 4;
+  string draft_body = 5;
+}
+
+// ItemMeta is the identity block embedded in every managed tree file. The
+// directory name is the stable slug; this display name lets a rename edit only
+// the file and never move a directory.
+message ItemMeta {
+  string name = 1;
+}
+
+// DescriptorSource is where schemas come from.
+//
+// Unlike the wire message (which carries a serialized FileDescriptorSet as
+// opaque bytes), the on-disk form stores it as a typed FileDescriptorSet, so a
+// committed schema is readable, diffable protojson instead of a base64 blob —
+// descriptors are proto definitions too, so we encode them the same way.
+message DescriptorSource {
+  oneof source {
+    google.protobuf.FileDescriptorSet descriptor_set = 1;
+    Reflection reflection = 2;
+  }
+}
+
+// Reflection addresses a server to reflect schemas from. Disk-local (not the
+// wire grpcview.v1.Server) so this package stays decoupled from the API.
+message Reflection {
+  string host = 1;
+  int32 port = 2;
+  bool tls = 3;
+}

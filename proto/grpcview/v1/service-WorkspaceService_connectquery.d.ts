@@ -40,3 +40,10 @@ export const deleteRequest: typeof WorkspaceService["method"]["deleteRequest"];
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateRequest
  */
 export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
+/**
+ * Invoke executes a unary RPC against a target server and returns the result
+ * (status, response body, request/response metadata, latency).
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.Invoke
+ */
+export const invoke: typeof WorkspaceService["method"]["invoke"];

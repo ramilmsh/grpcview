@@ -58,7 +58,7 @@ message UpdateRequestRequest {
   string item_name = 3;
   optional string service = 4;
   optional string method = 5;
-  optional bytes draft_body = 6;
+  optional string draft_body = 6;
   optional google.protobuf.Struct draft_metadata = 7;
 }
 
@@ -72,6 +72,28 @@ message GetRequest {
 
 message GetResponse {
   Workspace workspace = 1;
+}
+
+// InvokeRequest executes a single unary RPC against a target server. The
+// service/method/body/metadata carry the (possibly unsaved) editor state, so a
+// send never depends on a prior UpdateRequest landing first. workspace_name
+// identifies the collection (used to default the target from its reflection
+// source and, later, to key run history by path/item_name).
+message InvokeRequest {
+  string                 workspace_name = 1;
+  repeated string        path           = 2;
+  string                 item_name      = 3;
+  string                 service        = 4;
+  string                 method         = 5;
+  string                 body           = 6;
+  google.protobuf.Struct metadata       = 7;
+  // target overrides where the call is sent; when unset it defaults to the
+  // workspace's first reflection source.
+  optional Server        target         = 8;
+}
+
+message InvokeResponse {
+  Request.Response response = 1;
 }
 
 // WorkspaceService is a gRPC service that provides access to the workspace
@@ -88,4 +110,7 @@ service WorkspaceService {
   rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);
   // UpdateRequest updates a request in the workspace
   rpc UpdateRequest(UpdateRequestRequest) returns (UpdateRequestResponse);
+  // Invoke executes a unary RPC against a target server and returns the result
+  // (status, response body, request/response metadata, latency).
+  rpc Invoke(InvokeRequest) returns (InvokeResponse);
 }

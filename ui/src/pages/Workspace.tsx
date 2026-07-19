@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useWorkspaceStore, ItemWithPath } from "@/lib/store";
+import { Send } from "lucide-react";
+import { useWorkspaceStore, ItemWithPath, itemKey } from "@/lib/store";
 import { AddDescriptorSourceRequestSchema } from "@grpcview/v1/service_pb";
 import { create } from "@bufbuild/protobuf";
 
@@ -7,6 +8,13 @@ import { TreeView } from "@/components/TreeView";
 import { Editor } from "@/components/Editor";
 import { AddSourceModal } from "@/components/AddSourceModal";
 import { RequestSelectorModal } from "@/components/RequestSelectorModal";
+import {
+  MetadataEditor,
+  MetadataRow,
+  rowsToObject,
+  objectToRows,
+} from "@/components/MetadataEditor";
+import { ResponsePanel } from "@/components/ResponsePanel";
 import { Service, Method } from "@grpcview/v1/workspace_pb";
 
 export const WorkspacePage: React.FC = () => {
@@ -18,9 +26,27 @@ export const WorkspacePage: React.FC = () => {
   const [requestTargetParent, setRequestTargetParent] =
     useState<ItemWithPath | null>(null);
 
+  // Local editor state for the active request. It is the source of truth while
+  // editing (the stored Item goes stale after each reload), initialized when
+  // the selected request changes and persisted back on edit.
+  const [body, setBody] = useState<string>("{}");
+  const [metadataRows, setMetadataRows] = useState<MetadataRow[]>([]);
+  const [activeTab, setActiveTab] = useState<"body" | "metadata">("body");
+
+  const activeKey = activeItem ? itemKey(activeItem) : null;
+
   useEffect(() => {
     store.loadWorkspace();
   }, []);
+
+  useEffect(() => {
+    if (activeItem?.item.content.case === "request") {
+      const req = activeItem.item.content.value;
+      setBody(req.draftBody || "{}");
+      setMetadataRows(objectToRows(req.draftMetadata));
+      setActiveTab("body");
+    }
+  }, [activeKey]);
 
   const handleAddReflection = async (host: string, port: number) => {
     const req = create(AddDescriptorSourceRequestSchema, {
@@ -61,12 +87,7 @@ export const WorkspacePage: React.FC = () => {
     const serviceName = service.package + "." + service.name;
     const methodName = method.name;
 
-    store.createRequest(
-      requestTargetParent,
-      methodName,
-      serviceName,
-      methodName
-    );
+    store.createRequest(requestTargetParent, methodName, serviceName, methodName);
 
     setRequestTargetParent(null);
     setShowRequestModal(false);
@@ -101,18 +122,34 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // Editor Data - decode bytes to string for editing
-  const getEditorData = (): string => {
-    if (activeItem?.item.content.case === "request") {
-      const req = activeItem.item.content.value;
-      if (req.draftBody && req.draftBody.length > 0) {
-        return new TextDecoder().decode(req.draftBody);
-      }
-    }
-    return "{}";
+  const handleBodyChange = (val: string) => {
+    setBody(val);
+    if (activeItem) store.updateRequestData(activeItem, val);
   };
 
-  const editorData = getEditorData();
+  const handleMetadataChange = (rows: MetadataRow[]) => {
+    setMetadataRows(rows);
+    if (activeItem) store.updateRequestMetadata(activeItem, rowsToObject(rows));
+  };
+
+  const handleSend = () => {
+    if (activeItem) store.invoke(activeItem, body, rowsToObject(metadataRows));
+  };
+
+  const activeRequest =
+    activeItem?.item.content.case === "request"
+      ? activeItem.item.content.value
+      : null;
+  const response = activeKey ? store.responses[activeKey] : undefined;
+  const responseError = activeKey ? store.responseErrors[activeKey] : undefined;
+  const isInvoking = activeKey ? !!store.invoking[activeKey] : false;
+
+  const tabClass = (tab: "body" | "metadata") =>
+    `px-4 py-2 text-sm font-medium border-b-2 ${
+      activeTab === tab
+        ? "border-purple-600 text-purple-700"
+        : "border-transparent text-gray-500 hover:text-gray-700"
+    }`;
 
   return (
     <div className="flex w-full h-full bg-slate-50">
@@ -159,16 +196,81 @@ export const WorkspacePage: React.FC = () => {
 
       {/* Main Area */}
       <div className="flex-grow h-full bg-white relative">
-        {activeItem?.item.content.case === "request" ? (
-          <Editor
-            services={store.services}
-            data={editorData}
-            onChange={(val: string) => store.updateRequestData(activeItem, val)}
-            currentMethod={{
-              service: activeItem.item.content.value.service,
-              method: activeItem.item.content.value.method,
-            }}
-          />
+        {activeRequest ? (
+          <div className="flex flex-col h-full">
+            {/* Request header */}
+            <div className="h-12 flex items-center gap-3 px-4 border-b border-gray-200 shrink-0">
+              <div className="flex flex-col leading-tight min-w-0">
+                <span className="text-sm font-medium text-gray-800 truncate">
+                  {activeRequest.method}
+                </span>
+                <span className="text-xs text-gray-400 truncate">
+                  {activeRequest.service}
+                </span>
+              </div>
+              <button
+                onClick={handleSend}
+                disabled={isInvoking}
+                className="ml-auto flex items-center gap-2 bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 disabled:opacity-50 uppercase text-sm font-medium"
+              >
+                <Send size={16} />
+                {isInvoking ? "Sending…" : "Send"}
+              </button>
+            </div>
+
+            {/* Request / Response split */}
+            <div className="flex-grow flex overflow-hidden">
+              {/* Request */}
+              <div className="w-1/2 flex flex-col border-r border-gray-200">
+                <div className="flex border-b border-gray-200 shrink-0">
+                  <button
+                    className={tabClass("body")}
+                    onClick={() => setActiveTab("body")}
+                  >
+                    Body
+                  </button>
+                  <button
+                    className={tabClass("metadata")}
+                    onClick={() => setActiveTab("metadata")}
+                  >
+                    Metadata
+                    {metadataRows.length > 0 && (
+                      <span className="ml-1 text-xs text-purple-500">
+                        ({metadataRows.length})
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <div className="flex-grow overflow-hidden">
+                  {activeTab === "body" ? (
+                    <Editor
+                      services={store.services}
+                      data={body}
+                      onChange={handleBodyChange}
+                      currentMethod={{
+                        service: activeRequest.service,
+                        method: activeRequest.method,
+                      }}
+                    />
+                  ) : (
+                    <MetadataEditor
+                      rows={metadataRows}
+                      onChange={handleMetadataChange}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Response */}
+              <div className="w-1/2 flex flex-col">
+                <ResponsePanel
+                  response={response}
+                  error={responseError}
+                  loading={isInvoking}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
             Select a request to edit

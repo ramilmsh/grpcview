@@ -8,7 +8,6 @@ require (
 	connectrpc.com/grpcreflect v1.3.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jhump/protoreflect v1.18.0
-	github.com/mattn/go-sqlite3 v1.14.48
 	github.com/rs/cors v1.11.1
 	golang.org/x/net v0.57.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260715232425-e75dac1f907d

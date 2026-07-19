@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -21,7 +20,7 @@ import (
 
 	"connectrpc.com/grpcreflect"
 
-	workspace "codeberg.org/ramilmsh/grpcview/service/workspace"
+	"codeberg.org/ramilmsh/grpcview/service/workspace"
 
 	connectcors "connectrpc.com/cors"
 

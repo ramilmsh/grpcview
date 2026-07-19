@@ -1,135 +1,101 @@
-package service
+package workspace
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"log/slog"
 	"os"
-	"path"
+	"path/filepath"
 	"slices"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/grpcreflect"
-	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	_ "github.com/mattn/go-sqlite3"
-
 	"codeberg.org/ramilmsh/grpcview/inspector"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-var errWorkspaceNotFound = errors.New("workspace not found")
-
+// Workspace is the WorkspaceService handler. It is a thin adapter over
+// store.Store: each mutation delegates to the store and then reloads the whole
+// Workspace so responses keep the exact shape the client already expects.
 type Workspace struct {
-	db *sql.DB
+	store *store.Store
 }
 
+// New returns a handler persisting collections under the same base the previous
+// blob storage used: os.UserConfigDir()/.grpcview/<name>.
 func New(ctx context.Context) (Workspace, error) {
-	db, err := sql.Open("sqlite3", "/tmp/ws.db")
+	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return Workspace{}, nil
+		return Workspace{}, fmt.Errorf("failed to get user config dir: %w", err)
 	}
-
-	return Workspace{db: db}, nil
+	return Workspace{store: store.New(filepath.Join(configDir, ".grpcview"), slog.Default())}, nil
 }
 
 func (w Workspace) Close(ctx context.Context) error {
-	return w.db.Close()
-}
-
-func (w Workspace) getWorkspacePath(ctx context.Context, name string) (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user config dir: %w", err)
-	}
-
-	return path.Join(configDir, ".grpcview", name), nil
-}
-
-func (w Workspace) load(ctx context.Context, name string) (*grpcviewv1.Workspace, error) {
-	workspacePath, err := w.getWorkspacePath(ctx, name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get workspace path: %w", err)
-	}
-
-	file, err := os.OpenFile(workspacePath, os.O_RDONLY, 0644)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, errWorkspaceNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read workspace file: %w", err)
-	}
-
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read workspace file: %w", err)
-	}
-
-	workspace := &grpcviewv1.Workspace{}
-	if err := proto.Unmarshal(data, workspace); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal workspace: %w", err)
-	}
-
-	return workspace, nil
-}
-
-func (w Workspace) save(ctx context.Context, workspace *grpcviewv1.Workspace) error {
-	data, err := proto.Marshal(workspace)
-	if err != nil {
-		return fmt.Errorf("failed to marshal workspace: %w", err)
-	}
-
-	workspacePath, err := w.getWorkspacePath(ctx, workspace.GetName())
-	if err != nil {
-		return fmt.Errorf("failed to get workspace path: %w", err)
-	}
-
-	if err := os.MkdirAll(path.Dir(workspacePath), 0755); err != nil {
-		return fmt.Errorf("failed to create workspace directory: %w", err)
-	}
-
-	file, err := os.OpenFile(workspacePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open workspace file: %w", err)
-	}
-
-	defer file.Close()
-
-	_, err = file.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to write workspace file: %w", err)
-	}
-
 	return nil
 }
 
-func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
-	workspace, err := w.load(ctx, request.Msg.GetWorkspaceName())
+// toConnectError maps the store's transport-agnostic sentinel errors onto the
+// Connect error codes the client relies on; other errors pass through.
+func toConnectError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, store.ErrItemNotFound), errors.Is(err, store.ErrNotFound):
+		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, store.ErrNotAFolder), errors.Is(err, store.ErrNotARequest),
+		errors.Is(err, store.ErrAlreadyExists), errors.Is(err, store.ErrInvalidMove):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	default:
+		return err
+	}
+}
+
+func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error) {
+	coll, err := w.store.Open(ctx, request.Msg.GetWorkspaceName())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load workspace: %w", err)
+		return nil, err
+	}
+
+	ws, err := coll.Load(ctx)
+	if errors.Is(err, store.ErrNotFound) {
+		if err := coll.EnsureCreated(ctx); err != nil {
+			return nil, fmt.Errorf("failed to create workspace: %w", err)
+		}
+		ws, err = coll.Load(ctx)
+	}
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+
+	return connect.NewResponse(&grpcviewv1.GetResponse{Workspace: ws}), nil
+}
+
+func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
+	coll, err := w.store.Open(ctx, request.Msg.GetWorkspaceName())
+	if err != nil {
+		return nil, err
+	}
+	ws, err := coll.Load(ctx)
+	if err != nil {
+		return nil, toConnectError(err)
 	}
 
 	switch source := request.Msg.GetSource().(type) {
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("unimplemented source type: <%T> %+v", source, source))
 	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
-		conn, err := grpc.NewClient(
-			fmt.Sprintf("%s:%d", source.Reflection.Host, source.Reflection.Port),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
+		conn, err := dial(source.Reflection)
 		if err != nil {
-			return nil, fmt.Errorf("coudn't connect to %s: %w", source.Reflection, err)
+			return nil, fmt.Errorf("couldn't connect to %s: %w", source.Reflection, err)
 		}
 
 		client := grpcreflect.NewClientAuto(ctx, conn)
@@ -152,13 +118,15 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 				Methods: make([]*grpcviewv1.Method, len(serviceDesc.GetMethods())),
 			}
 
-			index := slices.IndexFunc(workspace.Services, func(s *grpcviewv1.Service) bool {
-				return s.GetName() == serviceDesc.GetFullyQualifiedName()
+			// Replace an existing entry for this service (matched by the
+			// package/name identity we persist) or append a new one.
+			index := slices.IndexFunc(ws.Services, func(s *grpcviewv1.Service) bool {
+				return s.GetPackage() == service.GetPackage() && s.GetName() == service.GetName()
 			})
 			if index == -1 {
-				workspace.Services = append(workspace.Services, service)
+				ws.Services = append(ws.Services, service)
 			} else {
-				workspace.Services[index] = service
+				ws.Services[index] = service
 			}
 
 			for j, methodDesc := range serviceDesc.GetMethods() {
@@ -195,241 +163,99 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 			}
 		}
 
-		if err := w.save(ctx, workspace); err != nil {
-			return nil, fmt.Errorf("failed to save workspace: %w", err)
+		// Persist the source config (committed) and the resolved schema cache
+		// (gitignored), then reload so the response reflects on-disk state.
+		src := &grpcviewv1.DescriptorSource{
+			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection},
+		}
+		ws.Sources = appendSourceUnique(ws.Sources, src)
+		if err := coll.PutDescriptorState(ctx, ws.Sources, ws.Services); err != nil {
+			return nil, fmt.Errorf("failed to persist descriptor state: %w", err)
 		}
 
-		return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{
-			Workspace: workspace,
-		}), nil
+		reloaded, err := coll.Load(ctx)
+		if err != nil {
+			return nil, toConnectError(err)
+		}
+		return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Workspace: reloaded}), nil
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}
 }
 
-func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error) {
-	workspace, err := w.load(ctx, request.Msg.GetWorkspaceName())
-	if errors.Is(err, errWorkspaceNotFound) {
-		workspace = &grpcviewv1.Workspace{
-			Name: request.Msg.GetWorkspaceName(),
-			Item: &grpcviewv1.Item{
-				Name: request.Msg.GetWorkspaceName(),
-				Content: &grpcviewv1.Item_Folder{
-					Folder: &grpcviewv1.Folder{
-						Items: make([]*grpcviewv1.Item, 0),
-					},
-				},
-			},
-		}
-
-		if err := w.save(ctx, workspace); err != nil {
-			return nil, fmt.Errorf("failed to save workspace: %w", err)
-		}
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to load workspace: %w", err)
+func appendSourceUnique(sources []*grpcviewv1.DescriptorSource, src *grpcviewv1.DescriptorSource) []*grpcviewv1.DescriptorSource {
+	if slices.ContainsFunc(sources, func(s *grpcviewv1.DescriptorSource) bool { return proto.Equal(s, src) }) {
+		return sources
 	}
-
-	return connect.NewResponse(&grpcviewv1.GetResponse{
-		Workspace: workspace,
-	}), nil
+	return append(sources, src)
 }
 
-func findItem(item *grpcviewv1.Item, protoPath []string) (*grpcviewv1.Item, error) {
-	if len(protoPath) == 0 {
-		return item, nil
-	}
-
-	currentItem := item
-	for _, name := range protoPath {
-		if currentItem.GetFolder() == nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("folder %s is not a folder", name))
-		}
-
-		items := currentItem.GetFolder().GetItems()
-
-		index := slices.IndexFunc(items, func(item *grpcviewv1.Item) bool {
-			return item.GetName() == name
-		})
-		if index == -1 {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("folder %s not found", name))
-		}
-
-		currentItem = items[index]
-	}
-
-	return currentItem, nil
-}
-
-func findFolder(item *grpcviewv1.Item, protoPath []string) (*grpcviewv1.Item, error) {
-	currentItem, err := findItem(item, protoPath)
+// mutate applies a single store mutation to the named collection and returns the
+// reloaded workspace, mapping store sentinels to Connect codes. The four
+// tree-mutating RPCs share this open→mutate→reload→map policy and differ only in
+// the response type, which each caller wraps.
+func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Collection) error) (*grpcviewv1.Workspace, error) {
+	coll, err := w.store.Open(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find item: %w", err)
+		return nil, err
 	}
-
-	switch currentItem.Content.(type) {
-	case *grpcviewv1.Item_Folder:
-		return currentItem, nil
-	default:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("item %s is not a folder", path.Join(append(protoPath, currentItem.GetName())...)))
+	if err := fn(coll); err != nil {
+		return nil, toConnectError(err)
 	}
-}
-
-func findFile(item *grpcviewv1.Item, protoPath []string) (*grpcviewv1.Item, error) {
-	currentItem, err := findItem(item, protoPath)
+	ws, err := coll.Load(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find item: %w", err)
+		return nil, toConnectError(err)
 	}
-
-	switch currentItem.Content.(type) {
-	case *grpcviewv1.Item_Request:
-		return currentItem, nil
-	default:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("item %s is not a file", path.Join(append(protoPath, currentItem.GetName())...)))
-	}
+	return ws, nil
 }
 
 // CreateFolder implements [grpcviewv1.WorkspaceServiceHandler].
-func (w *Workspace) CreateFolder(ctx context.Context, request *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
-	workspace, err := w.load(ctx, request.Msg.GetWorkspaceName())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workspace: %w", err)
-	}
-
-	path := request.Msg.GetPath()
-	folder, err := findFolder(workspace.GetItem(), path)
+func (w Workspace) CreateFolder(ctx context.Context, request *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.CreateFolder(ctx, request.Msg.GetPath(), request.Msg.GetItemName())
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	index := slices.IndexFunc(folder.GetFolder().GetItems(), func(item *grpcviewv1.Item) bool {
-		return item.GetName() == request.Msg.GetItemName()
-	})
-	if index != -1 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("folder %s already exists", request.Msg.GetItemName()))
-	}
-
-	folder.GetFolder().Items = append(folder.GetFolder().Items, &grpcviewv1.Item{
-		Name: request.Msg.GetItemName(),
-		Content: &grpcviewv1.Item_Folder{
-			Folder: &grpcviewv1.Folder{
-				Items: make([]*grpcviewv1.Item, 0),
-			},
-		},
-	})
-
-	if err := w.save(ctx, workspace); err != nil {
-		return nil, fmt.Errorf("failed to save workspace: %w", err)
-	}
-
-	return connect.NewResponse(&grpcviewv1.CreateFolderResponse{
-		Workspace: workspace,
-	}), nil
+	return connect.NewResponse(&grpcviewv1.CreateFolderResponse{Workspace: ws}), nil
 }
 
 // CreateRequest implements [grpcviewv1.WorkspaceServiceHandler].
-func (w *Workspace) CreateRequest(ctx context.Context, request *connect.Request[grpcviewv1.CreateRequestRequest]) (*connect.Response[grpcviewv1.CreateRequestResponse], error) {
-	fmt.Println(request.Msg)
-	workspace, err := w.load(ctx, request.Msg.GetWorkspaceName())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workspace: %w", err)
-	}
-
-	folder, err := findFolder(workspace.GetItem(), request.Msg.GetPath())
+func (w Workspace) CreateRequest(ctx context.Context, request *connect.Request[grpcviewv1.CreateRequestRequest]) (*connect.Response[grpcviewv1.CreateRequestResponse], error) {
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.CreateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), request.Msg.GetService(), request.Msg.GetMethod())
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	index := slices.IndexFunc(folder.GetFolder().GetItems(), func(item *grpcviewv1.Item) bool {
-		return item.GetName() == request.Msg.GetItemName()
-	})
-	if index != -1 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("request %s already exists", request.Msg.GetItemName()))
-	}
-
-	folder.GetFolder().Items = append(folder.GetFolder().Items, &grpcviewv1.Item{
-		Name: request.Msg.GetItemName(),
-		Content: &grpcviewv1.Item_Request{
-			Request: &grpcviewv1.Request{
-				Name:    request.Msg.GetItemName(),
-				Service: request.Msg.GetService(),
-				Method:  request.Msg.GetMethod(),
-			},
-		},
-	})
-
-	fmt.Println(workspace.GetItem())
-
-	if err := w.save(ctx, workspace); err != nil {
-		return nil, fmt.Errorf("failed to save workspace: %w", err)
-	}
-
-	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{
-		Workspace: workspace,
-	}), nil
+	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{Workspace: ws}), nil
 }
 
-// DeleteRequest implements [grpcviewv1.WorkspaceServiceHandler].
-func (w *Workspace) DeleteRequest(ctx context.Context, request *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error) {
-	workspace, err := w.load(ctx, request.Msg.GetWorkspaceName())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workspace: %w", err)
-	}
-
-	folder, err := findFolder(workspace.GetItem(), request.Msg.GetPath())
+// DeleteRequest implements [grpcviewv1.WorkspaceServiceHandler]. It removes any
+// item (folder or request) by name, matching the previous behavior.
+func (w Workspace) DeleteRequest(ctx context.Context, request *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error) {
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.Delete(ctx, request.Msg.GetPath(), request.Msg.GetItemName())
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	folder.GetFolder().Items = slices.DeleteFunc(folder.GetFolder().GetItems(), func(item *grpcviewv1.Item) bool {
-		return item.GetName() == request.Msg.GetItemName()
-	})
-
-	if err := w.save(ctx, workspace); err != nil {
-		return nil, fmt.Errorf("failed to save workspace: %w", err)
-	}
-
-	return connect.NewResponse(&grpcviewv1.DeleteRequestResponse{
-		Workspace: workspace,
-	}), nil
+	return connect.NewResponse(&grpcviewv1.DeleteRequestResponse{Workspace: ws}), nil
 }
 
 // UpdateRequest implements [grpcviewv1.WorkspaceServiceHandler].
-func (w *Workspace) UpdateRequest(ctx context.Context, request *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error) {
-	workspace, err := w.load(ctx, request.Msg.GetWorkspaceName())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workspace: %w", err)
+func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error) {
+	patch := store.RequestPatch{
+		Service:       request.Msg.Service,
+		Method:        request.Msg.Method,
+		DraftBody:     request.Msg.DraftBody,
+		DraftMetadata: request.Msg.DraftMetadata,
 	}
-
-	file, err := findFile(workspace.GetItem(), append(request.Msg.GetPath(), request.Msg.GetItemName()))
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.UpdateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	r := file.GetRequest()
-
-	if request.Msg.Method != nil {
-		r.Method = *request.Msg.Method
-	}
-
-	if request.Msg.Service != nil {
-		r.Service = *request.Msg.Service
-	}
-
-	if request.Msg.DraftBody != nil {
-		r.DraftBody = request.Msg.DraftBody
-	}
-
-	if request.Msg.DraftMetadata != nil {
-		r.DraftMetadata = request.Msg.DraftMetadata
-	}
-
-	fmt.Println(prototext.MarshalOptions{Indent: "  "}.Format(r))
-
-	if err = w.save(ctx, workspace); err != nil {
-		return nil, fmt.Errorf("failed to save workspace: %w", err)
-	}
-
-	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{
-		Workspace: workspace,
-	}), nil
+	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Workspace: ws}), nil
 }

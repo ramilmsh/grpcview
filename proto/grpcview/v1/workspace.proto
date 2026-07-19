@@ -84,7 +84,7 @@ message Request {
   string                    name              = 1;
   string                    service           = 2;
   string                    method            = 3;
-  bytes                     draft_body        = 4;
+  string                    draft_body        = 4;
   google.protobuf.Struct    draft_metadata    = 5;
   repeated History          history           = 6;
 }

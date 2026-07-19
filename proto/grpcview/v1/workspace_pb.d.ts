@@ -307,9 +307,9 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
   method: string;
 
   /**
-   * @generated from field: bytes draft_body = 4;
+   * @generated from field: string draft_body = 4;
    */
-  draftBody: Uint8Array;
+  draftBody: string;
 
   /**
    * @generated from field: google.protobuf.Struct draft_metadata = 5;

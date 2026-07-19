@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Server, Workspace } from "./workspace_pb";
+import type { Request_Response, Server, Workspace } from "./workspace_pb";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -226,9 +226,9 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
   method?: string | undefined;
 
   /**
-   * @generated from field: optional bytes draft_body = 6;
+   * @generated from field: optional string draft_body = 6;
    */
-  draftBody?: Uint8Array | undefined;
+  draftBody?: string | undefined;
 
   /**
    * @generated from field: optional google.protobuf.Struct draft_metadata = 7;
@@ -289,6 +289,82 @@ export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
  * Use `create(GetResponseSchema)` to create a new message.
  */
 export declare const GetResponseSchema: GenMessage<GetResponse>;
+
+/**
+ * InvokeRequest executes a single unary RPC against a target server. The
+ * service/method/body/metadata carry the (possibly unsaved) editor state, so a
+ * send never depends on a prior UpdateRequest landing first. workspace_name
+ * identifies the collection (used to default the target from its reflection
+ * source and, later, to key run history by path/item_name).
+ *
+ * @generated from message grpcview.v1.InvokeRequest
+ */
+export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: repeated string path = 2;
+   */
+  path: string[];
+
+  /**
+   * @generated from field: string item_name = 3;
+   */
+  itemName: string;
+
+  /**
+   * @generated from field: string service = 4;
+   */
+  service: string;
+
+  /**
+   * @generated from field: string method = 5;
+   */
+  method: string;
+
+  /**
+   * @generated from field: string body = 6;
+   */
+  body: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 7;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * target overrides where the call is sent; when unset it defaults to the
+   * workspace's first reflection source.
+   *
+   * @generated from field: optional grpcview.v1.Server target = 8;
+   */
+  target?: Server | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeRequest.
+ * Use `create(InvokeRequestSchema)` to create a new message.
+ */
+export declare const InvokeRequestSchema: GenMessage<InvokeRequest>;
+
+/**
+ * @generated from message grpcview.v1.InvokeResponse
+ */
+export declare type InvokeResponse = Message<"grpcview.v1.InvokeResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Request.Response response = 1;
+   */
+  response?: Request_Response | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeResponse.
+ * Use `create(InvokeResponseSchema)` to create a new message.
+ */
+export declare const InvokeResponseSchema: GenMessage<InvokeResponse>;
 
 /**
  * WorkspaceService is a gRPC service that provides access to the workspace
@@ -355,6 +431,17 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof UpdateRequestRequestSchema;
     output: typeof UpdateRequestResponseSchema;
+  },
+  /**
+   * Invoke executes a unary RPC against a target server and returns the result
+   * (status, response body, request/response metadata, latency).
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.Invoke
+   */
+  invoke: {
+    methodKind: "unary";
+    input: typeof InvokeRequestSchema;
+    output: typeof InvokeResponseSchema;
   },
 }>;
 

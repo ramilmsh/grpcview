@@ -61,7 +61,6 @@ use_repo(
     "com_connectrpc_grpcreflect",
     "com_github_invopop_jsonschema",
     "com_github_jhump_protoreflect",
-    "com_github_mattn_go_sqlite3",
     "com_github_rs_cors",
     "org_golang_google_genproto_googleapis_rpc",
     "org_golang_google_grpc",

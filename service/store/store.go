@@ -1,0 +1,131 @@
+// Package store persists a grpcview collection as a git-versionable directory
+// tree of protojson files instead of a single opaque binary blob.
+//
+// On-disk layout of a collection rooted at some directory:
+//
+//	<root>/
+//	  grpcview.json          manifest: schemaVersion, name, root ordering, sources
+//	  .gitignore             generated; ignores .grpcview/
+//	  tree/                  the request tree
+//	    <slug>/              a folder
+//	      folder.json          {meta:{name}, items:[child slugs]}
+//	      <slug>/ ...
+//	    <slug>/              a request
+//	      request.json         {meta:{name}, service, method, draftBody?, draftMetadata?}
+//	  .grpcview/             gitignored local state
+//	    cache/services.json    resolved-schema cache
+//
+// A directory is named by a stable slug; the display name lives in the config's
+// meta.name. Ordering is an explicit items[] slug list in the parent's config,
+// reconciled against disk on load. All writes are atomic (temp file + rename)
+// and mutations on a collection are serialized by a per-collection mutex.
+package store
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"path/filepath"
+	"sync"
+
+	"google.golang.org/protobuf/types/known/structpb"
+)
+
+// Sentinel errors. Callers (the RPC handlers) map these to transport error
+// codes; the store itself stays transport-agnostic.
+var (
+	// ErrNotFound means the collection has not been created yet.
+	ErrNotFound = errors.New("collection not found")
+	// ErrItemNotFound means a path segment or item does not exist.
+	ErrItemNotFound = errors.New("item not found")
+	// ErrNotAFolder means a path segment that must be a folder is not one.
+	ErrNotAFolder = errors.New("item is not a folder")
+	// ErrNotARequest means an operation expected a request but found a folder.
+	ErrNotARequest = errors.New("item is not a request")
+	// ErrAlreadyExists means an item with that display name already exists in
+	// the parent folder.
+	ErrAlreadyExists = errors.New("item already exists")
+	// ErrInvalidMove means a move destination is illegal (e.g. into itself).
+	ErrInvalidMove = errors.New("invalid move")
+)
+
+// RequestPatch is a partial update to a request. A nil field is left unchanged;
+// a non-nil field is applied — matching the optional RPC field semantics, so an
+// empty-but-present DraftBody ("") clears the body.
+type RequestPatch struct {
+	Service       *string
+	Method        *string
+	DraftBody     *string
+	DraftMetadata *structpb.Struct
+}
+
+// Store manages filesystem-backed collections rooted under a common base
+// directory. Phase 1 uses name-based addressing: a workspace name maps to
+// <base>/<name>. It hands out per-name Collection handles that serialize their
+// own mutations, and caches them so repeated access shares the same lock.
+type Store struct {
+	base   string
+	logger *slog.Logger
+
+	mu    sync.Mutex
+	colls map[string]*Collection
+}
+
+// New returns a Store rooting collections under base. A nil logger falls back to
+// slog.Default().
+func New(base string, logger *slog.Logger) *Store {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Store{
+		base:   base,
+		logger: logger,
+		colls:  make(map[string]*Collection),
+	}
+}
+
+// Open returns the handle for the named collection, first migrating a legacy
+// blob found at the same path (see Collection.migrateLegacyBlob). It does not
+// create a new collection; callers that must (Get) use Collection.EnsureCreated.
+func (s *Store) Open(ctx context.Context, name string) (*Collection, error) {
+	s.mu.Lock()
+	coll, ok := s.colls[name]
+	if !ok {
+		coll = &Collection{
+			root:   filepath.Join(s.base, name),
+			name:   name,
+			logger: s.logger.With("collection", name),
+		}
+		s.colls[name] = coll
+	}
+	s.mu.Unlock()
+
+	if err := coll.migrateLegacyBlob(ctx); err != nil {
+		return nil, err
+	}
+	return coll, nil
+}
+
+// Collection is a handle to a single collection on disk. Its mutex serializes
+// mutations so concurrent RPCs for the same workspace can't interleave writes.
+type Collection struct {
+	root   string
+	name   string
+	logger *slog.Logger
+
+	mu sync.Mutex
+
+	// migrateOnce guards the at-most-once legacy-blob migration (Store.Open
+	// calls it on every RPC); migrateErr caches its outcome for later Opens.
+	migrateOnce sync.Once
+	migrateErr  error
+}
+
+// Root returns the collection's on-disk directory.
+func (c *Collection) Root() string { return c.root }
+
+func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, collectionFileName) }
+func (c *Collection) treeRoot() string           { return filepath.Join(c.root, treeDir) }
+func (c *Collection) servicesCachePath() string {
+	return filepath.Join(c.root, stateDir, cacheSubdir, servicesCacheFileName)
+}
