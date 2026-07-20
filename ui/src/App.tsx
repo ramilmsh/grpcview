@@ -1,21 +1,27 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { WorkspacePage } from "@/pages/Workspace";
+import { TransportProvider } from "@connectrpc/connect-query";
+import { transport } from "@/lib/client";
+import { AppShell } from "@/components/shell/AppShell";
+import { useUIStore } from "@/lib/ui-store";
+import { WorkspaceView } from "@/features/workspace/WorkspaceView";
+import { SourcesView } from "@/features/sources/SourcesView";
 
+// TransportProvider OUTSIDE QueryClientProvider (verified pattern — plan §13).
 const queryClient = new QueryClient();
 
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/workspace" replace />} />
-          <Route path="/workspace" element={<WorkspacePage />} />
-          <Route path="*" element={<div>Not Found</div>} />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
-  );
+function CurrentView() {
+  const activeView = useUIStore((s) => s.activeView);
+  return activeView === "sources" ? <SourcesView /> : <WorkspaceView />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <TransportProvider transport={transport}>
+      <QueryClientProvider client={queryClient}>
+        <AppShell>
+          <CurrentView />
+        </AppShell>
+      </QueryClientProvider>
+    </TransportProvider>
+  );
+}

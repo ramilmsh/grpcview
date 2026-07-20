@@ -1,0 +1,18 @@
+/* Self-hosted fonts for the offline single-file build. The woff2 under ./fonts
+   are the latin subset of Inter Variable and JetBrains Mono Variable
+   (@fontsource-variable/*), vendored so the release bundle carries them inline
+   (vite-plugin-singlefile base64s them) — no fonts.googleapis.com at runtime. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("./fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2-variations");
+}
