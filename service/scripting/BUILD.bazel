@@ -1,0 +1,33 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+# Bring the compiled engine into this package as quickjs.wasm so engine.go can
+# //go:embed it by basename, mirroring how //service/cmd embeds index.html. The
+# result is still a single static pure-Go binary — the .wasm rides inside it.
+copy_file(
+    name = "quickjs_wasm",
+    src = "//third_party/quickjs:quickjs.wasm",
+    out = "quickjs.wasm",
+)
+
+go_library(
+    name = "scripting",
+    srcs = ["engine.go"],
+    embedsrcs = ["quickjs.wasm"],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/scripting",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_tetratelabs_wazero//:wazero",
+        "@com_github_tetratelabs_wazero//api",
+        "@com_github_tetratelabs_wazero//imports/wasi_snapshot_preview1",
+    ],
+)
+
+go_test(
+    name = "scripting_test",
+    srcs = [
+        "capabilities_test.go",
+        "wasm_smoke_test.go",
+    ],
+    embed = [":scripting"],
+)

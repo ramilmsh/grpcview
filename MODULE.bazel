@@ -20,12 +20,22 @@ bazel_dep(name = "hermetic_cc_toolchain", version = "4.2.0")
 bazel_dep(name = "apple_support", version = "1.24.2")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+
+# //third_party/quickjs invokes `zig cc` DIRECTLY (via @zig_sdk//:zig) to build the
+# wasm32-wasi module — no wasm cc toolchain is registered for resolution, so we drive
+# the compiler as a plain build tool. Its wasm support files live in the sibling
+# @zig_config repo, which this extension does not advertise as a root dep; that genrule
+# therefore references them by canonical name so `bazel mod tidy` cannot strip them.
 use_repo(toolchains, "zig_sdk")
 
 register_toolchains(
     "@zig_sdk//toolchain/...",
     "@zig_sdk//libc_aware/toolchain/...",
 )
+
+# Pinned bellard/quickjs C source, compiled to wasm by //third_party/quickjs.
+quickjs = use_extension("//third_party/quickjs:extensions.bzl", "quickjs")
+use_repo(quickjs, "quickjs")
 
 # protobuf >= 33.4 ships its own prebuilt protoc binary toolchain, so protoc is downloaded
 # rather than compiled from source. It is selected by --@protobuf//bazel/flags:prefer_prebuilt_protoc,
@@ -62,6 +72,7 @@ use_repo(
     "com_github_invopop_jsonschema",
     "com_github_jhump_protoreflect",
     "com_github_rs_cors",
+    "com_github_tetratelabs_wazero",
     "org_golang_google_genproto_googleapis_rpc",
     "org_golang_google_grpc",
     "org_golang_google_protobuf",

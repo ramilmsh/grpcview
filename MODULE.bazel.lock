@@ -342,6 +342,34 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//third_party/quickjs:extensions.bzl%quickjs": {
+      "general": {
+        "bzlTransitiveDigest": "9JpOaMS4KdhtSDxPHbAt4yJnmv/kA91EQk13atLbByw=",
+        "usagesDigest": "0oN6CFdLMmVeLAiemFAbVN+4JAU1l/jU6S0aVogKS1o=",
+        "recordedInputs": [
+          "REPO_MAPPING:,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "quickjs": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz"
+              ],
+              "sha256": "b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a",
+              "strip_prefix": "quickjs-2026-06-04",
+              "build_file": "@@//third_party/quickjs:quickjs.BUILD.bazel",
+              "patches": [
+                "@@//third_party/quickjs:quickjs-wasi.patch"
+              ],
+              "patch_args": [
+                "-p1"
+              ]
+            }
+          }
+        }
+      }
+    },
     "@@aspect_tools_telemetry+//:extension.bzl%telemetry": {
       "general": {
         "bzlTransitiveDigest": "4w9RM0xjdKo1crk5zL20a/TuhqO0P1z1LsuXDneBXD4=",

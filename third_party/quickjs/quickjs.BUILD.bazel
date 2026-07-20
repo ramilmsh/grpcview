@@ -1,0 +1,30 @@
+# BUILD file injected into the pinned bellard/quickjs source archive (see
+# //third_party/quickjs:extensions.bzl). It only exposes source files; the actual
+# wasm compile lives in //third_party/quickjs:BUILD.bazel so it can also pull in
+# our qjs_wasm.c shim, which is not part of upstream.
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob([
+    "*.c",
+    "*.h",
+]))
+
+# Everything needed to compile a minimal libquickjs for eval: the engine, regexp,
+# unicode, number formatting, and small utils. Deliberately excludes quickjs-libc.c
+# (the OS/fs/exec bindings) — smaller attack surface and no POSIX deps under wasi.
+filegroup(
+    name = "core_srcs",
+    srcs = [
+        "cutils.c",
+        "dtoa.c",
+        "libregexp.c",
+        "libunicode.c",
+        "quickjs.c",
+    ],
+)
+
+filegroup(
+    name = "headers",
+    srcs = glob(["*.h"]),
+)
