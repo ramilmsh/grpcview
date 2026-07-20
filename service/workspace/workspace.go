@@ -19,27 +19,50 @@ import (
 
 	"codeberg.org/ramilmsh/grpcview/inspector"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
+// scriptingMaxPages is the outer wazero linear-memory ceiling for the shared
+// scripting engine, in 64 KiB pages: 4096 pages = 256 MiB. That sits above the
+// most generous profile's inner heap cap (Scenario, 128 MiB) so a legitimate run
+// can use its full inner budget with headroom, while still being a hard backstop
+// enforced by wazero underneath QuickJS's own accounting.
+const scriptingMaxPages = 4096
+
 // Workspace is the WorkspaceService handler. It is a thin adapter over
 // store.Store: each mutation delegates to the store and then reloads the whole
-// Workspace so responses keep the exact shape the client already expects.
+// Workspace so responses keep the exact shape the client already expects. It also
+// owns the shared scripting Engine (compiled once, instances reused/pooled) that
+// backs the RunScript RPC.
 type Workspace struct {
-	store *store.Store
+	store  *store.Store
+	engine *scripting.Engine
 }
 
 // New returns a handler persisting collections under the same base the previous
-// blob storage used: os.UserConfigDir()/.grpcview/<name>.
+// blob storage used: os.UserConfigDir()/.grpcview/<name>. It also compiles the
+// scripting engine once here (the ~660 KiB module compile is the expensive step;
+// instances are cheap) so RunScript can serve from a warm engine.
 func New(ctx context.Context) (Workspace, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return Workspace{}, fmt.Errorf("failed to get user config dir: %w", err)
 	}
-	return Workspace{store: store.New(filepath.Join(configDir, ".grpcview"), slog.Default())}, nil
+	engine, err := scripting.NewEngine(ctx, scriptingMaxPages)
+	if err != nil {
+		return Workspace{}, fmt.Errorf("failed to initialize scripting engine: %w", err)
+	}
+	return Workspace{
+		store:  store.New(filepath.Join(configDir, ".grpcview"), slog.Default()),
+		engine: engine,
+	}, nil
 }
 
 func (w Workspace) Close(ctx context.Context) error {
+	if w.engine != nil {
+		return w.engine.Close(ctx)
+	}
 	return nil
 }
 

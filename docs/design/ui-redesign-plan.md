@@ -1,6 +1,7 @@
 # grpcview UI redesign — implementation plan
 
-**Status:** Draft · 2026-07-20
+**Status:** Phase 0 + Phase 1 **DONE & shipping** (commit `3869cf7`; `bazel build //service/cmd` green) · 2026-07-20
+**Next steps:** see [`next-steps.md`](./next-steps.md) — the sequenced, detailed plan for what follows Phase 1 (scripting engine core → close client gaps → streaming → history).
 **Goal:** Rebuild `ui/` to match the *gRPC Workspace* design (Nocturne design system), starting fresh. The current UI is a partial, light-themed prototype; its **behavior and server wiring are mostly correct** and are the reference for technical details, but the **UI/UX is being replaced**.
 **Constraint the user set:** *Phase 1 covers ONLY the currently-implemented backend endpoints.* Everything the design shows that needs new backend work is explicitly deferred to a later phase.
 

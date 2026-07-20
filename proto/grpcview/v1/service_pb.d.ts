@@ -367,6 +367,115 @@ export declare type InvokeResponse = Message<"grpcview.v1.InvokeResponse"> & {
 export declare const InvokeResponseSchema: GenMessage<InvokeResponse>;
 
 /**
+ * RunScriptRequest evaluates an ad-hoc script through the scripting engine's
+ * scenario profile (fresh isolated instance, no capabilities granted, no
+ * workspace state touched). It is the scratchpad that validates the engine end
+ * to end from the UI.
+ *
+ * @generated from message grpcview.v1.RunScriptRequest
+ */
+export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> & {
+  /**
+   * @generated from field: string source = 1;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message grpcview.v1.RunScriptRequest.
+ * Use `create(RunScriptRequestSchema)` to create a new message.
+ */
+export declare const RunScriptRequestSchema: GenMessage<RunScriptRequest>;
+
+/**
+ * ScriptLog is one buffered console.* call captured during a run.
+ *
+ * @generated from message grpcview.v1.ScriptLog
+ */
+export declare type ScriptLog = Message<"grpcview.v1.ScriptLog"> & {
+  /**
+   * debug | log | warn | error
+   *
+   * @generated from field: string level = 1;
+   */
+  level: string;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message grpcview.v1.ScriptLog.
+ * Use `create(ScriptLogSchema)` to create a new message.
+ */
+export declare const ScriptLogSchema: GenMessage<ScriptLog>;
+
+/**
+ * ScriptError is a JavaScript exception (or an execution failure like a timeout)
+ * that propagated out of a run. line is the source line parsed from the guest
+ * backtrace (0 when unknown).
+ *
+ * @generated from message grpcview.v1.ScriptError
+ */
+export declare type ScriptError = Message<"grpcview.v1.ScriptError"> & {
+  /**
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * @generated from field: string stack = 2;
+   */
+  stack: string;
+
+  /**
+   * @generated from field: int32 line = 3;
+   */
+  line: number;
+};
+
+/**
+ * Describes the message grpcview.v1.ScriptError.
+ * Use `create(ScriptErrorSchema)` to create a new message.
+ */
+export declare const ScriptErrorSchema: GenMessage<ScriptError>;
+
+/**
+ * RunScriptResponse carries a run's outcome. A script that throws or times out is
+ * reported here (error set), NOT as a Connect-level failure — only grpcview's own
+ * inability to run the engine surfaces as a Connect error.
+ *
+ * @generated from message grpcview.v1.RunScriptResponse
+ */
+export declare type RunScriptResponse = Message<"grpcview.v1.RunScriptResponse"> & {
+  /**
+   * value is the script's return value as JSON text; unset when the script
+   * returned undefined (a JSON `null` return is the literal string "null").
+   *
+   * @generated from field: optional string value = 1;
+   */
+  value?: string | undefined;
+
+  /**
+   * @generated from field: repeated grpcview.v1.ScriptLog logs = 2;
+   */
+  logs: ScriptLog[];
+
+  /**
+   * @generated from field: optional grpcview.v1.ScriptError error = 3;
+   */
+  error?: ScriptError | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.RunScriptResponse.
+ * Use `create(RunScriptResponseSchema)` to create a new message.
+ */
+export declare const RunScriptResponseSchema: GenMessage<RunScriptResponse>;
+
+/**
  * WorkspaceService is a gRPC service that provides access to the workspace
  *
  * @generated from service grpcview.v1.WorkspaceService
@@ -442,6 +551,18 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof InvokeRequestSchema;
     output: typeof InvokeResponseSchema;
+  },
+  /**
+   * RunScript evaluates an ad-hoc script through the scripting engine and returns
+   * its value, console output, and any error — the scratchpad that validates the
+   * engine end to end.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.RunScript
+   */
+  runScript: {
+    methodKind: "unary";
+    input: typeof RunScriptRequestSchema;
+    output: typeof RunScriptResponseSchema;
   },
 }>;
 

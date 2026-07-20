@@ -10,9 +10,18 @@ import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker&inline";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker&inline";
+// The TypeScript language service runs in its OWN worker (autocomplete, hover,
+// signature help, diagnostics). Without it bundled, `language="typescript"`
+// silently gives syntax highlighting but no IntelliSense in the offline build.
+// Same `?worker&inline` treatment as the editor/json workers above so it, too,
+// is embedded (no runtime fetch) and survives vite-plugin-singlefile. Powers the
+// Scripts scratchpad (see features/scripts/monaco-scripts.ts).
+import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline";
 
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string) {
+    // "typescript" and "javascript" both dispatch to the TS worker.
+    if (label === "typescript" || label === "javascript") return new TsWorker();
     if (label === "json") return new JsonWorker();
     return new EditorWorker();
   },

@@ -12,11 +12,22 @@ copy_file(
 
 go_library(
     name = "scripting",
-    srcs = ["engine.go"],
-    embedsrcs = ["quickjs.wasm"],
+    srcs = [
+        "bundler.go",
+        "engine.go",
+        "marshal.go",
+        "npm.go",
+        "pool.go",
+        "profiles.go",
+        "sourcemap.go",
+    ],
+    # quickjs.wasm is the engine; npm/** is the embedded npm registry (dayjs) the Engine
+    # self-provisions so bare npm imports resolve offline in the shipped binary.
+    embedsrcs = ["quickjs.wasm"] + glob(["npm/**"]),
     importpath = "codeberg.org/ramilmsh/grpcview/service/scripting",
     visibility = ["//visibility:public"],
     deps = [
+        "@com_github_evanw_esbuild//pkg/api",
         "@com_github_tetratelabs_wazero//:wazero",
         "@com_github_tetratelabs_wazero//api",
         "@com_github_tetratelabs_wazero//imports/wasi_snapshot_preview1",
@@ -26,8 +37,13 @@ go_library(
 go_test(
     name = "scripting_test",
     srcs = [
+        "bundler_test.go",
         "capabilities_test.go",
+        "engine_core_test.go",
         "wasm_smoke_test.go",
     ],
+    # Vendored npm packages (dayjs/mustache/ms) + entry package.jsons, embedded into the
+    # test binary so the esbuild-bundling validation is hermetic (no node_modules, no net).
+    embedsrcs = glob(["testdata/npm/**"]),
     embed = [":scripting"],
 )

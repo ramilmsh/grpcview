@@ -1,0 +1,12 @@
+{
+  "name": "mustache",
+  "version": "4.2.0",
+  "main": "mustache.mjs",
+  "exports": {
+    ".": {
+      "import": "./mustache.mjs",
+      "default": "./mustache.mjs"
+    }
+  },
+  "license": "MIT"
+}

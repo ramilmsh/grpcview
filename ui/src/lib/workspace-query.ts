@@ -18,6 +18,7 @@ import {
   updateRequest,
   addDescriptorSource,
   invoke,
+  runScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
 import type { Workspace, Server } from "@grpcview/v1/workspace_pb";
@@ -94,4 +95,11 @@ export function useWorkspaceMutations() {
 // stashed per-request in the UI store so it survives tab switches (plan §6).
 export function useInvoke() {
   return useMutation(invoke);
+}
+
+// useRunScript is the ad-hoc script-eval mutation backing the Scripts scratchpad.
+// The result (value / logs / error) is self-contained, so the caller keeps it in
+// local component state rather than the workspace cache.
+export function useRunScript() {
+  return useMutation(runScript);
 }

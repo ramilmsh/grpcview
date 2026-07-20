@@ -5,13 +5,21 @@ import { AppShell } from "@/components/shell/AppShell";
 import { useUIStore } from "@/lib/ui-store";
 import { WorkspaceView } from "@/features/workspace/WorkspaceView";
 import { SourcesView } from "@/features/sources/SourcesView";
+import { ScriptsView } from "@/features/scripts/ScriptsView";
 
 // TransportProvider OUTSIDE QueryClientProvider (verified pattern — plan §13).
 const queryClient = new QueryClient();
 
 function CurrentView() {
   const activeView = useUIStore((s) => s.activeView);
-  return activeView === "sources" ? <SourcesView /> : <WorkspaceView />;
+  switch (activeView) {
+    case "sources":
+      return <SourcesView />;
+    case "scripts":
+      return <ScriptsView />;
+    default:
+      return <WorkspaceView />;
+  }
 }
 
 export default function App() {

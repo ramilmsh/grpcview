@@ -1,33 +1,45 @@
 /*
- * qjs_wasm.c — host<->guest ABI shim for evaluating a JS source string inside
- * QuickJS compiled to wasm32-wasi (reactor), PLUS the capability seam: Layer B
- * (JS<->C marshalling) that reaches Layer A (Go host functions) through narrow,
- * purpose-built wasm imports. See docs/design/quickjs-wasm-capabilities-spike.md.
+ * qjs_wasm.c — host<->guest ABI for evaluating JS inside QuickJS compiled to
+ * wasm32-wasi (reactor). See docs/design/quickjs-wasm-spike.md and
+ * docs/design/quickjs-wasm-capabilities-spike.md.
+ *
+ * Beyond the capability seam (Layer B <-> Layer A imports), this exposes a small
+ * STATE-MACHINE ABI so the Go host can drive ASYNC execution step by step: eval,
+ * then pump the microtask queue until the top-level promise settles (or the host's
+ * wall-clock deadline fires), then marshal the settled value. Driving the pump from
+ * Go — rather than looping inside one eval call — is what will let a future network
+ * capability resolve a guest promise from off-thread work (the ticket pattern in the
+ * capabilities spike doc). The wasm instance is single-threaded and the Go Instance
+ * is never used concurrently, so one runtime + context + held value are kept as file
+ * globals rather than threaded through a handle.
  *
  * Host-visible exports (host -> guest):
- *   void*    qjs_malloc(size_t n)                     - allocate n bytes in wasm memory
- *   void     qjs_free(void* p)                        - free a qjs_malloc'd / result ptr
- *   uint8_t* qjs_eval(const char* src, int len, uint64_t mem_limit) -> result ptr
+ *   void*    qjs_malloc(size_t n)                 - allocate n bytes of wasm memory
+ *   void     qjs_free(void* p)                    - free a qjs_malloc'd / result ptr
+ *   int      qjs_new(uint64_t mem_limit)          - create this instance's runtime+context,
+ *                                                   set the inner heap cap, register the
+ *                                                   capability + console globals. 0 / -1.
+ *   void     qjs_dispose(void)                    - tear the runtime+context down.
+ *   int      qjs_eval(const char* src, int len, int async) -> status
+ *   int      qjs_pump(void)                                 -> status
+ *   uint8_t* qjs_result(int as_json)                        -> [tag u8][len u32 LE][payload]
+ *
+ *   status : 0 QJS_DONE    - a settled value is held (fetch it with qjs_result)
+ *            1 QJS_PENDING - the top-level promise is unsettled; pump again (or, later,
+ *                            feed a resolved host ticket) — the host bounds the loop
+ *            2 QJS_ERROR   - an exception / rejection is held (qjs_result tags it a throw)
+ *
+ *   result tag : 0 value (as_json ? JSON text : String()-ified)
+ *                1 throw ("message" or "message\nstack", UTF-8)
+ *                2 undefined (no payload; the value had no JSON form)
  *
  * Capability imports (guest -> host); the ONLY things that cross to real I/O:
  *   uint8_t* host_fs_read(const uint8_t* req, int req_len)   -> result ptr
  *   uint8_t* host_net_fetch(const uint8_t* req, int req_len) -> result ptr
+ *   void     host_console(int level, const uint8_t* msg, int len) - fire-and-forget sink
  *
- * THE UNIFORM ABI. Every capability import has the same shape and the same result
- * envelope as qjs_eval — one convention, reused in both directions:
- *   request  : (ptr,len) into linear memory (bytes the guest already holds; no copy)
- *   response : host allocates a result buffer IN GUEST MEMORY by calling the guest's
- *              own qjs_malloc (the wasm component-model cabi_realloc pattern), writes
- *              [tag u8][len u32 LE][payload], and returns that ptr. The guest reads it
- *              and qjs_free()s it — symmetric with how the Go host reads the qjs_eval
- *              result. tag 0 = value, tag 1 = error(message). A NULL return means the
- *              host could not even allocate (host OOM) -> we raise InternalError.
- *
- * Host failures therefore surface as CATCHABLE JS exceptions (tag 1 -> JS_ThrowTypeError
- * with the host's message), never a silent zero/empty string.
- *
- * Enforcement (grant check + path scope + the syscall) lives entirely in the Go host
- * functions, OUTSIDE the sandbox — this file only validates/marshals and never does I/O.
+ * Enforcement (grant + scope + syscall) lives entirely in the Go host functions,
+ * OUTSIDE the sandbox; this file only validates/marshals and never does I/O.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -36,19 +48,29 @@
 
 /* Result-buffer ABI, shared with the Go side (engine.go mirrors these). */
 #define QJS_RESULT_HEADER 5 /* tag u8 (1) + payload length u32 LE (4) */
-#define QJS_TAG_VALUE 0     /* payload is the String()-ified value / result bytes */
-#define QJS_TAG_THROW 1     /* payload is an error / exception message */
+#define QJS_TAG_VALUE 0     /* payload is the value (JSON text or String()-ified) */
+#define QJS_TAG_THROW 1     /* payload is "message" or "message\nstack" for an exception */
+#define QJS_TAG_UNDEFINED 2 /* no payload; the result had no JSON representation */
+
+/* qjs_eval / qjs_pump status codes (mirrored in engine.go). */
+#define QJS_DONE 0
+#define QJS_PENDING 1
+#define QJS_ERROR 2
 
 /* ---- Layer A imports: the narrow, purpose-built host boundary --------------------
  * Declared with import_module/import_name so wasm-ld emits them as imports the Go host
  * satisfies at instantiation. They are ALWAYS declared; the grant decides at call time
- * whether the Go side does real I/O or refuses (a deny-stub). See the spike doc's
- * "two independent gates". */
+ * whether the Go side does real I/O or refuses (a deny-stub). */
 __attribute__((import_module("env"), import_name("host_fs_read")))
 extern uint8_t *host_fs_read(const uint8_t *req, int req_len);
 
 __attribute__((import_module("env"), import_name("host_net_fetch")))
 extern uint8_t *host_net_fetch(const uint8_t *req, int req_len);
+
+/* Fire-and-forget log sink: no result envelope. console output cannot meaningfully
+ * fail in a way a script should catch, so it returns void and the Go host buffers it. */
+__attribute__((import_module("env"), import_name("host_console")))
+extern void host_console(int level, const uint8_t *msg, int len);
 
 __attribute__((export_name("qjs_malloc")))
 void *qjs_malloc(size_t n) { return malloc(n); }
@@ -56,7 +78,7 @@ void *qjs_malloc(size_t n) { return malloc(n); }
 __attribute__((export_name("qjs_free")))
 void qjs_free(void *p) { free(p); }
 
-/* Build a [tag|len|payload] result buffer the host can read back in one shot. */
+/* Build a [tag|len|payload] result buffer the host reads back in one shot. */
 static uint8_t *pack_result(uint8_t tag, const char *data, size_t len) {
     if (len > SIZE_MAX - QJS_RESULT_HEADER) return NULL; /* header+len would overflow */
     uint8_t *buf = (uint8_t *)malloc(QJS_RESULT_HEADER + len);
@@ -68,14 +90,13 @@ static uint8_t *pack_result(uint8_t tag, const char *data, size_t len) {
     return buf;
 }
 
-/* Pack a string-literal error message; its length is taken from the literal so
- * it cannot drift out of sync the way a hand-counted length would. */
+/* Pack a string-literal error whose length comes from the literal (can't drift). */
 #define pack_err(msg) pack_result(QJS_TAG_THROW, (msg), sizeof(msg) - 1)
 
-/* ---- Layer B: the ONE uniform helper every capability shim reuses -----------------
+/* ---- Layer B: capability marshallers ---------------------------------------------
  * Turn a host-returned result buffer into a JS value, or throw a catchable JS
- * exception, then free the buffer. This is the seam where a Go-side failure becomes
- * a JS `throw` the script can catch. */
+ * exception, then free the buffer. This is the seam where a Go-side failure becomes a
+ * JS `throw` the script can catch. */
 static JSValue unpack_host_result(JSContext *ctx, uint8_t *res) {
     if (!res) return JS_ThrowInternalError(ctx, "grpcview host: out of memory");
     uint8_t tag = res[0];
@@ -92,8 +113,8 @@ static JSValue unpack_host_result(JSContext *ctx, uint8_t *res) {
 }
 
 /* std/fs.readFile(path) Layer-B shim: validate + marshal, then exactly one import
- * call. Does NO I/O itself. The request is the path's bytes, which JS_ToCStringLen
- * already placed in linear memory, so we pass them straight through — no extra copy. */
+ * call. Does NO I/O itself. The path bytes are already in linear memory, so we pass
+ * them straight through — no extra copy. */
 static JSValue js_host_fs_read(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
     if (argc < 1) return JS_ThrowTypeError(ctx, "fs read: path required");
@@ -105,8 +126,7 @@ static JSValue js_host_fs_read(JSContext *ctx, JSValueConst this_val, int argc, 
     return unpack_host_result(ctx, res);
 }
 
-/* std/net.fetch(url) Layer-B shim — identical shape to fs, proving the one ABI
- * generalizes to a second capability. The Go side is stubbed (no real network). */
+/* std/net.fetch(url) Layer-B shim — identical shape to fs. The Go side is stubbed. */
 static JSValue js_host_net_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val;
     if (argc < 1) return JS_ThrowTypeError(ctx, "net fetch: url required");
@@ -118,79 +138,301 @@ static JSValue js_host_net_fetch(JSContext *ctx, JSValueConst this_val, int argc
     return unpack_host_result(ctx, res);
 }
 
-/* Register the Layer-B marshallers as globals. They are surfaced to scripts only via
- * the injected node:* shims (see engine.go's Bundle); a script that never imports the
- * matching module never references them. Registering them unconditionally is safe: the
- * privilege lives in the import (Layer A), not here. */
-static void register_capabilities(JSContext *ctx) {
+/* console sink Layer-B shim: __grpcview_console(level:int, message:string). The JS
+ * `console` object (level mapping + argument formatting) is assembled in the Go-side
+ * prelude; this shim only forwards the already-formatted line to the host import. */
+static JSValue js_console(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    /* console is fire-and-forget: it must never throw or leave a pending exception on the
+     * (possibly reused) context. The normal console.* object pre-formats args to an int
+     * level + a string, but this global is reachable directly, so a throwing valueOf /
+     * toString on an argument must be caught and cleared here. */
+    int level = 0;
+    if (argc >= 1 && JS_ToInt32(ctx, &level, argv[0]) < 0) {
+        JS_FreeValue(ctx, JS_GetException(ctx)); /* clear + default the level */
+        level = 0;
+    }
+    if (argc >= 2) {
+        size_t len;
+        const char *msg = JS_ToCStringLen(ctx, &len, argv[1]);
+        if (msg) {
+            host_console(level, (const uint8_t *)msg, (int)len);
+            JS_FreeCString(ctx, msg);
+        } else {
+            JS_FreeValue(ctx, JS_GetException(ctx)); /* toString threw — clear, don't forward */
+        }
+    }
+    return JS_UNDEFINED;
+}
+
+/* Register the Layer-B marshallers + the console shim as globals. Surfaced to scripts
+ * only via the injected prelude / node:* shims; registering unconditionally is safe —
+ * the privilege lives in the import (Layer A), not here. */
+static void register_globals(JSContext *ctx) {
     JSValue g = JS_GetGlobalObject(ctx);
     JS_SetPropertyStr(ctx, g, "__grpcview_fs_read",
                       JS_NewCFunction(ctx, js_host_fs_read, "__grpcview_fs_read", 1));
     JS_SetPropertyStr(ctx, g, "__grpcview_net_fetch",
                       JS_NewCFunction(ctx, js_host_net_fetch, "__grpcview_net_fetch", 1));
+    JS_SetPropertyStr(ctx, g, "__grpcview_console",
+                      JS_NewCFunction(ctx, js_console, "__grpcview_console", 2));
     JS_FreeValue(ctx, g);
 }
 
-__attribute__((export_name("qjs_eval")))
-uint8_t *qjs_eval(const char *src, int src_len, uint64_t mem_limit) {
-    /* src_len crosses the ABI as a signed int; a negative value would wrap the
-     * (size_t)src_len math below into a huge malloc + ~4 GiB OOB memcpy. Reject it. */
-    if (src_len < 0) return pack_err("negative source length");
+/* ---- Per-instance runtime state -------------------------------------------------- */
+static JSRuntime *g_rt;
+static JSContext *g_ctx;
+static JSValue g_completion;  /* the held value: a settled result, an error reason, or a
+                               * still-pending top-level promise (see g_pending). */
+static int g_have_completion; /* 1 if g_completion holds a live (freeable) value */
+static int g_is_error;        /* 1 if g_completion is an exception / rejection reason */
+static int g_pending;         /* 1 if g_completion is a top-level promise not yet settled */
+static int g_async;           /* 1 if the current eval used JS_EVAL_FLAG_ASYNC (see below) */
 
-    JSRuntime *rt = JS_NewRuntime();
-    if (!rt) return pack_err("cannot create runtime");
+/* Drop any held completion value. Safe to call repeatedly. */
+static void clear_completion(void) {
+    if (g_have_completion) JS_FreeValue(g_ctx, g_completion);
+    g_completion = JS_UNDEFINED;
+    g_have_completion = 0;
+    g_is_error = 0;
+    g_pending = 0;
+}
 
-    /* THE INNER BOUND: QuickJS refuses any allocation that would push total bytes
-     * past mem_limit and throws, before the host's page ceiling is even reached.
-     * size_t is 32-bit on wasm32, so CLAMP rather than truncate the uint64: an
-     * unclamped cast turns e.g. a 4 GiB request (0x1_0000_0000) into 0, and a limit
-     * of 0 makes QuickJS reject EVERY allocation (0 is not a "disabled" sentinel —
-     * that is (size_t)-1), so JS_NewContext below would fail. Clamping to SIZE_MAX
-     * means "the entire 4 GiB wasm32 address space", i.e. effectively unbounded. */
+__attribute__((export_name("qjs_dispose")))
+void qjs_dispose(void) {
+    if (g_ctx) clear_completion();
+    if (g_ctx) { JS_FreeContext(g_ctx); g_ctx = NULL; }
+    if (g_rt) { JS_FreeRuntime(g_rt); g_rt = NULL; }
+}
+
+__attribute__((export_name("qjs_new")))
+int qjs_new(uint64_t mem_limit) {
+    qjs_dispose(); /* defensively reset any prior state */
+
+    g_rt = JS_NewRuntime();
+    if (!g_rt) return -1;
+
+    /* THE INNER BOUND. QuickJS refuses any allocation that would push total bytes past
+     * mem_limit and throws, before the host's page ceiling is reached. size_t is 32-bit
+     * on wasm32, so CLAMP rather than truncate the uint64: an unclamped cast turns e.g.
+     * a 4 GiB request (0x1_0000_0000) into 0, and a limit of 0 makes QuickJS reject
+     * EVERY allocation (0 is not a "disabled" sentinel — that is (size_t)-1), so
+     * JS_NewContext below would fail. Clamping to SIZE_MAX means "the whole 4 GiB
+     * wasm32 address space", i.e. effectively unbounded. */
     if (mem_limit) {
         size_t lim = mem_limit > (uint64_t)SIZE_MAX ? SIZE_MAX : (size_t)mem_limit;
-        JS_SetMemoryLimit(rt, lim);
+        JS_SetMemoryLimit(g_rt, lim);
     }
 
-    JSContext *ctx = JS_NewContext(rt);
-    if (!ctx) { JS_FreeRuntime(rt); return pack_err("cannot create context"); }
+    g_ctx = JS_NewContext(g_rt);
+    if (!g_ctx) { JS_FreeRuntime(g_rt); g_rt = NULL; return -1; }
 
-    register_capabilities(ctx); /* attach the Layer-B marshallers before eval */
+    register_globals(g_ctx);
+    g_completion = JS_UNDEFINED;
+    g_have_completion = 0;
+    g_is_error = 0;
+    g_pending = 0;
+    g_async = 0;
+    return 0;
+}
+
+/* Classify a freshly produced completion value into the state machine. Takes ownership
+ * of v and returns the status. */
+static int set_completion(JSValue v) {
+    clear_completion();
+
+    if (JS_IsException(v)) {
+        /* A synchronous throw / compile error: JS_EXCEPTION is not itself a heap value;
+         * pull the pending exception object out of the context (owned). */
+        g_completion = JS_GetException(g_ctx);
+        g_have_completion = 1;
+        g_is_error = 1;
+        return QJS_ERROR;
+    }
+
+    /* Is v a promise? Only objects can be, and JS_PromiseState returns -1 otherwise —
+     * but JSPromiseStateEnum is UNSIGNED, so that -1 wraps to a huge value and a naive
+     * `ps < 0` never fires (it would then misclassify every plain value/object as a
+     * settled promise and JS_PromiseResult it to undefined). Gate on JS_IsObject and
+     * only act on an EXACT known promise state; anything else is a plain settled value. */
+    int ps = -1;
+    if (JS_IsObject(v)) ps = (int)JS_PromiseState(g_ctx, v);
+
+    if (ps == JS_PROMISE_PENDING) {
+        g_completion = v; /* keep the promise itself; pump advances it */
+        g_have_completion = 1;
+        g_pending = 1;
+        return QJS_PENDING;
+    }
+    if (ps == JS_PROMISE_FULFILLED || ps == JS_PROMISE_REJECTED) {
+        /* Already settled: unwrap to the value/reason and drop the promise. */
+        JSValue inner = JS_PromiseResult(g_ctx, v); /* owned (a dup) */
+        JS_FreeValue(g_ctx, v);
+        g_completion = inner;
+        g_have_completion = 1;
+        if (ps == JS_PROMISE_REJECTED) { g_is_error = 1; return QJS_ERROR; }
+        return QJS_DONE;
+    }
+
+    /* Not a promise: an already-settled plain value. */
+    g_completion = v;
+    g_have_completion = 1;
+    return QJS_DONE;
+}
+
+__attribute__((export_name("qjs_eval")))
+int qjs_eval(const char *src, int src_len, int async) {
+    if (!g_ctx) return QJS_ERROR;
+    /* src_len crosses the ABI as a signed int; a negative value would wrap the
+     * (size_t)src_len math below into a huge malloc + OOB memcpy. Reject it. */
+    if (src_len < 0) return set_completion(JS_ThrowTypeError(g_ctx, "negative source length"));
 
     /* JS_Eval wants a NUL-terminated C string. */
     char *csrc = (char *)malloc((size_t)src_len + 1);
-    if (!csrc) { JS_FreeContext(ctx); JS_FreeRuntime(rt); return pack_err("oom"); }
+    if (!csrc) return set_completion(JS_ThrowInternalError(g_ctx, "oom copying source"));
     if (src_len) memcpy(csrc, src, (size_t)src_len); /* src may be NULL when src_len==0 */
     csrc[src_len] = '\0';
 
-    JSValue val = JS_Eval(ctx, csrc, (size_t)src_len, "<eval>", JS_EVAL_TYPE_GLOBAL);
+    int flags = JS_EVAL_TYPE_GLOBAL;
+    g_async = async ? 1 : 0;
+    if (async) flags |= JS_EVAL_FLAG_ASYNC; /* allow top-level await; JS_Eval -> promise */
+    JSValue v = JS_Eval(g_ctx, csrc, (size_t)src_len, "<script>", flags);
     free(csrc);
+    return set_completion(v);
+}
 
-    uint8_t tag;
-    JSValue str_val;
-    if (JS_IsException(val)) {
-        tag = QJS_TAG_THROW;
-        JSValue exc = JS_GetException(ctx);
-        str_val = JS_ToString(ctx, exc);
-        JS_FreeValue(ctx, exc);
-    } else {
-        tag = QJS_TAG_VALUE;
-        str_val = JS_ToString(ctx, val);
+__attribute__((export_name("qjs_pump")))
+int qjs_pump(void) {
+    if (!g_ctx) return QJS_ERROR;
+
+    /* Drain the job (microtask) queue. Each job may enqueue more, so loop until empty.
+     * A job that throws leaves a pending exception on its context; clear it so it can't
+     * corrupt the JS_PromiseState calls below — the top-level promise state is the
+     * source of truth for the run's outcome, not an individual job's exception. */
+    JSContext *jc;
+    for (;;) {
+        int r = JS_ExecutePendingJob(g_rt, &jc);
+        if (r == 0) break; /* no more pending jobs */
+        if (r < 0) {
+            JSValue e = JS_GetException(jc);
+            JS_FreeValue(jc, e);
+        }
+    }
+
+    if (!g_pending) return g_is_error ? QJS_ERROR : QJS_DONE;
+
+    /* Re-check the stored top-level promise now the queue is drained. */
+    JSPromiseStateEnum ps = JS_PromiseState(g_ctx, g_completion);
+    if (ps == JS_PROMISE_PENDING) return QJS_PENDING; /* nothing left to run it -> caller decides */
+
+    JSValue inner = JS_PromiseResult(g_ctx, g_completion); /* owned (a dup) */
+    JS_FreeValue(g_ctx, g_completion);
+    g_completion = inner;
+    g_pending = 0;
+    if (ps == JS_PROMISE_REJECTED) { g_is_error = 1; return QJS_ERROR; }
+    return QJS_DONE;
+}
+
+/* Marshal an error value into a throw buffer: "message" or "message\nstack". */
+static uint8_t *pack_error(JSContext *ctx, JSValue err) {
+    /* Both JS_ToCString (invokes err.toString) and the "stack" getter can themselves
+     * throw; on failure they return NULL / an exception and leave a pending exception on
+     * the context. Clear it each time, or it would linger on a reused long-lived context. */
+    const char *msg = JS_ToCString(ctx, err); /* e.g. "TypeError: x is not a function" */
+    if (!msg) JS_FreeValue(ctx, JS_GetException(ctx));
+
+    const char *stack = NULL;
+    JSValue stackv = JS_UNDEFINED;
+    if (JS_IsObject(err)) {
+        stackv = JS_GetPropertyStr(ctx, err, "stack");
+        if (JS_IsException(stackv)) {
+            JS_FreeValue(ctx, JS_GetException(ctx)); /* a throwing "stack" getter */
+            stackv = JS_UNDEFINED;
+        } else if (!JS_IsUndefined(stackv)) {
+            stack = JS_ToCString(ctx, stackv);
+            if (!stack) JS_FreeValue(ctx, JS_GetException(ctx));
+        }
+    }
+
+    uint8_t *out = NULL;
+    if (msg && stack && *stack) {
+        size_t ml = strlen(msg), sl = strlen(stack);
+        if (ml <= SIZE_MAX - 1 - sl) { /* mirror pack_result's overflow guard */
+            char *buf = (char *)malloc(ml + 1 + sl);
+            if (buf) {
+                memcpy(buf, msg, ml);
+                buf[ml] = '\n';
+                memcpy(buf + ml + 1, stack, sl);
+                out = pack_result(QJS_TAG_THROW, buf, ml + 1 + sl);
+                free(buf);
+            }
+        }
+    }
+    if (!out && msg) out = pack_result(QJS_TAG_THROW, msg, strlen(msg));
+    if (!out) out = pack_err("uncaught (throw with no usable message)");
+
+    if (stack) JS_FreeCString(ctx, stack);
+    JS_FreeValue(ctx, stackv);
+    if (msg) JS_FreeCString(ctx, msg);
+    return out;
+}
+
+__attribute__((export_name("qjs_result")))
+uint8_t *qjs_result(int as_json) {
+    if (!g_ctx) return pack_err("no context");
+    if (!g_have_completion) return pack_result(QJS_TAG_UNDEFINED, "", 0);
+
+    if (g_is_error) {
+        /* A rejection reason is NOT wrapped by the async flag — marshal it directly. */
+        uint8_t *out = pack_error(g_ctx, g_completion);
+        clear_completion();
+        return out;
+    }
+
+    /* An async eval (JS_EVAL_FLAG_ASYNC) fulfils its promise with { value: <completion> };
+     * unwrap that one layer so the host marshals the actual value, not the wrapper. A sync
+     * eval (legacy string path) is not wrapped, so use g_completion directly. */
+    JSValue val = g_completion;
+    JSValue unwrapped = JS_UNDEFINED;
+    int did_unwrap = 0;
+    if (g_async) {
+        unwrapped = JS_GetPropertyStr(g_ctx, g_completion, "value");
+        val = unwrapped;
+        did_unwrap = 1;
     }
 
     uint8_t *out;
-    if (JS_IsException(str_val)) {
-        out = pack_err("<unstringifiable result>");
+    if (as_json) {
+        JSValue jsonv = JS_JSONStringify(g_ctx, val, JS_UNDEFINED, JS_UNDEFINED);
+        if (JS_IsException(jsonv)) {
+            JSValue e = JS_GetException(g_ctx); /* e.g. circular structure / throwing toJSON */
+            out = pack_error(g_ctx, e);
+            JS_FreeValue(g_ctx, e);
+        } else if (JS_IsUndefined(jsonv)) {
+            out = pack_result(QJS_TAG_UNDEFINED, "", 0); /* undefined / function / symbol top level */
+        } else {
+            size_t len;
+            const char *s = JS_ToCStringLen(g_ctx, &len, jsonv);
+            out = s ? pack_result(QJS_TAG_VALUE, s, len) : pack_err("<null cstring>");
+            JS_FreeCString(g_ctx, s);
+        }
+        JS_FreeValue(g_ctx, jsonv);
     } else {
-        size_t plen = 0;
-        const char *pstr = JS_ToCStringLen(ctx, &plen, str_val);
-        out = pstr ? pack_result(tag, pstr, plen) : pack_err("<null cstring>");
-        JS_FreeCString(ctx, pstr); /* NULL-safe: JS_FreeCString early-returns on NULL */
+        JSValue sv = JS_ToString(g_ctx, val);
+        if (JS_IsException(sv)) {
+            JSValue e = JS_GetException(g_ctx);
+            JS_FreeValue(g_ctx, e);
+            out = pack_err("<unstringifiable result>");
+        } else {
+            size_t len;
+            const char *s = JS_ToCStringLen(g_ctx, &len, sv);
+            out = s ? pack_result(QJS_TAG_VALUE, s, len) : pack_err("<null cstring>");
+            JS_FreeCString(g_ctx, s);
+        }
+        JS_FreeValue(g_ctx, sv);
     }
 
-    JS_FreeValue(ctx, str_val);
-    JS_FreeValue(ctx, val);
-    JS_FreeContext(ctx);
-    JS_FreeRuntime(rt);
+    if (did_unwrap) JS_FreeValue(g_ctx, unwrapped);
+    clear_completion();
     return out;
 }

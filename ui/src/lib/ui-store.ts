@@ -6,7 +6,7 @@ import type { Request_Response } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath, MetadataRow } from "./format";
 import { itemKey } from "./format";
 
-export type ActiveView = "workspace" | "sources";
+export type ActiveView = "workspace" | "sources" | "scripts";
 
 // A client-side open request tab. Keyed by itemKey; name is a display copy (safe
 // in Phase 1 since rename is unsupported). The live Request is resolved from the

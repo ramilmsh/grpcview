@@ -47,3 +47,11 @@ export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
  * @generated from rpc grpcview.v1.WorkspaceService.Invoke
  */
 export const invoke: typeof WorkspaceService["method"]["invoke"];
+/**
+ * RunScript evaluates an ad-hoc script through the scripting engine and returns
+ * its value, console output, and any error — the scratchpad that validates the
+ * engine end to end.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.RunScript
+ */
+export const runScript: typeof WorkspaceService["method"]["runScript"];

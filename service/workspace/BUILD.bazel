@@ -4,6 +4,7 @@ go_library(
     name = "workspace",
     srcs = [
         "invoke.go",
+        "runscript.go",
         "workspace.go",
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/workspace",
@@ -11,6 +12,7 @@ go_library(
     deps = [
         "//inspector",
         "//proto/grpcview/v1:grpcview",
+        "//service/scripting",
         "//service/store",
         "@com_connectrpc_connect//:connect",
         "@com_github_jhump_protoreflect//desc",
