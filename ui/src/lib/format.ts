@@ -41,11 +41,17 @@ export const rootItemsOf = (rootItem?: Item): ItemWithPath[] => {
   return [];
 };
 
-// itemKey is the stable identity of an item within the tree (parent path + name),
-// used to key open tabs and per-request invocation state so a response survives
-// navigating away and back.
+// keyOf builds an item key from a parent path + display name — the one place the
+// key convention lives, so a rename can derive the new key the same way.
+export const keyOf = (path: string[], name: string): string =>
+  [...path, name].join("/");
+
+// itemKey is the (name-derived) identity of an item within the tree (parent path
+// + name), used to key open tabs and per-request invocation state so a response
+// survives navigating away and back. NOTE: because it is name-derived, a rename
+// changes the key — callers must remap keyed state (see ui-store renameItem).
 export const itemKey = (item: ItemWithPath): string =>
-  [...item.path, item.item.name].join("/");
+  keyOf(item.path, item.item.name);
 
 // findByKey resolves the live ItemWithPath for a key from the (freshly derived)
 // tree, so editors/headers read the current server Request after any update.

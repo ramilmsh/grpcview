@@ -30,6 +30,7 @@ export const HardDrives = Ph.HardDrives as unknown as Icon;
 export const LockSimple = Ph.LockSimple as unknown as Icon;
 export const LockSimpleOpen = Ph.LockSimpleOpen as unknown as Icon;
 export const MagnifyingGlass = Ph.MagnifyingGlass as unknown as Icon;
+export const PencilSimple = Ph.PencilSimple as unknown as Icon;
 export const Play = Ph.Play as unknown as Icon;
 export const PlugsConnected = Ph.PlugsConnected as unknown as Icon;
 export const Plus = Ph.Plus as unknown as Icon;

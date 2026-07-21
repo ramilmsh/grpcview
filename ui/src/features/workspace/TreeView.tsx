@@ -1,8 +1,16 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { CaretDown, CaretRight, Folder, Plus, Trash } from "@/components/ui/icons";
+import {
+  CaretDown,
+  CaretRight,
+  Folder,
+  PencilSimple,
+  Plus,
+  Trash,
+} from "@/components/ui/icons";
 import type { ItemWithPath } from "@/lib/format";
 import { itemKey } from "@/lib/format";
+import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag } from "@/components/ui/Tag";
 
 interface TreeViewProps {
@@ -10,19 +18,23 @@ interface TreeViewProps {
   activeKey: string | null;
   onSelectRequest: (item: ItemWithPath) => void;
   onNewRequestUnder: (folder: ItemWithPath) => void;
+  onRename: (item: ItemWithPath, newName: string) => void;
   onDelete: (item: ItemWithPath) => void;
 }
 
 // TreeView renders one collection node (folder or request) and, for folders, its
-// children. Restyled to .treerow (plan §7); rename is omitted (no backend).
+// children. Restyled to .treerow (plan §7). Request rows can be renamed inline via
+// the pencil affordance; folder rename is a follow-up (see N2a scope note).
 export function TreeView({
   item,
   activeKey,
   onSelectRequest,
   onNewRequestUnder,
+  onRename,
   onDelete,
 }: TreeViewProps) {
   const [open, setOpen] = useState(true);
+  const [editing, setEditing] = useState(false);
   const isFolder = item.item.content.case === "folder";
   const children = item.children ?? [];
 
@@ -70,6 +82,7 @@ export function TreeView({
                 activeKey={activeKey}
                 onSelectRequest={onSelectRequest}
                 onNewRequestUnder={onNewRequestUnder}
+                onRename={onRename}
                 onDelete={onDelete}
               />
             ))}
@@ -84,13 +97,28 @@ export function TreeView({
   return (
     <div
       className={clsx("treerow", active && "on")}
-      onClick={() => onSelectRequest(item)}
+      onClick={editing ? undefined : () => onSelectRequest(item)}
     >
       <MethodKindTag kind="u" />
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {item.item.name}
-      </span>
+      <EditableName
+        value={item.item.name}
+        editing={editing}
+        onEditingChange={setEditing}
+        onCommit={(next) => onRename(item, next)}
+        ariaLabel="Request name"
+        style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      />
       <span className="rowbtns">
+        <button
+          className="rowbtn"
+          title="Rename request"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(true);
+          }}
+        >
+          <PencilSimple size={13} />
+        </button>
         <DeleteButton title="Delete request" onDelete={() => onDelete(item)} />
       </span>
     </div>

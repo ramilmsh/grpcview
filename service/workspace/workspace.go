@@ -269,6 +269,7 @@ func (w Workspace) DeleteRequest(ctx context.Context, request *connect.Request[g
 // UpdateRequest implements [grpcviewv1.WorkspaceServiceHandler].
 func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error) {
 	patch := store.RequestPatch{
+		Name:          request.Msg.Name,
 		Service:       request.Msg.Service,
 		Method:        request.Msg.Method,
 		DraftBody:     request.Msg.DraftBody,

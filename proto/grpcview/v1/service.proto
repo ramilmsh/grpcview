@@ -60,6 +60,9 @@ message UpdateRequestRequest {
   optional string method = 5;
   optional string draft_body = 6;
   optional google.protobuf.Struct draft_metadata = 7;
+  // name renames the request (its display name). Unset leaves the name unchanged;
+  // a rename that collides with a sibling fails with FailedPrecondition.
+  optional string name = 8;
 }
 
 message UpdateRequestResponse {

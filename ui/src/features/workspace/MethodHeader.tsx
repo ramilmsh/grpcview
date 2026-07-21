@@ -2,13 +2,14 @@ import { useState } from "react";
 import { CaretDown, Play, PlugsConnected } from "@/components/ui/icons";
 import type { Service, Method, Server, Request } from "@grpcview/v1/workspace_pb";
 import { Button } from "@/components/ui/Button";
+import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { serviceName } from "@/lib/format";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { TargetBar } from "./TargetBar";
 
-// MethodHeader: request name (read-only — rename unsupported, plan §11), the
-// service/method selector (opens the picker; persists via UpdateRequest), the
+// MethodHeader: request name (click to rename inline; persists via UpdateRequest),
+// the service/method selector (opens the picker; persists via UpdateRequest), the
 // resolving-source chip (read-only), and Invoke. The first reflection source is
 // both the invoke target and the enable/disable signal.
 export function MethodHeader({
@@ -17,6 +18,7 @@ export function MethodHeader({
   reflection,
   invoking,
   onChangeMethod,
+  onRename,
   onInvoke,
 }: {
   request: Request;
@@ -24,9 +26,11 @@ export function MethodHeader({
   reflection: Server | null;
   invoking: boolean;
   onChangeMethod: (service: string, method: string) => void;
+  onRename: (name: string) => void;
   onInvoke: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const canInvoke = !!reflection;
 
   const onPick = (service: Service, method: Method) => {
@@ -43,8 +47,15 @@ export function MethodHeader({
       }}
     >
       <div className="flex items-center gap-[10px]" style={{ marginBottom: 10 }}>
-        <span
+        <EditableName
+          value={request.name}
+          editing={editingName}
+          onEditingChange={setEditingName}
+          onCommit={onRename}
+          activateOnClick
           className="font-heading"
+          title="Click to rename"
+          ariaLabel="Request name"
           style={{
             fontSize: 15,
             fontWeight: 600,
@@ -54,10 +65,13 @@ export function MethodHeader({
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
           }}
-          title="Rename is unsupported in Phase 1"
-        >
-          {request.name}
-        </span>
+          inputStyle={{
+            fontSize: 15,
+            fontWeight: 600,
+            color: "var(--color-text)",
+            maxWidth: 240,
+          }}
+        />
         <MethodKindTag kind="u" />
 
         {/* service / method selector — both open the same picker */}

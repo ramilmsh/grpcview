@@ -234,6 +234,14 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
    * @generated from field: optional google.protobuf.Struct draft_metadata = 7;
    */
   draftMetadata?: JsonObject | undefined;
+
+  /**
+   * name renames the request (its display name). Unset leaves the name unchanged;
+   * a rename that collides with a sibling fails with FailedPrecondition.
+   *
+   * @generated from field: optional string name = 8;
+   */
+  name?: string | undefined;
 };
 
 /**

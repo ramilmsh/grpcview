@@ -8,9 +8,9 @@ import { itemKey } from "./format";
 
 export type ActiveView = "workspace" | "sources" | "scripts";
 
-// A client-side open request tab. Keyed by itemKey; name is a display copy (safe
-// in Phase 1 since rename is unsupported). The live Request is resolved from the
-// workspace tree by key so edits/updates stay in sync.
+// A client-side open request tab. Keyed by itemKey; name is a display copy kept
+// in sync by renameItem on a successful rename. The live Request is resolved from
+// the workspace tree by key so edits/updates stay in sync.
 export interface OpenTab {
   key: string;
   name: string;
@@ -47,6 +47,7 @@ interface UIState {
   openTab: (item: ItemWithPath) => void;
   closeTab: (key: string) => void;
   setActiveKey: (key: string | null) => void;
+  renameItem: (oldKey: string, newKey: string, newName: string) => void;
 
   seedDraft: (key: string, draft: Draft) => void; // only if absent
   setDraft: (key: string, patch: Partial<Draft>) => void;
@@ -95,6 +96,29 @@ export const useUIStore = create<UIState>()((set) => ({
     }),
 
   setActiveKey: (activeKey) => set({ activeKey }),
+
+  // renameItem remaps all name-derived keyed state from oldKey to newKey after a
+  // successful rename, so the open tab, its draft, and its last response follow
+  // the new name instead of detaching (itemKey is name-derived — see format.ts).
+  renameItem: (oldKey, newKey, newName) =>
+    set((s) => {
+      if (oldKey === newKey) return {};
+      const rekey = <T,>(
+        m: Record<string, T | undefined>
+      ): Record<string, T | undefined> => {
+        if (!(oldKey in m)) return m;
+        const { [oldKey]: moved, ...rest } = m;
+        return moved === undefined ? rest : { ...rest, [newKey]: moved };
+      };
+      return {
+        openTabs: s.openTabs.map((t) =>
+          t.key === oldKey ? { key: newKey, name: newName } : t
+        ),
+        activeKey: s.activeKey === oldKey ? newKey : s.activeKey,
+        drafts: rekey(s.drafts),
+        invokes: rekey(s.invokes),
+      };
+    }),
 
   seedDraft: (key, draft) =>
     set((s) => (s.drafts[key] ? {} : { drafts: { ...s.drafts, [key]: draft } })),

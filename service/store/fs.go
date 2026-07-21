@@ -179,13 +179,26 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	itemDir := filepath.Join(parentDir, ch.slug)
 
-	if patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil {
+	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil {
 		return nil
 	}
 	// Reuse the request.json readChildren already decoded (ch.request) rather
 	// than re-opening and re-decoding the same file.
 	p := filepath.Join(itemDir, requestFileName)
 	dr := ch.request
+	// Rename: same slug-identity model as Move/renameMeta — only meta.name
+	// changes; the slug/dir is stable so open tabs/history keyed by slug survive.
+	// A collision with a different sibling is rejected (ErrAlreadyExists); a
+	// no-op rename to the current name is skipped so it doesn't self-collide.
+	if patch.Name != nil && *patch.Name != name {
+		if _, exists := findByName(present, *patch.Name); exists {
+			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
+		}
+		if dr.Meta == nil {
+			dr.Meta = &grpcviewstorev1.ItemMeta{}
+		}
+		dr.Meta.Name = *patch.Name
+	}
 	if patch.Service != nil {
 		dr.Service = *patch.Service
 	}

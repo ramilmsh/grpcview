@@ -10,6 +10,7 @@ import {
 import { useUIStore } from "@/lib/ui-store";
 import {
   findByKey,
+  keyOf,
   objectToRows,
   resolveMethod,
   rowsToObject,
@@ -38,6 +39,7 @@ export function RequestWorkspace() {
   const seedDraft = useUIStore((s) => s.seedDraft);
   const setDraft = useUIStore((s) => s.setDraft);
   const setInvoke = useUIStore((s) => s.setInvoke);
+  const renameItem = useUIStore((s) => s.renameItem);
 
   const activeItem = useMemo(() => findByKey(rootItems, activeKey), [rootItems, activeKey]);
   const request =
@@ -102,6 +104,18 @@ export function RequestWorkspace() {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
   };
 
+  // Rename persists via UpdateRequest; on success we remap the client-side keyed
+  // state (tab/draft/response) from the old itemKey to the new one, since itemKey
+  // is name-derived (a failed rename, e.g. a name collision, leaves the UI as-is).
+  const onRename = (nextName: string) => {
+    const next = nextName.trim();
+    if (!next || next === itemName) return;
+    updateRequest.mutate(
+      { workspaceName: WORKSPACE_NAME, path, itemName, name: next },
+      { onSuccess: () => renameItem(key, keyOf(path, next), next) }
+    );
+  };
+
   const onInvoke = () => {
     setInvoke(key, { loading: true });
     invokeMut.mutate(
@@ -129,6 +143,7 @@ export function RequestWorkspace() {
         reflection={reflection}
         invoking={!!invokeState?.loading}
         onChangeMethod={onChangeMethod}
+        onRename={onRename}
         onInvoke={onInvoke}
       />
       <div className="flex" style={{ flex: 1, minHeight: 0 }}>

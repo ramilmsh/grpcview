@@ -51,8 +51,11 @@ var (
 
 // RequestPatch is a partial update to a request. A nil field is left unchanged;
 // a non-nil field is applied — matching the optional RPC field semantics, so an
-// empty-but-present DraftBody ("") clears the body.
+// empty-but-present DraftBody ("") clears the body. Name renames the request's
+// display name; because the store keys items by a stable slug (not the name),
+// the rename only rewrites meta.name and the on-disk directory stays put.
 type RequestPatch struct {
+	Name          *string
 	Service       *string
 	Method        *string
 	DraftBody     *string

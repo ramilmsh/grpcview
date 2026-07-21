@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -220,6 +221,62 @@ func TestRenameSameParent(t *testing.T) {
 	folder := childByName(rootItems(t, coll, ctx), "Folder")
 	if childByName(folder.GetFolder().GetItems(), "Renamed") == nil {
 		t.Errorf("renamed request not found: %v", names(folder.GetFolder().GetItems()))
+	}
+}
+
+func TestUpdateRequestRename(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "Get User", "s.S", "GetUser"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateRequest(ctx, nil, "List Users", "s.S", "ListUsers"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Happy path: rename "Get User" -> "Fetch User". Per the slug-identity model
+	// the slug/dir stays stable and only meta.name changes; a name-only patch must
+	// not touch service/method.
+	newName := "Fetch User"
+	if err := coll.UpdateRequest(ctx, nil, "Get User", RequestPatch{Name: &newName}); err != nil {
+		t.Fatalf("UpdateRequest rename: %v", err)
+	}
+	tree := filepath.Join(coll.Root(), treeDir)
+	if _, err := os.Stat(filepath.Join(tree, "get-user")); err != nil {
+		t.Errorf("slug dir should be stable across rename: %v", err)
+	}
+	rf := &grpcviewstorev1.Request{}
+	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
+	if rf.GetMeta().GetName() != newName {
+		t.Errorf("meta.name = %q, want %q", rf.GetMeta().GetName(), newName)
+	}
+	if rf.GetService() != "s.S" || rf.GetMethod() != "GetUser" {
+		t.Errorf("name-only patch mutated service/method: %q/%q", rf.GetService(), rf.GetMethod())
+	}
+	root := rootItems(t, coll, ctx)
+	if childByName(root, newName) == nil || childByName(root, "Get User") != nil {
+		t.Errorf("rename not reflected in tree: %v", names(root))
+	}
+
+	// Collision: renaming onto an existing sibling name fails with ErrAlreadyExists
+	// and leaves the request untouched.
+	collide := "List Users"
+	if err := coll.UpdateRequest(ctx, nil, newName, RequestPatch{Name: &collide}); !errors.Is(err, ErrAlreadyExists) {
+		t.Errorf("rename collision = %v, want ErrAlreadyExists", err)
+	}
+	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
+	if rf.GetMeta().GetName() != newName {
+		t.Errorf("failed rename must not mutate meta.name, got %q", rf.GetMeta().GetName())
+	}
+
+	// A no-op rename (name == current) combined with another field still applies
+	// that field without self-colliding.
+	body := `{"x":1}`
+	if err := coll.UpdateRequest(ctx, nil, newName, RequestPatch{Name: &newName, DraftBody: &body}); err != nil {
+		t.Fatalf("no-op rename + body patch: %v", err)
+	}
+	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
+	if rf.GetMeta().GetName() != newName || rf.GetDraftBody() != body {
+		t.Errorf("after no-op rename + body: name=%q body=%q", rf.GetMeta().GetName(), rf.GetDraftBody())
 	}
 }
 

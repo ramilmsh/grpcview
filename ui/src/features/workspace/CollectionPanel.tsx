@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import { childPathOf, itemKey, serviceName, type ItemWithPath } from "@/lib/format";
+import { childPathOf, itemKey, keyOf, serviceName, type ItemWithPath } from "@/lib/format";
 import { TreeView } from "./TreeView";
 import { MethodPickerModal } from "./MethodPickerModal";
 
@@ -46,9 +46,10 @@ const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => {
 export function CollectionPanel() {
   const { workspace, services } = useWorkspace();
   const rootItems = useRootItems(workspace);
-  const { createFolder, createRequest, deleteRequest } = useWorkspaceMutations();
+  const { createFolder, createRequest, deleteRequest, updateRequest } = useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
   const activeKey = useUIStore((s) => s.activeKey);
+  const renameItem = useUIStore((s) => s.renameItem);
 
   const [filter, setFilter] = useState("");
   const [folderName, setFolderName] = useState("");
@@ -69,7 +70,7 @@ export function CollectionPanel() {
   };
 
   const onPick = (service: Service, method: Method) => {
-    // request name = method name (rename is unsupported in Phase 1 — plan §11)
+    // new request defaults its name to the method name; rename it inline afterward
     createRequest.mutate({
       workspaceName: WORKSPACE_NAME,
       path: childPathOf(pickerParent ?? null),
@@ -78,6 +79,18 @@ export function CollectionPanel() {
       method: method.name,
     });
     setPickerParent(undefined);
+  };
+
+  // Rename a request (folders are not renamable yet — N2a scope). Persists via
+  // UpdateRequest, then remaps client-side keyed state old key -> new key so the
+  // open tab/draft/response follow the rename (itemKey is name-derived).
+  const doRename = (item: ItemWithPath, newName: string) => {
+    const next = newName.trim();
+    if (!next || next === item.item.name || item.item.content.case !== "request") return;
+    updateRequest.mutate(
+      { workspaceName: WORKSPACE_NAME, path: item.path, itemName: item.item.name, name: next },
+      { onSuccess: () => renameItem(itemKey(item), keyOf(item.path, next), next) }
+    );
   };
 
   const doDelete = () => {
@@ -162,6 +175,7 @@ export function CollectionPanel() {
               activeKey={activeKey}
               onSelectRequest={openTab}
               onNewRequestUnder={(folder) => setPickerParent(folder)}
+              onRename={doRename}
               onDelete={setConfirm}
             />
           ))
