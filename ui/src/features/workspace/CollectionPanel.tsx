@@ -173,6 +173,7 @@ export function CollectionPanel() {
               key={itemKey(item)}
               item={item}
               activeKey={activeKey}
+              services={services}
               onSelectRequest={openTab}
               onNewRequestUnder={(folder) => setPickerParent(folder)}
               onRename={doRename}

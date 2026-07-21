@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { JsonObject } from "@bufbuild/protobuf";
+import { ConnectError, Code } from "@connectrpc/connect";
 import {
   useWorkspace,
   useRootItems,
   useWorkspaceMutations,
   useInvoke,
+  useStreamingClient,
   WORKSPACE_NAME,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import {
   findByKey,
   keyOf,
+  methodKind,
   objectToRows,
+  prettyBody,
   resolveMethod,
   rowsToObject,
   type MetadataRow,
@@ -32,6 +36,7 @@ export function RequestWorkspace() {
   const rootItems = useRootItems(workspace);
   const { updateRequest } = useWorkspaceMutations();
   const invokeMut = useInvoke();
+  const streamClient = useStreamingClient();
 
   const activeKey = useUIStore((s) => s.activeKey);
   const draft = useUIStore((s) => (activeKey ? s.drafts[activeKey] : undefined));
@@ -39,33 +44,48 @@ export function RequestWorkspace() {
   const seedDraft = useUIStore((s) => s.seedDraft);
   const setDraft = useUIStore((s) => s.setDraft);
   const setInvoke = useUIStore((s) => s.setInvoke);
+  const startStream = useUIStore((s) => s.startStream);
+  const pushStreamMessage = useUIStore((s) => s.pushStreamMessage);
+  const endStream = useUIStore((s) => s.endStream);
+  const stopStream = useUIStore((s) => s.stopStream);
+  const failStream = useUIStore((s) => s.failStream);
   const renameItem = useUIStore((s) => s.renameItem);
 
   const activeItem = useMemo(() => findByKey(rootItems, activeKey), [rootItems, activeKey]);
   const request =
     activeItem?.item.content.case === "request" ? activeItem.item.content.value : null;
 
-  // Seed the draft from the server Request once per request (idempotent).
+  // Seed the draft from the server Request once per request (idempotent). The
+  // compose list is seeded with the single draft body — its first entry is the
+  // persisted primary; cs/bd requests grow it with ephemeral extras.
   useEffect(() => {
     if (activeKey && request) {
+      const primary = request.draftBody || "{}";
       seedDraft(activeKey, {
-        body: request.draftBody || "{}",
+        body: primary,
         metadataRows: objectToRows(request.draftMetadata),
+        messages: [primary],
       });
     }
   }, [activeKey, request, seedDraft]);
 
-  // The method the request points at — one lookup feeds both the editor's JSON
-  // schema and the "valid <type>" footer.
+  // The method the request points at — one lookup feeds the editor's JSON schema,
+  // the "valid <type>" footer, and the method-kind branch (unary vs streaming).
   const activeMethod = useMemo(
     () => (request ? resolveMethod(services, request.service, request.method) : undefined),
     [services, request]
   );
+  const kind = methodKind(activeMethod);
 
   // Debounce timers keyed by `${requestKey}:${slot}` so a pending save for one
   // request is never cancelled by scheduling a save for a different request
   // (which would silently drop the first request's unsaved edit).
   const timers = useRef<Record<string, number>>({});
+
+  // AbortControllers for in-flight streams, keyed by request key. Like `timers`,
+  // this ref survives tab switches so a stream started on one tab can be stopped
+  // after navigating away and back (plan §5).
+  const aborters = useRef<Record<string, AbortController>>({});
 
   if (!activeItem || !request || !activeKey) {
     return <Centered>Select a request to edit and invoke.</Centered>;
@@ -76,6 +96,10 @@ export function RequestWorkspace() {
   const itemName = activeItem.item.name;
   const body = draft?.body ?? request.draftBody ?? "{}";
   const metadataRows = draft?.metadataRows ?? objectToRows(request.draftMetadata);
+  // Compose list for cs/bd. The primary (index 0) is always the current body —
+  // the single source of truth for the persisted message — with any ephemeral
+  // extras appended, so the two can never drift.
+  const messages = draft?.messages ? [body, ...draft.messages.slice(1)] : [body];
 
   // Debounced persistence, one timer per field so a body save and a metadata
   // save don't cancel each other.
@@ -100,6 +124,15 @@ export function RequestWorkspace() {
     scheduleSave("meta", { draftMetadata: rowsToObject(rows) });
   };
 
+  // Compose-list edits (cs/bd). Only the primary (index 0) persists — it mirrors
+  // the request's single draft_body via the same debounced body path; the extras
+  // stay ephemeral in the draft.
+  const onMessagesChange = (next: string[]) => {
+    const primary = next[0] ?? "{}";
+    setDraft(key, { messages: next, body: primary });
+    scheduleSave("body", { draftBody: primary });
+  };
+
   const onChangeMethod = (service: string, method: string) => {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
   };
@@ -117,31 +150,84 @@ export function RequestWorkspace() {
   };
 
   const onInvoke = () => {
-    setInvoke(key, { loading: true });
-    invokeMut.mutate(
-      {
-        workspaceName: WORKSPACE_NAME,
-        path,
-        itemName,
-        service: request.service,
-        method: request.method,
-        body,
-        metadata: rowsToObject(metadataRows),
-      },
-      {
-        onSuccess: (res) => setInvoke(key, { response: res.response }),
-        onError: (e) => setInvoke(key, { error: e instanceof Error ? e.message : String(e) }),
+    // Unary — existing mutation path, unchanged.
+    if (kind === "u") {
+      setInvoke(key, { loading: true });
+      invokeMut.mutate(
+        {
+          workspaceName: WORKSPACE_NAME,
+          path,
+          itemName,
+          service: request.service,
+          method: request.method,
+          body,
+          metadata: rowsToObject(metadataRows),
+        },
+        {
+          onSuccess: (res) => setInvoke(key, { response: res.response }),
+          onError: (e) => setInvoke(key, { error: e instanceof Error ? e.message : String(e) }),
+        }
+      );
+      return;
+    }
+
+    // Streaming (ss/cs/bd) — one server-streaming RPC carrying every request
+    // message up-front: the single body for server-streaming, the whole compose
+    // list for client-streaming / bidi. `key` and the request fields are captured
+    // here so a mid-stream tab switch keeps writing into the request the stream
+    // was started for (the store actions patch by this captured key).
+    const messagesToSend = kind === "ss" ? [body] : messages;
+    const req = {
+      workspaceName: WORKSPACE_NAME,
+      path,
+      itemName,
+      service: request.service,
+      method: request.method,
+      messages: messagesToSend,
+      metadata: rowsToObject(metadataRows),
+    };
+
+    aborters.current[key]?.abort(); // supersede any prior stream for this key
+    const ac = new AbortController();
+    aborters.current[key] = ac;
+    startStream(key);
+
+    void (async () => {
+      try {
+        for await (const frame of streamClient.invokeStreaming(req, { signal: ac.signal })) {
+          if (frame.event.case === "message") {
+            pushStreamMessage(key, { body: prettyBody(frame.event.value), at: Date.now() });
+          } else if (frame.event.case === "result") {
+            endStream(key, frame.event.value);
+          }
+        }
+      } catch (e) {
+        // Stop aborts the response stream, surfacing as a Canceled ConnectError —
+        // a clean close: keep the received messages, no error banner. Anything
+        // else is a real grpcview-internal failure.
+        if (ac.signal.aborted || (e instanceof ConnectError && e.code === Code.Canceled)) {
+          stopStream(key);
+        } else {
+          failStream(key, e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        // Clear only if still ours — a superseding invoke may have replaced it.
+        if (aborters.current[key] === ac) delete aborters.current[key];
       }
-    );
+    })();
   };
+
+  // Stop the active request's in-flight stream (no-op if none).
+  const onStop = () => aborters.current[key]?.abort();
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
       <MethodHeader
         request={request}
         services={services}
+        kind={kind}
         reflection={reflection}
-        invoking={!!invokeState?.loading}
+        invoking={!!invokeState?.loading || !!invokeState?.streaming}
         onChangeMethod={onChangeMethod}
         onRename={onRename}
         onInvoke={onInvoke}
@@ -149,15 +235,18 @@ export function RequestWorkspace() {
       <div className="flex" style={{ flex: 1, minHeight: 0 }}>
         <RequestPane
           schema={activeMethod?.input?.schema as object | undefined}
+          kind={kind}
           body={body}
           onBodyChange={onBodyChange}
+          messages={messages}
+          onMessagesChange={onMessagesChange}
           metadataRows={metadataRows}
           onMetadataChange={onMetadataChange}
           currentMethod={{ service: request.service, method: request.method }}
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}
         />
-        <ResponsePane invoke={invokeState} />
+        <ResponsePane invoke={invokeState} kind={kind} onStop={onStop} />
       </div>
     </div>
   );

@@ -35,6 +35,7 @@ export const Play = Ph.Play as unknown as Icon;
 export const PlugsConnected = Ph.PlugsConnected as unknown as Icon;
 export const Plus = Ph.Plus as unknown as Icon;
 export const Stack = Ph.Stack as unknown as Icon;
+export const Stop = Ph.Stop as unknown as Icon;
 export const Trash = Ph.Trash as unknown as Icon;
 export const TreeStructure = Ph.TreeStructure as unknown as Icon;
 export const Warning = Ph.Warning as unknown as Icon;

@@ -13,14 +13,41 @@ type loggingInterceptor struct {
 	logger *slog.Logger
 }
 
-// WrapStreamingClient implements [connect.Interceptor].
+// WrapStreamingClient implements [connect.Interceptor]. grpcview issues no
+// outbound streaming calls of its own, so this is a pass-through; returning nil
+// (the previous stub) would break any future streaming client.
 func (l loggingInterceptor) WrapStreamingClient(handler connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return nil
+	return handler
 }
 
-// WrapStreamingHandler implements [connect.Interceptor].
+// WrapStreamingHandler implements [connect.Interceptor]. It logs each streaming
+// RPC's completion (latency + status), mirroring WrapUnary. Returning nil here
+// (the previous unary-only stub) made connect call a nil implementation and
+// panic on the first streaming RPC (InvokeStreaming).
 func (l loggingInterceptor) WrapStreamingHandler(handler connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return nil
+	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		start := time.Now()
+		err := handler(ctx, conn)
+
+		args := []any{
+			"protocol", conn.Peer().Protocol,
+			"address", conn.Peer().Addr,
+			"procedure", conn.Spec().Procedure,
+			"latency", time.Since(start),
+		}
+
+		if err == nil {
+			l.logger.InfoContext(ctx, "stream finished", append(args, "status", "ok")...)
+			return nil
+		}
+
+		status := connect.CodeUnknown.String()
+		if connectErr := new(connect.Error); errors.As(err, &connectErr) {
+			status = connectErr.Code().String()
+		}
+		l.logger.ErrorContext(ctx, "stream finished", append(args, "status", status, "error", err)...)
+		return err
+	}
 }
 
 // WrapUnary implements [connect.Interceptor].

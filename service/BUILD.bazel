@@ -1,5 +1,5 @@
 load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 copy_file(
     name = "ui",
@@ -26,4 +26,11 @@ go_library(
         "@org_golang_x_net//http2",
         "@org_golang_x_net//http2/h2c",
     ],
+)
+
+go_test(
+    name = "service_test",
+    srcs = ["logging_test.go"],
+    embed = [":service"],
+    deps = ["@com_connectrpc_connect//:connect"],
 )

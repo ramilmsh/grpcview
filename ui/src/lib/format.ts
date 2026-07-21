@@ -5,6 +5,8 @@
 import type { Item, Service, Method } from "@grpcview/v1/workspace_pb";
 import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 import type { JsonObject } from "@bufbuild/protobuf";
+// Type-only import — no runtime dependency on the component, so no import cycle.
+import type { MethodKind } from "@/components/ui/Tag";
 
 // ── tree flattening ──────────────────────────────────────────────────────────
 
@@ -91,6 +93,18 @@ export const resolveMethod = (
   services
     .find((s) => serviceName(s) === service)
     ?.methods.find((m) => m.name === method);
+
+// methodKind maps a Method's streaming flags to the four-way kind the UI tags
+// (see components/ui/Tag). A missing/unresolved method falls back to unary — the
+// neutral default the tree/tabs/header show before a method resolves.
+export const methodKind = (method?: Method): MethodKind => {
+  const client = method?.clientStreaming ?? false;
+  const server = method?.serverStreaming ?? false;
+  if (client && server) return "bd";
+  if (client) return "cs";
+  if (server) return "ss";
+  return "u";
+};
 
 // ── gRPC status ──────────────────────────────────────────────────────────────
 

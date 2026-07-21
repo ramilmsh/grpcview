@@ -1,0 +1,13 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "echo",
+    srcs = ["echo.go"],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/echo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/echo/v1:echo",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//reflection",
+    ],
+)

@@ -21,12 +21,27 @@ export interface OpenTab {
 export interface Draft {
   body: string;
   metadataRows: MetadataRow[];
+  // Compose list for client-streaming / bidi requests. messages[0] mirrors `body`
+  // (the persisted primary — see RequestWorkspace); messages[1..] are ephemeral
+  // extras the user adds before sending. Unused by unary / server-streaming.
+  messages?: string[];
+}
+
+// One received streaming payload, kept for a response card: body is the pretty
+// JSON, at is the arrival time (ms epoch) shown right-aligned on the card.
+export interface StreamMessage {
+  body: string;
+  at: number;
 }
 
 // Ephemeral result of the last Invoke for a request. Survives tab switches; not
-// persisted (history is not wired — plan §2).
+// persisted (history is not wired — plan §2). Serves BOTH the unary path
+// (loading + response/error) and the streaming path (streaming + messages, with
+// response holding the terminal result once the stream closes).
 export interface InvokeState {
   loading?: boolean;
+  streaming?: boolean;
+  messages?: StreamMessage[];
   response?: Request_Response;
   error?: string;
 }
@@ -53,6 +68,17 @@ interface UIState {
   setDraft: (key: string, patch: Partial<Draft>) => void;
 
   setInvoke: (key: string, state: InvokeState) => void;
+
+  // Streaming actions. Each patches the keyed InvokeState atomically so the async
+  // invoke loop appends to (never replaces) the accumulated messages, even across
+  // tab switches. startStream resets, pushStreamMessage appends, endStream sets
+  // the terminal result, stopStream marks a clean close (abort), failStream sets
+  // an internal error — the last three keep prior messages via a spread.
+  startStream: (key: string) => void;
+  pushStreamMessage: (key: string, msg: StreamMessage) => void;
+  endStream: (key: string, response: Request_Response) => void;
+  stopStream: (key: string) => void;
+  failStream: (key: string, error: string) => void;
 
   setRequestSubtab: (tab: RequestSubtab) => void;
   setResponseSubtab: (tab: ResponseSubtab) => void;
@@ -131,6 +157,37 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setInvoke: (key, state) =>
     set((s) => ({ invokes: { ...s.invokes, [key]: state } })),
+
+  startStream: (key) =>
+    set((s) => ({
+      invokes: { ...s.invokes, [key]: { streaming: true, messages: [] } },
+    })),
+
+  pushStreamMessage: (key, msg) =>
+    set((s) => {
+      const prev = s.invokes[key];
+      return {
+        invokes: {
+          ...s.invokes,
+          [key]: { ...prev, streaming: true, messages: [...(prev?.messages ?? []), msg] },
+        },
+      };
+    }),
+
+  endStream: (key, response) =>
+    set((s) => ({
+      invokes: { ...s.invokes, [key]: { ...s.invokes[key], streaming: false, response } },
+    })),
+
+  stopStream: (key) =>
+    set((s) => ({
+      invokes: { ...s.invokes, [key]: { ...s.invokes[key], streaming: false } },
+    })),
+
+  failStream: (key, error) =>
+    set((s) => ({
+      invokes: { ...s.invokes, [key]: { ...s.invokes[key], streaming: false, error } },
+    })),
 
   setRequestSubtab: (requestSubtab) => set({ requestSubtab }),
   setResponseSubtab: (responseSubtab) => set({ responseSubtab }),

@@ -25,6 +25,7 @@ go_library(
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",
         "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//runtime/protoiface",
         "@org_golang_google_protobuf//types/descriptorpb",
         "@org_golang_google_protobuf//types/known/durationpb",
         "@org_golang_google_protobuf//types/known/structpb",
@@ -34,10 +35,14 @@ go_library(
 
 go_test(
     name = "workspace_test",
-    srcs = ["workspace_test.go"],
+    srcs = [
+        "invoke_streaming_test.go",
+        "workspace_test.go",
+    ],
     embed = [":workspace"],
     deps = [
         "//proto/grpcview/v1:grpcview",
+        "//service/echo",
         "//service/store",
         "@com_connectrpc_connect//:connect",
         "@com_github_jhump_protoreflect//desc",

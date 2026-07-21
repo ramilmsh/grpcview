@@ -121,6 +121,21 @@ export declare type Method = Message$1<"grpcview.v1.Method"> & {
    * @generated from field: grpcview.v1.Message output = 3;
    */
   output?: Message | undefined;
+
+  /**
+   * client_streaming / server_streaming carry the method's real streaming kind,
+   * populated from reflection's IsClientStreaming/IsServerStreaming. The four
+   * combinations map to unary (both false), server-streaming, client-streaming,
+   * and bidi (both true).
+   *
+   * @generated from field: bool client_streaming = 4;
+   */
+  clientStreaming: boolean;
+
+  /**
+   * @generated from field: bool server_streaming = 5;
+   */
+  serverStreaming: boolean;
 };
 
 /**

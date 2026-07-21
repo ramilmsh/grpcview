@@ -3,7 +3,7 @@ import { CaretDown, Play, PlugsConnected } from "@/components/ui/icons";
 import type { Service, Method, Server, Request } from "@grpcview/v1/workspace_pb";
 import { Button } from "@/components/ui/Button";
 import { EditableName } from "@/components/ui/EditableName";
-import { MethodKindTag } from "@/components/ui/Tag";
+import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
 import { serviceName } from "@/lib/format";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { TargetBar } from "./TargetBar";
@@ -15,6 +15,7 @@ import { TargetBar } from "./TargetBar";
 export function MethodHeader({
   request,
   services,
+  kind,
   reflection,
   invoking,
   onChangeMethod,
@@ -23,6 +24,7 @@ export function MethodHeader({
 }: {
   request: Request;
   services: Service[];
+  kind: MethodKind;
   reflection: Server | null;
   invoking: boolean;
   onChangeMethod: (service: string, method: string) => void;
@@ -72,7 +74,7 @@ export function MethodHeader({
             maxWidth: 240,
           }}
         />
-        <MethodKindTag kind="u" />
+        <MethodKindTag kind={kind} />
 
         {/* service / method selector — both open the same picker */}
         <div

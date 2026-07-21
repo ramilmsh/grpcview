@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -16,10 +18,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
 	"github.com/jhump/protoreflect/grpcreflect"
 
+	"google.golang.org/protobuf/runtime/protoiface"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -36,31 +40,12 @@ import (
 func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
 	msg := request.Msg
 
-	target, err := w.resolveTarget(ctx, msg)
+	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, msg.GetTarget(), msg.GetWorkspaceName(), msg.GetService(), msg.GetMethod())
 	if err != nil {
 		return nil, err
 	}
+	defer cleanup()
 
-	conn, err := dial(target)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connect to %s:%d: %w", target.GetHost(), target.GetPort(), err))
-	}
-	defer conn.Close()
-
-	// Resolve the method descriptor by reflecting the target. Reflection sources
-	// don't persist full descriptors, so the schema is fetched fresh per call;
-	// if the server is unreachable we can't build the request at all.
-	refClient := grpcreflect.NewClientAuto(ctx, conn)
-	defer refClient.Reset()
-
-	svcDesc, err := refClient.ResolveService(msg.GetService())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("resolve service %q: %w", msg.GetService(), err))
-	}
-	methodDesc := svcDesc.FindMethodByName(msg.GetMethod())
-	if methodDesc == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("method %q not found in service %q", msg.GetMethod(), msg.GetService()))
-	}
 	if methodDesc.IsClientStreaming() || methodDesc.IsServerStreaming() {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("streaming methods are not supported yet: %s", methodDesc.GetFullyQualifiedName()))
 	}
@@ -115,17 +100,270 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
 }
 
+// InvokeStreaming adapts the Connect server-streaming handler onto streamInvoke.
+// It is a thin seam: all logic lives in streamInvoke, which writes frames through
+// a plain send func so it can be unit-tested without a real connect.ServerStream.
+func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamResponse]) error {
+	return w.streamInvoke(ctx, request.Msg, stream.Send)
+}
+
+// streamInvoke executes an RPC of any kind against the target and streams the
+// responses back through send. It maps the target method's real streaming kind
+// (unary / server / client / bidi over full gRPC) onto the single
+// server-streaming shape the browser transport allows: every client message is
+// supplied up-front in msg.Messages and, for client-streaming and bidi targets,
+// composed and sent before any response is read — there is no live interleave, a
+// deliberate v1 limit of the browser transport (connect-web cannot stream a
+// request body).
+//
+// Frame protocol: zero or more `message` frames carry response payloads as JSON
+// as they arrive, then exactly one terminal `result` frame carries the final
+// gRPC status, request/response metadata, latency and timestamp. Its `response`
+// bytes stay empty — the payloads went out as message frames — but it is
+// otherwise the same Request.Response shape unary Invoke returns.
+//
+// Error policy mirrors unary Invoke. Pre-flight failures grpcview itself can't
+// get past (no target, unreachable schema, a request body that doesn't parse)
+// return a Connect error and send nothing. A gRPC-status failure of the invoked
+// call — even one that surfaces partway through a stream after some message
+// frames were already sent — is NOT a Connect error: it is reported in the
+// terminal frame's status and the handler returns nil. If send itself fails
+// (client aborted / ctx cancelled) we stop and return that error without
+// panicking; ctx cancellation propagates into the target call and surfaces as
+// the terminal frame's (Canceled) status or a failed send.
+func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, msg.GetTarget(), msg.GetWorkspaceName(), msg.GetService(), msg.GetMethod())
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Build every client request message up-front. An empty list defaults to a
+	// single "{}", mirroring unary Invoke's empty-body handling. A body that
+	// doesn't fit the input type is a pre-flight failure: a Connect error with no
+	// frames sent.
+	bodies := msg.GetMessages()
+	if len(bodies) == 0 {
+		bodies = []string{"{}"}
+	}
+	reqMsgs := make([]*dynamic.Message, len(bodies))
+	for i, body := range bodies {
+		body = strings.TrimSpace(body)
+		if body == "" {
+			body = "{}"
+		}
+		m := dynamic.NewMessage(methodDesc.GetInputType())
+		if err := m.UnmarshalJSON([]byte(body)); err != nil {
+			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body [%d] for %s: %w", i, methodDesc.GetInputType().GetFullyQualifiedName(), err))
+		}
+		reqMsgs[i] = m
+	}
+
+	reqMD := structToMetadata(msg.GetMetadata())
+	callCtx := metadata.NewOutgoingContext(ctx, reqMD)
+	stub := grpcdynamic.NewStub(conn)
+
+	// sendMessage marshals a received response payload to JSON and emits it as a
+	// message frame. A marshal failure is a grpcview-internal error (CodeInternal);
+	// a send failure means the client aborted — both propagate out of streamInvoke.
+	sendMessage := func(resp protoiface.MessageV1) error {
+		dm, err := dynamic.AsDynamicMessage(resp)
+		if err != nil {
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("read response message: %w", err))
+		}
+		jsonBytes, err := dm.MarshalJSON()
+		if err != nil {
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal response to json: %w", err))
+		}
+		return send(&grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Message{Message: jsonBytes}})
+	}
+
+	var (
+		header, trailer metadata.MD
+		invokeErr       error
+	)
+	client := methodDesc.IsClientStreaming()
+	server := methodDesc.IsServerStreaming()
+	start := time.Now()
+
+	switch {
+	case !client && !server:
+		// Unary: a single request, a single response.
+		resp, err := stub.InvokeRpc(callCtx, methodDesc, reqMsgs[0], grpc.Header(&header), grpc.Trailer(&trailer))
+		invokeErr = err
+		if err == nil {
+			if serr := sendMessage(resp); serr != nil {
+				return serr
+			}
+		}
+
+	case !client && server:
+		// Server-streaming: a single request, a stream of responses.
+		ss, err := stub.InvokeRpcServerStream(callCtx, methodDesc, reqMsgs[0])
+		invokeErr = err
+		if err == nil {
+			for {
+				resp, rerr := ss.RecvMsg()
+				if errors.Is(rerr, io.EOF) {
+					break
+				}
+				if rerr != nil {
+					invokeErr = rerr
+					break
+				}
+				if serr := sendMessage(resp); serr != nil {
+					return serr
+				}
+			}
+			// Read metadata after the stream completes: Header blocks until the
+			// server sends headers, Trailer is valid once RecvMsg has returned an
+			// error (EOF included).
+			header, _ = ss.Header()
+			trailer = ss.Trailer()
+		}
+
+	case client && !server:
+		// Client-streaming: every client message is sent up-front, then a single
+		// response is received.
+		cs, err := stub.InvokeRpcClientStream(callCtx, methodDesc)
+		invokeErr = err
+		if err == nil {
+			for _, m := range reqMsgs {
+				if invokeErr = cs.SendMsg(m); invokeErr != nil {
+					break
+				}
+			}
+			if invokeErr == nil {
+				resp, rerr := cs.CloseAndReceive()
+				invokeErr = rerr
+				if rerr == nil {
+					if serr := sendMessage(resp); serr != nil {
+						return serr
+					}
+				}
+			}
+			header, _ = cs.Header()
+			trailer = cs.Trailer()
+		}
+
+	default:
+		// Bidi: every client message is composed and sent up-front, the send side
+		// is closed, then the whole response stream is drained. There is no live
+		// interleave of sends and receives — a deliberate v1 limit of the browser
+		// transport — so the call is modeled as send-all-then-receive-all.
+		bs, err := stub.InvokeRpcBidiStream(callCtx, methodDesc)
+		invokeErr = err
+		if err == nil {
+			for _, m := range reqMsgs {
+				if invokeErr = bs.SendMsg(m); invokeErr != nil {
+					break
+				}
+			}
+			if invokeErr == nil {
+				invokeErr = bs.CloseSend()
+			}
+			if invokeErr == nil {
+				for {
+					resp, rerr := bs.RecvMsg()
+					if errors.Is(rerr, io.EOF) {
+						break
+					}
+					if rerr != nil {
+						invokeErr = rerr
+						break
+					}
+					if serr := sendMessage(resp); serr != nil {
+						return serr
+					}
+				}
+			}
+			header, _ = bs.Header()
+			trailer = bs.Trailer()
+		}
+	}
+
+	// Terminal frame: the single completion point for both success and a
+	// gRPC-status failure of the invoked call. The failure is reported in Status
+	// here (NOT as a Connect error), mirroring unary Invoke — even when some
+	// message frames already went out before it. Response bytes stay empty; the
+	// payloads were the message frames.
+	out := &grpcviewv1.Request_Response{
+		RequestMetadata:  metadataToStruct(reqMD),
+		ResponseMetadata: metadataToStruct(mergeMD(header, trailer)),
+		Latency:          durationpb.New(time.Since(start)),
+		Timestamp:        timestamppb.Now(),
+	}
+	if invokeErr != nil {
+		st := status.Convert(invokeErr)
+		out.Status = &grpcviewv1.Status{
+			Code:    int32(st.Code()),
+			Message: st.Message(),
+			Details: st.Proto().GetDetails(),
+		}
+	} else {
+		out.Status = &grpcviewv1.Status{Code: int32(codeOK)}
+	}
+
+	if err := send(&grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Result{Result: out}}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // codeOK is the gRPC status code for a successful call (google.rpc.Code.OK).
 const codeOK = 0
 
-// resolveTarget returns the server to send the call to: the explicit target on
-// the request if set, otherwise the workspace's first reflection source.
-func (w Workspace) resolveTarget(ctx context.Context, msg *grpcviewv1.InvokeRequest) (*grpcviewv1.Server, error) {
-	if t := msg.GetTarget(); t != nil {
-		return t, nil
+// resolveMethod resolves the target server, dials it, reflects its schema, and
+// locates the requested method descriptor. It returns the open connection, the
+// method descriptor, and a cleanup func the caller must invoke when done (it
+// resets the reflection client and closes the connection). Shared by unary
+// Invoke and streamInvoke. Every failure here is a pre-flight failure grpcview
+// itself can't get past, so they surface as Connect errors, with the same codes
+// unary Invoke has always used.
+func (w Workspace) resolveMethod(ctx context.Context, target *grpcviewv1.Server, workspaceName, service, method string) (*grpc.ClientConn, *desc.MethodDescriptor, func(), error) {
+	resolved, err := w.resolveTarget(ctx, target, workspaceName)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
-	coll, err := w.store.Open(ctx, msg.GetWorkspaceName())
+	conn, err := dial(resolved)
+	if err != nil {
+		return nil, nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connect to %s:%d: %w", resolved.GetHost(), resolved.GetPort(), err))
+	}
+
+	// Resolve the method descriptor by reflecting the target. Reflection sources
+	// don't persist full descriptors, so the schema is fetched fresh per call; if
+	// the server is unreachable we can't build the request at all.
+	refClient := grpcreflect.NewClientAuto(ctx, conn)
+	cleanup := func() {
+		refClient.Reset()
+		_ = conn.Close()
+	}
+
+	svcDesc, err := refClient.ResolveService(service)
+	if err != nil {
+		cleanup()
+		return nil, nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("resolve service %q: %w", service, err))
+	}
+	methodDesc := svcDesc.FindMethodByName(method)
+	if methodDesc == nil {
+		cleanup()
+		return nil, nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("method %q not found in service %q", method, service))
+	}
+
+	return conn, methodDesc, cleanup, nil
+}
+
+// resolveTarget returns the server to send the call to: the explicit target if
+// set, otherwise the named workspace's first reflection source. Both invoke
+// request types expose GetTarget/GetWorkspaceName, so this takes those two
+// values rather than a concrete request type.
+func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server, workspaceName string) (*grpcviewv1.Server, error) {
+	if target != nil {
+		return target, nil
+	}
+
+	coll, err := w.store.Open(ctx, workspaceName)
 	if err != nil {
 		return nil, err
 	}

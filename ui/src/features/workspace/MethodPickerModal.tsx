@@ -4,7 +4,7 @@ import type { Service, Method } from "@grpcview/v1/workspace_pb";
 import { IconButton } from "@/components/ui/Button";
 import { Backdrop } from "@/components/ui/Backdrop";
 import { MethodKindTag } from "@/components/ui/Tag";
-import { serviceName } from "@/lib/format";
+import { methodKind, serviceName } from "@/lib/format";
 
 // Two-pane service → method picker. Ported from RequestSelectorModal (plan §7),
 // restyled to Nocturne. Used both to create a request and to change a request's
@@ -145,7 +145,7 @@ export function MethodPickerModal({
                     onClose();
                   }}
                 >
-                  <MethodKindTag kind="u" />
+                  <MethodKindTag kind={methodKind(m)} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: "var(--color-text)" }}>{m.name}</div>
                     <div

@@ -111,6 +111,46 @@ message InvokeResponse {
   Request.Response response = 1;
 }
 
+// InvokeStreamRequest opens a streaming invoke. The browser transport
+// (@connectrpc/connect-web) cannot stream a request body, so the entire call is
+// modeled as a single server-streaming RPC: every client message is supplied
+// up-front in `messages`, and the backend maps them onto the target method's
+// real streaming kind (unary / server / client / bidi over full gRPC). The
+// service/method/messages/metadata carry the (possibly unsaved) editor state,
+// mirroring InvokeRequest.
+message InvokeStreamRequest {
+  string                 workspace_name = 1;
+  repeated string        path           = 2;
+  string                 item_name      = 3;
+  string                 service        = 4;
+  string                 method         = 5;
+  // messages are the client request bodies as JSON text, in send order. Unary
+  // and server-streaming targets expect exactly one; client-streaming and bidi
+  // targets receive all of them composed up-front — there is no live interleave,
+  // a deliberate v1 limit of the browser transport. Empty defaults to one "{}".
+  repeated string        messages       = 6;
+  google.protobuf.Struct metadata       = 7;
+  // target overrides where the call is sent; unset defaults to the workspace's
+  // first reflection source (same as Invoke).
+  optional Server        target         = 8;
+}
+
+// InvokeStreamResponse is one frame of a streaming invoke. Zero or more `message`
+// frames carry response payloads as the target emits them; exactly one terminal
+// `result` frame closes the stream, carrying the final gRPC status, request +
+// response metadata, latency and timestamp — the same Request.Response shape
+// unary Invoke returns (its `response` bytes are left empty; payloads arrived as
+// message frames). A gRPC-status failure of the invoked call is reported in the
+// terminal frame's status, NOT as a Connect stream error; only grpcview-internal
+// failures (no target, unreachable schema, a body that doesn't parse) surface as
+// Connect errors.
+message InvokeStreamResponse {
+  oneof event {
+    bytes            message = 1;
+    Request.Response result  = 2;
+  }
+}
+
 // RunScriptRequest evaluates an ad-hoc script through the scripting engine's
 // scenario profile (fresh isolated instance, no capabilities granted, no
 // workspace state touched). It is the scratchpad that validates the engine end
@@ -165,6 +205,12 @@ service WorkspaceService {
   // Invoke executes a unary RPC against a target server and returns the result
   // (status, response body, request/response metadata, latency).
   rpc Invoke(InvokeRequest) returns (InvokeResponse);
+  // InvokeStreaming executes an RPC of any kind (unary, server-, client-, or
+  // bidi-streaming) against the target and streams the responses back. Modeled
+  // as server-streaming — not the bidi the design sketch suggested — because the
+  // browser transport (connect-web) cannot stream a request body; see
+  // InvokeStreamRequest for how client messages are supplied.
+  rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamResponse);
   // RunScript evaluates an ad-hoc script through the scripting engine and returns
   // its value, console output, and any error — the scratchpad that validates the
   // engine end to end.

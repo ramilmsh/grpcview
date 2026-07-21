@@ -32,9 +32,15 @@ message Message {
 }
 
 message Method {
-  string  name   = 1;
-  Message input  = 2;
-  Message output = 3;
+  string  name             = 1;
+  Message input            = 2;
+  Message output           = 3;
+  // client_streaming / server_streaming carry the method's real streaming kind,
+  // populated from reflection's IsClientStreaming/IsServerStreaming. The four
+  // combinations map to unary (both false), server-streaming, client-streaming,
+  // and bidi (both true).
+  bool    client_streaming = 4;
+  bool    server_streaming = 5;
 }
 
 message Service {

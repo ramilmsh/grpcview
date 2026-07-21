@@ -9,7 +9,9 @@ import {
   createConnectQueryKey,
 } from "@connectrpc/connect-query";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { createClient } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
+import { WorkspaceService } from "@grpcview/v1/service_pb";
 import {
   get,
   createFolder,
@@ -97,6 +99,15 @@ export function useWorkspaceMutations() {
 // stashed per-request in the UI store so it survives tab switches (plan §6).
 export function useInvoke() {
   return useMutation(invoke);
+}
+
+// useStreamingClient returns the raw connect client for the streaming invoke.
+// connect-query has no streaming hook, so the server-streaming InvokeStreaming
+// RPC is called directly on this client (it returns an AsyncIterable of frames);
+// the transport is the same <TransportProvider> one connect-query uses.
+export function useStreamingClient() {
+  const transport = useTransport();
+  return useMemo(() => createClient(WorkspaceService, transport), [transport]);
 }
 
 // useRunScript is the ad-hoc script-eval mutation backing the Scripts scratchpad.

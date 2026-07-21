@@ -2,10 +2,15 @@ import clsx from "clsx";
 import { X } from "@/components/ui/icons";
 import { useUIStore } from "@/lib/ui-store";
 import { MethodKindTag } from "@/components/ui/Tag";
+import { useWorkspace, useRootItems } from "@/lib/workspace-query";
+import { findByKey, methodKind, resolveMethod } from "@/lib/format";
 
 // RequestTabs is the client-side open-request tab strip (plan §1.2). Purely
-// frontend state; no persistence.
+// frontend state; no persistence. Each tab's method-kind tag is resolved live
+// from the workspace tree (fallback unary when the request/method can't resolve).
 export function RequestTabs() {
+  const { workspace, services } = useWorkspace();
+  const rootItems = useRootItems(workspace);
   const openTabs = useUIStore((s) => s.openTabs);
   const activeKey = useUIStore((s) => s.activeKey);
   const setActiveKey = useUIStore((s) => s.setActiveKey);
@@ -25,6 +30,12 @@ export function RequestTabs() {
     >
       {openTabs.map((tab) => {
         const active = tab.key === activeKey;
+        const item = findByKey(rootItems, tab.key);
+        const req =
+          item?.item.content.case === "request" ? item.item.content.value : undefined;
+        const kind = methodKind(
+          resolveMethod(services, req?.service ?? "", req?.method ?? "")
+        );
         return (
           <div
             key={tab.key}
@@ -41,7 +52,7 @@ export function RequestTabs() {
             }}
             onClick={() => setActiveKey(tab.key)}
           >
-            <MethodKindTag kind="u" />
+            <MethodKindTag kind={kind} />
             {tab.name}
             <X
               size={12}

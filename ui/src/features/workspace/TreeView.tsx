@@ -8,14 +8,18 @@ import {
   Plus,
   Trash,
 } from "@/components/ui/icons";
+import type { Service } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
-import { itemKey } from "@/lib/format";
+import { itemKey, methodKind, resolveMethod } from "@/lib/format";
 import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag } from "@/components/ui/Tag";
 
 interface TreeViewProps {
   item: ItemWithPath;
   activeKey: string | null;
+  // services resolves each request row's method kind for its tag; threaded down
+  // the recursion from CollectionPanel (falls back to unary when unresolved).
+  services: Service[];
   onSelectRequest: (item: ItemWithPath) => void;
   onNewRequestUnder: (folder: ItemWithPath) => void;
   onRename: (item: ItemWithPath, newName: string) => void;
@@ -28,6 +32,7 @@ interface TreeViewProps {
 export function TreeView({
   item,
   activeKey,
+  services,
   onSelectRequest,
   onNewRequestUnder,
   onRename,
@@ -80,6 +85,7 @@ export function TreeView({
                 key={itemKey(child)}
                 item={child}
                 activeKey={activeKey}
+                services={services}
                 onSelectRequest={onSelectRequest}
                 onNewRequestUnder={onNewRequestUnder}
                 onRename={onRename}
@@ -94,12 +100,17 @@ export function TreeView({
 
   // request row
   const active = itemKey(item) === activeKey;
+  const request =
+    item.item.content.case === "request" ? item.item.content.value : undefined;
+  const kind = methodKind(
+    resolveMethod(services, request?.service ?? "", request?.method ?? "")
+  );
   return (
     <div
       className={clsx("treerow", active && "on")}
       onClick={editing ? undefined : () => onSelectRequest(item)}
     >
-      <MethodKindTag kind="u" />
+      <MethodKindTag kind={kind} />
       <EditableName
         value={item.item.name}
         editing={editing}

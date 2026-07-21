@@ -416,6 +416,111 @@ export declare type InvokeResponse = Message<"grpcview.v1.InvokeResponse"> & {
 export declare const InvokeResponseSchema: GenMessage<InvokeResponse>;
 
 /**
+ * InvokeStreamRequest opens a streaming invoke. The browser transport
+ * (@connectrpc/connect-web) cannot stream a request body, so the entire call is
+ * modeled as a single server-streaming RPC: every client message is supplied
+ * up-front in `messages`, and the backend maps them onto the target method's
+ * real streaming kind (unary / server / client / bidi over full gRPC). The
+ * service/method/messages/metadata carry the (possibly unsaved) editor state,
+ * mirroring InvokeRequest.
+ *
+ * @generated from message grpcview.v1.InvokeStreamRequest
+ */
+export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: repeated string path = 2;
+   */
+  path: string[];
+
+  /**
+   * @generated from field: string item_name = 3;
+   */
+  itemName: string;
+
+  /**
+   * @generated from field: string service = 4;
+   */
+  service: string;
+
+  /**
+   * @generated from field: string method = 5;
+   */
+  method: string;
+
+  /**
+   * messages are the client request bodies as JSON text, in send order. Unary
+   * and server-streaming targets expect exactly one; client-streaming and bidi
+   * targets receive all of them composed up-front — there is no live interleave,
+   * a deliberate v1 limit of the browser transport. Empty defaults to one "{}".
+   *
+   * @generated from field: repeated string messages = 6;
+   */
+  messages: string[];
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 7;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * target overrides where the call is sent; unset defaults to the workspace's
+   * first reflection source (same as Invoke).
+   *
+   * @generated from field: optional grpcview.v1.Server target = 8;
+   */
+  target?: Server | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeStreamRequest.
+ * Use `create(InvokeStreamRequestSchema)` to create a new message.
+ */
+export declare const InvokeStreamRequestSchema: GenMessage<InvokeStreamRequest>;
+
+/**
+ * InvokeStreamResponse is one frame of a streaming invoke. Zero or more `message`
+ * frames carry response payloads as the target emits them; exactly one terminal
+ * `result` frame closes the stream, carrying the final gRPC status, request +
+ * response metadata, latency and timestamp — the same Request.Response shape
+ * unary Invoke returns (its `response` bytes are left empty; payloads arrived as
+ * message frames). A gRPC-status failure of the invoked call is reported in the
+ * terminal frame's status, NOT as a Connect stream error; only grpcview-internal
+ * failures (no target, unreachable schema, a body that doesn't parse) surface as
+ * Connect errors.
+ *
+ * @generated from message grpcview.v1.InvokeStreamResponse
+ */
+export declare type InvokeStreamResponse = Message<"grpcview.v1.InvokeStreamResponse"> & {
+  /**
+   * @generated from oneof grpcview.v1.InvokeStreamResponse.event
+   */
+  event: {
+    /**
+     * @generated from field: bytes message = 1;
+     */
+    value: Uint8Array;
+    case: "message";
+  } | {
+    /**
+     * @generated from field: grpcview.v1.Request.Response result = 2;
+     */
+    value: Request_Response;
+    case: "result";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeStreamResponse.
+ * Use `create(InvokeStreamResponseSchema)` to create a new message.
+ */
+export declare const InvokeStreamResponseSchema: GenMessage<InvokeStreamResponse>;
+
+/**
  * RunScriptRequest evaluates an ad-hoc script through the scripting engine's
  * scenario profile (fresh isolated instance, no capabilities granted, no
  * workspace state touched). It is the scratchpad that validates the engine end
@@ -611,6 +716,20 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof InvokeRequestSchema;
     output: typeof InvokeResponseSchema;
+  },
+  /**
+   * InvokeStreaming executes an RPC of any kind (unary, server-, client-, or
+   * bidi-streaming) against the target and streams the responses back. Modeled
+   * as server-streaming — not the bidi the design sketch suggested — because the
+   * browser transport (connect-web) cannot stream a request body; see
+   * InvokeStreamRequest for how client messages are supplied.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.InvokeStreaming
+   */
+  invokeStreaming: {
+    methodKind: "server_streaming";
+    input: typeof InvokeStreamRequestSchema;
+    output: typeof InvokeStreamResponseSchema;
   },
   /**
    * RunScript evaluates an ad-hoc script through the scripting engine and returns
