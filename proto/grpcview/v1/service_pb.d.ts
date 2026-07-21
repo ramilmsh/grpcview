@@ -61,6 +61,47 @@ export declare type AddDescriptorSourceResponse = Message<"grpcview.v1.AddDescri
 export declare const AddDescriptorSourceResponseSchema: GenMessage<AddDescriptorSourceResponse>;
 
 /**
+ * @generated from message grpcview.v1.RemoveDescriptorSourceRequest
+ */
+export declare type RemoveDescriptorSourceRequest = Message<"grpcview.v1.RemoveDescriptorSourceRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * index selects the source to remove by its position in Workspace.sources,
+   * which matches the order the UI displays. Sources have no id yet (Phase 2),
+   * so the index is the stable handle until then.
+   *
+   * @generated from field: int32 index = 2;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message grpcview.v1.RemoveDescriptorSourceRequest.
+ * Use `create(RemoveDescriptorSourceRequestSchema)` to create a new message.
+ */
+export declare const RemoveDescriptorSourceRequestSchema: GenMessage<RemoveDescriptorSourceRequest>;
+
+/**
+ * @generated from message grpcview.v1.RemoveDescriptorSourceResponse
+ */
+export declare type RemoveDescriptorSourceResponse = Message<"grpcview.v1.RemoveDescriptorSourceResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.RemoveDescriptorSourceResponse.
+ * Use `create(RemoveDescriptorSourceResponseSchema)` to create a new message.
+ */
+export declare const RemoveDescriptorSourceResponseSchema: GenMessage<RemoveDescriptorSourceResponse>;
+
+/**
  * @generated from message grpcview.v1.CreateFolderRequest
  */
 export declare type CreateFolderRequest = Message<"grpcview.v1.CreateFolderRequest"> & {
@@ -498,6 +539,17 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof AddDescriptorSourceRequestSchema;
     output: typeof AddDescriptorSourceResponseSchema;
+  },
+  /**
+   * RemoveDescriptorSource drops the source at the given index and re-resolves
+   * the workspace's services from the sources that remain.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
+   */
+  removeDescriptorSource: {
+    methodKind: "unary";
+    input: typeof RemoveDescriptorSourceRequestSchema;
+    output: typeof RemoveDescriptorSourceResponseSchema;
   },
   /**
    * Get returns the workspace snapshot

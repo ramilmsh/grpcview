@@ -20,6 +20,18 @@ message AddDescriptorSourceResponse {
   Workspace workspace = 1;
 }
 
+message RemoveDescriptorSourceRequest {
+  string workspace_name = 1;
+  // index selects the source to remove by its position in Workspace.sources,
+  // which matches the order the UI displays. Sources have no id yet (Phase 2),
+  // so the index is the stable handle until then.
+  int32  index = 2;
+}
+
+message RemoveDescriptorSourceResponse {
+  Workspace workspace = 1;
+}
+
 message CreateFolderRequest {
   string workspace_name = 1;
   repeated string path = 2;
@@ -137,6 +149,9 @@ message RunScriptResponse {
 service WorkspaceService {
   // AddDescriptorSource adds a descriptor source to the workspace, it is used to obtain workspace defitions
   rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
+  // RemoveDescriptorSource drops the source at the given index and re-resolves
+  // the workspace's services from the sources that remain.
+  rpc RemoveDescriptorSource(RemoveDescriptorSourceRequest) returns (RemoveDescriptorSourceResponse);
   // Get returns the workspace snapshot
   rpc Get(GetRequest) returns (GetResponse);
   // CreateFolder creates a new folder in the workspace

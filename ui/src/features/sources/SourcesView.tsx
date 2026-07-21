@@ -1,17 +1,29 @@
 import { useState } from "react";
-import { Plus, PlugsConnected, FileArchive, Warning } from "@/components/ui/icons";
-import { Button } from "@/components/ui/Button";
+import { Plus, PlugsConnected, FileArchive, Warning, Trash } from "@/components/ui/icons";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
+import { Dialog } from "@/components/ui/Dialog";
 import { useWorkspace, useWorkspaceMutations, hostLabel, WORKSPACE_NAME } from "@/lib/workspace-query";
+import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
 import { AddSourceModal } from "./AddSourceModal";
 
+// sourceLabel is the human-readable handle shown for a source in the
+// remove-confirm dialog.
+function sourceLabel(s: DescriptorSource): string {
+  const reflection = s.source.case === "reflection" ? s.source.value : null;
+  return reflection ? `reflection:${hostLabel(reflection)}` : "descriptor set";
+}
+
 // SourcesView is the minimal Phase-1 definition-sources list (plan §1.7): the
-// current sources plus an "Add source" action. Priority/freshness/versions/
-// collisions and the full table wait for Phase 2 (needs backend work).
+// current sources plus an "Add source" action and a per-row remove. Priority/
+// freshness/versions/collisions and the full table wait for Phase 2 (needs
+// backend work).
 export function SourcesView() {
   const { sources } = useWorkspace();
-  const { addDescriptorSource } = useWorkspaceMutations();
+  const { addDescriptorSource, removeDescriptorSource } = useWorkspaceMutations();
   const [modalOpen, setModalOpen] = useState(false);
+  // confirm holds the index of the source pending removal, or null.
+  const [confirm, setConfirm] = useState<number | null>(null);
 
   const onAdd = (host: string, port: number, tls: boolean) => {
     addDescriptorSource.mutate(
@@ -22,6 +34,21 @@ export function SourcesView() {
       { onSuccess: () => setModalOpen(false) }
     );
   };
+
+  const doRemove = () => {
+    if (confirm === null) return;
+    removeDescriptorSource.mutate(
+      { workspaceName: WORKSPACE_NAME, index: confirm },
+      { onSuccess: () => setConfirm(null) }
+    );
+  };
+
+  // Show whichever mutation last errored (add or remove).
+  const activeError = addDescriptorSource.isError
+    ? addDescriptorSource.error
+    : removeDescriptorSource.isError
+      ? removeDescriptorSource.error
+      : null;
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -47,7 +74,7 @@ export function SourcesView() {
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "14px 20px" }}>
-        {addDescriptorSource.isError && (
+        {activeError && (
           <div
             className="flex items-center gap-[8px]"
             style={{
@@ -61,9 +88,7 @@ export function SourcesView() {
             }}
           >
             <Warning weight="fill" />
-            {addDescriptorSource.error instanceof Error
-              ? addDescriptorSource.error.message
-              : "Failed to add source"}
+            {activeError instanceof Error ? activeError.message : "Source operation failed"}
           </div>
         )}
 
@@ -108,6 +133,13 @@ export function SourcesView() {
                   ) : (
                     <Tag variant="neutral">descriptor set</Tag>
                   )}
+                  <IconButton
+                    title="Remove source"
+                    onClick={() => setConfirm(i)}
+                    disabled={removeDescriptorSource.isPending}
+                  >
+                    <Trash size={15} />
+                  </IconButton>
                 </div>
               );
             })}
@@ -121,6 +153,26 @@ export function SourcesView() {
         onAddReflection={onAdd}
         pending={addDescriptorSource.isPending}
       />
+
+      {/* remove confirm */}
+      <Dialog
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        title="Remove source"
+        width={400}
+      >
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+          Remove{" "}
+          <strong>{confirm !== null && sources[confirm] ? sourceLabel(sources[confirm]) : "this source"}</strong>?
+          Its services are re-resolved from the remaining sources.
+        </p>
+        <div className="dialog-actions">
+          <Button onClick={() => setConfirm(null)}>Cancel</Button>
+          <Button variant="danger" onClick={doRemove} disabled={removeDescriptorSource.isPending}>
+            {removeDescriptorSource.isPending ? "Removing…" : "Remove"}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

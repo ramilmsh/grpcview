@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "workspace",
@@ -28,5 +28,20 @@ go_library(
         "@org_golang_google_protobuf//types/known/durationpb",
         "@org_golang_google_protobuf//types/known/structpb",
         "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)
+
+go_test(
+    name = "workspace_test",
+    srcs = ["workspace_test.go"],
+    embed = [":workspace"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "//service/store",
+        "@com_connectrpc_connect//:connect",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//health",
+        "@org_golang_google_grpc//health/grpc_health_v1",
+        "@org_golang_google_grpc//reflection",
     ],
 )

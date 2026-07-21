@@ -17,6 +17,7 @@ import {
   deleteRequest,
   updateRequest,
   addDescriptorSource,
+  removeDescriptorSource,
   invoke,
   runScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
@@ -88,6 +89,7 @@ export function useWorkspaceMutations() {
     deleteRequest: useMutation(deleteRequest, opts),
     updateRequest: useMutation(updateRequest, opts),
     addDescriptorSource: useMutation(addDescriptorSource, opts),
+    removeDescriptorSource: useMutation(removeDescriptorSource, opts),
   };
 }
 

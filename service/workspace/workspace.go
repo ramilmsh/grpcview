@@ -116,74 +116,15 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("unimplemented source type: <%T> %+v", source, source))
 	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
-		conn, err := dial(source.Reflection)
+		// Reflect the newly added source and merge its services into the
+		// workspace's flat list (existing sources are not re-reflected on add;
+		// remove re-resolves the whole list — see RemoveDescriptorSource).
+		resolved, err := resolveReflectionServices(ctx, source.Reflection)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't connect to %s: %w", source.Reflection, err)
+			return nil, err
 		}
-
-		client := grpcreflect.NewClientAuto(ctx, conn)
-		services, err := client.ListServices()
-		if err != nil {
-			return nil, fmt.Errorf("failed to list services: %w", err)
-		}
-
-		for _, serviceName := range services {
-			fileDesc, err := client.FileContainingSymbol(serviceName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get file for service [%s]: %w", serviceName, err)
-			}
-
-			serviceDesc := fileDesc.FindSymbol(serviceName).(*desc.ServiceDescriptor)
-
-			service := &grpcviewv1.Service{
-				Package: serviceDesc.GetFile().AsFileDescriptorProto().GetPackage(),
-				Name:    serviceDesc.GetName(),
-				Methods: make([]*grpcviewv1.Method, len(serviceDesc.GetMethods())),
-			}
-
-			// Replace an existing entry for this service (matched by the
-			// package/name identity we persist) or append a new one.
-			index := slices.IndexFunc(ws.Services, func(s *grpcviewv1.Service) bool {
-				return s.GetPackage() == service.GetPackage() && s.GetName() == service.GetName()
-			})
-			if index == -1 {
-				ws.Services = append(ws.Services, service)
-			} else {
-				ws.Services[index] = service
-			}
-
-			for j, methodDesc := range serviceDesc.GetMethods() {
-				inputDesc := methodDesc.GetInputType()
-				schema, err := inspector.ConvertMessage(inputDesc.UnwrapMessage())
-				if err != nil {
-					return nil, fmt.Errorf("failed to convert message (%s) to schema: %w", inputDesc.Unwrap().FullName(), err)
-				}
-
-				encodedSchema, err := json.Marshal(schema)
-				if err != nil {
-					return nil, err
-				}
-
-				decodedSchema := make(map[string]any)
-				err = json.Unmarshal(encodedSchema, &decodedSchema)
-				if err != nil {
-					return nil, err
-				}
-
-				schemaStruct, err := structpb.NewStruct(decodedSchema)
-				if err != nil {
-					return nil, err
-				}
-
-				service.Methods[j] = &grpcviewv1.Method{
-					Name: methodDesc.GetName(),
-					Input: &grpcviewv1.Message{
-						Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
-						Name:    inputDesc.GetName(),
-						Schema:  schemaStruct,
-					},
-				}
-			}
+		for _, svc := range resolved {
+			ws.Services = mergeService(ws.Services, svc)
 		}
 
 		// Persist the source config (committed) and the resolved schema cache
@@ -204,6 +145,160 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}
+}
+
+// RemoveDescriptorSource drops the source at the given index (its position in
+// Workspace.sources, matching the displayed order) and re-resolves the flat
+// services list from the sources that remain. The merged list can't be
+// un-merged per source until Phase 2 gives sources real identity, so the
+// remaining reflection sources are re-reflected here — one network round-trip
+// each, performed server-side and surfaced as a clean Connect error on failure.
+func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.RemoveDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RemoveDescriptorSourceResponse], error) {
+	coll, err := w.store.Open(ctx, request.Msg.GetWorkspaceName())
+	if err != nil {
+		return nil, err
+	}
+	ws, err := coll.Load(ctx)
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+
+	index := int(request.Msg.GetIndex())
+	if index < 0 || index >= len(ws.Sources) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("source index %d out of range [0,%d)", index, len(ws.Sources)))
+	}
+
+	remaining := slices.Delete(slices.Clone(ws.Sources), index, index+1)
+	services, err := resolveServicesFromSources(ctx, remaining)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable,
+			fmt.Errorf("failed to re-resolve services after removing source: %w", err))
+	}
+
+	if err := coll.PutDescriptorState(ctx, remaining, services); err != nil {
+		return nil, fmt.Errorf("failed to persist descriptor state: %w", err)
+	}
+
+	reloaded, err := coll.Load(ctx)
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	return connect.NewResponse(&grpcviewv1.RemoveDescriptorSourceResponse{Workspace: reloaded}), nil
+}
+
+// resolveServicesFromSources rebuilds the merged services list from a set of
+// descriptor sources, reflecting each reflection source (one network round-trip
+// each). Later-listed sources win on package/name collisions, matching the
+// incremental merge AddDescriptorSource performs. Descriptor-set sources don't
+// resolve yet (N2c) and are skipped; in practice none can be present because
+// AddDescriptorSource rejects that source type as Unimplemented.
+func resolveServicesFromSources(ctx context.Context, sources []*grpcviewv1.DescriptorSource) ([]*grpcviewv1.Service, error) {
+	var services []*grpcviewv1.Service
+	for _, src := range sources {
+		switch s := src.GetSource().(type) {
+		case *grpcviewv1.DescriptorSource_Reflection:
+			resolved, err := resolveReflectionServices(ctx, s.Reflection)
+			if err != nil {
+				return nil, err
+			}
+			for _, svc := range resolved {
+				services = mergeService(services, svc)
+			}
+		case *grpcviewv1.DescriptorSource_DescriptorSet:
+			continue
+		}
+	}
+	return services, nil
+}
+
+// resolveReflectionServices dials a reflection server, lists its services, and
+// converts each into a wire Service (package/name + methods with input schemas).
+// One network round-trip per call.
+func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) ([]*grpcviewv1.Service, error) {
+	conn, err := dial(server)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't connect to %s: %w", server, err)
+	}
+
+	client := grpcreflect.NewClientAuto(ctx, conn)
+	names, err := client.ListServices()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list services: %w", err)
+	}
+
+	services := make([]*grpcviewv1.Service, 0, len(names))
+	for _, serviceName := range names {
+		fileDesc, err := client.FileContainingSymbol(serviceName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get file for service [%s]: %w", serviceName, err)
+		}
+		serviceDesc := fileDesc.FindSymbol(serviceName).(*desc.ServiceDescriptor)
+		service, err := convertService(serviceDesc)
+		if err != nil {
+			return nil, err
+		}
+		services = append(services, service)
+	}
+	return services, nil
+}
+
+// convertService builds a wire Service (package/name + methods with input JSON
+// schemas) from a resolved service descriptor. This is the schema-conversion
+// step shared across descriptor source types — reflection today, descriptor-set
+// upload in N2c.
+func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, error) {
+	service := &grpcviewv1.Service{
+		Package: serviceDesc.GetFile().AsFileDescriptorProto().GetPackage(),
+		Name:    serviceDesc.GetName(),
+		Methods: make([]*grpcviewv1.Method, len(serviceDesc.GetMethods())),
+	}
+
+	for j, methodDesc := range serviceDesc.GetMethods() {
+		inputDesc := methodDesc.GetInputType()
+		schema, err := inspector.ConvertMessage(inputDesc.UnwrapMessage())
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert message (%s) to schema: %w", inputDesc.Unwrap().FullName(), err)
+		}
+
+		encodedSchema, err := json.Marshal(schema)
+		if err != nil {
+			return nil, err
+		}
+
+		decodedSchema := make(map[string]any)
+		if err := json.Unmarshal(encodedSchema, &decodedSchema); err != nil {
+			return nil, err
+		}
+
+		schemaStruct, err := structpb.NewStruct(decodedSchema)
+		if err != nil {
+			return nil, err
+		}
+
+		service.Methods[j] = &grpcviewv1.Method{
+			Name: methodDesc.GetName(),
+			Input: &grpcviewv1.Message{
+				Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
+				Name:    inputDesc.GetName(),
+				Schema:  schemaStruct,
+			},
+		}
+	}
+	return service, nil
+}
+
+// mergeService replaces the entry sharing svc's package/name identity or appends
+// svc when none exists, returning the updated slice.
+func mergeService(services []*grpcviewv1.Service, svc *grpcviewv1.Service) []*grpcviewv1.Service {
+	index := slices.IndexFunc(services, func(s *grpcviewv1.Service) bool {
+		return s.GetPackage() == svc.GetPackage() && s.GetName() == svc.GetName()
+	})
+	if index == -1 {
+		return append(services, svc)
+	}
+	services[index] = svc
+	return services
 }
 
 func appendSourceUnique(sources []*grpcviewv1.DescriptorSource, src *grpcviewv1.DescriptorSource) []*grpcviewv1.DescriptorSource {

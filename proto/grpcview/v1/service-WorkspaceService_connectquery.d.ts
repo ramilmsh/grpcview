@@ -11,6 +11,13 @@ import { WorkspaceService } from "./service_pb";
  */
 export const addDescriptorSource: typeof WorkspaceService["method"]["addDescriptorSource"];
 /**
+ * RemoveDescriptorSource drops the source at the given index and re-resolves
+ * the workspace's services from the sources that remain.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
+ */
+export const removeDescriptorSource: typeof WorkspaceService["method"]["removeDescriptorSource"];
+/**
  * Get returns the workspace snapshot
  *
  * @generated from rpc grpcview.v1.WorkspaceService.Get
