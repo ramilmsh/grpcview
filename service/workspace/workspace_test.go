@@ -8,10 +8,13 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/jhump/protoreflect/desc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/store"
@@ -56,6 +59,33 @@ func reflectionAddReq(port int) *grpcviewv1.AddDescriptorSourceRequest {
 
 func removeReq(index int32) *grpcviewv1.RemoveDescriptorSourceRequest {
 	return &grpcviewv1.RemoveDescriptorSourceRequest{WorkspaceName: testWorkspace, Index: index}
+}
+
+func descriptorSetAddReq(set []byte) *grpcviewv1.AddDescriptorSourceRequest {
+	return &grpcviewv1.AddDescriptorSourceRequest{
+		WorkspaceName: testWorkspace,
+		Source:        &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: set},
+	}
+}
+
+// fileDescriptorSet marshals a self-contained FileDescriptorSet (the named
+// registered proto file plus its transitive dependencies) to wire bytes,
+// standing in for what `protoc --include_imports` emits and the UI uploads.
+func fileDescriptorSet(t *testing.T, path string) []byte {
+	t.Helper()
+	fd, err := protoregistry.GlobalFiles.FindFileByPath(path)
+	if err != nil {
+		t.Fatalf("find file descriptor %s: %v", path, err)
+	}
+	wrapped, err := desc.WrapFile(fd)
+	if err != nil {
+		t.Fatalf("wrap file descriptor %s: %v", path, err)
+	}
+	raw, err := proto.Marshal(desc.ToFileDescriptorSet(wrapped))
+	if err != nil {
+		t.Fatalf("marshal descriptor set: %v", err)
+	}
+	return raw
 }
 
 func ensureWorkspace(t *testing.T, w Workspace, ctx context.Context) {
@@ -140,6 +170,100 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	if got := final.Msg.GetWorkspace(); len(got.GetSources()) != 0 || len(got.GetServices()) != 0 {
 		t.Fatalf("want empty sources+services, got %d sources / %d services",
 			len(got.GetSources()), len(got.GetServices()))
+	}
+}
+
+// TestAddDescriptorSetSource uploads a descriptor set, asserting its services
+// load and that both the descriptor-set bytes (round-tripped through the store's
+// typed FileDescriptorSet) and the resolved services survive a reload.
+func TestAddDescriptorSetSource(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	set := fileDescriptorSet(t, "grpc/health/v1/health.proto")
+	resp, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(set)))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource (descriptor set): %v", err)
+	}
+	ws := resp.Msg.GetWorkspace()
+	if len(ws.GetSources()) != 1 {
+		t.Fatalf("want 1 source, got %d", len(ws.GetSources()))
+	}
+	if ws.GetSources()[0].GetDescriptorSet() == nil {
+		t.Fatalf("stored source is not a descriptor set: %+v", ws.GetSources()[0])
+	}
+	if !hasService(ws.GetServices(), "Health") {
+		t.Fatalf("Health service missing after adding descriptor-set source")
+	}
+
+	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get after add: %v", err)
+	}
+	got := reloaded.Msg.GetWorkspace()
+	if len(got.GetSources()) != 1 || got.GetSources()[0].GetDescriptorSet() == nil {
+		t.Fatalf("descriptor-set source not persisted: %+v", got.GetSources())
+	}
+	if !hasService(got.GetServices(), "Health") {
+		t.Fatalf("Health service missing after reload")
+	}
+}
+
+// TestRemoveReResolvesDescriptorSetSource combines a reflection source with a
+// descriptor-set source, then removes the reflection source. Re-resolution must
+// walk the remaining descriptor-set source (the N2c branch of
+// resolveServicesFromSources) so its services survive while the removed
+// reflection source's services disappear.
+func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	// Source 0: reflection-only server (exposes ServerReflection, not Health).
+	// Source 1: a descriptor set that defines grpc.health.v1.Health.
+	port := startReflectionServer(t, false)
+	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(reflectionAddReq(port))); err != nil {
+		t.Fatalf("AddDescriptorSource (reflection): %v", err)
+	}
+	set := fileDescriptorSet(t, "grpc/health/v1/health.proto")
+	addResp, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(set)))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource (descriptor set): %v", err)
+	}
+	ws := addResp.Msg.GetWorkspace()
+	if len(ws.GetSources()) != 2 {
+		t.Fatalf("want 2 sources, got %d", len(ws.GetSources()))
+	}
+	if !hasService(ws.GetServices(), "Health") || !hasService(ws.GetServices(), "ServerReflection") {
+		t.Fatalf("want both Health (descriptor set) and ServerReflection (reflection): %v", ws.GetServices())
+	}
+
+	// Remove the reflection source (index 0). The remaining descriptor-set
+	// source must re-resolve, so Health survives while ServerReflection is gone.
+	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(0)))
+	if err != nil {
+		t.Fatalf("RemoveDescriptorSource: %v", err)
+	}
+	ws = remResp.Msg.GetWorkspace()
+	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetDescriptorSet() == nil {
+		t.Fatalf("want 1 descriptor-set source after remove, got %+v", ws.GetSources())
+	}
+	if !hasService(ws.GetServices(), "Health") {
+		t.Fatalf("Health should survive: descriptor-set source must re-resolve on remove")
+	}
+	if hasService(ws.GetServices(), "ServerReflection") {
+		t.Fatalf("ServerReflection should be gone after removing the reflection source")
+	}
+
+	// The re-resolved state must persist.
+	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get after remove: %v", err)
+	}
+	if got := final.Msg.GetWorkspace(); len(got.GetSources()) != 1 || !hasService(got.GetServices(), "Health") {
+		t.Fatalf("re-resolved descriptor-set state not persisted: %d sources, Health present=%v",
+			len(got.GetSources()), hasService(got.GetServices(), "Health"))
 	}
 }
 

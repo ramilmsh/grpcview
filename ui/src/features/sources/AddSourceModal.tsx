@@ -1,25 +1,31 @@
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Field } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-// AddSourceModal adds a server-reflection source (host:port + optional TLS) —
-// the only source type the backend implements. Descriptor-set upload returns
-// Unimplemented server-side, so it is shown disabled (plan §1.6/§11).
+// AddSourceModal adds a definition source: either a server-reflection target
+// (host:port + optional TLS) or an uploaded protobuf FileDescriptorSet. Both are
+// wired to the backend (the reflection and descriptor-set branches of
+// AddDescriptorSource). A descriptor set is what `protoc --include_imports
+// --descriptor_set_out` emits; uploading one reads the file to bytes and sends
+// them as the descriptorSet oneof case.
 export function AddSourceModal({
   open,
   onClose,
   onAddReflection,
+  onAddDescriptorSet,
   pending,
 }: {
   open: boolean;
   onClose: () => void;
   onAddReflection: (host: string, port: number, tls: boolean) => void;
+  onAddDescriptorSet: (bytes: Uint8Array) => void;
   pending?: boolean;
 }) {
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("10000");
   const [tls, setTls] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const submit = () => {
     const p = parseInt(port, 10);
@@ -28,6 +34,13 @@ export function AddSourceModal({
 
   const onEnter = (e: KeyboardEvent) => {
     if (e.key === "Enter") submit();
+  };
+
+  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so re-selecting the same file fires onChange
+    if (!file) return;
+    onAddDescriptorSet(new Uint8Array(await file.arrayBuffer()));
   };
 
   return (
@@ -66,15 +79,24 @@ export function AddSourceModal({
         Use TLS
       </label>
 
-      {/* descriptor-set upload — not implemented server-side */}
-      <div
-        style={{ opacity: 0.5 }}
-        title="Descriptor-set upload is not implemented server-side yet (plan §11)"
-      >
-        <Field label="Descriptor set">
-          <Input disabled placeholder="Not available in Phase 1" />
-        </Field>
-      </div>
+      {/* descriptor-set upload — an alternative to reflection */}
+      <div style={{ borderTop: "1px solid var(--line)" }} />
+      <Field label="Descriptor set">
+        <input
+          ref={fileRef}
+          type="file"
+          onChange={onFile}
+          style={{ display: "none" }}
+        />
+        <div className="flex items-center gap-[8px]">
+          <Button onClick={() => fileRef.current?.click()} disabled={pending}>
+            Upload descriptor set…
+          </Button>
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            protoc --include_imports --descriptor_set_out
+          </span>
+        </div>
+      </Field>
 
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>

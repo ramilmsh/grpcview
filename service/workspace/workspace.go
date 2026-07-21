@@ -15,6 +15,7 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/grpcreflect"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"codeberg.org/ramilmsh/grpcview/inspector"
@@ -112,39 +113,53 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 		return nil, toConnectError(err)
 	}
 
+	// Resolve just the newly added source and merge its services into the flat
+	// list; existing sources are not re-resolved on add (remove re-resolves the
+	// whole list — see RemoveDescriptorSource). Both branches share the merge +
+	// persist + reload tail in addResolvedSource.
 	switch source := request.Msg.GetSource().(type) {
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
-		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("unimplemented source type: <%T> %+v", source, source))
+		resolved, err := resolveDescriptorSetServices(source.DescriptorSet)
+		if err != nil {
+			return nil, err
+		}
+		src := &grpcviewv1.DescriptorSource{
+			Source: &grpcviewv1.DescriptorSource_DescriptorSet{DescriptorSet: source.DescriptorSet},
+		}
+		return w.addResolvedSource(ctx, coll, ws, src, resolved)
 	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
-		// Reflect the newly added source and merge its services into the
-		// workspace's flat list (existing sources are not re-reflected on add;
-		// remove re-resolves the whole list — see RemoveDescriptorSource).
 		resolved, err := resolveReflectionServices(ctx, source.Reflection)
 		if err != nil {
 			return nil, err
 		}
-		for _, svc := range resolved {
-			ws.Services = mergeService(ws.Services, svc)
-		}
-
-		// Persist the source config (committed) and the resolved schema cache
-		// (gitignored), then reload so the response reflects on-disk state.
 		src := &grpcviewv1.DescriptorSource{
 			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection},
 		}
-		ws.Sources = appendSourceUnique(ws.Sources, src)
-		if err := coll.PutDescriptorState(ctx, ws.Sources, ws.Services); err != nil {
-			return nil, fmt.Errorf("failed to persist descriptor state: %w", err)
-		}
-
-		reloaded, err := coll.Load(ctx)
-		if err != nil {
-			return nil, toConnectError(err)
-		}
-		return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Workspace: reloaded}), nil
+		return w.addResolvedSource(ctx, coll, ws, src, resolved)
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}
+}
+
+// addResolvedSource records src and merges its freshly resolved services into
+// the workspace (later services win on a package/name collision, matching
+// resolveServicesFromSources), persists the source config (committed) alongside
+// the resolved schema cache (gitignored), then reloads so the response reflects
+// on-disk state. Shared by both AddDescriptorSource branches.
+func (w Workspace) addResolvedSource(ctx context.Context, coll *store.Collection, ws *grpcviewv1.Workspace, src *grpcviewv1.DescriptorSource, resolved []*grpcviewv1.Service) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
+	for _, svc := range resolved {
+		ws.Services = mergeService(ws.Services, svc)
+	}
+	ws.Sources = appendSourceUnique(ws.Sources, src)
+	if err := coll.PutDescriptorState(ctx, ws.Sources, ws.Services); err != nil {
+		return nil, fmt.Errorf("failed to persist descriptor state: %w", err)
+	}
+
+	reloaded, err := coll.Load(ctx)
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Workspace: reloaded}), nil
 }
 
 // RemoveDescriptorSource drops the source at the given index (its position in
@@ -189,24 +204,25 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 
 // resolveServicesFromSources rebuilds the merged services list from a set of
 // descriptor sources, reflecting each reflection source (one network round-trip
-// each). Later-listed sources win on package/name collisions, matching the
-// incremental merge AddDescriptorSource performs. Descriptor-set sources don't
-// resolve yet (N2c) and are skipped; in practice none can be present because
-// AddDescriptorSource rejects that source type as Unimplemented.
+// each) and parsing each uploaded descriptor set. Later-listed sources win on
+// package/name collisions, matching the incremental merge AddDescriptorSource
+// performs.
 func resolveServicesFromSources(ctx context.Context, sources []*grpcviewv1.DescriptorSource) ([]*grpcviewv1.Service, error) {
 	var services []*grpcviewv1.Service
 	for _, src := range sources {
+		var resolved []*grpcviewv1.Service
+		var err error
 		switch s := src.GetSource().(type) {
 		case *grpcviewv1.DescriptorSource_Reflection:
-			resolved, err := resolveReflectionServices(ctx, s.Reflection)
-			if err != nil {
-				return nil, err
-			}
-			for _, svc := range resolved {
-				services = mergeService(services, svc)
-			}
+			resolved, err = resolveReflectionServices(ctx, s.Reflection)
 		case *grpcviewv1.DescriptorSource_DescriptorSet:
-			continue
+			resolved, err = resolveDescriptorSetServices(s.DescriptorSet)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, svc := range resolved {
+			services = mergeService(services, svc)
 		}
 	}
 	return services, nil
@@ -243,10 +259,45 @@ func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) (
 	return services, nil
 }
 
+// resolveDescriptorSetServices parses an uploaded FileDescriptorSet (raw
+// protobuf wire bytes) and converts every service it defines into a wire Service
+// via the shared convertService path. The set must be self-contained — carrying
+// the transitive dependencies of its files, as `protoc --include_imports` and
+// the UI upload produce — or linking fails. Services are walked in the set's
+// file order and merged so a later file wins on a package/name collision,
+// mirroring resolveServicesFromSources' cross-source rule. Parse and link
+// failures surface as InvalidArgument because the bytes are caller-supplied.
+func resolveDescriptorSetServices(raw []byte) ([]*grpcviewv1.Service, error) {
+	fds := &descriptorpb.FileDescriptorSet{}
+	if err := proto.Unmarshal(raw, fds); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse descriptor set: %w", err))
+	}
+	files, err := desc.CreateFileDescriptorsFromSet(fds)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("link descriptor set: %w", err))
+	}
+
+	var services []*grpcviewv1.Service
+	for _, fdp := range fds.GetFile() {
+		file := files[fdp.GetName()]
+		if file == nil {
+			continue
+		}
+		for _, serviceDesc := range file.GetServices() {
+			service, err := convertService(serviceDesc)
+			if err != nil {
+				return nil, err
+			}
+			services = mergeService(services, service)
+		}
+	}
+	return services, nil
+}
+
 // convertService builds a wire Service (package/name + methods with input JSON
 // schemas) from a resolved service descriptor. This is the schema-conversion
-// step shared across descriptor source types — reflection today, descriptor-set
-// upload in N2c.
+// step shared across descriptor source types — reflection and descriptor-set
+// upload both funnel through here.
 func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, error) {
 	service := &grpcviewv1.Service{
 		Package: serviceDesc.GetFile().AsFileDescriptorProto().GetPackage(),

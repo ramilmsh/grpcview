@@ -35,6 +35,16 @@ export function SourcesView() {
     );
   };
 
+  const onAddDescriptorSet = (bytes: Uint8Array) => {
+    addDescriptorSource.mutate(
+      {
+        workspaceName: WORKSPACE_NAME,
+        source: { case: "descriptorSet", value: bytes },
+      },
+      { onSuccess: () => setModalOpen(false) }
+    );
+  };
+
   const doRemove = () => {
     if (confirm === null) return;
     removeDescriptorSource.mutate(
@@ -59,7 +69,7 @@ export function SourcesView() {
         <div>
           <h4 style={{ margin: 0 }}>Definition sources</h4>
           <span className="text-muted" style={{ fontSize: 12 }}>
-            Reflection is the only source type wired in Phase 1.
+            Add a server-reflection target or upload a descriptor set.
           </span>
         </div>
         <Button
@@ -94,8 +104,8 @@ export function SourcesView() {
 
         {sources.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 13, padding: "16px 0", lineHeight: 1.6 }}>
-            No definition sources yet. Add a server-reflection source to load its
-            services and schemas.
+            No definition sources yet. Add a server-reflection target or upload a
+            descriptor set to load its services and schemas.
           </div>
         ) : (
           <div className="flex flex-col" style={{ gap: 8, maxWidth: 640 }}>
@@ -151,6 +161,7 @@ export function SourcesView() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onAddReflection={onAdd}
+        onAddDescriptorSet={onAddDescriptorSet}
         pending={addDescriptorSource.isPending}
       />
 
