@@ -101,6 +101,16 @@ export function useInvoke() {
   return useMutation(invoke);
 }
 
+// useRefreshWorkspace invalidates the Get query so the next read re-fetches the
+// workspace snapshot. Invoke persists run history server-side but doesn't return
+// the fresh Workspace, so the History timeline (which rides along on Get) is
+// refreshed by calling this after a run completes.
+export function useRefreshWorkspace() {
+  const qc = useQueryClient();
+  const key = useWorkspaceKey();
+  return useMemo(() => () => void qc.invalidateQueries({ queryKey: key }), [qc, key]);
+}
+
 // useStreamingClient returns the raw connect client for the streaming invoke.
 // connect-query has no streaming hook, so the server-streaming InvokeStreaming
 // RPC is called directly on this client (it returns an AsyncIterable of frames);

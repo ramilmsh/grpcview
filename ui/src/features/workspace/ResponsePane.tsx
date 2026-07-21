@@ -1,5 +1,13 @@
 import { useMemo } from "react";
-import { Copy, DownloadSimple, Stack, Stop } from "@/components/ui/icons";
+import type { History } from "@grpcview/v1/workspace_pb";
+import {
+  ArrowClockwise,
+  ClockCounterClockwise,
+  Copy,
+  DownloadSimple,
+  Stack,
+  Stop,
+} from "@/components/ui/icons";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Centered } from "@/components/ui/Centered";
 import { Subtab } from "@/components/ui/Subtab";
@@ -25,14 +33,23 @@ export function ResponsePane({
   invoke,
   kind = "u",
   onStop,
+  history = [],
+  onSelectHistory,
+  onRerunHistory,
 }: {
   invoke?: InvokeState;
   kind?: MethodKind;
   onStop?: () => void;
+  // Persisted run history for the active request (rides along on the Get
+  // snapshot). Newest-last from the store; the Timeline renders it newest-first.
+  history?: History[];
+  onSelectHistory?: (entry: History) => void;
+  onRerunHistory?: (entry: History) => void;
 }) {
   const subtab = useUIStore((s) => s.responseSubtab);
   const setSubtab = useUIStore((s) => s.setResponseSubtab);
 
+  const hasHistory = history.length > 0;
   const response = invoke?.response; // terminal result (undefined while streaming)
   // A stream having started is the discriminator: `messages` is set (even empty)
   // for the streaming path and undefined for the unary path.
@@ -80,15 +97,20 @@ export function ResponsePane({
     );
   }
 
-  // Nothing invoked yet. Streaming turns to its live view the moment a stream
-  // starts (messages set), so this only shows pre-invoke; the hint reflects kind.
-  if (!streamMode && !response) {
+  // Nothing invoked this session AND no persisted history: the only truly-empty
+  // case. When history exists (e.g. right after a reload) we fall through to the
+  // pane so the Timeline subtab is reachable without invoking first.
+  if (!streamMode && !response && !hasHistory) {
     return (
       <Centered>
         {kind === "u" ? "No response yet. Click Invoke." : "No stream yet. Click Invoke."}
       </Centered>
     );
   }
+
+  // A live result/stream drives the status bar + Messages/Metadata tabs; without
+  // one (history-only browsing) those are hidden and the Timeline leads.
+  const hasResult = !!response || streamMode;
 
   // code is defined whenever a terminal result exists (always so for unary here);
   // undefined means a stream is still open before its result frame → "pending".
@@ -111,7 +133,8 @@ export function ResponsePane({
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-      {/* status bar */}
+      {/* status bar — hidden when browsing history with no live result */}
+      {hasResult && (
       <div
         className="flex items-center gap-[10px]"
         style={{
@@ -196,6 +219,7 @@ export function ResponsePane({
           </IconButton>
         </div>
       </div>
+      )}
 
       {/* gRPC status message, if the call failed */}
       {!ok && response?.status?.message && (
@@ -229,21 +253,36 @@ export function ResponsePane({
             </Tag>
           )}
         </Subtab>
+        <Subtab active={subtab === "history"} onClick={() => setSubtab("history")}>
+          <span className="flex items-center gap-[5px]">
+            <ClockCounterClockwise size={13} />
+            Timeline
+          </span>
+          {hasHistory && (
+            <Tag variant="neutral" className="ml-[2px]">
+              {history.length}
+            </Tag>
+          )}
+        </Subtab>
       </div>
 
       {/* content */}
-      {subtab === "messages" ? (
+      {subtab === "history" ? (
+        <HistoryTimeline
+          history={history}
+          onSelect={onSelectHistory}
+          onRerun={onRerunHistory}
+        />
+      ) : subtab === "messages" ? (
         streamMode ? (
           <StreamMessagesView msgs={streamMsgs} streaming={streaming} />
-        ) : (
+        ) : response && ok ? (
           <div style={{ flex: 1, minHeight: 0 }}>
-            {ok ? (
-              <JsonViewer value={pretty} />
-            ) : (
-              <div className="text-muted" style={{ fontSize: 13, padding: 16 }}>
-                No response body.
-              </div>
-            )}
+            <JsonViewer value={pretty} />
+          </div>
+        ) : (
+          <div className="text-muted" style={{ fontSize: 13, padding: 16 }}>
+            {response ? "No response body." : "No response yet. Click Invoke."}
           </div>
         )
       ) : (
@@ -316,6 +355,103 @@ function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; stream
           </div>
         )
       )}
+    </div>
+  );
+}
+
+// HistoryTimeline lists past runs newest-first: a status chip, latency, the
+// method invoked, and the run's timestamp. Clicking a row loads that run back
+// into the editor (draft + metadata); the re-run button loads it AND fires it
+// again. The store appends newest-last, so the list is reversed here.
+function HistoryTimeline({
+  history,
+  onSelect,
+  onRerun,
+}: {
+  history: History[];
+  onSelect?: (entry: History) => void;
+  onRerun?: (entry: History) => void;
+}) {
+  if (history.length === 0) {
+    return (
+      <div className="text-muted" style={{ fontSize: 13, padding: 16 }}>
+        No runs yet. Invoke this request to build its timeline.
+      </div>
+    );
+  }
+  const rows = history.slice().reverse();
+  return (
+    <div
+      className="flex flex-col"
+      style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 8, gap: 6 }}
+    >
+      {rows.map((entry, i) => {
+        const res = entry.response;
+        const code = res?.status?.code ?? 0;
+        const ok = code === 0;
+        return (
+          <div
+            key={i}
+            className="flex items-center gap-[10px]"
+            onClick={() => onSelect?.(entry)}
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              background: "var(--panel-2)",
+              padding: "8px 10px",
+              cursor: onSelect ? "pointer" : "default",
+            }}
+            title="Load this run into the editor"
+          >
+            <span
+              className="tag font-mono"
+              style={{
+                fontWeight: 600,
+                flex: "none",
+                background: ok ? "var(--ok-bg)" : "var(--err-bg)",
+                color: ok ? "var(--ok)" : "var(--err)",
+              }}
+            >
+              {code} {codeName(code)}
+            </span>
+            {res?.latency && (
+              <span
+                className="font-mono"
+                style={{ fontSize: 12, color: "var(--color-neutral-500)", flex: "none" }}
+              >
+                {latencyLabel(res.latency)}
+              </span>
+            )}
+            <span
+              className="font-mono text-muted"
+              style={{
+                fontSize: 12,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {entry.request?.method}
+            </span>
+            <span
+              className="ml-auto font-mono"
+              style={{ fontSize: 11, color: "var(--color-neutral-500)", flex: "none" }}
+            >
+              {res?.timestamp ? timestampLabel(res.timestamp) : ""}
+            </span>
+            <IconButton
+              title="Re-run this request"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRerun?.(entry);
+              }}
+            >
+              <ArrowClockwise />
+            </IconButton>
+          </div>
+        );
+      })}
     </div>
   );
 }

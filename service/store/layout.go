@@ -15,11 +15,13 @@ const (
 	collectionFileName = "grpcview.json" // root manifest + root folder ordering + sources
 	folderFileName     = "folder.json"   // per-folder config (meta + child ordering)
 	requestFileName    = "request.json"  // per-request config (meta + service/method/body/metadata)
+	historyFileName    = "history.json"  // per-request run history (gitignored; under stateDir)
 	gitignoreFileName  = ".gitignore"
 
 	treeDir               = "tree"      // committed request tree
 	stateDir              = ".grpcview" // gitignored local state
 	cacheSubdir           = "cache"     // resolved-schema cache under stateDir
+	historyDir            = "history"   // run history under stateDir, keyed by request slug path
 	servicesCacheFileName = "services.json"
 )
 

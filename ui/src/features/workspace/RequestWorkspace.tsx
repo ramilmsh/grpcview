@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { JsonObject } from "@bufbuild/protobuf";
 import { ConnectError, Code } from "@connectrpc/connect";
+import type { History } from "@grpcview/v1/workspace_pb";
 import {
   useWorkspace,
   useRootItems,
   useWorkspaceMutations,
   useInvoke,
   useStreamingClient,
+  useRefreshWorkspace,
   WORKSPACE_NAME,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
@@ -37,6 +39,7 @@ export function RequestWorkspace() {
   const { updateRequest } = useWorkspaceMutations();
   const invokeMut = useInvoke();
   const streamClient = useStreamingClient();
+  const refreshWorkspace = useRefreshWorkspace();
 
   const activeKey = useUIStore((s) => s.activeKey);
   const draft = useUIStore((s) => (activeKey ? s.drafts[activeKey] : undefined));
@@ -149,8 +152,13 @@ export function RequestWorkspace() {
     );
   };
 
-  const onInvoke = () => {
-    // Unary — existing mutation path, unchanged.
+  // runInvoke fires the call with explicit body/metadata/messages so a re-run
+  // from history can pass historical values directly (the draft state update is
+  // async, so the current-draft closure would be stale). onInvoke passes the live
+  // draft-derived values. Each completed run refreshes the workspace so the
+  // just-persisted entry appears on the Timeline (history rides along on Get).
+  const runInvoke = (b: string, rows: MetadataRow[], msgs: string[]) => {
+    // Unary — mutation path.
     if (kind === "u") {
       setInvoke(key, { loading: true });
       invokeMut.mutate(
@@ -160,11 +168,15 @@ export function RequestWorkspace() {
           itemName,
           service: request.service,
           method: request.method,
-          body,
-          metadata: rowsToObject(metadataRows),
+          body: b,
+          metadata: rowsToObject(rows),
         },
         {
-          onSuccess: (res) => setInvoke(key, { response: res.response }),
+          // The server persists history before returning, so refresh on success.
+          onSuccess: (res) => {
+            setInvoke(key, { response: res.response });
+            refreshWorkspace();
+          },
           onError: (e) => setInvoke(key, { error: e instanceof Error ? e.message : String(e) }),
         }
       );
@@ -176,7 +188,7 @@ export function RequestWorkspace() {
     // list for client-streaming / bidi. `key` and the request fields are captured
     // here so a mid-stream tab switch keeps writing into the request the stream
     // was started for (the store actions patch by this captured key).
-    const messagesToSend = kind === "ss" ? [body] : messages;
+    const messagesToSend = kind === "ss" ? [b] : msgs;
     const req = {
       workspaceName: WORKSPACE_NAME,
       path,
@@ -184,7 +196,7 @@ export function RequestWorkspace() {
       service: request.service,
       method: request.method,
       messages: messagesToSend,
-      metadata: rowsToObject(metadataRows),
+      metadata: rowsToObject(rows),
     };
 
     aborters.current[key]?.abort(); // supersede any prior stream for this key
@@ -213,12 +225,38 @@ export function RequestWorkspace() {
       } finally {
         // Clear only if still ours — a superseding invoke may have replaced it.
         if (aborters.current[key] === ac) delete aborters.current[key];
+        // The stream has closed, so the server handler returned and its history
+        // entry is persisted — refresh so the Timeline picks it up.
+        refreshWorkspace();
       }
     })();
   };
 
+  const onInvoke = () => runInvoke(body, metadataRows, messages);
+
   // Stop the active request's in-flight stream (no-op if none).
   const onStop = () => aborters.current[key]?.abort();
+
+  // historyDraft derives the editor draft a past run should repopulate: its
+  // request body (bytes -> text) and metadata rows. Selecting a run loads it;
+  // re-running loads it AND fires the call with those exact values.
+  const historyDraft = (entry: History) => {
+    const b =
+      entry.request && entry.request.body.length > 0
+        ? new TextDecoder().decode(entry.request.body)
+        : "{}";
+    const rows = objectToRows(entry.request?.metadata);
+    return { b, rows };
+  };
+  const onSelectHistory = (entry: History) => {
+    const { b, rows } = historyDraft(entry);
+    setDraft(key, { body: b, metadataRows: rows, messages: [b] });
+  };
+  const onRerunHistory = (entry: History) => {
+    const { b, rows } = historyDraft(entry);
+    setDraft(key, { body: b, metadataRows: rows, messages: [b] });
+    runInvoke(b, rows, [b]);
+  };
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -246,7 +284,14 @@ export function RequestWorkspace() {
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}
         />
-        <ResponsePane invoke={invokeState} kind={kind} onStop={onStop} />
+        <ResponsePane
+          invoke={invokeState}
+          kind={kind}
+          onStop={onStop}
+          history={request.history}
+          onSelectHistory={onSelectHistory}
+          onRerunHistory={onRerunHistory}
+        />
       </div>
     </div>
   );

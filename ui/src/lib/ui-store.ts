@@ -47,7 +47,7 @@ export interface InvokeState {
 }
 
 export type RequestSubtab = "message" | "metadata";
-export type ResponseSubtab = "messages" | "metadata";
+export type ResponseSubtab = "messages" | "metadata" | "history";
 
 interface UIState {
   activeView: ActiveView;

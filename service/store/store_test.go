@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -441,6 +442,95 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if err != nil || string(gi) == "" {
 		t.Fatalf(".gitignore missing: %v", err)
 	}
+}
+
+// TestAppendHistoryCapAndReload appends more runs than the cap allows and asserts
+// the newest are kept (oldest dropped) in order, that history lands under the
+// gitignored .grpcview/history/ sidecar (never request.json), and that it rides
+// back along Request.history on a fresh reload.
+func TestAppendHistoryCapAndReload(t *testing.T) {
+	base := t.TempDir()
+	s := New(base, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+	coll, err := s.Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		t.Fatalf("EnsureCreated: %v", err)
+	}
+	if err := coll.CreateRequest(ctx, nil, "Get User", "acme.v1.UserService", "GetUser"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	histEntry := func(i int) *grpcviewv1.History {
+		return &grpcviewv1.History{
+			Request: &grpcviewv1.History_Request{Service: "acme.v1.UserService", Method: "GetUser", Body: []byte(fmt.Sprintf(`{"n":%d}`, i))},
+			Response: &grpcviewv1.History_Response{
+				Status:   &grpcviewv1.Status{Code: int32(i % 3)}, // mix OK and non-OK codes
+				Response: []byte(fmt.Sprintf(`{"r":%d}`, i)),
+			},
+		}
+	}
+
+	// Append 6 runs with a cap of 3: the last three (3,4,5) survive, in order.
+	const limit = 3
+	for i := 0; i < 6; i++ {
+		if err := coll.AppendHistory(ctx, nil, "Get User", histEntry(i), limit); err != nil {
+			t.Fatalf("AppendHistory %d: %v", i, err)
+		}
+	}
+
+	// History is gitignored local state: the sidecar exists, and request.json is
+	// untouched by run history.
+	histFile := filepath.Join(base, "test", stateDir, historyDir, "get-user", historyFileName)
+	if _, err := os.Stat(histFile); err != nil {
+		t.Fatalf("history sidecar missing at %s: %v", histFile, err)
+	}
+	// request.json is intact and carries no run history (the on-disk Request schema
+	// has no history field — the sidecar is the only place run history lives).
+	rf := &grpcviewstorev1.Request{}
+	mustRead(t, filepath.Join(base, "test", treeDir, "get-user", requestFileName), rf)
+	if rf.GetMeta().GetName() != "Get User" {
+		t.Errorf("request.json meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
+	}
+
+	assertHistory := func(t *testing.T, hist []*grpcviewv1.History) {
+		t.Helper()
+		if len(hist) != limit {
+			t.Fatalf("history len = %d, want %d (capped)", len(hist), limit)
+		}
+		for j, want := range []int{3, 4, 5} {
+			gotBody := string(hist[j].GetRequest().GetBody())
+			if wantBody := fmt.Sprintf(`{"n":%d}`, want); gotBody != wantBody {
+				t.Errorf("entry %d body = %s, want %s (order/drop-oldest)", j, gotBody, wantBody)
+			}
+			if got := hist[j].GetResponse().GetStatus().GetCode(); got != int32(want%3) {
+				t.Errorf("entry %d status code = %d, want %d", j, got, want%3)
+			}
+		}
+	}
+
+	// Rides along on this collection's Load.
+	assertHistory(t, historyOf(t, coll, ctx, "Get User"))
+
+	// And survives a fresh reload from a brand-new Store over the same directory
+	// (no in-memory caches shared).
+	reloaded, err := New(base, slog.New(slog.NewTextHandler(io.Discard, nil))).Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	assertHistory(t, historyOf(t, reloaded, ctx, "Get User"))
+}
+
+// historyOf loads the collection and returns the named root request's history.
+func historyOf(t *testing.T, coll *Collection, ctx context.Context, name string) []*grpcviewv1.History {
+	t.Helper()
+	req := childByName(rootItems(t, coll, ctx), name)
+	if req == nil || req.GetRequest() == nil {
+		t.Fatalf("request %q not found", name)
+	}
+	return req.GetRequest().GetHistory()
 }
 
 func TestLoadMissingCollection(t *testing.T) {

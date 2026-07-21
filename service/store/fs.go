@@ -214,6 +214,52 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	return writeMessage(p, dr)
 }
 
+// AppendHistory records one completed invoke in the run history of the request
+// named name inside parent, retaining the newest max entries (max <= 0 keeps all)
+// and logging when older entries are dropped. Run history is gitignored local
+// state (storage.md §4): it lives under .grpcview/history/ keyed by the request's
+// stable slug path — so it survives a rename and never hits git — and is loaded
+// back into Request.history on Load. A missing target request returns
+// ErrItemNotFound; Invoke persists history best-effort and does not fail on it.
+func (c *Collection) AppendHistory(_ context.Context, parent []string, name string, entry *grpcviewv1.History, max int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return err
+	}
+	parentDir, err := c.resolveFolder(parent)
+	if err != nil {
+		return err
+	}
+	present, err := c.readChildren(parentDir)
+	if err != nil {
+		return err
+	}
+	ch, ok := findByName(present, name)
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrItemNotFound, name)
+	}
+	if ch.kind != kindRequest {
+		return fmt.Errorf("%w: %q", ErrNotARequest, name)
+	}
+	histPath, err := c.historyFilePath(filepath.Join(parentDir, ch.slug))
+	if err != nil {
+		return err
+	}
+
+	entries, err := readHistoryFile(histPath)
+	if err != nil {
+		return err
+	}
+	entries = append(entries, entry)
+	if max > 0 && len(entries) > max {
+		dropped := len(entries) - max
+		c.logger.Info("capping request history", "request", name, "dropped", dropped, "cap", max)
+		entries = entries[dropped:]
+	}
+	return writeHistoryFile(histPath, entries)
+}
+
 // Delete removes the item named name from parent. It is idempotent: deleting a
 // missing item is a no-op (matching the previous blob behavior).
 func (c *Collection) Delete(_ context.Context, parent []string, name string) error {
@@ -606,9 +652,11 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: children}},
 		}, nil
 	case kindRequest:
+		req := diskToWireRequest(ch.name, ch.request)
+		req.History = c.readHistory(dir) // gitignored sidecar; nil when absent
 		return &grpcviewv1.Item{
 			Name:    ch.name,
-			Content: &grpcviewv1.Item_Request{Request: diskToWireRequest(ch.name, ch.request)},
+			Content: &grpcviewv1.Item_Request{Request: req},
 		}, nil
 	}
 	return nil, fmt.Errorf("unknown item kind")
@@ -734,6 +782,73 @@ func (c *Collection) readServicesCache() ([]*grpcviewv1.Service, error) {
 		return nil, fmt.Errorf("unmarshal services cache: %w", err)
 	}
 	return wrapper.GetServices(), nil
+}
+
+// historyFilePath returns the run-history file for the request whose on-disk
+// directory is itemDir. History is keyed by the request's tree-relative slug path
+// under .grpcview/history/ (e.g. tree/users/get-user -> history/users/get-user/
+// history.json), so it stays attached across a rename (the slug is stable) and
+// out of the committed tree.
+func (c *Collection) historyFilePath(itemDir string) (string, error) {
+	rel, err := filepath.Rel(c.treeRoot(), itemDir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(c.historyRoot(), rel, historyFileName), nil
+}
+
+// readHistory returns the persisted run history for the request at itemDir, or
+// nil if there is none. A path or decode error is logged and swallowed (returning
+// nil) so a corrupt local history file can never block loading the workspace —
+// history is regenerable local state, not committed data.
+func (c *Collection) readHistory(itemDir string) []*grpcviewv1.History {
+	histPath, err := c.historyFilePath(itemDir)
+	if err != nil {
+		c.logger.Warn("resolve history path", "dir", itemDir, "err", err)
+		return nil
+	}
+	entries, err := readHistoryFile(histPath)
+	if err != nil {
+		c.logger.Warn("read request history", "path", histPath, "err", err)
+		return nil
+	}
+	return entries
+}
+
+// historyMarshal renders the history file without emitting default values (unlike
+// managed committed files): a successful run's OK (code 0) status and a stream's
+// empty response bytes then cost nothing on disk.
+var historyMarshal = protojson.MarshalOptions{Multiline: true, Indent: "  "}
+
+// readHistoryFile / writeHistoryFile reuse the wire Request as a carrier for its
+// repeated History — mirroring how the services cache reuses the wire Workspace.
+// The payload is a genuine snapshot of wire messages, so no disk-specific schema
+// is needed, and being gitignored/regenerable it is not part of the committed
+// on-disk format.
+func readHistoryFile(path string) ([]*grpcviewv1.History, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	carrier := &grpcviewv1.Request{}
+	if err := unmarshalOpts.Unmarshal(data, carrier); err != nil {
+		return nil, fmt.Errorf("unmarshal history %s: %w", path, err)
+	}
+	return carrier.GetHistory(), nil
+}
+
+func writeHistoryFile(path string, entries []*grpcviewv1.History) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := historyMarshal.Marshal(&grpcviewv1.Request{History: entries})
+	if err != nil {
+		return fmt.Errorf("marshal history %s: %w", path, err)
+	}
+	return writeFileAtomic(path, append(data, '\n'), 0o644)
 }
 
 func fileExists(p string) bool {

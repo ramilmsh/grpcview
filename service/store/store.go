@@ -132,3 +132,4 @@ func (c *Collection) treeRoot() string           { return filepath.Join(c.root, 
 func (c *Collection) servicesCachePath() string {
 	return filepath.Join(c.root, stateDir, cacheSubdir, servicesCacheFileName)
 }
+func (c *Collection) historyRoot() string { return filepath.Join(c.root, stateDir, historyDir) }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +30,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/store"
 )
+
+// historyLimit caps how many past runs are retained per request; older entries
+// are dropped (and the drop logged) when a new run pushes the list over it.
+const historyLimit = 50
 
 // Invoke executes a single unary RPC against the target server and returns the
 // result. A gRPC-level failure of the *invoked* call (e.g. the target returns
@@ -83,6 +89,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 			Message: st.Message(),
 			Details: st.Proto().GetDetails(),
 		}
+		w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), msg.GetBody(), out)
 		return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
 	}
 
@@ -97,6 +104,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	}
 	out.Response = jsonBytes
 
+	w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), msg.GetBody(), out)
 	return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
 }
 
@@ -307,7 +315,61 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	if err := send(&grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Result{Result: out}}); err != nil {
 		return err
 	}
+
+	// Record only after the terminal frame reaches the client (a send failure is a
+	// client abort — skipped, like the early returns above). Streaming history keeps
+	// the terminal status/metadata/latency/timestamp; the streamed payloads are not
+	// stored (out.Response is empty for streams) and only the first request message
+	// is captured — a documented limitation, see recordHistory.
+	var body string
+	if bodies := msg.GetMessages(); len(bodies) > 0 {
+		body = bodies[0]
+	}
+	w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), body, out)
 	return nil
+}
+
+// recordHistory persists one completed invoke to the target request's run
+// history. It is best-effort by design: an ad-hoc invoke with no stored target
+// request (empty item_name) records nothing, and any persistence failure is
+// logged, never returned — history is local, regenerable state and must never
+// fail the RPC. The History.Response mirrors the invoke's out almost 1:1; only
+// Status.details (google.protobuf.Any) is dropped, since its target-defined types
+// aren't in grpcview's registry and could break protojson round-tripping — the
+// code + message are what the UI's status chip needs. For a streaming invoke, out
+// carries the terminal status/metadata/latency/timestamp but no streamed payloads
+// (out.Response is empty), and body holds only the first request message.
+func (w Workspace) recordHistory(ctx context.Context, workspaceName string, path []string, itemName, service, method, body string, out *grpcviewv1.Request_Response) {
+	if itemName == "" {
+		return // ad-hoc invoke: no stored request to attach history to
+	}
+	st := out.GetStatus()
+	entry := &grpcviewv1.History{
+		Request: &grpcviewv1.History_Request{
+			Service:  service,
+			Method:   method,
+			Body:     []byte(body),
+			Metadata: out.GetRequestMetadata(),
+		},
+		Response: &grpcviewv1.History_Response{
+			Status:    &grpcviewv1.Status{Code: st.GetCode(), Message: st.GetMessage()},
+			Response:  out.GetResponse(),
+			Metadata:  out.GetResponseMetadata(),
+			Latency:   out.GetLatency(),
+			Timestamp: out.GetTimestamp(),
+		},
+	}
+	coll, err := w.store.Open(ctx, workspaceName)
+	if err != nil {
+		slog.Warn("history: open collection", "workspace", workspaceName, "err", err)
+		return
+	}
+	if err := coll.AppendHistory(ctx, path, itemName, entry, historyLimit); err != nil {
+		if errors.Is(err, store.ErrItemNotFound) {
+			return // request not stored (deleted mid-call): nothing to attach to
+		}
+		slog.Warn("history: append", "workspace", workspaceName, "item", itemName, "err", err)
+	}
 }
 
 // codeOK is the gRPC status code for a successful call (google.rpc.Code.OK).
