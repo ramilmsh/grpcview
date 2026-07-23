@@ -140,6 +140,20 @@ export function RequestWorkspace() {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
   };
 
+  // Middleware attach/detach/reorder persists the whole ordered list immediately
+  // (like a method change — a discrete edit, not a debounced buffer). The set-flag
+  // replaces the list (empty clears all); the re-seeded Get cache flows the fresh
+  // request.middleware back down, so the tab reads server state, no local copy.
+  const onMiddlewareChange = (next: string[]) => {
+    updateRequest.mutate({
+      workspaceName: WORKSPACE_NAME,
+      path,
+      itemName,
+      updateMiddleware: true,
+      middleware: next,
+    });
+  };
+
   // Rename persists via UpdateRequest; on success we remap the client-side keyed
   // state (tab/draft/response) from the old itemKey to the new one, since itemKey
   // is name-derived (a failed rename, e.g. a name collision, leaves the UI as-is).
@@ -280,6 +294,8 @@ export function RequestWorkspace() {
           onMessagesChange={onMessagesChange}
           metadataRows={metadataRows}
           onMetadataChange={onMetadataChange}
+          middleware={request.middleware}
+          onMiddlewareChange={onMiddlewareChange}
           currentMethod={{ service: request.service, method: request.method }}
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}

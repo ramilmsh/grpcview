@@ -46,7 +46,7 @@ export interface InvokeState {
   error?: string;
 }
 
-export type RequestSubtab = "message" | "metadata";
+export type RequestSubtab = "message" | "metadata" | "middleware";
 export type ResponseSubtab = "messages" | "metadata" | "history";
 // The Scripts view's active detail subtab (plan §S1: Code / Dependencies /
 // Capabilities). Dependencies + Capabilities are the sandboxed empty states.

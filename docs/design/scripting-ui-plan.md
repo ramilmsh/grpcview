@@ -20,7 +20,7 @@ So *script processing* exists but you cannot **create** a script (nothing persis
 |---|---|---|---|
 | **S1** | **Scripts CRUD + authoring view** | *create* scripts | **✅ DONE 2026-07-23** |
 | **S2** | **Generators in requests** — `{{ }}` tokens + binding editor | *use* (values) | **✅ DONE 2026-07-23** |
-| **S3** | **Middleware in requests** — attach + run-before-invoke | *use* (rewrite) | **NEXT** |
+| **S3** | **Middleware in requests** — attach + run-before-invoke | *use* (rewrite) | **✅ DONE 2026-07-23** |
 | S4 | Capabilities · grants · launch consent · `std/http` | security | deferred |
 | S5 | npm dependency management (Dependencies · Add-package · Store · Registries) | packages | deferred |
 | S6 | Scenarios view · Environments view | test/env | deferred |
@@ -113,6 +113,8 @@ Each milestone follows the established N1–N4 shape: storage-proto → wire-pro
 ---
 
 ## S3 — Middleware in requests: attach + run-before-invoke  *(use — rewrite)*
+
+> **Status: DONE & green (2026-07-23).** Two commits — backend `67448a9`, frontend next. `bazel build //... //ui:ui` + touched tests green (`tsc --noEmit` clean); browser-verified against the echo server: attached a middleware `tagbody` (`handle(ctx){ ctx.body.message = "[mw] " + …; return ctx }`) to a `Unary` request via the Middleware tab (badge → 1), invoked `0 OK`, and the echo returned `{"message":"echo: [mw] "}` — the chain ran pre-send and its body rewrite reached the target; detach cleared it. **Backend** (`service/workspace/middleware.go`): `Request.middleware` (ordered MIDDLEWARE display names) on both schemas + an `update_middleware` set-flag patch on `UpdateRequest`; `applyRequestMiddleware` runs the chain after token resolution in unary + streaming, threading `{body, metadata, target}` via `RunMiddleware` (empty Grant); body/metadata rewrite applied, **target threaded but not re-dialed** (follow-up); unknown/throwing/malformed-ctx → `FailedPrecondition`. Also fixed a latent S1 bug — the middleware `ctx.body` was aliased to the frozen input, so `ctx.body.field = …` silently no-op'd; it's now a deep copy (`entry.go`). **Frontend**: a Middleware subtab (count badge) with attach-picker (MIDDLEWARE-kind scripts), up/down reorder, detach, and a broken-row state for an attachment whose script was renamed away; all persisted via `UpdateRequest`, read from the Get snapshot. Deferred as planned: a live enable/disable toggle (detach is the toggle), target re-dial, folder-inherited middleware, and middleware capabilities (S4).
 
 **Goal.** Attach ordered middleware to a request; run the chain before the call so each can rewrite body/metadata/target.
 
