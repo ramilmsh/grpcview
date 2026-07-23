@@ -1,6 +1,6 @@
 # grpcview — detailed next-steps plan
 
-**Status:** Draft · 2026-07-20
+**Status:** Draft · 2026-07-20 · **N1–N4 all DONE & green (2026-07-21)** — see per-milestone status blocks below
 **Companion to:** [`ui-redesign-plan.md`](./ui-redesign-plan.md) (client/UI track) and the *Scripting Engine — Design Plan* + [`quickjs-wasm-spike.md`](./quickjs-wasm-spike.md) / [`quickjs-wasm-capabilities-spike.md`](./quickjs-wasm-capabilities-spike.md) (engine track).
 **Purpose:** Now that the UI redesign reached a complete, shippable **Phase 0 + Phase 1** and the scripting engine finished its **spikes (green, "GO")**, this doc sequences and details the next four milestones.
 
@@ -20,10 +20,10 @@ The two tracks converge at **environments/variables** (UI plan Phase 5) and **ge
 **Chosen sequence (this doc details each):**
 
 ```
-N1  Scripting engine core        (Track B — engine Phase 1)   ← immediate next
-N2  Close client gaps            (Track A — rename, remove-source, descriptor upload)
-N3  Streaming                    (Track A — UI plan Phase 3)
-N4  Request history              (Track A — UI plan Phase 4)
+N1  Scripting engine core        (Track B — engine Phase 1)                            ✅ DONE 2026-07-20
+N2  Close client gaps            (Track A — rename, remove-source, descriptor upload)  ✅ DONE 2026-07-21  (844f2cd / c980ff7 / a3d5210)
+N3  Streaming                    (Track A — UI plan Phase 3)                           ✅ DONE 2026-07-21  (bb01751)
+N4  Request history              (Track A — UI plan Phase 4)                           ✅ DONE 2026-07-21  (6bffd7a)
 ```
 
 Deferred behind these (unchanged from the source plans): full Definition-Sources management (needs a per-source-attribution data-model decision — see §6), environments/variables, engine phases 2–7, scenarios, auth/middleware/options, multi-collection, ⌘K, Git.
@@ -79,6 +79,11 @@ Deferred behind these (unchanged from the source plans): full Definition-Sources
 
 ## N2 — Close client gaps  *(rename · remove-source · descriptor upload)*
 
+> **Status: DONE & green (2026-07-21).** All three slices shipped and e2e-verified against the self-reflecting prod binary (isolated `HOME`); `bazel build //service/cmd` + touched-package tests green.
+> - **N2a rename** (`844f2cd`) — `optional string name` on `UpdateRequestRequest`; the FS store rewrites `meta.name` on the **stable slug** (no on-disk move, contra the "Watch" note below) guarding `ErrAlreadyExists`; UI `EditableName` inline-edit + `ui-store.renameItem` remaps `openTabs`/`drafts`/`invokes`/`activeKey` so the open tab/draft/response survive. **Folder rename deferred** (needs a distinct RPC + a subtree rekey).
+> - **N2b remove-source** (`c980ff7`) — `RemoveDescriptorSource(workspace_name, index)`; drops the source, re-resolves the merged `services[]` from the remaining sources, persists via `PutDescriptorState`. Extracted `convertService` / `resolveReflectionServices` / `resolveServicesFromSources` / `mergeService`. Out-of-range → `InvalidArgument`, re-reflect failure → `Unavailable`.
+> - **N2c descriptor-set upload** (`a3d5210`) — implemented the `DescriptorSet` branch via `resolveDescriptorSetServices` (jhump `CreateFileDescriptorsFromSet` → shared `convertService` + `mergeService`), wired into **both** `AddDescriptorSource` and `resolveServicesFromSources` (the latter previously skipped descriptor-set sources, so remove/re-resolve would have dropped them); `AddSourceModal` upload enabled. The spec's "extract the schema-conversion helper" was already done by N2b.
+
 Three independent, small proto+backend+UI slices. Each closes a gap a user hits immediately in the shipped Phase-1 UI and is currently a disabled/tooltip'd control.
 
 ### N2a — Rename request (and folder)
@@ -103,6 +108,12 @@ Three independent, small proto+backend+UI slices. Each closes a gap a user hits 
 
 ## N3 — Streaming  *(UI plan Phase 3)*
 
+> **Status: DONE & green (2026-07-21, `bb01751`).** All four call shapes end-to-end; `bazel build //...` + `bazel test //...` green; e2e drove unary/server/client/bidi against a new echo server.
+> - **Transport decision — server-streaming, NOT the bidi shape suggested below.** `@connectrpc/connect-web` can't stream a request body from a browser, so `InvokeStreaming` is `rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamResponse)`: client messages are supplied up-front and the backend maps them onto the target's real kind over full gRPC. **Limitation:** client/bidi targets have no live interleave (compose-then-send).
+> - `Method` gained `client_streaming`/`server_streaming` (+ `output`), populated once in `convertService` (serves reflection + descriptor-set). `resolveMethod` factored out of unary `Invoke`. Frontend: kind tags (U/S←/C→/B⇄), `MessagesTab`, streamed message cards + live count + Stop.
+> - **Streaming test target built:** `//service/echo/cmd` (proto `echo/v1`, all four kinds + reflection) — resolves the prerequisite flagged below (the self-reflecting binary is unary-only).
+> - **Bug caught by e2e, not unit tests:** `service/logging.go` `WrapStreamingHandler` returned `nil` (unary-only stub); since this is the repo's first streaming RPC, connect wrapped the handler into nil → panic on every streaming call. Fixed + `service/logging_test.go` regression.
+
 **Goal.** Server-, client-, and bidi-streaming invokes, with the tree/tabs showing the real method kind.
 
 - **Proto** (`workspace.proto`): add streaming kind to `Method` — `bool client_streaming = 4; bool server_streaming = 5;` (populate from reflection's `IsClientStreaming`/`IsServerStreaming` in **both** `AddDescriptorSource` branches). Add a streaming invoke RPC to `service.proto` — recommend a **bidi** `rpc InvokeStreaming(stream InvokeStreamRequest) returns (stream InvokeStreamResponse)` that carries: an opening message (service/method/target/metadata), then client messages, then a close; responses carry per-message payloads + a final status/trailers. Keep unary `Invoke` as-is.
@@ -113,6 +124,10 @@ Three independent, small proto+backend+UI slices. Each closes a gap a user hits 
 ---
 
 ## N4 — Request history  *(UI plan Phase 4)*
+
+> **Status: DONE & green (2026-07-21, `6bffd7a`).** History persisted, browsable, re-runnable; `bazel build //...` + `test //...` green; e2e — 3 invokes survived a process restart + page reload, re-run repopulated + fired.
+> - **No proto change** (`History` already carries status/latency/timestamp; `Get` already returns `Request.history[]`). Store `AppendHistory` caps at 50 (drops oldest, logs) and writes the **gitignored `.grpcview/history/<slug>/history.json` sidecar** (never `request.json`; survives rename via slug key). `recordHistory` hooks both unary returns + the streaming terminal frame; ad-hoc invokes record nothing.
+> - UI **Timeline** subtab in `ResponsePane` (status chip + latency + timestamp, newest-first), reachable post-reload; select repopulates draft+metadata, re-run fires. **`ClearHistory` skipped** (optional). **Limitation:** streaming history records terminal status/metadata + the first request message only, not streamed payloads.
 
 **Goal.** Persist each invoke and let the user browse/re-run past calls. The data model already exists.
 
@@ -127,8 +142,11 @@ Three independent, small proto+backend+UI slices. Each closes a gap a user hits 
 
 - **Per-source service attribution (blocks full Sources management, UI plan Phase 2).** The design's Sources view (priority/reorder, collisions, freshness, versions, buf/proto/descriptor types, live-streaming reflection) all assume the backend knows *which source contributed which service*. Today `services[]` is flat and merged. This is a **foundational data-model decision** — resolve it before Phase 2. N2b's "remove ⇒ re-reflect everything" is the deliberate stopgap until then.
 - **Environments/variables ↔ scripting convergence.** UI plan Phase 5 (`env`/`vars`/`secrets`, `{{ }}` resolution, generators, the binding editor) overlaps the engine's inert host objects and the generator script kind. Sequence it **after** engine core (N1) + esbuild (engine Phase 2) so generators have a runtime.
-- **Streaming test target** (N3 prerequisite) — the app can't dogfood streaming against itself.
-- **Rename changes `itemKey` identity** (N2a) — the UI must remap client-side keyed state; keep in mind for any future name-derived keying.
+- **Streaming test target** (N3 prerequisite) — the app can't dogfood streaming against itself. **✅ Resolved by N3:** `//service/echo/cmd` (echo server, all four kinds + reflection).
+- **Rename changes `itemKey` identity** (N2a) — the UI must remap client-side keyed state; keep in mind for any future name-derived keying. **✅ Handled** via `ui-store.renameItem` (remaps `openTabs`/`drafts`/`invokes`/`activeKey`).
+- **Folder rename** (deferred from N2a) — needs a distinct `RenameItem`/`UpdateFolder` RPC + a subtree rekey of every descendant's name-derived key (`UpdateRequest` rejects non-requests). Small follow-up.
+- **`ClearHistory` RPC + clear affordance** (skipped in N4 as optional) — small follow-up if the history UI wants a clear button.
+- **Descriptor-set-only workspaces have no Invoke target** (noticed in N3) — `resolveTarget` returns only the first *reflection* source, so a workspace whose services come solely from a descriptor set lists methods but can't invoke (`FailedPrecondition`). Pre-existing gap.
 - **Engine phases 2–7** (esbuild, capability productionization, npm deps, Monaco IDE, Management UI, hardening) proceed on the engine track per its own plan; the **Management UI** (engine Phase 6) is where Track B finally surfaces as the workspace mockup's Scripts/Registries/Grants views.
 
 ---
