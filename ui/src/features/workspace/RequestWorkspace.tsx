@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { JsonObject } from "@bufbuild/protobuf";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { BodyLanguage } from "@grpcview/v1/workspace_pb";
+import { BodyLanguage, ScriptKind } from "@grpcview/v1/workspace_pb";
 import type { History } from "@grpcview/v1/workspace_pb";
 import {
   useWorkspace,
@@ -80,6 +80,20 @@ export function RequestWorkspace() {
     [services, request]
   );
   const kind = methodKind(activeMethod);
+
+  // The workspace's saved GENERATOR names, threaded down to the Monaco body editor
+  // for autocomplete + typing (ts-request-body-plan §T3). In TypeScript body mode the
+  // backend injects each referenced generator as an ambient `globalThis.<name>` and
+  // runs it, so the body calls it directly; the editor only needs the NAMES to declare
+  // them ambiently. Memoized on `workspace?.scripts` for a stable array identity, so the
+  // editor's ambient-decl effect re-runs only when the generator set actually changes.
+  const generators = useMemo(
+    () =>
+      workspace?.scripts
+        .filter((s) => s.kind === ScriptKind.GENERATOR)
+        .map((s) => s.name) ?? [],
+    [workspace?.scripts]
+  );
 
   // Debounce timers keyed by `${requestKey}:${slot}` so a pending save for one
   // request is never cancelled by scheduling a save for a different request
@@ -327,6 +341,7 @@ export function RequestWorkspace() {
           inputPackage={activeMethod?.input?.package}
           inputFile={activeMethod?.input?.file}
           onBodyLanguageChange={onBodyLanguageChange}
+          generators={generators}
         />
         <ResponsePane
           invoke={invokeState}

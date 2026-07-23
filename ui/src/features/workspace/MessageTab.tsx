@@ -23,6 +23,7 @@ export function MessageTab({
   inputPackage,
   inputFile,
   onBodyLanguageChange,
+  generators,
 }: {
   schema?: object;
   body: string;
@@ -36,6 +37,8 @@ export function MessageTab({
   inputPackage?: string;
   inputFile?: string;
   onBodyLanguageChange: (next: BodyLanguage) => void;
+  // T3 composition: workspace generator names, forwarded to Editor for ambient autocomplete.
+  generators: string[];
 }) {
   const [errors, setErrors] = useState(0);
   const openBinding = useUIStore((s) => s.openBinding);
@@ -73,6 +76,7 @@ export function MessageTab({
           inputPackage={inputPackage}
           inputName={inputTypeName}
           inputFile={inputFile}
+          generators={generators}
           onErrorsChange={setErrors}
           onTokenClick={openBinding}
         />

@@ -33,6 +33,7 @@ export function RequestPane({
   inputPackage,
   inputFile,
   onBodyLanguageChange,
+  generators,
 }: {
   schema?: object;
   kind: MethodKind;
@@ -53,6 +54,8 @@ export function RequestPane({
   inputPackage?: string;
   inputFile?: string;
   onBodyLanguageChange: (next: BodyLanguage) => void;
+  // T3 composition: workspace generator names, forwarded to MessageTab → Editor.
+  generators: string[];
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
   const setSubtab = useUIStore((s) => s.setRequestSubtab);
@@ -122,6 +125,7 @@ export function RequestPane({
             inputPackage={inputPackage}
             inputFile={inputFile}
             onBodyLanguageChange={onBodyLanguageChange}
+            generators={generators}
           />
         )
       ) : subtab === "metadata" ? (

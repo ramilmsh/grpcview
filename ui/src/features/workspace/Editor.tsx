@@ -34,6 +34,21 @@ import { scanTokens, type Token } from "./tokens";
 const JSON_MODEL_URI = "grpcview://request/body.json";
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
 
+// JS reserved words that are ILLEGAL as a `function <name>` declaration identifier. A
+// generator so named (e.g. `default`) would emit `declare function default(...)`, a SYNTAX
+// error that makes Monaco fail to parse the whole generators.d.ts and silently kills ambient
+// autocomplete for EVERY generator — so we skip such names (they still run server-side if the
+// backend accepts them), the same graceful degradation as dotted names. (Names colliding with
+// lib globals like `Date` only produce a self-contained duplicate-identifier squiggle, so they
+// are left alone.)
+const GENERATOR_NAME_RESERVED = new Set([
+  "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
+  "do", "else", "enum", "export", "extends", "false", "finally", "for", "function", "if",
+  "import", "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw",
+  "true", "try", "typeof", "var", "void", "while", "with", "let", "static", "yield", "await",
+  "implements", "interface", "package", "private", "protected", "public",
+]);
+
 interface EditorProps {
   schema?: object; // the current method's input JSON schema (resolved upstream)
   data: string;
@@ -50,6 +65,10 @@ interface EditorProps {
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
+  // T3 composition: the workspace's saved GENERATOR names (used only in TS mode). Each
+  // simple-identifier name is declared as an ambient global so the body can call it with
+  // autocomplete + typing. Optional; defaults to [] so JSON-only callers need not pass it.
+  generators?: string[];
   onErrorsChange?: (errors: number) => void;
   // Called when a `{{ … }}` token in the body is clicked, with the generator name.
   onTokenClick?: (generator: string) => void;
@@ -66,6 +85,7 @@ export function Editor({
   inputPackage,
   inputName,
   inputFile,
+  generators = [],
   onErrorsChange,
   onTokenClick,
 }: EditorProps) {
@@ -173,6 +193,35 @@ export function Editor({
       typeLibs.current = [];
     };
   }, [monaco, isTS, descriptorSet, inputPackage, inputName, inputFile]);
+
+  // T3 composition — ambient autocomplete for the workspace's saved GENERATOR names.
+  // In TS body mode the backend injects each referenced generator as `globalThis.<name>`
+  // and the body calls it directly (e.g. `mkid()`); we mirror that here so those names
+  // autocomplete + type-check instead of erroring "Cannot find name". The emitted .d.ts
+  // has NO import/export, so its `declare`s are AMBIENT GLOBALS visible even inside the
+  // module body (same idiom as the Scripts ENV_DTS in monaco-scripts.ts). We emit ONLY
+  // simple-identifier names (/^[A-Za-z_$][A-Za-z0-9_$]*$/, minus JS reserved words) — this
+  // mirrors the backend's rule: a name with dots/other chars can't be made a bare global, so
+  // it is skipped (see GENERATOR_NAME_RESERVED above for why reserved words are excluded too).
+  // Registered at a CONSTANT path DISTINCT from the T2 libs; dispose-before-add (like T2,
+  // since typescriptDefaults is global with no per-URI fileMatch) so the set updates
+  // cleanly on change with no leak / no "Duplicate definition". Gated on TS mode so JSON
+  // mode is untouched; an empty list just registers empty content (harmless no-op decls).
+  const genLib = useRef<Monaco.IDisposable | null>(null);
+  useEffect(() => {
+    if (!monaco || !isTS) return;
+    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+    const content = generators
+      .filter((name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !GENERATOR_NAME_RESERVED.has(name))
+      .map((name) => `declare function ${name}(...args: any[]): any;`)
+      .join("\n");
+    genLib.current?.dispose();
+    genLib.current = tsDefaults.addExtraLib(content, "file:///grpcview/request/generators.d.ts");
+    return () => {
+      genLib.current?.dispose();
+      genLib.current = null;
+    };
+  }, [monaco, isTS, generators]);
 
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
