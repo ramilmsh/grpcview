@@ -27,6 +27,7 @@ import { Centered } from "@/components/ui/Centered";
 import { MethodHeader } from "./MethodHeader";
 import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
+import { wrap } from "./body-wrapper";
 
 const DEBOUNCE_MS = 400;
 
@@ -161,13 +162,13 @@ export function RequestWorkspace() {
   // local draft copy is needed (ts-request-body-plan §T1/§4.6).
   const onBodyLanguageChange = (next: BodyLanguage) => {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, bodyLanguage: next });
-    // Seed a return-annotated template on JSON→TS when the body is trivial. TS
-    // completions/errors only fire if the `RequestMessage` annotation is literally in the
-    // buffer (an untyped `() => ({})` infers `{}` and offers nothing — plan §T2/§2). Only
-    // for an empty/`{}` body so we never clobber a real JSON object the user is migrating.
+    // Seed the canonical hidden-wrapper module on JSON→TS when the body is trivial (§T4). The
+    // `=> (\n{ … }\n)` shape is what the editor hides down to a bare object; the RequestMessage
+    // return annotation must be literally present or TS infers `{}` and offers no completions
+    // (plan §T2). Only for an empty/`{}` body, so we never clobber a real object mid-migration.
     const trimmed = body.trim();
     if (next === BodyLanguage.TYPESCRIPT && (trimmed === "" || trimmed === "{}")) {
-      onBodyChange("export default (): RequestMessage => ({\n  \n})");
+      onBodyChange(wrap("{\n  \n}"));
     }
   };
 
