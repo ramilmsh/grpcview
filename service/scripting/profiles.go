@@ -210,6 +210,31 @@ func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in In
 	return e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
 }
 
+// RunRequestBody runs a TypeScript request body, exposing the workspace's saved generators as
+// ambient globals so the body can COMPOSE them (ts-request-body-plan T3 / pillar C). Like
+// RunGeneratorUncached it is UNCACHED (a body may call now()/Math.random() and must vary per
+// invoke) and fully sandboxed (the invoke path passes an empty Grant and empty Input). gens is
+// the per-run generator set (name -> source) the body may reference — the caller narrows it to
+// the generators the body actually names, so an unrelated generator's compile error can't break
+// an unrelated body.
+//
+// When gens is empty there is nothing to compose, so it defers to runGenerator VERBATIM — the
+// plain §T1 body path, byte-identical (no synthetic prelude, no extra cache bypass). Otherwise
+// it compiles the body with the composition prelude (compileRequestBody) and runs it on a fresh
+// instance under the Generator bounds, never touching the generator result cache.
+func (e *Engine) RunRequestBody(ctx context.Context, body string, gens map[string]string, g Grant, in Input) (Result, error) {
+	if len(gens) == 0 {
+		return e.runGenerator(ctx, body, g, in)
+	}
+	c, postlude, err := e.compileRequestBody(body, g, in.Args, gens)
+	if err != nil {
+		return Result{}, err
+	}
+	rctx, cancel := withProfileDeadline(ctx, Generator)
+	defer cancel()
+	return e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
+}
+
 // RunMiddleware runs a middleware invoke through the warm instance pool. A middleware that
 // declares a `handle`/default export is called with a ctx built from in.Request (§2.5);
 // otherwise it falls back to last-expression eval.

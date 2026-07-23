@@ -153,10 +153,16 @@ var stackPosRe = regexp.MustCompile(`<script>:(\d+):(\d+)`)
 
 // remapJSError rewrites je.Line from a line in the assembled source (inputPrelude +
 // compiled code) to the author's original line, using the compiled script's source map.
-// preludeLines is the number of newlines in the input prelude prepended before the code.
-// It is a no-op (leaving the raw line) if there is no map, the error predates the code
-// (it landed in the prelude), or the position does not map — never worse than before.
-func remapJSError(je *JSError, sourceMap []byte, preludeLines int) {
+// preludeLines is the number of newlines in the run-time input prelude prepended before the
+// code (the eval-side offset). authorPreludeLines is the number of synthetic-prelude lines
+// prepended ahead of the body WITHIN the author source before esbuild compiled it (the
+// source-side offset, non-zero only for a composed request body — compose.go); it is
+// subtracted back out once a position maps INTO the author source, and only then — an inlined
+// generator's own frames map to that generator's source and keep their raw line. It is a no-op
+// (leaving the raw line) if there is no map, the error predates the code (it landed in the
+// input prelude), the position maps inside the synthetic author prelude, or the position does
+// not map — never worse than before.
+func remapJSError(je *JSError, sourceMap []byte, preludeLines int, authorPreludeLines int) {
 	if je == nil || len(sourceMap) == 0 {
 		return
 	}
@@ -182,7 +188,18 @@ func remapJSError(je *JSError, sourceMap []byte, preludeLines int) {
 	if err != nil {
 		return
 	}
-	if _, srcLine, ok := sm.originalPos(genLine, col); ok {
-		je.Line = srcLine + 1 // back to 1-based for humans
+	if src, srcLine, ok := sm.originalPos(genLine, col); ok {
+		line := srcLine
+		// The generator-composition prelude (compose.go) sits in the SAME author source
+		// ("script.ts") above the body, so a body position maps to a line shifted down by the
+		// prelude length; undo it. ONLY the author source carries this offset — a frame inside
+		// an inlined generator maps to that generator's own source and must not be shifted.
+		if src == authorSource {
+			line -= authorPreludeLines
+			if line < 0 {
+				return // the position is inside the synthetic prelude — leave the raw line
+			}
+		}
+		je.Line = line + 1 // back to 1-based for humans
 	}
 }

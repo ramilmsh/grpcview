@@ -85,6 +85,64 @@ func TestResolveInvokeBody(t *testing.T) {
 	}
 }
 
+// TestResolveInvokeBodyComposition covers pillar C on the invoke path (ts-request-body-plan
+// T3): a TYPESCRIPT body calls a generator saved in the workspace (via the store), and the
+// produced JSON reflects the composed call. It also proves FAILURE ISOLATION — a broken
+// generator the body does NOT reference cannot break the body — because referencedGenerators
+// bounds each per-invoke bundle to the generators the body actually names.
+func TestResolveInvokeBodyComposition(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	createGenerator(t, w, ctx, "mkid", `export default () => "id-42"`)
+
+	t.Run("typescript body composes a saved generator", func(t *testing.T) {
+		out, err := w.resolveInvokeBody(ctx, testWorkspace,
+			[]string{`export default () => ({ id: mkid(), n: 7 })`},
+			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+		if err != nil {
+			t.Fatalf("resolveInvokeBody: %v", err)
+		}
+		if len(out) != 1 || out[0] != `{"id":"id-42","n":7}` {
+			t.Fatalf("got %q, want [{\"id\":\"id-42\",\"n\":7}]", out)
+		}
+	})
+
+	t.Run("an unreferenced broken generator does not break the body", func(t *testing.T) {
+		// A generator whose source does not compile lives in the workspace, but the body never
+		// names it — so referencedGenerators excludes it and the body still bundles and runs.
+		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
+		out, err := w.resolveInvokeBody(ctx, testWorkspace,
+			[]string{`export default () => ({ id: mkid() })`},
+			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+		if err != nil {
+			t.Fatalf("resolveInvokeBody (unreferenced broken generator): %v", err)
+		}
+		if len(out) != 1 || out[0] != `{"id":"id-42"}` {
+			t.Fatalf("got %q, want [{\"id\":\"id-42\"}]", out)
+		}
+	})
+
+	t.Run("a broken generator whose name collides with a key or method does not break the body", func(t *testing.T) {
+		// The regression the call-site scan closes: a broken generator named like a common object
+		// key (id) or method (toString) must NOT be folded into the bundle when the body only USES
+		// those as a key / method — it calls mkid(), never id() or toString(). A bare-identifier
+		// scan matched the key/method tokens, pulled the broken generators in, and failed the whole
+		// (valid) body; the call-site scan excludes a non-call occurrence, so the body still runs.
+		createGenerator(t, w, ctx, "id", `export default () => "unterminated`)
+		createGenerator(t, w, ctx, "toString", `export default () => "also broken`)
+		out, err := w.resolveInvokeBody(ctx, testWorkspace,
+			[]string{`export default () => ({ id: mkid(), label: (7).toString() })`},
+			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+		if err != nil {
+			t.Fatalf("resolveInvokeBody (name-collision isolation): %v", err)
+		}
+		if len(out) != 1 || out[0] != `{"id":"id-42","label":"7"}` {
+			t.Fatalf("got %q, want [{\"id\":\"id-42\",\"label\":\"7\"}]", out)
+		}
+	})
+}
+
 // TestInvokeTypeScriptBody is the §T1 must-pass end-to-end: a unary Invoke with
 // body_language=TYPESCRIPT and the plan's example body runs the body as a generator,
 // the returned object unmarshals into the request message, and the echo server sees

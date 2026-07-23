@@ -59,6 +59,14 @@ const esbuildTarget = api.ES2022
 type compiled struct {
 	code      string
 	sourceMap []byte
+	// authorPreludeLines is the number of synthetic-prelude lines prepended AHEAD of the
+	// author's code in the esbuild INPUT — distinct from the run-time input prelude, which
+	// is prepended at eval time and counted separately (runCompiled). Only the generator-
+	// composition path sets it non-zero: its `import … from "grpcview:gen/…"` lines (compose.go)
+	// sit in the SAME author source ("script.ts") above the body, so a body runtime error maps
+	// through the source map to a line shifted down by this many lines, which remapJSError
+	// undoes. It is 0 for every existing path (no synthetic author prelude there).
+	authorPreludeLines int
 }
 
 // bundler compiles scripts via esbuild and caches the result by a content hash of
@@ -162,9 +170,18 @@ func (b *bundler) compileEntry(source string, g Grant) (compiled, error) {
 	return c, nil
 }
 
-// buildBundle runs esbuild's bundler: TS entry via stdin, everything inlined to one ESM
-// blob whose top-level statements stay at top level (so it evaluates as GLOBAL code).
-func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
+// esbuildBundle is the one place the shared esbuild BuildOptions live; every bundling path
+// funnels through it. The (format, globalName) pair selects the two output shapes callers
+// need — ESM (FormatESModule, "") keeps the entry's top-level statements at top level so the
+// blob evaluates as GLOBAL code and its last expression is the run's value; IIFE (FormatIIFE,
+// entryGlobalName) captures the entry module's exports onto that global for the entry-point
+// calling convention (entry.go) — while `extra` injects run-specific resolver plugins (the
+// generator-composition resolver). Everything else is identical across shapes and stays
+// byte-for-byte what buildBundle/buildEntryBundle used before this was extracted:
+// PlatformBrowser (resolves main/module/exports; no node core auto-polyfill), TreeShaking off
+// (never drop a bundled dependency's code as "unused"), an external source map, and a
+// filesystem-anchored resolve only via b.resolveDir/b.nodePaths (both empty in production).
+func (b *bundler) esbuildBundle(source string, g Grant, format api.Format, globalName string, extra ...api.Plugin) (compiled, error) {
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   source,
@@ -175,21 +192,28 @@ func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
 		Outfile:       "script.js", // required for an external source map even with Write:false
 		Bundle:        true,
 		Write:         false,
-		Format:        api.FormatESModule, // keeps entry top-level statements at top level
+		Format:        format,
+		GlobalName:    globalName, // ignored by esbuild unless format is IIFE
 		Target:        esbuildTarget,
-		Platform:      api.PlatformBrowser, // resolves main/module/exports; no node core auto-polyfill
-		TreeShaking:   api.TreeShakingFalse, // never drop a bundled dependency's code as "unused"
+		Platform:      api.PlatformBrowser,
+		TreeShaking:   api.TreeShakingFalse,
 		Sourcemap:     api.SourceMapExternal,
 		Charset:       api.CharsetUTF8,
 		LegalComments: api.LegalCommentsNone,
 		LogLevel:      api.LogLevelSilent,
 		NodePaths:     b.nodePaths,
-		Plugins:       b.plugins(g),
+		Plugins:       b.plugins(g, extra...),
 	})
 	if len(result.Errors) > 0 {
 		return compiled{}, bundleErrors(result.Errors)
 	}
 	return outputToCompiled(result.OutputFiles), nil
+}
+
+// buildBundle runs esbuild's bundler: TS entry via stdin, everything inlined to one ESM
+// blob whose top-level statements stay at top level (so it evaluates as GLOBAL code).
+func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
+	return b.esbuildBundle(source, g, api.FormatESModule, "")
 }
 
 // buildEntryBundle runs esbuild's bundler in IIFE format with a GlobalName, so the entry
@@ -199,32 +223,25 @@ func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
 // available in IIFE output (esbuild rejects it) — the authored contract is an exported
 // (possibly async) function, awaited by the postlude, not module-level TLA.
 func (b *bundler) buildEntryBundle(source string, g Grant) (compiled, error) {
-	result := api.Build(api.BuildOptions{
-		Stdin: &api.StdinOptions{
-			Contents:   source,
-			Loader:     api.LoaderTS,
-			Sourcefile: authorSource,
-			ResolveDir: b.resolveDir,
-		},
-		Outfile:       "script.js",
-		Bundle:        true,
-		Write:         false,
-		Format:        api.FormatIIFE,
-		GlobalName:    entryGlobalName,
-		Target:        esbuildTarget,
-		Platform:      api.PlatformBrowser,
-		TreeShaking:   api.TreeShakingFalse,
-		Sourcemap:     api.SourceMapExternal,
-		Charset:       api.CharsetUTF8,
-		LegalComments: api.LegalCommentsNone,
-		LogLevel:      api.LogLevelSilent,
-		NodePaths:     b.nodePaths,
-		Plugins:       b.plugins(g),
-	})
-	if len(result.Errors) > 0 {
-		return compiled{}, bundleErrors(result.Errors)
-	}
-	return outputToCompiled(result.OutputFiles), nil
+	return b.esbuildBundle(source, g, api.FormatIIFE, entryGlobalName)
+}
+
+// buildBundleComposed is buildBundle with the workspace's saved generators available for
+// composition: generatorResolverPlugin resolves the composition prelude's `grpcview:gen/<name>`
+// imports (compose.go) by inlining each generator's source into the ESM bundle. Used for a
+// composing TypeScript request body with NO default export (last-expression form). It
+// deliberately does NOT consult or populate the compile cache — the generator set folds into
+// the blob per run and a request-body eval is uncached (RunRequestBody), so a cache keyed on
+// (source, grant) alone would be unsound (it ignores gens).
+func (b *bundler) buildBundleComposed(source string, g Grant, gens map[string]string) (compiled, error) {
+	return b.esbuildBundle(source, g, api.FormatESModule, "", generatorResolverPlugin(gens))
+}
+
+// buildEntryBundleComposed is buildEntryBundle for a composing body that DOES declare a
+// default export (the entry-point convention): the same IIFE export capture, plus the
+// generator resolver. Like buildBundleComposed it bypasses the compile cache.
+func (b *bundler) buildEntryBundleComposed(source string, g Grant, gens map[string]string) (compiled, error) {
+	return b.esbuildBundle(source, g, api.FormatIIFE, entryGlobalName, generatorResolverPlugin(gens))
 }
 
 // transformScript transpiles a no-import script (TS -> JS) without bundling, preserving
@@ -333,12 +350,16 @@ var capModules = map[string]capModule{
 }
 
 // plugins is the ordered esbuild plugin chain for one run. The capability plugin (Gate 1)
-// runs first so it owns the node:* names; the registry plugin (when a registry is
-// provisioned) resolves bare npm specifiers against the embedded tree. esbuild tries each
-// plugin's OnResolve in order and takes the first that returns a path, so ordering is the
-// contract that keeps the two from fighting over a name.
-func (b *bundler) plugins(g Grant) []api.Plugin {
+// runs FIRST so it owns the node:* names; any `extra` plugins (the generator-composition
+// resolver, passed by the composed builds) run NEXT; the registry plugin (when a registry is
+// provisioned) resolves bare npm specifiers against the embedded tree LAST. esbuild tries each
+// plugin's OnResolve in order and takes the first that returns a path, so this ordering is the
+// contract that keeps grpcview:gen/* claimed by the generator plugin before the npm registry
+// plugin (whose `^[^./]` filter would otherwise match it) — and keeps every plugin from
+// fighting over a name.
+func (b *bundler) plugins(g Grant, extra ...api.Plugin) []api.Plugin {
 	ps := []api.Plugin{capabilityPlugin(g)}
+	ps = append(ps, extra...)
 	if b.registryDir != "" {
 		ps = append(ps, registryResolverPlugin(b.registryDir))
 	}
@@ -421,6 +442,60 @@ func withinDir(dir, path string) bool {
 		return false
 	}
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// ---- Generator composition resolver ----------------------------------------------
+//
+// generatorResolverPlugin lets a TypeScript request body call the workspace's saved
+// generators as ambient globals (ts-request-body-plan T3 / pillar C). compose.go emits a
+// synthetic prelude of `import __gen$i from "grpcview:gen/<name>"` lines; this plugin resolves
+// each such specifier to the named generator's SOURCE, which esbuild then inlines into the
+// bundle like any other module (mirroring how registryResolverPlugin serves npm packages).
+// The gens map is the per-run generator set (name -> source), so the plugin is built fresh per
+// composed build and never shares a cache slot.
+//
+// It is registered AHEAD of the npm registry plugin (see plugins) so it claims the
+// grpcview:gen/* specifiers first — the registry plugin's `^[^./]` filter would otherwise match
+// them. A generator's OWN bare imports (e.g. `import dayjs from "dayjs"`) still resolve: the
+// registry plugin's OnResolve carries no namespace constraint, so it fires for an import from
+// the generator namespace exactly as it does for the author's own — esbuild resolves by import
+// path regardless of which module holds the import.
+
+const (
+	// generatorSpecPrefix is the synthetic import-specifier prefix the composition prelude
+	// uses; the text after it is the generator's display name.
+	generatorSpecPrefix = "grpcview:gen/"
+	// generatorNamespace tags a resolved generator module so OnLoad serves its source from the
+	// gens map (the analogue of capNamespace for the capability shims).
+	generatorNamespace = "grpcview-generator"
+)
+
+// generatorResolverPlugin builds the composition resolver for one run's generator set,
+// mirroring registryResolverPlugin. OnResolve claims a grpcview:gen/<name> specifier and maps
+// it to a generatorNamespace module named for the generator; a <name> not present in gens is
+// an esbuild resolve error, so the composed bundle fails to assemble (surfaced as a Go bundle
+// error) rather than silently dropping the call. OnLoad hands esbuild the generator's source
+// as TypeScript.
+func generatorResolverPlugin(gens map[string]string) api.Plugin {
+	return api.Plugin{
+		Name: "grpcview-generators",
+		Setup: func(build api.PluginBuild) {
+			build.OnResolve(api.OnResolveOptions{Filter: `^grpcview:gen/`},
+				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					name := strings.TrimPrefix(args.Path, generatorSpecPrefix)
+					if _, ok := gens[name]; !ok {
+						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: no generator named %q", args.Path, name)
+					}
+					return api.OnResolveResult{Path: name, Namespace: generatorNamespace}, nil
+				})
+			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: generatorNamespace},
+				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					contents := gens[args.Path]
+					loader := api.LoaderTS
+					return api.OnLoadResult{Contents: &contents, Loader: loader}, nil
+				})
+		},
+	}
 }
 
 // capabilityPlugin builds the Gate-1 esbuild plugin for one run's grant.
