@@ -545,3 +545,80 @@ func TestLoadMissingCollection(t *testing.T) {
 		t.Errorf("Load of missing collection = %v, want ErrNotFound", err)
 	}
 }
+
+// TestUpdateRequestMiddleware covers the attached-middleware patch (§S3): the set-flag
+// distinguishes "set" from "leave unchanged", an empty set clears the list, the list
+// persists in request.json and round-trips through a fresh Store, and RequestMiddleware
+// reads it back (with ErrItemNotFound for an absent request).
+func TestUpdateRequestMiddleware(t *testing.T) {
+	base := t.TempDir()
+	ctx := context.Background()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	coll, err := New(base, discard).Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		t.Fatalf("EnsureCreated: %v", err)
+	}
+	if err := coll.CreateRequest(ctx, nil, "Echo", "echo.v1.EchoService", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	middlewareOf := func(t *testing.T, c *Collection, name string) []string {
+		t.Helper()
+		req := childByName(rootItems(t, c, ctx), name)
+		if req == nil || req.GetRequest() == nil {
+			t.Fatalf("request %q not found", name)
+		}
+		return req.GetRequest().GetMiddleware()
+	}
+
+	// Set the list.
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{SetMiddleware: true, Middleware: []string{"sign", "trace"}}); err != nil {
+		t.Fatalf("UpdateRequest set middleware: %v", err)
+	}
+	if got := middlewareOf(t, coll, "Echo"); len(got) != 2 || got[0] != "sign" || got[1] != "trace" {
+		t.Fatalf("middleware after set = %v, want [sign trace]", got)
+	}
+	// On-disk shape: the ordered list lands in request.json.
+	rf := &grpcviewstorev1.Request{}
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
+	if len(rf.GetMiddleware()) != 2 || rf.GetMiddleware()[0] != "sign" {
+		t.Fatalf("request.json middleware = %v, want [sign trace]", rf.GetMiddleware())
+	}
+
+	// RequestMiddleware reads the list back without loading the whole tree.
+	if got, err := coll.RequestMiddleware(ctx, nil, "Echo"); err != nil || len(got) != 2 || got[1] != "trace" {
+		t.Fatalf("RequestMiddleware = %v (err %v), want [sign trace]", got, err)
+	}
+	if _, err := coll.RequestMiddleware(ctx, nil, "Ghost"); !errors.Is(err, ErrItemNotFound) {
+		t.Fatalf("RequestMiddleware of absent request = %v, want ErrItemNotFound", err)
+	}
+
+	// An unrelated patch (set-flag off) leaves the list untouched.
+	body := `{"m":1}`
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{DraftBody: &body}); err != nil {
+		t.Fatalf("UpdateRequest body only: %v", err)
+	}
+	if got := middlewareOf(t, coll, "Echo"); len(got) != 2 {
+		t.Fatalf("middleware after unrelated patch = %v, want [sign trace] unchanged", got)
+	}
+
+	// The list survives a fresh reload from a brand-new Store over the same directory.
+	reloaded, err := New(base, discard).Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := middlewareOf(t, reloaded, "Echo"); len(got) != 2 || got[0] != "sign" {
+		t.Fatalf("reloaded middleware = %v, want [sign trace]", got)
+	}
+
+	// Setting an empty list clears it.
+	if err := reloaded.UpdateRequest(ctx, nil, "Echo", RequestPatch{SetMiddleware: true, Middleware: nil}); err != nil {
+		t.Fatalf("UpdateRequest clear middleware: %v", err)
+	}
+	if got := middlewareOf(t, reloaded, "Echo"); len(got) != 0 {
+		t.Fatalf("middleware after clear = %v, want empty", got)
+	}
+}

@@ -335,6 +335,15 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
    * @generated from field: repeated grpcview.v1.History history = 6;
    */
   history: History[];
+
+  /**
+   * middleware is the ordered display names of the MIDDLEWARE-kind scripts
+   * attached to this request; each runs (in this order) before the call to
+   * rewrite the outgoing body/metadata (scripting-ui-plan §S3).
+   *
+   * @generated from field: repeated string middleware = 7;
+   */
+  middleware: string[];
 };
 
 /**

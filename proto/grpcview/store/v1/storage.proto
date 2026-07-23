@@ -65,6 +65,10 @@ message Request {
   string method = 3;
   google.protobuf.Struct draft_metadata = 4;
   string draft_body = 5;
+  // middleware is the ordered display names of the MIDDLEWARE-kind scripts
+  // attached to this request; each runs (in this order) before the call to
+  // rewrite the outgoing body/metadata (scripting-ui-plan §S3).
+  repeated string middleware = 6;
 }
 
 // ItemMeta is the identity block embedded in every managed tree file. The

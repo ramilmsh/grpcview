@@ -24,6 +24,7 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 		Method:        dr.GetMethod(),
 		DraftBody:     dr.GetDraftBody(),
 		DraftMetadata: dr.GetDraftMetadata(), // Struct: identical on both sides
+		Middleware:    dr.GetMiddleware(),
 	}
 }
 
@@ -35,6 +36,7 @@ func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Req
 		Method:        wr.GetMethod(),
 		DraftBody:     wr.GetDraftBody(),
 		DraftMetadata: wr.GetDraftMetadata(),
+		Middleware:    wr.GetMiddleware(),
 	}
 }
 

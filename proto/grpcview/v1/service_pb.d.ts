@@ -283,6 +283,22 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
    * @generated from field: optional string name = 8;
    */
   name?: string | undefined;
+
+  /**
+   * middleware patches the request's attached-middleware list (ordered MIDDLEWARE
+   * script display names). proto3 repeated can't be `optional`, so update_middleware
+   * is the set-flag that distinguishes "leave unchanged" from "set": when
+   * update_middleware is true the list is replaced by `middleware` (an empty list
+   * clears it); when false/unset the list is left as-is.
+   *
+   * @generated from field: optional bool update_middleware = 9;
+   */
+  updateMiddleware?: boolean | undefined;
+
+  /**
+   * @generated from field: repeated string middleware = 10;
+   */
+  middleware: string[];
 };
 
 /**

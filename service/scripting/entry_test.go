@@ -75,6 +75,13 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 			`{"body":{"n":1},"metadata":{"authorization":"Bearer t","x-signature":"sig"},"target":"localhost:10000"}`,
 		},
 		{
+			// ctx.body is a deep copy of the (frozen) input, so a middleware can mutate its
+			// fields in place — the request-rewriting use case (scripting-ui-plan §S3).
+			"handle-mutates-body-field",
+			`export function handle(ctx) { ctx.body.n = 2; return ctx; }`,
+			`{"body":{"n":2},"metadata":{"authorization":"Bearer t"},"target":"localhost:10000"}`,
+		},
+		{
 			"async-default-rewrites-target",
 			`export default async (ctx) => { ctx.target = "other:1"; return ctx; }`,
 			`{"body":{"n":1},"metadata":{"authorization":"Bearer t"},"target":"other:1"}`,

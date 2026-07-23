@@ -93,6 +93,10 @@ message Request {
   string                    draft_body        = 4;
   google.protobuf.Struct    draft_metadata    = 5;
   repeated History          history           = 6;
+  // middleware is the ordered display names of the MIDDLEWARE-kind scripts
+  // attached to this request; each runs (in this order) before the call to
+  // rewrite the outgoing body/metadata (scripting-ui-plan §S3).
+  repeated string           middleware        = 7;
 }
 
 // Item is a single element in the treeview

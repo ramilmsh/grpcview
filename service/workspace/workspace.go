@@ -444,6 +444,8 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 		Method:        request.Msg.Method,
 		DraftBody:     request.Msg.DraftBody,
 		DraftMetadata: request.Msg.DraftMetadata,
+		Middleware:    request.Msg.GetMiddleware(),
+		SetMiddleware: request.Msg.GetUpdateMiddleware(),
 	}
 	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
 		return coll.UpdateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)

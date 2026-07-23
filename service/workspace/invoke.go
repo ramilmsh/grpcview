@@ -67,6 +67,14 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	if err != nil {
 		return nil, err
 	}
+	// Run the saved request's attached middleware chain (§S3) on the resolved outgoing
+	// request — tokens resolve to values first, then middleware rewrites the body/metadata,
+	// in order. The same shared pre-send step streamInvoke runs; a no-op when nothing is
+	// attached, and a per-middleware failure is a Connect error like the token errors.
+	resolvedBodies, resolvedMD, err = w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetTarget(), resolvedBodies, resolvedMD)
+	if err != nil {
+		return nil, err
+	}
 	body = resolvedBodies[0]
 
 	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
@@ -167,6 +175,13 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	// call (§S2), the same pre-send step unary Invoke runs. A resolution failure is a
 	// pre-flight Connect error that sends no frames, like the other pre-flight errors here.
 	bodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), bodies, msg.GetMetadata())
+	if err != nil {
+		return err
+	}
+	// Run the saved request's attached middleware chain (§S3) on the resolved outgoing
+	// request, the same shared pre-send step unary Invoke runs (after token resolution). A
+	// per-middleware failure is a pre-flight Connect error that sends no frames.
+	bodies, resolvedMD, err = w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetTarget(), bodies, resolvedMD)
 	if err != nil {
 		return err
 	}

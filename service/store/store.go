@@ -54,12 +54,19 @@ var (
 // empty-but-present DraftBody ("") clears the body. Name renames the request's
 // display name; because the store keys items by a stable slug (not the name),
 // the rename only rewrites meta.name and the on-disk directory stays put.
+//
+// Middleware (the ordered attached-middleware names) is a repeated field, which
+// can't be a pointer-nil "unset", so SetMiddleware is its explicit set-flag: when
+// true the list is replaced by Middleware (nil/empty clears it); when false the
+// list is left unchanged.
 type RequestPatch struct {
 	Name          *string
 	Service       *string
 	Method        *string
 	DraftBody     *string
 	DraftMetadata *structpb.Struct
+	Middleware    []string
+	SetMiddleware bool
 }
 
 // ScriptPatch is a partial update to a script. A nil field is left unchanged; a

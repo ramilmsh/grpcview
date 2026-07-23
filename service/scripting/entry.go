@@ -49,13 +49,15 @@ func generatorPostlude(args []any) string {
 	return fmt.Sprintf("await Promise.resolve(%s.default(...%s))", entryGlobalName, argsJSON)
 }
 
-// middlewarePostlude is the call site for a middleware: build a mutable ctx from the frozen
+// middlewarePostlude is the call site for a middleware: build a MUTABLE ctx from the frozen
 // request Input, call `handle` (or the default export), await it, and yield the returned
 // ctx — falling back to the passed ctx when the handler mutates in place and returns
-// nothing. metadata is shallow-copied so an in-place `ctx.metadata[k]=v` is not a write to
-// the frozen input.
+// nothing. Unlike a generator (whose request is a read-only input), a middleware's job is to
+// rewrite the request, so ctx is detached from the frozen input: metadata is shallow-copied
+// and body is DEEP-copied (a JSON round-trip), so `ctx.body.field = …` / `ctx.metadata[k] = v`
+// mutate the ctx, never the frozen input. body defaults to null when the request has none.
 var middlewarePostlude = fmt.Sprintf(`await (async () => {
-  const __ctx = { body: globalThis.request.body, metadata: Object.assign({}, globalThis.request.metadata), target: globalThis.request.target };
+  const __ctx = { body: JSON.parse(JSON.stringify(globalThis.request.body ?? null)), metadata: Object.assign({}, globalThis.request.metadata), target: globalThis.request.target };
   const __fn = %[1]s.handle || %[1]s.default;
   if (typeof __fn !== "function") { throw new TypeError("middleware must export a handle() function or a default export"); }
   const __out = await __fn(__ctx);

@@ -201,7 +201,7 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	itemDir := filepath.Join(parentDir, ch.slug)
 
-	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil {
+	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && !patch.SetMiddleware {
 		return nil
 	}
 	// Reuse the request.json readChildren already decoded (ch.request) rather
@@ -233,7 +233,41 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	if patch.DraftMetadata != nil {
 		dr.DraftMetadata = patch.DraftMetadata // Struct: identical on both sides
 	}
+	// SetMiddleware gates the repeated middleware list (it has no nil "unset"):
+	// replace it (nil/empty clears; protojson then omits it).
+	if patch.SetMiddleware {
+		dr.Middleware = patch.Middleware
+	}
 	return writeMessage(p, dr)
+}
+
+// RequestMiddleware returns the ordered attached-middleware display names for the
+// request named name inside parent — the cheap read the invoke path's middleware
+// step needs, without loading the whole tree (mirroring Sources/Scripts). It
+// returns ErrItemNotFound when there is no such request (an ad-hoc or just-deleted
+// target), which the invoke path treats as "no middleware".
+func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name string) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return nil, err
+	}
+	parentDir, err := c.resolveFolder(parent)
+	if err != nil {
+		return nil, err
+	}
+	present, err := c.readChildren(parentDir)
+	if err != nil {
+		return nil, err
+	}
+	ch, ok := findByName(present, name)
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrItemNotFound, name)
+	}
+	if ch.kind != kindRequest {
+		return nil, fmt.Errorf("%w: %q", ErrNotARequest, name)
+	}
+	return ch.request.GetMiddleware(), nil
 }
 
 // AppendHistory records one completed invoke in the run history of the request

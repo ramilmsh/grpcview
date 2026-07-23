@@ -75,6 +75,13 @@ message UpdateRequestRequest {
   // name renames the request (its display name). Unset leaves the name unchanged;
   // a rename that collides with a sibling fails with FailedPrecondition.
   optional string name = 8;
+  // middleware patches the request's attached-middleware list (ordered MIDDLEWARE
+  // script display names). proto3 repeated can't be `optional`, so update_middleware
+  // is the set-flag that distinguishes "leave unchanged" from "set": when
+  // update_middleware is true the list is replaced by `middleware` (an empty list
+  // clears it); when false/unset the list is left as-is.
+  optional bool update_middleware = 9;
+  repeated string middleware = 10;
 }
 
 message UpdateRequestResponse {
