@@ -19,6 +19,9 @@ export function MessageTab({
   currentKey,
   inputTypeName,
   bodyLanguage,
+  descriptorSet,
+  inputPackage,
+  inputFile,
   onBodyLanguageChange,
 }: {
   schema?: object;
@@ -28,6 +31,10 @@ export function MessageTab({
   currentKey: string;
   inputTypeName?: string;
   bodyLanguage: BodyLanguage;
+  // T2 typed-body inputs, forwarded to Editor (used only in TS mode).
+  descriptorSet?: Uint8Array;
+  inputPackage?: string;
+  inputFile?: string;
   onBodyLanguageChange: (next: BodyLanguage) => void;
 }) {
   const [errors, setErrors] = useState(0);
@@ -62,6 +69,10 @@ export function MessageTab({
           currentMethod={currentMethod}
           currentKey={currentKey}
           bodyLanguage={bodyLanguage}
+          descriptorSet={descriptorSet}
+          inputPackage={inputPackage}
+          inputName={inputTypeName}
+          inputFile={inputFile}
           onErrorsChange={setErrors}
           onTokenClick={openBinding}
         />

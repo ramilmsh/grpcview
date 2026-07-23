@@ -44,7 +44,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	services, err := c.readServicesCache()
+	services, descriptorSet, err := c.readServicesCache()
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +60,10 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 			Name:    name,
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: rootItems}},
 		},
-		Sources:  sources,
-		Services: services,
-		Scripts:  scripts,
+		Sources:       sources,
+		Services:      services,
+		Scripts:       scripts,
+		DescriptorSet: descriptorSet,
 	}, nil
 }
 
@@ -447,14 +448,16 @@ func (c *Collection) Move(_ context.Context, from, to []string) error {
 }
 
 // PutDescriptorState persists the committed descriptor sources (grpcview.json)
-// and the resolved-schema cache (gitignored .grpcview/cache/services.json).
-func (c *Collection) PutDescriptorState(_ context.Context, sources []*grpcviewv1.DescriptorSource, services []*grpcviewv1.Service) error {
+// and the resolved-schema cache (gitignored .grpcview/cache/services.json). The
+// derived, merged descriptorSet is cached alongside the services (same wire
+// Workspace carrier), never committed.
+func (c *Collection) PutDescriptorState(_ context.Context, sources []*grpcviewv1.DescriptorSource, services []*grpcviewv1.Service, descriptorSet []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
-	if err := c.writeServicesCache(services); err != nil {
+	if err := c.writeServicesCache(services, descriptorSet); err != nil {
 		return err
 	}
 	col, err := c.readCollection()
@@ -525,7 +528,7 @@ func (c *Collection) writeWorkspace(ws *grpcviewv1.Workspace) error {
 		return err
 	}
 	if len(ws.GetServices()) > 0 {
-		if err := c.writeServicesCache(ws.GetServices()); err != nil {
+		if err := c.writeServicesCache(ws.GetServices(), ws.GetDescriptorSet()); err != nil {
 			return err
 		}
 	}
@@ -818,11 +821,11 @@ func (c *Collection) ensureGitignore() error {
 // The cache is a snapshot of the wire services (a genuine 1:1), so it reuses the
 // wire message rather than a disk-specific one; being gitignored and regenerable,
 // it is not part of the committed on-disk schema.
-func (c *Collection) writeServicesCache(services []*grpcviewv1.Service) error {
+func (c *Collection) writeServicesCache(services []*grpcviewv1.Service, descriptorSet []byte) error {
 	if err := os.MkdirAll(filepath.Dir(c.servicesCachePath()), 0o755); err != nil {
 		return err
 	}
-	wrapper := &grpcviewv1.Workspace{Services: services}
+	wrapper := &grpcviewv1.Workspace{Services: services, DescriptorSet: descriptorSet}
 	data, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(wrapper)
 	if err != nil {
 		return fmt.Errorf("marshal services cache: %w", err)
@@ -830,19 +833,19 @@ func (c *Collection) writeServicesCache(services []*grpcviewv1.Service) error {
 	return writeFileAtomic(c.servicesCachePath(), append(data, '\n'), 0o644)
 }
 
-func (c *Collection) readServicesCache() ([]*grpcviewv1.Service, error) {
+func (c *Collection) readServicesCache() ([]*grpcviewv1.Service, []byte, error) {
 	data, err := os.ReadFile(c.servicesCachePath())
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	wrapper := &grpcviewv1.Workspace{}
 	if err := protojson.Unmarshal(data, wrapper); err != nil {
-		return nil, fmt.Errorf("unmarshal services cache: %w", err)
+		return nil, nil, fmt.Errorf("unmarshal services cache: %w", err)
 	}
-	return wrapper.GetServices(), nil
+	return wrapper.GetServices(), wrapper.GetDescriptorSet(), nil
 }
 
 // historyFilePath returns the run-history file for the request whose on-disk

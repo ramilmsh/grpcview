@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { JsonObject } from "@bufbuild/protobuf";
 import { ConnectError, Code } from "@connectrpc/connect";
-import type { BodyLanguage, History } from "@grpcview/v1/workspace_pb";
+import { BodyLanguage } from "@grpcview/v1/workspace_pb";
+import type { History } from "@grpcview/v1/workspace_pb";
 import {
   useWorkspace,
   useRootItems,
@@ -146,6 +147,14 @@ export function RequestWorkspace() {
   // local draft copy is needed (ts-request-body-plan §T1/§4.6).
   const onBodyLanguageChange = (next: BodyLanguage) => {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, bodyLanguage: next });
+    // Seed a return-annotated template on JSON→TS when the body is trivial. TS
+    // completions/errors only fire if the `RequestMessage` annotation is literally in the
+    // buffer (an untyped `() => ({})` infers `{}` and offers nothing — plan §T2/§2). Only
+    // for an empty/`{}` body so we never clobber a real JSON object the user is migrating.
+    const trimmed = body.trim();
+    if (next === BodyLanguage.TYPESCRIPT && (trimmed === "" || trimmed === "{}")) {
+      onBodyChange("export default (): RequestMessage => ({\n  \n})");
+    }
   };
 
   // Middleware attach/detach/reorder persists the whole ordered list immediately
@@ -314,6 +323,9 @@ export function RequestWorkspace() {
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}
           bodyLanguage={request.bodyLanguage}
+          descriptorSet={workspace?.descriptorSet}
+          inputPackage={activeMethod?.input?.package}
+          inputFile={activeMethod?.input?.file}
           onBodyLanguageChange={onBodyLanguageChange}
         />
         <ResponsePane

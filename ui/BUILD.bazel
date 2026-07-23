@@ -13,6 +13,7 @@ BUILD_DEPS = [":node_modules/" + d for d in [
     "@types/react",
     "@types/react-dom",
     "@bufbuild/protobuf",
+    "@bufbuild/protoc-gen-es",
     "@connectrpc/connect",
     "@connectrpc/connect-query",
     "@connectrpc/connect-web",

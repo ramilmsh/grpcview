@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -419,7 +420,8 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	services := []*grpcviewv1.Service{
 		{Package: "acme.v1", Name: "UserService", Methods: []*grpcviewv1.Method{{Name: "GetUser"}}},
 	}
-	if err := coll.PutDescriptorState(ctx, sources, services); err != nil {
+	descriptorSet := []byte{0x01, 0x02, 0x03}
+	if err := coll.PutDescriptorState(ctx, sources, services, descriptorSet); err != nil {
 		t.Fatalf("PutDescriptorState: %v", err)
 	}
 
@@ -432,6 +434,9 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	}
 	if len(ws.GetServices()) != 1 || ws.GetServices()[0].GetName() != "UserService" {
 		t.Errorf("services not round-tripped: %v", ws.GetServices())
+	}
+	if !bytes.Equal(ws.GetDescriptorSet(), descriptorSet) {
+		t.Errorf("descriptor set not round-tripped: got %v want %v", ws.GetDescriptorSet(), descriptorSet)
 	}
 
 	// The resolved-schema cache lives under the gitignored state dir.

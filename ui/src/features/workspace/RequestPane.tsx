@@ -29,6 +29,9 @@ export function RequestPane({
   currentKey,
   inputTypeName,
   bodyLanguage,
+  descriptorSet,
+  inputPackage,
+  inputFile,
   onBodyLanguageChange,
 }: {
   schema?: object;
@@ -45,6 +48,10 @@ export function RequestPane({
   currentKey: string;
   inputTypeName?: string;
   bodyLanguage: BodyLanguage;
+  // T2 typed-body inputs, passed through to MessageTab → Editor (used only in TS mode).
+  descriptorSet?: Uint8Array;
+  inputPackage?: string;
+  inputFile?: string;
   onBodyLanguageChange: (next: BodyLanguage) => void;
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
@@ -111,6 +118,9 @@ export function RequestPane({
             currentKey={currentKey}
             inputTypeName={inputTypeName}
             bodyLanguage={bodyLanguage}
+            descriptorSet={descriptorSet}
+            inputPackage={inputPackage}
+            inputFile={inputFile}
             onBodyLanguageChange={onBodyLanguageChange}
           />
         )

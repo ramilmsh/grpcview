@@ -119,23 +119,23 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	// persist + reload tail in addResolvedSource.
 	switch source := request.Msg.GetSource().(type) {
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
-		resolved, err := resolveDescriptorSetServices(source.DescriptorSet)
+		resolved, fileDescs, err := resolveDescriptorSetServices(source.DescriptorSet)
 		if err != nil {
 			return nil, err
 		}
 		src := &grpcviewv1.DescriptorSource{
 			Source: &grpcviewv1.DescriptorSource_DescriptorSet{DescriptorSet: source.DescriptorSet},
 		}
-		return w.addResolvedSource(ctx, coll, ws, src, resolved)
+		return w.addResolvedSource(ctx, coll, ws, src, resolved, fileDescs)
 	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
-		resolved, err := resolveReflectionServices(ctx, source.Reflection)
+		resolved, fileDescs, err := resolveReflectionServices(ctx, source.Reflection)
 		if err != nil {
 			return nil, err
 		}
 		src := &grpcviewv1.DescriptorSource{
 			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection},
 		}
-		return w.addResolvedSource(ctx, coll, ws, src, resolved)
+		return w.addResolvedSource(ctx, coll, ws, src, resolved, fileDescs)
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}
@@ -146,12 +146,18 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 // resolveServicesFromSources), persists the source config (committed) alongside
 // the resolved schema cache (gitignored), then reloads so the response reflects
 // on-disk state. Shared by both AddDescriptorSource branches.
-func (w Workspace) addResolvedSource(ctx context.Context, coll *store.Collection, ws *grpcviewv1.Workspace, src *grpcviewv1.DescriptorSource, resolved []*grpcviewv1.Service) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
+func (w Workspace) addResolvedSource(ctx context.Context, coll *store.Collection, ws *grpcviewv1.Workspace, src *grpcviewv1.DescriptorSource, resolved []*grpcviewv1.Service, fileDescs []*desc.FileDescriptor) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
 	for _, svc := range resolved {
 		ws.Services = mergeService(ws.Services, svc)
 	}
 	ws.Sources = appendSourceUnique(ws.Sources, src)
-	if err := coll.PutDescriptorState(ctx, ws.Sources, ws.Services); err != nil {
+	// Fold the new source's descriptors into the cached descriptor_set (loaded on
+	// ws), mirroring the incremental services merge above.
+	descriptorSet, err := mergeDescriptorSet(ws.GetDescriptorSet(), fileDescs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge descriptor set: %w", err)
+	}
+	if err := coll.PutDescriptorState(ctx, ws.Sources, ws.Services, descriptorSet); err != nil {
 		return nil, fmt.Errorf("failed to persist descriptor state: %w", err)
 	}
 
@@ -185,13 +191,19 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 	}
 
 	remaining := slices.Delete(slices.Clone(ws.Sources), index, index+1)
-	services, err := resolveServicesFromSources(ctx, remaining)
+	services, fileDescs, err := resolveServicesFromSources(ctx, remaining)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
 			fmt.Errorf("failed to re-resolve services after removing source: %w", err))
 	}
+	// The remaining sources were fully re-resolved, so the descriptor_set is rebuilt
+	// from scratch (no cache merge) — the removed source's files drop out.
+	descriptorSet, err := mergeDescriptorSet(nil, fileDescs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge descriptor set: %w", err)
+	}
 
-	if err := coll.PutDescriptorState(ctx, remaining, services); err != nil {
+	if err := coll.PutDescriptorState(ctx, remaining, services, descriptorSet); err != nil {
 		return nil, fmt.Errorf("failed to persist descriptor state: %w", err)
 	}
 
@@ -207,56 +219,63 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 // each) and parsing each uploaded descriptor set. Later-listed sources win on
 // package/name collisions, matching the incremental merge AddDescriptorSource
 // performs.
-func resolveServicesFromSources(ctx context.Context, sources []*grpcviewv1.DescriptorSource) ([]*grpcviewv1.Service, error) {
+func resolveServicesFromSources(ctx context.Context, sources []*grpcviewv1.DescriptorSource) ([]*grpcviewv1.Service, []*desc.FileDescriptor, error) {
 	var services []*grpcviewv1.Service
+	var fileDescs []*desc.FileDescriptor
 	for _, src := range sources {
 		var resolved []*grpcviewv1.Service
+		var files []*desc.FileDescriptor
 		var err error
 		switch s := src.GetSource().(type) {
 		case *grpcviewv1.DescriptorSource_Reflection:
-			resolved, err = resolveReflectionServices(ctx, s.Reflection)
+			resolved, files, err = resolveReflectionServices(ctx, s.Reflection)
 		case *grpcviewv1.DescriptorSource_DescriptorSet:
-			resolved, err = resolveDescriptorSetServices(s.DescriptorSet)
+			resolved, files, err = resolveDescriptorSetServices(s.DescriptorSet)
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, svc := range resolved {
 			services = mergeService(services, svc)
 		}
+		fileDescs = append(fileDescs, files...)
 	}
-	return services, nil
+	return services, fileDescs, nil
 }
 
 // resolveReflectionServices dials a reflection server, lists its services, and
 // converts each into a wire Service (package/name + methods with input schemas).
-// One network round-trip per call.
-func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) ([]*grpcviewv1.Service, error) {
+// It also returns the resolved *desc.FileDescriptor for each service (carrying its
+// transitive dependency graph incl. WKTs), which the caller merges into the
+// workspace's cached descriptor_set (§T2). One network round-trip per call.
+func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) ([]*grpcviewv1.Service, []*desc.FileDescriptor, error) {
 	conn, err := dial(server)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't connect to %s: %w", server, err)
+		return nil, nil, fmt.Errorf("couldn't connect to %s: %w", server, err)
 	}
 
 	client := grpcreflect.NewClientAuto(ctx, conn)
 	names, err := client.ListServices()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list services: %w", err)
+		return nil, nil, fmt.Errorf("failed to list services: %w", err)
 	}
 
 	services := make([]*grpcviewv1.Service, 0, len(names))
+	fileDescs := make([]*desc.FileDescriptor, 0, len(names))
 	for _, serviceName := range names {
 		fileDesc, err := client.FileContainingSymbol(serviceName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get file for service [%s]: %w", serviceName, err)
+			return nil, nil, fmt.Errorf("failed to get file for service [%s]: %w", serviceName, err)
 		}
 		serviceDesc := fileDesc.FindSymbol(serviceName).(*desc.ServiceDescriptor)
 		service, err := convertService(serviceDesc)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		services = append(services, service)
+		fileDescs = append(fileDescs, fileDesc)
 	}
-	return services, nil
+	return services, fileDescs, nil
 }
 
 // resolveDescriptorSetServices parses an uploaded FileDescriptorSet (raw
@@ -267,31 +286,63 @@ func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) (
 // file order and merged so a later file wins on a package/name collision,
 // mirroring resolveServicesFromSources' cross-source rule. Parse and link
 // failures surface as InvalidArgument because the bytes are caller-supplied.
-func resolveDescriptorSetServices(raw []byte) ([]*grpcviewv1.Service, error) {
+func resolveDescriptorSetServices(raw []byte) ([]*grpcviewv1.Service, []*desc.FileDescriptor, error) {
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(raw, fds); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse descriptor set: %w", err))
+		return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse descriptor set: %w", err))
 	}
 	files, err := desc.CreateFileDescriptorsFromSet(fds)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("link descriptor set: %w", err))
+		return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("link descriptor set: %w", err))
 	}
 
 	var services []*grpcviewv1.Service
+	// Every linked file (incl. transitive deps) feeds the merged descriptor_set;
+	// desc.ToFileDescriptorSet dedupes and topo-sorts, so file order is irrelevant.
+	fileDescs := make([]*desc.FileDescriptor, 0, len(files))
 	for _, fdp := range fds.GetFile() {
 		file := files[fdp.GetName()]
 		if file == nil {
 			continue
 		}
+		fileDescs = append(fileDescs, file)
 		for _, serviceDesc := range file.GetServices() {
 			service, err := convertService(serviceDesc)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			services = mergeService(services, service)
 		}
 	}
-	return services, nil
+	return services, fileDescs, nil
+}
+
+// mergeDescriptorSet combines freshly resolved file descriptors with the
+// previously cached descriptor_set (existing, may be nil) and marshals one
+// merged, deduped FileDescriptorSet with transitive deps incl. WKTs.
+// desc.ToFileDescriptorSet walks GetDependencies transitively, dedupes by file
+// name, and topo-sorts; fileDescs come first so a re-added/updated source wins.
+// This mirrors the incremental services merge: Add folds new descriptors into the
+// cache, while RemoveDescriptorSource re-resolves the full set and passes nil.
+func mergeDescriptorSet(existing []byte, fileDescs []*desc.FileDescriptor) ([]byte, error) {
+	all := fileDescs
+	if len(existing) > 0 {
+		prev := &descriptorpb.FileDescriptorSet{}
+		if err := proto.Unmarshal(existing, prev); err != nil {
+			return nil, fmt.Errorf("parse cached descriptor set: %w", err)
+		}
+		prevFiles, err := desc.CreateFileDescriptorsFromSet(prev)
+		if err != nil {
+			return nil, fmt.Errorf("link cached descriptor set: %w", err)
+		}
+		for _, fd := range prevFiles {
+			all = append(all, fd)
+		}
+	}
+	if len(all) == 0 {
+		return nil, nil
+	}
+	return proto.Marshal(desc.ToFileDescriptorSet(all...))
 }
 
 // convertService builds a wire Service (package/name + methods with input JSON
@@ -328,11 +379,16 @@ func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, e
 				Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    inputDesc.GetName(),
 				Schema:  schemaStruct,
+				// File is the proto path defining this message — the protoc-gen-es
+				// fileToGenerate selector into Workspace.descriptor_set (§T2). It
+				// rides the wire-typed services cache for free.
+				File: inputDesc.GetFile().GetName(),
 			},
 			Output: &grpcviewv1.Message{
 				Package: outputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    outputDesc.GetName(),
 				Schema:  outputSchema,
+				File:    outputDesc.GetFile().GetName(),
 			},
 			ClientStreaming: methodDesc.IsClientStreaming(),
 			ServerStreaming: methodDesc.IsServerStreaming(),

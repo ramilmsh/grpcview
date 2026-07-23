@@ -95,6 +95,16 @@ export declare type Message = Message$1<"grpcview.v1.Message"> & {
    * @generated from field: optional google.protobuf.Struct schema = 3;
    */
   schema?: JsonObject | undefined;
+
+  /**
+   * file is the proto file path that defines this message (e.g.
+   * proto/foo/v1/foo.proto). It is the protoc-gen-es fileToGenerate selector and
+   * identifies which generated _pb.ts exports this message's Json type
+   * (ts-request-body-plan §T2/§4.4). Derived from the resolved descriptor.
+   *
+   * @generated from field: string file = 4;
+   */
+  file: string;
 };
 
 /**
@@ -497,6 +507,17 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
    * @generated from field: repeated grpcview.v1.Script scripts = 5;
    */
   scripts: Script[];
+
+  /**
+   * descriptor_set is the merged, deduped FileDescriptorSet (transitive deps
+   * incl. WKTs, topo-sorted) that protoc-gen-es needs to type request bodies
+   * client-side (ts-request-body-plan §T2/§4.4). It is DERIVED from the resolved
+   * descriptors and cached alongside services (gitignored services.json), never
+   * committed to grpcview.json and not part of grpcview.store.v1.
+   *
+   * @generated from field: bytes descriptor_set = 6;
+   */
+  descriptorSet: Uint8Array;
 };
 
 /**

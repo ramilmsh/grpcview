@@ -10,6 +10,10 @@ import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
 // the body editor never shares a model with the Scripts / binding editors. T1 is
 // UNTYPED: we do not addExtraLib the request-message type here (that is T2).
 import "@/features/scripts/monaco-scripts";
+// Side-effect import (T2): the fixed virtual `@bufbuild/protobuf{,/wkt,/codegenv2}` d.ts
+// stubs the generated proto `_pb.ts` files import from. Added once; the per-method generated
+// files + RequestMessage alias are injected by the effect below.
+import "./vendor/bufbuild-stubs";
 import { scanTokens, type Token } from "./tokens";
 
 // The request editor has two modes, selected per-request by body_language:
@@ -39,6 +43,13 @@ interface EditorProps {
   // How the body is interpreted (JSON vs TYPESCRIPT); drives the editor language +
   // model URI. UNSPECIFIED behaves as JSON.
   bodyLanguage: BodyLanguage;
+  // T2 typed-body inputs (all optional; only used in TS mode). descriptorSet is the
+  // workspace-global merged FileDescriptorSet; the input triple identifies the active
+  // method's request message so the body types against its generated `<Message>Json`.
+  descriptorSet?: Uint8Array;
+  inputPackage?: string;
+  inputName?: string;
+  inputFile?: string;
   onErrorsChange?: (errors: number) => void;
   // Called when a `{{ … }}` token in the body is clicked, with the generator name.
   onTokenClick?: (generator: string) => void;
@@ -51,6 +62,10 @@ export function Editor({
   currentMethod,
   currentKey,
   bodyLanguage,
+  descriptorSet,
+  inputPackage,
+  inputName,
+  inputFile,
   onErrorsChange,
   onTokenClick,
 }: EditorProps) {
@@ -75,7 +90,7 @@ export function Editor({
   // Point the JSON validator at the current method's input schema, matched to
   // this editor's single model URI.
   useEffect(() => {
-    if (!monaco) return;
+    if (!monaco || isTS) return; // TS mode: no JSON model is live, so this is a no-op — skip it.
     monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
       validate: true,
       schemaValidation: "error",
@@ -90,7 +105,7 @@ export function Editor({
           ]
         : [],
     });
-  }, [monaco, schema, currentMethod.service, currentMethod.method]);
+  }, [monaco, isTS, schema, currentMethod.service, currentMethod.method]);
 
   // Load the active request's draft when the request identity changes. Guarded so
   // it never clobbers the buffer mid-typing (onChange keeps `data` === buffer).
@@ -117,6 +132,47 @@ export function Editor({
     });
     return () => sub.dispose();
   }, [monaco, onErrorsChange]);
+
+  // T2 — type the TS body against the input message's generated `<Message>Json` type.
+  // Only in TS mode with a descriptor set + a known input file: dynamically import the
+  // client-side generator (keeps protoc-gen-es + typescript off the main chunk), run it
+  // over the workspace descriptor set (memoized by reference), then addExtraLib each
+  // generated `_pb.ts` under file:///grpcview/request/gen/<protopath> (extensionless
+  // relative imports in the generated files resolve to these) plus a RequestMessage alias
+  // d.ts at a constant path. typescriptDefaults is GLOBAL with no per-URI fileMatch, but
+  // only one body editor is live, so we track the libs in a ref and DISPOSE-BEFORE-ADD on
+  // every re-run (method change / descriptor change) — same-path replace can throw
+  // "Duplicate definition". Cleanup disposes all libs so no stale `declare global` survives.
+  const typeLibs = useRef<Monaco.IDisposable[]>([]);
+  useEffect(() => {
+    // descriptorSet is best-effort on the backend (empty when a reflection source is
+    // unreachable) — an empty set has no files to generate, so skip and let the body stay
+    // untyped rather than aliasing RequestMessage to a missing import.
+    if (!monaco || !isTS || !descriptorSet?.length || !inputFile) return;
+    let cancelled = false;
+    void (async () => {
+      const { generateWorkspaceTypes, requestMessageAlias } = await import("./proto-types");
+      const files = generateWorkspaceTypes(descriptorSet);
+      if (cancelled) return;
+      const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+      typeLibs.current.forEach((d) => d.dispose());
+      typeLibs.current = [];
+      for (const [path, content] of files) {
+        typeLibs.current.push(
+          tsDefaults.addExtraLib(content, `file:///grpcview/request/gen/${path}`)
+        );
+      }
+      const alias = requestMessageAlias(files, inputPackage ?? "", inputName ?? "", inputFile);
+      typeLibs.current.push(
+        tsDefaults.addExtraLib(alias.dts, "file:///grpcview/request/request-message.d.ts")
+      );
+    })();
+    return () => {
+      cancelled = true;
+      typeLibs.current.forEach((d) => d.dispose());
+      typeLibs.current = [];
+    };
+  }, [monaco, isTS, descriptorSet, inputPackage, inputName, inputFile]);
 
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
