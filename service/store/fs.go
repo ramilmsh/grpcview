@@ -83,6 +83,23 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 	return diskToWireSources(col.GetSources())
 }
 
+// Scripts returns just the collection's ordered scripts (manifest order + the
+// scripts/ directory), without walking the request tree or reading the schema
+// cache — the cheap read the invoke path's token resolution needs, mirroring
+// Sources. It returns ErrNotFound if the collection has not been created.
+func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	col, err := c.readCollection()
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return c.loadScripts(col.GetScripts())
+}
+
 // EnsureCreated creates an empty collection (grpcview.json, tree/, .gitignore)
 // if one does not already exist. Used by the Get RPC, which auto-creates.
 func (c *Collection) EnsureCreated(_ context.Context) error {

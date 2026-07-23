@@ -176,16 +176,7 @@ func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in In
 			return v.(Result).clone(), nil // clone: never hand callers the cache's slices
 		}
 	}
-	// Entry-point convention (§2.5): a generator that declares `export default` is called
-	// with in.Args; one that doesn't falls back to last-expression eval.
-	c, postlude, err := e.compileGenerator(source, g, in.Args)
-	if err != nil {
-		return Result{}, err
-	}
-	rctx, cancel := withProfileDeadline(ctx, Generator)
-	defer cancel()
-
-	res, err := e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
+	res, err := e.runGenerator(ctx, source, g, in)
 	if err != nil {
 		return res, err
 	}
@@ -193,6 +184,30 @@ func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in In
 		e.genCache.Store(key, res.clone()) // clone: detach the cache from this caller's slices
 	}
 	return res, nil
+}
+
+// RunGeneratorUncached runs a generator WITHOUT consulting or populating the generator
+// cache, so a caller that must re-run every time gets a fresh value. Token resolution on
+// the invoke path uses this (scripting-ui-plan §S2): `uuid()`/`now()` must vary per invoke,
+// so the config-digest cache — which assumes the generator is a pure function of its
+// configuration — would hand back a stale value. The cache stays intact for a future
+// opt-in "by inputs" caching policy; RunGenerator remains the cached entry point.
+func (e *Engine) RunGeneratorUncached(ctx context.Context, source string, g Grant, in Input) (Result, error) {
+	return e.runGenerator(ctx, source, g, in)
+}
+
+// runGenerator is the shared compile-and-run core of the cached (RunGenerator) and uncached
+// (RunGeneratorUncached) paths. It applies the entry-point convention (§2.5) — a generator
+// that declares `export default` is called with in.Args, one that doesn't falls back to
+// last-expression eval — and runs on a fresh instance under the Generator bounds.
+func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in Input) (Result, error) {
+	c, postlude, err := e.compileGenerator(source, g, in.Args)
+	if err != nil {
+		return Result{}, err
+	}
+	rctx, cancel := withProfileDeadline(ctx, Generator)
+	defer cancel()
+	return e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
 }
 
 // RunMiddleware runs a middleware invoke through the warm instance pool. A middleware that

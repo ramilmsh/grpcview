@@ -56,16 +56,25 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("streaming methods are not supported yet: %s", methodDesc.GetFullyQualifiedName()))
 	}
 
-	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
 	body := strings.TrimSpace(msg.GetBody())
 	if body == "" {
 		body = "{}"
 	}
+	// Resolve {{ generator() }} tokens in the body + metadata before the call (§S2), the
+	// shared pre-send step streamInvoke also runs. A token-free request is untouched; a
+	// resolution failure is a Connect error grpcview can't get past, like a bad body.
+	resolvedBodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), []string{body}, msg.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
+	body = resolvedBodies[0]
+
+	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
 	if err := reqMsg.UnmarshalJSON([]byte(body)); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body for %s: %w", methodDesc.GetInputType().GetFullyQualifiedName(), err))
 	}
 
-	reqMD := structToMetadata(msg.GetMetadata())
+	reqMD := structToMetadata(resolvedMD)
 	callCtx := metadata.NewOutgoingContext(ctx, reqMD)
 
 	var header, trailer metadata.MD
@@ -154,6 +163,13 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	if len(bodies) == 0 {
 		bodies = []string{"{}"}
 	}
+	// Resolve {{ generator() }} tokens across every request body + the metadata before the
+	// call (§S2), the same pre-send step unary Invoke runs. A resolution failure is a
+	// pre-flight Connect error that sends no frames, like the other pre-flight errors here.
+	bodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), bodies, msg.GetMetadata())
+	if err != nil {
+		return err
+	}
 	reqMsgs := make([]*dynamic.Message, len(bodies))
 	for i, body := range bodies {
 		body = strings.TrimSpace(body)
@@ -167,7 +183,7 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 		reqMsgs[i] = m
 	}
 
-	reqMD := structToMetadata(msg.GetMetadata())
+	reqMD := structToMetadata(resolvedMD)
 	callCtx := metadata.NewOutgoingContext(ctx, reqMD)
 	stub := grpcdynamic.NewStub(conn)
 
