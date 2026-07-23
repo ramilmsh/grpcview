@@ -446,6 +446,7 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 		DraftMetadata: request.Msg.DraftMetadata,
 		Middleware:    request.Msg.GetMiddleware(),
 		SetMiddleware: request.Msg.GetUpdateMiddleware(),
+		BodyLanguage:  request.Msg.BodyLanguage, // wire *grpcviewv1.BodyLanguage, optional
 	}
 	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
 		return coll.UpdateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)

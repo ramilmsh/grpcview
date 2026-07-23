@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -30,6 +31,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
@@ -60,10 +62,18 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	if body == "" {
 		body = "{}"
 	}
+	// Evaluate a TypeScript body → JSON first (§T1), the shared pre-send step streamInvoke
+	// also runs BEFORE token resolution: when body_language is TYPESCRIPT the body is a
+	// generator whose returned object becomes the JSON message; for JSON (the default) this
+	// is a byte-identical no-op, so today's JSON path + {{ }} tokens are untouched.
+	evaluatedBodies, err := w.resolveInvokeBody(ctx, msg.GetWorkspaceName(), []string{body}, msg.GetBodyLanguage())
+	if err != nil {
+		return nil, err
+	}
 	// Resolve {{ generator() }} tokens in the body + metadata before the call (§S2), the
 	// shared pre-send step streamInvoke also runs. A token-free request is untouched; a
 	// resolution failure is a Connect error grpcview can't get past, like a bad body.
-	resolvedBodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), []string{body}, msg.GetMetadata())
+	resolvedBodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), evaluatedBodies, msg.GetMetadata())
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +180,13 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	bodies := msg.GetMessages()
 	if len(bodies) == 0 {
 		bodies = []string{"{}"}
+	}
+	// Evaluate a TypeScript body → JSON before token resolution (§T1), the same shared
+	// pre-send step unary Invoke runs; a byte-identical no-op for JSON bodies. A failure is
+	// a pre-flight Connect error that sends no frames, like the other pre-flight errors here.
+	bodies, err = w.resolveInvokeBody(ctx, msg.GetWorkspaceName(), bodies, msg.GetBodyLanguage())
+	if err != nil {
+		return err
 	}
 	// Resolve {{ generator() }} tokens across every request body + the metadata before the
 	// call (§S2), the same pre-send step unary Invoke runs. A resolution failure is a
@@ -358,6 +375,60 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	}
 	w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), body, out)
 	return nil
+}
+
+// resolveInvokeBody is the shared pre-send body-evaluation step (ts-request-body-plan §T1)
+// for unary Invoke (one body) and streaming InvokeStreaming (many), run BEFORE token
+// resolution at both sites. When lang is TYPESCRIPT each body is a TS/JS generator: it is
+// run through the engine — uncached, so Math.random()/now() vary per invoke, and fully
+// sandboxed (empty Grant, no vars/secrets/env, exactly like the token/middleware runs) — and
+// its returned JSON object REPLACES the body, which then flows through the existing
+// token/middleware/UnmarshalJSON pipeline unchanged. For JSON or UNSPECIFIED (the default, so
+// a request saved before body_language existed) it is a pure no-op: the bodies pass through
+// byte-identical, so today's JSON path and {{ }} tokens are completely untouched. A throw,
+// timeout, or a non-object return is a Connect FailedPrecondition, mirroring the token/
+// middleware error policy (tokenError/middlewareError).
+func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string, lang grpcviewv1.BodyLanguage) ([]string, error) {
+	if lang != grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT {
+		return bodies, nil // JSON / UNSPECIFIED: no-op, today's path runs verbatim
+	}
+	if w.engine == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("a TypeScript request body requires the scripting engine, which is not available"))
+	}
+	out := make([]string, len(bodies))
+	for i, body := range bodies {
+		// The whole body is the generator source (its own `export default` fires the
+		// entry-point convention with no positional args, per entry.go). Result.Value is the
+		// returned object as raw JSON — the replacement body.
+		res, err := w.engine.RunGeneratorUncached(ctx, body, scripting.Grant{}, scripting.Input{})
+		if err != nil {
+			return nil, bodyError(i, err.Error())
+		}
+		if !isJSONObject(res.Value) {
+			return nil, bodyError(i, "expected the body to return an object")
+		}
+		out[i] = string(res.Value)
+	}
+	return out, nil
+}
+
+// isJSONObject reports whether raw is a JSON object ({…}) — the shape a request message must
+// have. It only inspects the first non-space byte: the engine already guarantees raw is valid
+// JSON (or empty for an undefined/non-serializable return), and the subsequent UnmarshalJSON
+// validates it against the message type. An empty (undefined) return is not an object.
+func isJSONObject(raw []byte) bool {
+	raw = bytes.TrimSpace(raw)
+	return len(raw) > 0 && raw[0] == '{'
+}
+
+// bodyError renders a TypeScript-body evaluation failure as a Connect FailedPrecondition
+// naming the offending body by index (mirroring the streaming unmarshal's "[%d]"), matching
+// Invoke's policy that a pre-send failure grpcview itself can't get past is a typed Connect
+// error (mirrors tokens.go's tokenError and middleware.go's middlewareError).
+func bodyError(index int, detail string) error {
+	return connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Errorf("cannot evaluate TypeScript request body [%d]: %s", index, detail))
 }
 
 // recordHistory persists one completed invoke to the target request's run

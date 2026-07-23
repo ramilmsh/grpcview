@@ -1,20 +1,34 @@
 import { useEffect, useRef } from "react";
 import { Editor as MonacoEditor, useMonaco, type OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
+import { BodyLanguage } from "@grpcview/v1/workspace_pb";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
+// Side-effect import: configure the GLOBAL TypeScript defaults (compiler options,
+// eager model sync, diagnostics ON) the same way the Scripts editor does, so the TS
+// body model below gets sane options + live error markers. We deliberately mount on
+// our OWN file:// URI (TS_MODEL_URI), distinct from that module's SCRATCH_PATH, so
+// the body editor never shares a model with the Scripts / binding editors. T1 is
+// UNTYPED: we do not addExtraLib the request-message type here (that is T2).
+import "@/features/scripts/monaco-scripts";
 import { scanTokens, type Token } from "./tokens";
 
-// The request editor uses one JSON model at a fixed URI; the per-method JSON
-// schema is swapped on the shared jsonDefaults (matched to that URI) and the
-// buffer is reloaded when the active request changes — so two requests on the
-// same method still show their own draft. Ported from the previous Editor.tsx
-// (plan §7), retargeted at the bundled Monaco + Nocturne theme.
-//
-// S2: `{{ generator(args?) }}` tokens in the body get an accent-2 chip decoration
-// (Monaco can't host React chips inline, so this is an inline-className decoration
-// recomputed on every edit) and a mouse-down on a token opens the binding editor
-// for the generator it names.
-const MODEL_URI = "grpcview://request/body.json";
+// The request editor has two modes, selected per-request by body_language:
+//   • JSON (default / UNSPECIFIED): one JSON model at JSON_MODEL_URI; the per-method
+//     JSON schema is swapped on the shared jsonDefaults (matched to that URI) and the
+//     buffer is reloaded when the active request changes — so two requests on the
+//     same method still show their own draft. `{{ generator(args?) }}` tokens get an
+//     accent-2 chip decoration (Monaco can't host React chips inline, so this is an
+//     inline-className decoration recomputed on every edit) and a mouse-down on a
+//     token opens the binding editor for the generator it names.
+//   • TYPESCRIPT (ts-request-body-plan §T1): the body is a TS/JS generator whose
+//     returned object becomes the message. It mounts language="typescript" on a
+//     DISTINCT file:// URI (Node-style resolution; never collides with the JSON model
+//     or the Scripts sandbox's SCRATCH_PATH). The editor is re-keyed on the mode so
+//     exactly one model is live at a time and each toggle re-seeds from the current
+//     body; JSON-only concerns (schema, token chips) are gated off in TS mode.
+// Ported from the previous Editor.tsx (plan §7), on the bundled Monaco + Nocturne theme.
+const JSON_MODEL_URI = "grpcview://request/body.json";
+const TS_MODEL_URI = "file:///grpcview/request/body.ts";
 
 interface EditorProps {
   schema?: object; // the current method's input JSON schema (resolved upstream)
@@ -22,6 +36,9 @@ interface EditorProps {
   onChange: (value: string) => void;
   currentMethod: { service: string; method: string };
   currentKey: string; // request identity — reload the buffer when it changes
+  // How the body is interpreted (JSON vs TYPESCRIPT); drives the editor language +
+  // model URI. UNSPECIFIED behaves as JSON.
+  bodyLanguage: BodyLanguage;
   onErrorsChange?: (errors: number) => void;
   // Called when a `{{ … }}` token in the body is clicked, with the generator name.
   onTokenClick?: (generator: string) => void;
@@ -33,9 +50,11 @@ export function Editor({
   onChange,
   currentMethod,
   currentKey,
+  bodyLanguage,
   onErrorsChange,
   onTokenClick,
 }: EditorProps) {
+  const isTS = bodyLanguage === BodyLanguage.TYPESCRIPT;
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   // Set while we reload the buffer programmatically, so the resulting
   // onDidChangeModelContent isn't reported as a user edit. @monaco-editor/react
@@ -65,7 +84,7 @@ export function Editor({
         ? [
             {
               uri: `grpcview://schemas/${currentMethod.service}/${currentMethod.method}`,
-              fileMatch: [MODEL_URI],
+              fileMatch: [JSON_MODEL_URI],
               schema,
             },
           ]
@@ -105,6 +124,12 @@ export function Editor({
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
       editor.getAction("editor.action.formatDocument")?.run();
     });
+
+    // `{{ … }}` token chips + click-to-edit are JSON-mode concerns only (a TS body
+    // calls generators directly — there are no tokens to scan). Skip them in TS mode.
+    // onMount is captured at mount and the editor is re-keyed on the mode, so `isTS`
+    // here always reflects the model that just mounted.
+    if (isTS) return;
 
     // Decorate every `{{ … }}` token as an accent-2 chip, recomputed from the live
     // buffer on each edit (offsets → line/column ranges). The collection is owned by
@@ -150,8 +175,14 @@ export function Editor({
 
   return (
     <MonacoEditor
-      path={MODEL_URI}
-      language="json"
+      // Re-key on the mode so a JSON⇄TS toggle fully remounts the editor: the old
+      // model is disposed and a fresh one is created at the mode's URI, seeded from
+      // the current body via defaultValue. This keeps the two modes' models from ever
+      // coexisting and avoids stale content on toggle-back. JSON-only usage never
+      // toggles, so it never remounts — today's behavior is preserved exactly.
+      key={isTS ? "ts" : "json"}
+      path={isTS ? TS_MODEL_URI : JSON_MODEL_URI}
+      language={isTS ? "typescript" : "json"}
       theme={NOCTURNE_MONACO_THEME}
       defaultValue={data}
       onMount={onMount}

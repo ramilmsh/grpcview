@@ -344,6 +344,16 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
    * @generated from field: repeated string middleware = 7;
    */
   middleware: string[];
+
+  /**
+   * body_language selects how draft_body is interpreted on invoke: JSON — sent
+   * as-is (the default; today's path + {{ }} tokens) — or TYPESCRIPT, where
+   * draft_body is a TS/JS generator whose returned object is the request message
+   * (ts-request-body-plan §T1). See BodyLanguage.
+   *
+   * @generated from field: grpcview.v1.BodyLanguage body_language = 8;
+   */
+  bodyLanguage: BodyLanguage;
 };
 
 /**
@@ -494,6 +504,36 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
  * Use `create(WorkspaceSchema)` to create a new message.
  */
 export declare const WorkspaceSchema: GenMessage<Workspace>;
+
+/**
+ * BodyLanguage selects how a Request's draft_body is interpreted on invoke.
+ * Mirrors the on-disk grpcview.store.v1.BodyLanguage. UNSPECIFIED and JSON both
+ * mean "send the body as-is" (today's JSON path + {{ }} tokens), so a request
+ * saved before this field existed (UNSPECIFIED) behaves exactly as JSON.
+ *
+ * @generated from enum grpcview.v1.BodyLanguage
+ */
+export enum BodyLanguage {
+  /**
+   * @generated from enum value: BODY_LANGUAGE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BODY_LANGUAGE_JSON = 1;
+   */
+  JSON = 1,
+
+  /**
+   * @generated from enum value: BODY_LANGUAGE_TYPESCRIPT = 2;
+   */
+  TYPESCRIPT = 2,
+}
+
+/**
+ * Describes the enum grpcview.v1.BodyLanguage.
+ */
+export declare const BodyLanguageSchema: GenEnum<BodyLanguage>;
 
 /**
  * ScriptKind classifies a saved script by how it is invoked. Mirrors the on-disk

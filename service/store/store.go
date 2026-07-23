@@ -29,6 +29,8 @@ import (
 	"sync"
 
 	"google.golang.org/protobuf/types/known/structpb"
+
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
 // Sentinel errors. Callers (the RPC handlers) map these to transport error
@@ -67,6 +69,11 @@ type RequestPatch struct {
 	DraftMetadata *structpb.Struct
 	Middleware    []string
 	SetMiddleware bool
+	// BodyLanguage patches how the body is interpreted on invoke (JSON vs
+	// TYPESCRIPT). It is the WIRE enum (bridged to the disk enum on apply, like
+	// the request converters); nil leaves it unchanged, matching the optional RPC
+	// field. A scalar enum needs no set-flag (unlike Middleware).
+	BodyLanguage *grpcviewv1.BodyLanguage
 }
 
 // ScriptPatch is a partial update to a script. A nil field is left unchanged; a

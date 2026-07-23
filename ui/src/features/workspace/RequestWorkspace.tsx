@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { JsonObject } from "@bufbuild/protobuf";
 import { ConnectError, Code } from "@connectrpc/connect";
-import type { History } from "@grpcview/v1/workspace_pb";
+import type { BodyLanguage, History } from "@grpcview/v1/workspace_pb";
 import {
   useWorkspace,
   useRootItems,
@@ -140,6 +140,14 @@ export function RequestWorkspace() {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
   };
 
+  // Body-language toggle (JSON ⇄ TypeScript). A discrete edit like a method change:
+  // persist immediately, then the re-seeded Get cache flows request.bodyLanguage back
+  // down — the editor + the invoke payloads read it straight off `request`, so no
+  // local draft copy is needed (ts-request-body-plan §T1/§4.6).
+  const onBodyLanguageChange = (next: BodyLanguage) => {
+    updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, bodyLanguage: next });
+  };
+
   // Middleware attach/detach/reorder persists the whole ordered list immediately
   // (like a method change — a discrete edit, not a debounced buffer). The set-flag
   // replaces the list (empty clears all); the re-seeded Get cache flows the fresh
@@ -184,6 +192,9 @@ export function RequestWorkspace() {
           method: request.method,
           body: b,
           metadata: rowsToObject(rows),
+          // Carry the editor's current toggle so a TS body evaluates on the server
+          // (the invoke path reads this off the wire, not the saved Request).
+          bodyLanguage: request.bodyLanguage,
         },
         {
           // The server persists history before returning, so refresh on success.
@@ -211,6 +222,9 @@ export function RequestWorkspace() {
       method: request.method,
       messages: messagesToSend,
       metadata: rowsToObject(rows),
+      // Carry the editor's current toggle (mirrors the unary path) so a TS message
+      // evaluates on the server.
+      bodyLanguage: request.bodyLanguage,
     };
 
     aborters.current[key]?.abort(); // supersede any prior stream for this key
@@ -299,6 +313,8 @@ export function RequestWorkspace() {
           currentMethod={{ service: request.service, method: request.method }}
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}
+          bodyLanguage={request.bodyLanguage}
+          onBodyLanguageChange={onBodyLanguageChange}
         />
         <ResponsePane
           invoke={invokeState}

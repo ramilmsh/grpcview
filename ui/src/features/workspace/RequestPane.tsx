@@ -1,3 +1,4 @@
+import type { BodyLanguage } from "@grpcview/v1/workspace_pb";
 import { ArrowsSplit, BracketsCurly } from "@/components/ui/icons";
 import { Subtab } from "@/components/ui/Subtab";
 import { Tag, type MethodKind } from "@/components/ui/Tag";
@@ -27,6 +28,8 @@ export function RequestPane({
   currentMethod,
   currentKey,
   inputTypeName,
+  bodyLanguage,
+  onBodyLanguageChange,
 }: {
   schema?: object;
   kind: MethodKind;
@@ -41,6 +44,8 @@ export function RequestPane({
   currentMethod: { service: string; method: string };
   currentKey: string;
   inputTypeName?: string;
+  bodyLanguage: BodyLanguage;
+  onBodyLanguageChange: (next: BodyLanguage) => void;
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
   const setSubtab = useUIStore((s) => s.setRequestSubtab);
@@ -105,6 +110,8 @@ export function RequestPane({
             currentMethod={currentMethod}
             currentKey={currentKey}
             inputTypeName={inputTypeName}
+            bodyLanguage={bodyLanguage}
+            onBodyLanguageChange={onBodyLanguageChange}
           />
         )
       ) : subtab === "metadata" ? (

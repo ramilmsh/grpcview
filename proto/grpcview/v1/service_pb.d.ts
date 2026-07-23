@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Request_Response, ScriptKind, Server, Workspace } from "./workspace_pb";
+import type { BodyLanguage, Request_Response, ScriptKind, Server, Workspace } from "./workspace_pb";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -299,6 +299,15 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
    * @generated from field: repeated string middleware = 10;
    */
   middleware: string[];
+
+  /**
+   * body_language patches how the request's body is interpreted on invoke
+   * (JSON vs TYPESCRIPT). A scalar enum, so a plain optional (no set-flag like
+   * update_middleware): unset leaves it unchanged, present replaces it.
+   *
+   * @generated from field: optional grpcview.v1.BodyLanguage body_language = 11;
+   */
+  bodyLanguage?: BodyLanguage | undefined;
 };
 
 /**
@@ -407,6 +416,17 @@ export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
    * @generated from field: optional grpcview.v1.Server target = 8;
    */
   target?: Server | undefined;
+
+  /**
+   * body_language selects how `body` is interpreted: JSON — sent as-is (the
+   * default) — or TYPESCRIPT, where `body` is a TS/JS generator whose returned
+   * object becomes the message (ts-request-body-plan §T1). It carries the
+   * editor's current toggle, like body/metadata above, so a send never depends
+   * on a prior UpdateRequest landing first.
+   *
+   * @generated from field: grpcview.v1.BodyLanguage body_language = 9;
+   */
+  bodyLanguage: BodyLanguage;
 };
 
 /**
@@ -490,6 +510,15 @@ export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamReque
    * @generated from field: optional grpcview.v1.Server target = 8;
    */
   target?: Server | undefined;
+
+  /**
+   * body_language selects how each entry of `messages` is interpreted (JSON —
+   * sent as-is, the default — vs TYPESCRIPT: each is a TS/JS generator whose
+   * returned object becomes the message), mirroring InvokeRequest.
+   *
+   * @generated from field: grpcview.v1.BodyLanguage body_language = 9;
+   */
+  bodyLanguage: BodyLanguage;
 };
 
 /**
