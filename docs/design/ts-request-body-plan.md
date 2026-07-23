@@ -6,6 +6,8 @@
 
 Two findings reshape the design: the "functions" are saved generators (§2), and pillar B's type source is now proven to be the real `protoc-gen-es` generator running client-side (§2.5).
 
+**Progress:** T1 shipped + browser-verified (commit `ce4e74d`, 2026-07-23) — details in §5. Next up: T2 (typed body).
+
 ---
 
 ## 0. Decisions locked (2026-07-23) + design deltas
@@ -156,7 +158,9 @@ esbuild bundles the whole graph in one pass; each generator keeps its own module
 
 ## 5. Phased plan (each phase independently shippable + browser-verified, S1–S3 rhythm)
 
-- **T1 — Backend eval + `body_language` + raw TS toggle.** Pillar A + §4.3, plus a minimal (untyped) TS editor toggle so the eval path is verifiable end-to-end. *Verify:* a TS body `export default () => ({ message: "hi-" + Math.random() })` invokes and the echo server returns it; JSON requests unaffected.
+- **T1 — Backend eval + `body_language` + raw TS toggle. ✅ DONE — commit `ce4e74d`, 2026-07-23, browser-verified.** Pillar A + §4.3, plus a minimal (untyped) TS editor toggle so the eval path is verifiable end-to-end. *Verify:* a TS body `export default () => ({ message: "hi-" + Math.random() })` invokes and the echo server returns it; JSON requests unaffected.
+  - *Delta from plan:* `body_language` was also added to `InvokeRequest`/`InvokeStreamRequest` (field 9) — the invoke path reads editor state off the wire, not the saved store `Request`, so the toggle is carried on the invoke payloads (preserving "a send never depends on a prior UpdateRequest landing"). In-browser proof used **self-reflection** (`WorkspaceService.Get` with `{ workspaceName: "def"+"ault" }` → `0 OK`, workspace returned) rather than an echo server; mode + body persist across reload; JSON path unaffected.
+  - *Review fixes folded in:* footer token chip hidden in TS mode; footer error count reset on the JSON⇄TS flip (a clean destination model fires no marker event). *Deferred:* history re-run doesn't snapshot `body_language` (a history-feature gap, not T1).
 - **T2 — Typed body (pillar B).** Run `protoc-gen-es` in-browser over the reflected descriptor (proven §2.5/§4.4) → `.d.ts` + editor type injection + error footer. *Verify:* unknown field shows a red squiggle; valid fields autocomplete; a type error blocks with a clear message.
 - **T3 — Composition (pillar C).** Generators resolver plugin + ambient decl + editor generator-completion/import-insertion. *Verify:* `import { mkmsg } from "grpcview:generators"; export default () => ({ message: mkmsg() })` → echo resolves — the `{{ }}` replacement, end to end.
 - **T4 — Ergonomics & migration (optional).** "Bare object" hidden-wrapper mode (needs the Monaco position-mapping spike, §0); one-click *convert JSON body → TS*; typed generator signatures; (later) TS metadata + a deprecation path for `{{ }}`.
