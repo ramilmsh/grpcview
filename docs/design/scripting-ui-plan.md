@@ -19,8 +19,8 @@ So *script processing* exists but you cannot **create** a script (nothing persis
 | # | Milestone | Delivers | Status |
 |---|---|---|---|
 | **S1** | **Scripts CRUD + authoring view** | *create* scripts | **✅ DONE 2026-07-23** |
-| **S2** | **Generators in requests** — `{{ }}` tokens + binding editor | *use* (values) | planned |
-| **S3** | **Middleware in requests** — attach + run-before-invoke | *use* (rewrite) | planned |
+| **S2** | **Generators in requests** — `{{ }}` tokens + binding editor | *use* (values) | **✅ DONE 2026-07-23** |
+| **S3** | **Middleware in requests** — attach + run-before-invoke | *use* (rewrite) | **NEXT** |
 | S4 | Capabilities · grants · launch consent · `std/http` | security | deferred |
 | S5 | npm dependency management (Dependencies · Add-package · Store · Registries) | packages | deferred |
 | S6 | Scenarios view · Environments view | test/env | deferred |
@@ -99,6 +99,8 @@ Each milestone follows the established N1–N4 shape: storage-proto → wire-pro
 ---
 
 ## S2 — Generators in requests: `{{ }}` tokens + binding editor  *(use — values)*
+
+> **Status: DONE & green (2026-07-23).** Two commits — backend `c689919`, frontend next. `bazel build //... //ui:ui` + touched tests green; verified end-to-end against the echo server (`//service/echo/cmd`): a `Unary` request body `{"message": {{ mkmsg() }}, "count": 1}` with generator `mkmsg = () => "resolved-42"` invoked `0 OK` and the echo returned `{"message":"echo: resolved-42"}` — the token resolved server-side and the target received the generated value (also confirmed directly over the Connect API). **Backend** (`service/workspace/tokens.go`): `{{ name(args?) }}` resolved pre-send in both unary + streaming via `RunGeneratorUncached` (values vary per invoke); body tokens splice raw JSON in value position, whole-value metadata tokens coerce to string; string-aware `}}` scan; unknown/throwing generator → `FailedPrecondition` naming the token. **Frontend**: Monaco decorations chip `{{ … }}` in the body + a "N tokens resolve" footer, whole-token metadata values render as clickable chips, and clicking a token opens the **binding-editor modal** (edit the generator's source, resolved-preview Test run, a display-only caching selector) — a missing generator offers a create flow. **Known limitation:** Monaco's JSON validator flags `{{ … }}` as invalid JSON (the footer shows "N errors") even though the request resolves and invokes fine — a token-aware validator / pre-substitution is a follow-up. Deferred as planned: `invoke()`, `env`/`vars`/`secrets`, variants, and enforced caching policies.
 
 **Goal.** Reference a generator from a request body or metadata via `{{ name(args?) }}`; on invoke, resolve each token by running its generator and splice the result; edit/preview the bound generator in the binding-editor modal.
 

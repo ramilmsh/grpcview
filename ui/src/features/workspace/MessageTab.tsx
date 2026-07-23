@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle, Warning } from "@/components/ui/icons";
+import { useUIStore } from "@/lib/ui-store";
 import { Editor } from "./Editor";
+import { scanTokens } from "./tokens";
 
 // MessageTab is the request body editor (Monaco) plus a footer that reports the
-// schema-validity from Monaco's markers (plan §1.4).
+// schema-validity from Monaco's markers and, when the body carries `{{ … }}`
+// generator tokens, how many resolve on invoke (plan §S2). Clicking a token opens
+// the binding editor for the generator it names.
 export function MessageTab({
   schema,
   body,
@@ -20,6 +24,8 @@ export function MessageTab({
   inputTypeName?: string;
 }) {
   const [errors, setErrors] = useState(0);
+  const openBinding = useUIStore((s) => s.openBinding);
+  const tokenCount = useMemo(() => scanTokens(body).length, [body]);
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minHeight: 0 }}>
@@ -31,6 +37,7 @@ export function MessageTab({
           currentMethod={currentMethod}
           currentKey={currentKey}
           onErrorsChange={setErrors}
+          onTokenClick={openBinding}
         />
       </div>
       <div
@@ -53,7 +60,12 @@ export function MessageTab({
             <Warning weight="fill" /> {errors} {errors === 1 ? "error" : "errors"}
           </span>
         )}
-        <span className="ml-auto">JSON · UTF-8</span>
+        {tokenCount > 0 && (
+          <span style={{ marginLeft: "auto", color: "var(--color-accent-2-300)" }}>
+            {tokenCount} {tokenCount === 1 ? "token" : "tokens"} resolve
+          </span>
+        )}
+        <span className={tokenCount > 0 ? undefined : "ml-auto"}>JSON · UTF-8</span>
       </div>
     </div>
   );

@@ -109,11 +109,39 @@
 .btn-danger { border: 1px solid var(--err); color: #eaa1a8; background: transparent; }
 .btn-danger:hover { background: var(--err-bg); color: var(--err-fg); }
 
-/* token pill (used by target bar / metadata later) */
+/* token pill (target bar env placeholders + metadata generator chips). The base
+   pill wraps its text in {{ }} braces (a `{{ var }}` reference); the .gen variant
+   is a generator binding — an accent-2 chip with a leading → affordance, clickable
+   to open the binding editor (scripting-ui-plan §S2). Ported from the workspace
+   mockup, retinted from the mockup's green to accent-2 to match this app's
+   generator identity (the Scripts view + binding editor are accent-2). */
 .tok {
   font-family: var(--mono); font-size: 12px; background: var(--color-accent-900);
   color: var(--color-accent-300); border: 1px solid var(--color-accent-800); border-radius: 5px;
   padding: 0 5px; white-space: nowrap; display: inline-flex; align-items: center;
+}
+.tok::before { content: "{{\00a0"; opacity: .55; }
+.tok::after { content: "\00a0}}"; opacity: .55; }
+.tok.gen {
+  color: var(--color-accent-2-300); background: var(--color-accent-2-900);
+  border-color: var(--color-accent-2-800); cursor: pointer;
+  border-radius: 5px; padding: 0 5px; font-family: var(--mono); font-size: 12px;
+}
+.tok.gen::before { content: "\2192\00a0"; opacity: .8; color: var(--color-accent-2-300); }
+.tok.gen::after { content: ""; }
+.tok.gen:hover { background: var(--color-accent-2-800); }
+
+/* Monaco inline decoration for a `{{ … }}` generator token in the body editor.
+   Applied to the literal token text (which already carries its braces), so — unlike
+   the .tok.gen chip — it adds no ::before/::after; just the accent-2 tint + a
+   layout-neutral inset border so the span reads as a chip. Clickable (Editor.tsx
+   maps a click on the span to the binding editor). */
+.tok-gen-decoration {
+  background: var(--color-accent-2-900);
+  box-shadow: inset 0 0 0 1px var(--color-accent-2-800);
+  border-radius: 4px;
+  color: var(--color-accent-2-100) !important;
+  cursor: pointer;
 }
 
 /* bare inline inputs (filter fields, request name) */
@@ -147,3 +175,15 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 }
 .kindopt:hover { color: var(--color-neutral-200); }
 .kindopt.on { background: var(--color-accent-900); color: var(--color-accent-300); box-shadow: inset 0 0 0 1px var(--color-accent-700); }
+
+/* ── binding editor (S2) — caching-policy selector ── */
+
+/* freshness/caching options (binding editor). UI-only this pass — only per-invoke
+   resolution is wired server-side (the invoke path runs generators uncached). */
+.freshopt {
+  padding: 6px 11px; font-size: 12px; border-radius: 7px; white-space: nowrap; cursor: pointer;
+  color: var(--color-neutral-400); background: transparent; border: 1px solid transparent;
+  font-family: inherit; transition: color .12s, background .12s, border-color .12s;
+}
+.freshopt:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+.freshopt.on { color: var(--color-accent); border-color: var(--color-accent-700); background: var(--color-accent-900); }

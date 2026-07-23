@@ -69,6 +69,16 @@ interface UIState {
   scriptDrafts: Record<string, string | undefined>;
   scriptSubtab: ScriptSubtab;
 
+  // Binding editor (plan §S2). Opened by clicking a `{{ generator }}` token in the
+  // request body or metadata; edits the generator that token resolves to. Only the
+  // open flag, the target generator NAME, and per-generator draft source buffers are
+  // UI state — the generator itself is server data (rides the Get snapshot).
+  // bindingDrafts mirrors scriptDrafts (seeded once from the server source, then
+  // authoritative); it is a separate buffer from the Scripts view's scriptDrafts.
+  bindingOpen: boolean;
+  bindingGenerator: string | null;
+  bindingDrafts: Record<string, string | undefined>;
+
   setView: (view: ActiveView) => void;
   openTab: (item: ItemWithPath) => void;
   closeTab: (key: string) => void;
@@ -103,6 +113,13 @@ interface UIState {
   renameScript: (oldName: string, newName: string) => void;
   // Drop a deleted script's draft and clear the selection if it was selected.
   forgetScript: (name: string) => void;
+
+  // Binding editor: open it for a generator (by name), close it, and manage the
+  // generator's draft source buffer (mirrors seed/setScriptDraft).
+  openBinding: (generator: string) => void;
+  closeBinding: () => void;
+  seedBindingDraft: (name: string, source: string) => void; // only if absent
+  setBindingDraft: (name: string, source: string) => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -116,6 +133,9 @@ export const useUIStore = create<UIState>()((set) => ({
   selectedScript: null,
   scriptDrafts: {},
   scriptSubtab: "code",
+  bindingOpen: false,
+  bindingGenerator: null,
+  bindingDrafts: {},
 
   setView: (activeView) => set({ activeView }),
 
@@ -253,4 +273,17 @@ export const useUIStore = create<UIState>()((set) => ({
         selectedScript: s.selectedScript === name ? null : s.selectedScript,
       };
     }),
+
+  openBinding: (bindingGenerator) => set({ bindingOpen: true, bindingGenerator }),
+  closeBinding: () => set({ bindingOpen: false, bindingGenerator: null }),
+
+  seedBindingDraft: (name, source) =>
+    set((s) =>
+      s.bindingDrafts[name] !== undefined
+        ? {}
+        : { bindingDrafts: { ...s.bindingDrafts, [name]: source } }
+    ),
+
+  setBindingDraft: (name, source) =>
+    set((s) => ({ bindingDrafts: { ...s.bindingDrafts, [name]: source } })),
 }));
