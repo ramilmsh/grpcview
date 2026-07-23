@@ -40,6 +40,14 @@ import (
 // dependency), and is the "<script>" analogue for the structured path.
 const authorSource = "script.ts"
 
+// entryGlobalName is the global esbuild's IIFE build assigns the entry module's exports
+// to (its `default` and named exports). The entry-point calling convention (entry.go)
+// reads the exported function off it — `__grpcview_entry.default` / `.handle` — from the
+// run-time postlude. It is deliberately obscure so an author's code is unlikely to shadow
+// it. Used only by the generator/middleware entry-point compile path, not the scenario/
+// scratchpad last-expression path.
+const entryGlobalName = "__grpcview_entry"
+
 // esbuildTarget is the syntax level esbuild emits. ES2022 is the floor that permits
 // TOP-LEVEL AWAIT (es2020 makes esbuild reject it) while staying well within what the
 // bundled bellard/quickjs supports; nothing newer is required.
@@ -86,7 +94,7 @@ func newBundler(resolveDir string, nodePaths []string, registryDir string) *bund
 // the middleware profile recompiles the same script on every invoke, so the cache is what
 // keeps warm-path compilation off the hot path.
 func (b *bundler) compile(source string, g Grant) (compiled, error) {
-	key, keyable := b.cacheKey(source, g)
+	key, keyable := b.cacheKey(source, g, "expr")
 	if keyable {
 		if v, ok := b.cache.Load(key); ok {
 			return v.(compiled), nil
@@ -116,7 +124,7 @@ func (b *bundler) compile(source string, g Grant) (compiled, error) {
 	return c, nil
 }
 
-func (b *bundler) cacheKey(source string, g Grant) (string, bool) {
+func (b *bundler) cacheKey(source string, g Grant, variant string) (string, bool) {
 	gj, err := json.Marshal(g)
 	if err != nil {
 		return "", false // a grant that will not marshal must not share a cache slot
@@ -124,10 +132,34 @@ func (b *bundler) cacheKey(source string, g Grant) (string, bool) {
 	h := sha256.New()
 	io.WriteString(h, b.cacheSalt)
 	h.Write([]byte{0})
+	io.WriteString(h, variant) // "expr" vs "entry" produce different blobs from one source
+	h.Write([]byte{0})
 	h.Write(gj)
 	h.Write([]byte{0})
 	io.WriteString(h, source)
 	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+// compileEntry compiles source for the ENTRY-POINT calling convention: an IIFE bundle
+// that assigns the entry module's exports to the entryGlobalName global, so a run-time
+// postlude can call the exported function (entry.go). Unlike compile it always bundles
+// (there is always an export to expose) and never uses the transpile-only last-expression
+// path. Cached independently of compile via the "entry" variant.
+func (b *bundler) compileEntry(source string, g Grant) (compiled, error) {
+	key, keyable := b.cacheKey(source, g, "entry")
+	if keyable {
+		if v, ok := b.cache.Load(key); ok {
+			return v.(compiled), nil
+		}
+	}
+	c, err := b.buildEntryBundle(source, g)
+	if err != nil {
+		return compiled{}, err
+	}
+	if keyable {
+		b.cache.Store(key, c)
+	}
+	return c, nil
 }
 
 // buildBundle runs esbuild's bundler: TS entry via stdin, everything inlined to one ESM
@@ -147,6 +179,41 @@ func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
 		Target:        esbuildTarget,
 		Platform:      api.PlatformBrowser, // resolves main/module/exports; no node core auto-polyfill
 		TreeShaking:   api.TreeShakingFalse, // never drop a bundled dependency's code as "unused"
+		Sourcemap:     api.SourceMapExternal,
+		Charset:       api.CharsetUTF8,
+		LegalComments: api.LegalCommentsNone,
+		LogLevel:      api.LogLevelSilent,
+		NodePaths:     b.nodePaths,
+		Plugins:       b.plugins(g),
+	})
+	if len(result.Errors) > 0 {
+		return compiled{}, bundleErrors(result.Errors)
+	}
+	return outputToCompiled(result.OutputFiles), nil
+}
+
+// buildEntryBundle runs esbuild's bundler in IIFE format with a GlobalName, so the entry
+// module's exports (`default`, named `handle`, …) are captured onto entryGlobalName. The
+// blob evaluates as global code that ends by assigning that global; the run-time postlude
+// then reads and calls the exported function. Top-level await in the module body is not
+// available in IIFE output (esbuild rejects it) — the authored contract is an exported
+// (possibly async) function, awaited by the postlude, not module-level TLA.
+func (b *bundler) buildEntryBundle(source string, g Grant) (compiled, error) {
+	result := api.Build(api.BuildOptions{
+		Stdin: &api.StdinOptions{
+			Contents:   source,
+			Loader:     api.LoaderTS,
+			Sourcefile: authorSource,
+			ResolveDir: b.resolveDir,
+		},
+		Outfile:       "script.js",
+		Bundle:        true,
+		Write:         false,
+		Format:        api.FormatIIFE,
+		GlobalName:    entryGlobalName,
+		Target:        esbuildTarget,
+		Platform:      api.PlatformBrowser,
+		TreeShaking:   api.TreeShakingFalse,
 		Sourcemap:     api.SourceMapExternal,
 		Charset:       api.CharsetUTF8,
 		LegalComments: api.LegalCommentsNone,

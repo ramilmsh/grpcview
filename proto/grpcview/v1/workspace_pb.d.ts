@@ -2,7 +2,7 @@
 // @generated from file proto/grpcview/v1/workspace.proto (package grpcview.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message as Message$1 } from "@bufbuild/protobuf";
 import type { Any, Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 
@@ -420,6 +420,35 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
 export declare const ItemSchema: GenMessage<Item>;
 
 /**
+ * Script is a saved script in the collection: a kind, a display name, and the
+ * authored source. Persisted under scripts/<slug>/script.json.
+ *
+ * @generated from message grpcview.v1.Script
+ */
+export declare type Script = Message$1<"grpcview.v1.Script"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: grpcview.v1.ScriptKind kind = 2;
+   */
+  kind: ScriptKind;
+
+  /**
+   * @generated from field: string source = 3;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message grpcview.v1.Script.
+ * Use `create(ScriptSchema)` to create a new message.
+ */
+export declare const ScriptSchema: GenMessage<Script>;
+
+/**
  * Workspace is a state of the workspace
  *
  * @generated from message grpcview.v1.Workspace
@@ -444,6 +473,11 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
    * @generated from field: repeated grpcview.v1.Service services = 4;
    */
   services: Service[];
+
+  /**
+   * @generated from field: repeated grpcview.v1.Script scripts = 5;
+   */
+  scripts: Script[];
 };
 
 /**
@@ -451,4 +485,37 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
  * Use `create(WorkspaceSchema)` to create a new message.
  */
 export declare const WorkspaceSchema: GenMessage<Workspace>;
+
+/**
+ * ScriptKind classifies a saved script by how it is invoked. Mirrors the on-disk
+ * grpcview.store.v1.ScriptKind.
+ *
+ * @generated from enum grpcview.v1.ScriptKind
+ */
+export enum ScriptKind {
+  /**
+   * @generated from enum value: SCRIPT_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SCRIPT_KIND_GENERATOR = 1;
+   */
+  GENERATOR = 1,
+
+  /**
+   * @generated from enum value: SCRIPT_KIND_MIDDLEWARE = 2;
+   */
+  MIDDLEWARE = 2,
+
+  /**
+   * @generated from enum value: SCRIPT_KIND_SCENARIO = 3;
+   */
+  SCENARIO = 3,
+}
+
+/**
+ * Describes the enum grpcview.v1.ScriptKind.
+ */
+export declare const ScriptKindSchema: GenEnum<ScriptKind>;
 

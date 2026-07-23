@@ -25,6 +25,26 @@ message Collection {
   string name = 2;
   repeated string items = 3;              // ordered root-level slugs
   repeated DescriptorSource sources = 4;  // committed descriptor sources
+  repeated string scripts = 5;            // ordered script slugs (scripts/<slug>/)
+}
+
+// ScriptKind classifies a saved script by how it is invoked. It mirrors the wire
+// grpcview.v1.ScriptKind (same ordinals) so convert.go can bridge them; the two
+// stay distinct types so the disk format can evolve independently.
+enum ScriptKind {
+  SCRIPT_KIND_UNSPECIFIED = 0;
+  SCRIPT_KIND_GENERATOR = 1;
+  SCRIPT_KIND_MIDDLEWARE = 2;
+  SCRIPT_KIND_SCENARIO = 3;
+}
+
+// Script is script.json inside a script directory under scripts/. Like Request's
+// draft_body, source is an inline UTF-8 string so script.json stays human-readable
+// and diffable rather than a base64 blob.
+message Script {
+  ItemMeta meta = 1;
+  ScriptKind kind = 2;
+  string source = 3;
 }
 
 // Folder is folder.json inside a (non-root) folder directory.

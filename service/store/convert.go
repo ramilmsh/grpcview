@@ -38,6 +38,45 @@ func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Req
 	}
 }
 
+// diskToWireScript builds a wire Script from a disk Script (name carried
+// separately, like requests: the display name lives in meta on disk).
+func diskToWireScript(name string, ds *grpcviewstorev1.Script) *grpcviewv1.Script {
+	return &grpcviewv1.Script{
+		Name:   name,
+		Kind:   diskToWireScriptKind(ds.GetKind()),
+		Source: ds.GetSource(),
+	}
+}
+
+// diskToWireScriptKind / wireToDiskScriptKind bridge the two mirrored enums. The
+// ordinals match, but the mapping is explicit so a future divergence is a compile
+// error here rather than a silent misread.
+func diskToWireScriptKind(k grpcviewstorev1.ScriptKind) grpcviewv1.ScriptKind {
+	switch k {
+	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_GENERATOR:
+		return grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR
+	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
+		return grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE
+	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_SCENARIO:
+		return grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO
+	default:
+		return grpcviewv1.ScriptKind_SCRIPT_KIND_UNSPECIFIED
+	}
+}
+
+func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
+	switch k {
+	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
+		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_GENERATOR
+	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
+		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_MIDDLEWARE
+	case grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO:
+		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_SCENARIO
+	default:
+		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_UNSPECIFIED
+	}
+}
+
 // diskToWireSources converts the committed descriptor sources for the wire.
 func diskToWireSources(in []*grpcviewstorev1.DescriptorSource) ([]*grpcviewv1.DescriptorSource, error) {
 	if len(in) == 0 {

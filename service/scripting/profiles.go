@@ -176,10 +176,16 @@ func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in In
 			return v.(Result).clone(), nil // clone: never hand callers the cache's slices
 		}
 	}
+	// Entry-point convention (§2.5): a generator that declares `export default` is called
+	// with in.Args; one that doesn't falls back to last-expression eval.
+	c, postlude, err := e.compileGenerator(source, g, in.Args)
+	if err != nil {
+		return Result{}, err
+	}
 	rctx, cancel := withProfileDeadline(ctx, Generator)
 	defer cancel()
 
-	res, err := e.runFresh(rctx, source, g, in, Generator.MemLimit)
+	res, err := e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
 	if err != nil {
 		return res, err
 	}
@@ -189,30 +195,37 @@ func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in In
 	return res, nil
 }
 
-// RunMiddleware runs a middleware invoke through the warm instance pool.
+// RunMiddleware runs a middleware invoke through the warm instance pool. A middleware that
+// declares a `handle`/default export is called with a ctx built from in.Request (§2.5);
+// otherwise it falls back to last-expression eval.
 func (e *Engine) RunMiddleware(ctx context.Context, source string, g Grant, in Input) (Result, error) {
+	c, postlude, err := e.compileMiddleware(source, g)
+	if err != nil {
+		return Result{}, err
+	}
 	rctx, cancel := withProfileDeadline(ctx, Middleware)
 	defer cancel()
-	return e.mwPool.Run(rctx, source, g, in)
+	return e.mwPool.RunCompiled(rctx, c, g, in, postlude)
 }
 
-// RunScenario runs a long-running scenario on a fresh, isolated instance + context.
+// RunScenario runs a long-running scenario on a fresh, isolated instance + context. It is
+// the ad-hoc scratchpad path: last-expression eval, no entry-point convention.
 func (e *Engine) RunScenario(ctx context.Context, source string, g Grant, in Input) (Result, error) {
-	rctx, cancel := withProfileDeadline(ctx, Scenario)
-	defer cancel()
-	return e.runFresh(rctx, source, g, in, Scenario.MemLimit)
-}
-
-// runFresh executes on a brand-new instance + context, torn down after — maximum
-// isolation, the price being the full instantiate + context bootstrap per run. The
-// script is compiled (Gate 1, TS, dependency inlining) before any instance is created, so
-// a compile failure — including an ungranted-capability denial — never allocates one.
-func (e *Engine) runFresh(ctx context.Context, source string, g Grant, in Input, memLimit uint64) (Result, error) {
 	c, err := e.bundler.compile(source, g)
 	if err != nil {
 		return Result{}, err
 	}
+	rctx, cancel := withProfileDeadline(ctx, Scenario)
+	defer cancel()
+	return e.runFresh(rctx, c, g, in, Scenario.MemLimit, "")
+}
 
+// runFresh executes an already-compiled blob on a brand-new instance + context, torn down
+// after — maximum isolation, the price being the full instantiate + context bootstrap per
+// run. The caller compiles (Gate 1, TS, dependency inlining) before this is reached, so a
+// compile failure — including an ungranted-capability denial — never allocates an instance.
+// postlude is the entry-point call site (empty for last-expression eval).
+func (e *Engine) runFresh(ctx context.Context, c compiled, g Grant, in Input, memLimit uint64, postlude string) (Result, error) {
 	inst, err := e.rt.Instantiate(ctx)
 	if err != nil {
 		return Result{}, err
@@ -224,12 +237,13 @@ func (e *Engine) runFresh(ctx context.Context, source string, g Grant, in Input,
 	}
 	defer inst.disposeContext(context.WithoutCancel(ctx))
 
-	return inst.runCompiled(ctx, c, g, in)
+	return inst.runCompiled(ctx, c, g, in, postlude)
 }
 
 // configDigest is the generator cache key: a stable hash over the profile, source, the
-// grant (capabilities + scope), and the environment inputs (vars/secrets/env) — but NOT
-// the per-invoke request. Maps are marshalled with sorted keys by encoding/json, so the
+// grant (capabilities + scope), the environment inputs (vars/secrets/env), and the
+// generator's positional args — but NOT the per-invoke request. Maps are marshalled with
+// sorted keys by encoding/json, so the
 // digest is deterministic. It returns an error if the grant or inputs cannot be JSON-
 // marshalled, in which case the caller must NOT cache (a "" fallback key would collide
 // distinct configs and could return one run's output — including secrets — for another).
@@ -244,7 +258,8 @@ func configDigest(profile, source string, g Grant, in Input) (string, error) {
 	writeField(h, string(grantJSON))
 	envJSON, err := json.Marshal(struct {
 		Vars, Secrets, Env map[string]any
-	}{in.Vars, in.Secrets, in.Env})
+		Args               []any
+	}{in.Vars, in.Secrets, in.Env, in.Args})
 	if err != nil {
 		return "", err
 	}

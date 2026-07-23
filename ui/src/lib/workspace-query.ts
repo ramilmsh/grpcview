@@ -22,6 +22,9 @@ import {
   removeDescriptorSource,
   invoke,
   runScript,
+  createScript,
+  updateScript,
+  deleteScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
 import type { Workspace, Server } from "@grpcview/v1/workspace_pb";
@@ -75,16 +78,24 @@ export function useRootItems(workspace?: Workspace): ItemWithPath[] {
   return useMemo(() => rootItemsOf(workspace?.item), [workspace]);
 }
 
+// useSeedGetCache returns the mutation options that re-seed the Get cache with the
+// fresh Workspace a write returns, so the UI updates without a refetch round-trip.
+// Every WorkspaceService write returns the whole Workspace, so this is shared by
+// useWorkspaceMutations and the script mutations below.
+function useSeedGetCache() {
+  const qc = useQueryClient();
+  const key = useWorkspaceKey();
+  return {
+    onSuccess: (res: { workspace?: Workspace }) => {
+      if (res.workspace) qc.setQueryData(key, create(GetResponseSchema, { workspace: res.workspace }));
+    },
+  };
+}
+
 // useWorkspaceMutations wires the write RPCs, each seeding the Get cache with the
 // fresh Workspace it returns so the tree updates without a refetch round-trip.
 export function useWorkspaceMutations() {
-  const qc = useQueryClient();
-  const key = useWorkspaceKey();
-  const seed = (ws?: Workspace) => {
-    if (ws) qc.setQueryData(key, create(GetResponseSchema, { workspace: ws }));
-  };
-  const opts = { onSuccess: (res: { workspace?: Workspace }) => seed(res.workspace) };
-
+  const opts = useSeedGetCache();
   return {
     createFolder: useMutation(createFolder, opts),
     createRequest: useMutation(createRequest, opts),
@@ -93,6 +104,23 @@ export function useWorkspaceMutations() {
     addDescriptorSource: useMutation(addDescriptorSource, opts),
     removeDescriptorSource: useMutation(removeDescriptorSource, opts),
   };
+}
+
+// Script mutations (plan §S1). Each mirrors the workspace mutations: it calls the
+// connect-query descriptor and re-seeds the Get cache from the returned Workspace,
+// so the Scripts sidebar (which rides the Get snapshot) updates immediately.
+// CreateScript adds an empty script of a kind; UpdateScript patches source and/or
+// renames (newName); DeleteScript removes one.
+export function useCreateScript() {
+  return useMutation(createScript, useSeedGetCache());
+}
+
+export function useUpdateScript() {
+  return useMutation(updateScript, useSeedGetCache());
+}
+
+export function useDeleteScript() {
+  return useMutation(deleteScript, useSeedGetCache());
 }
 
 // useInvoke is the unary Invoke mutation. Its result is handled by the caller and
@@ -120,9 +148,12 @@ export function useStreamingClient() {
   return useMemo(() => createClient(WorkspaceService, transport), [transport]);
 }
 
-// useRunScript is the ad-hoc script-eval mutation backing the Scripts scratchpad.
-// The result (value / logs / error) is self-contained, so the caller keeps it in
-// local component state rather than the workspace cache.
+// useRunScript is the script test-run mutation backing the Scripts view. The
+// caller passes the current editor buffer and the script's kind ({ source, kind })
+// so the engine picks the matching profile/calling convention (a generator's
+// `export default`, a middleware's `handle`, or — unset/scenario — last-expression
+// scratchpad eval). The result (value / logs / error) is self-contained, so the
+// caller keeps it in local component state rather than the workspace cache.
 export function useRunScript() {
   return useMutation(runScript);
 }

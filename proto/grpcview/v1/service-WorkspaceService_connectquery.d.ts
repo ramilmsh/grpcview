@@ -55,10 +55,28 @@ export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
  */
 export const invoke: typeof WorkspaceService["method"]["invoke"];
 /**
- * RunScript evaluates an ad-hoc script through the scripting engine and returns
- * its value, console output, and any error — the scratchpad that validates the
- * engine end to end.
+ * RunScript evaluates a script through the scripting engine and returns its
+ * value, console output, and any error — the scratchpad and the per-kind
+ * test-run surface that validates the engine end to end.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.RunScript
  */
 export const runScript: typeof WorkspaceService["method"]["runScript"];
+/**
+ * CreateScript creates a new, empty script of a given kind in the workspace.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
+ */
+export const createScript: typeof WorkspaceService["method"]["createScript"];
+/**
+ * UpdateScript edits a script's source and/or renames it.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
+ */
+export const updateScript: typeof WorkspaceService["method"]["updateScript"];
+/**
+ * DeleteScript removes a script from the workspace.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.DeleteScript
+ */
+export const deleteScript: typeof WorkspaceService["method"]["deleteScript"];

@@ -7,6 +7,7 @@ go_library(
         "convert.go",
         "fs.go",
         "layout.go",
+        "scripts.go",
         "store.go",
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/store",
@@ -23,7 +24,10 @@ go_library(
 
 go_test(
     name = "store_test",
-    srcs = ["store_test.go"],
+    srcs = [
+        "scripts_test.go",
+        "store_test.go",
+    ],
     embed = [":store"],
     deps = [
         "//proto/grpcview/store/v1:store",

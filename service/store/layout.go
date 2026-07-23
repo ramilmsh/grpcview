@@ -15,10 +15,12 @@ const (
 	collectionFileName = "grpcview.json" // root manifest + root folder ordering + sources
 	folderFileName     = "folder.json"   // per-folder config (meta + child ordering)
 	requestFileName    = "request.json"  // per-request config (meta + service/method/body/metadata)
+	scriptFileName     = "script.json"   // per-script config (meta + kind + source)
 	historyFileName    = "history.json"  // per-request run history (gitignored; under stateDir)
 	gitignoreFileName  = ".gitignore"
 
 	treeDir               = "tree"      // committed request tree
+	scriptsDir            = "scripts"   // committed script directory (sibling of tree/)
 	stateDir              = ".grpcview" // gitignored local state
 	cacheSubdir           = "cache"     // resolved-schema cache under stateDir
 	historyDir            = "history"   // run history under stateDir, keyed by request slug path
@@ -45,6 +47,18 @@ type childEntry struct {
 	// re-decoding the file. Exactly one is non-nil, matching kind.
 	folder  *grpcviewstorev1.Folder
 	request *grpcviewstorev1.Request
+}
+
+func (c childEntry) orderSlug() string { return c.slug }
+func (c childEntry) orderName() string { return c.name }
+
+// slugNamed is anything with a stable slug and a display name — the shape
+// reconcileOrder needs to order a directory's children against a recorded slug
+// list. Both tree items (childEntry) and scripts (scriptEntry) satisfy it, so
+// they share the one reconciliation routine.
+type slugNamed interface {
+	orderSlug() string
+	orderName() string
 }
 
 // reservedSlugs cannot be used as item directory names: they would collide with
@@ -133,10 +147,10 @@ func findByName(children []childEntry, name string) (childEntry, bool) {
 // self-heals drift: slugs listed but absent on disk are dropped (returned in
 // dropped for the caller to log), and on-disk items missing from the list are
 // appended in display-name order (tie-broken by slug for determinism).
-func reconcileOrder(listed []string, present []childEntry) (ordered []childEntry, dropped []string) {
-	bySlug := make(map[string]childEntry, len(present))
+func reconcileOrder[T slugNamed](listed []string, present []T) (ordered []T, dropped []string) {
+	bySlug := make(map[string]T, len(present))
 	for _, c := range present {
-		bySlug[c.slug] = c
+		bySlug[c.orderSlug()] = c
 	}
 
 	seen := make(map[string]bool, len(listed))
@@ -153,17 +167,17 @@ func reconcileOrder(listed []string, present []childEntry) (ordered []childEntry
 		ordered = append(ordered, c)
 	}
 
-	var rest []childEntry
+	var rest []T
 	for _, c := range present {
-		if !seen[c.slug] {
+		if !seen[c.orderSlug()] {
 			rest = append(rest, c)
 		}
 	}
-	slices.SortFunc(rest, func(a, b childEntry) int {
-		if d := cmp.Compare(strings.ToLower(a.name), strings.ToLower(b.name)); d != 0 {
+	slices.SortFunc(rest, func(a, b T) int {
+		if d := cmp.Compare(strings.ToLower(a.orderName()), strings.ToLower(b.orderName())); d != 0 {
 			return d
 		}
-		return cmp.Compare(a.slug, b.slug)
+		return cmp.Compare(a.orderSlug(), b.orderSlug())
 	})
 	ordered = append(ordered, rest...)
 	return ordered, dropped

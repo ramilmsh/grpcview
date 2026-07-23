@@ -16,6 +16,10 @@ type Input struct {
 	Vars    map[string]any // globalThis.vars    — resolved variables
 	Secrets map[string]any // globalThis.secrets — resolved secrets
 	Env     map[string]any // globalThis.env     — environment values
+	// Args are the positional arguments a GENERATOR's exported entry point is called
+	// with (the parsed args of a `{{ name(args) }}` token). Ignored by middleware and
+	// scenario/scratchpad runs, which take no positional args.
+	Args []any
 }
 
 // RequestInput mirrors the gRPC request a middleware/generator script operates on.

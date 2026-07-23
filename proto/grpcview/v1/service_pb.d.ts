@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Request_Response, Server, Workspace } from "./workspace_pb";
+import type { Request_Response, ScriptKind, Server, Workspace } from "./workspace_pb";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -521,10 +521,146 @@ export declare type InvokeStreamResponse = Message<"grpcview.v1.InvokeStreamResp
 export declare const InvokeStreamResponseSchema: GenMessage<InvokeStreamResponse>;
 
 /**
- * RunScriptRequest evaluates an ad-hoc script through the scripting engine's
- * scenario profile (fresh isolated instance, no capabilities granted, no
- * workspace state touched). It is the scratchpad that validates the engine end
- * to end from the UI.
+ * CreateScriptRequest creates a new, empty script of the given kind in the
+ * collection. The name must be unique among scripts.
+ *
+ * @generated from message grpcview.v1.CreateScriptRequest
+ */
+export declare type CreateScriptRequest = Message<"grpcview.v1.CreateScriptRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: grpcview.v1.ScriptKind kind = 3;
+   */
+  kind: ScriptKind;
+};
+
+/**
+ * Describes the message grpcview.v1.CreateScriptRequest.
+ * Use `create(CreateScriptRequestSchema)` to create a new message.
+ */
+export declare const CreateScriptRequestSchema: GenMessage<CreateScriptRequest>;
+
+/**
+ * @generated from message grpcview.v1.CreateScriptResponse
+ */
+export declare type CreateScriptResponse = Message<"grpcview.v1.CreateScriptResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.CreateScriptResponse.
+ * Use `create(CreateScriptResponseSchema)` to create a new message.
+ */
+export declare const CreateScriptResponseSchema: GenMessage<CreateScriptResponse>;
+
+/**
+ * UpdateScriptRequest applies a partial update to the script named `name`. An
+ * unset field is left unchanged; source replaces the authored source, and new_name
+ * renames the script (a collision with another script fails FailedPrecondition —
+ * like UpdateRequest's rename).
+ *
+ * @generated from message grpcview.v1.UpdateScriptRequest
+ */
+export declare type UpdateScriptRequest = Message<"grpcview.v1.UpdateScriptRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional string source = 3;
+   */
+  source?: string | undefined;
+
+  /**
+   * @generated from field: optional string new_name = 4;
+   */
+  newName?: string | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.UpdateScriptRequest.
+ * Use `create(UpdateScriptRequestSchema)` to create a new message.
+ */
+export declare const UpdateScriptRequestSchema: GenMessage<UpdateScriptRequest>;
+
+/**
+ * @generated from message grpcview.v1.UpdateScriptResponse
+ */
+export declare type UpdateScriptResponse = Message<"grpcview.v1.UpdateScriptResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.UpdateScriptResponse.
+ * Use `create(UpdateScriptResponseSchema)` to create a new message.
+ */
+export declare const UpdateScriptResponseSchema: GenMessage<UpdateScriptResponse>;
+
+/**
+ * @generated from message grpcview.v1.DeleteScriptRequest
+ */
+export declare type DeleteScriptRequest = Message<"grpcview.v1.DeleteScriptRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message grpcview.v1.DeleteScriptRequest.
+ * Use `create(DeleteScriptRequestSchema)` to create a new message.
+ */
+export declare const DeleteScriptRequestSchema: GenMessage<DeleteScriptRequest>;
+
+/**
+ * @generated from message grpcview.v1.DeleteScriptResponse
+ */
+export declare type DeleteScriptResponse = Message<"grpcview.v1.DeleteScriptResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.DeleteScriptResponse.
+ * Use `create(DeleteScriptResponseSchema)` to create a new message.
+ */
+export declare const DeleteScriptResponseSchema: GenMessage<DeleteScriptResponse>;
+
+/**
+ * RunScriptRequest evaluates a script through the scripting engine (fresh isolated
+ * instance, no capabilities granted, no workspace state touched). kind selects the
+ * execution profile and calling convention: a generator's `export default` is called,
+ * a middleware's `handle`/default export is called with a ctx; unset (or scenario)
+ * evaluates the buffer as an ad-hoc scratchpad (last-expression value) — the surface
+ * that validates the engine end to end from the UI.
  *
  * @generated from message grpcview.v1.RunScriptRequest
  */
@@ -533,6 +669,11 @@ export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> &
    * @generated from field: string source = 1;
    */
   source: string;
+
+  /**
+   * @generated from field: optional grpcview.v1.ScriptKind kind = 2;
+   */
+  kind?: ScriptKind | undefined;
 };
 
 /**
@@ -732,9 +873,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof InvokeStreamResponseSchema;
   },
   /**
-   * RunScript evaluates an ad-hoc script through the scripting engine and returns
-   * its value, console output, and any error — the scratchpad that validates the
-   * engine end to end.
+   * RunScript evaluates a script through the scripting engine and returns its
+   * value, console output, and any error — the scratchpad and the per-kind
+   * test-run surface that validates the engine end to end.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.RunScript
    */
@@ -742,6 +883,36 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof RunScriptRequestSchema;
     output: typeof RunScriptResponseSchema;
+  },
+  /**
+   * CreateScript creates a new, empty script of a given kind in the workspace.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
+   */
+  createScript: {
+    methodKind: "unary";
+    input: typeof CreateScriptRequestSchema;
+    output: typeof CreateScriptResponseSchema;
+  },
+  /**
+   * UpdateScript edits a script's source and/or renames it.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
+   */
+  updateScript: {
+    methodKind: "unary";
+    input: typeof UpdateScriptRequestSchema;
+    output: typeof UpdateScriptResponseSchema;
+  },
+  /**
+   * DeleteScript removes a script from the workspace.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.DeleteScript
+   */
+  deleteScript: {
+    methodKind: "unary";
+    input: typeof DeleteScriptRequestSchema;
+    output: typeof DeleteScriptResponseSchema;
   },
 }>;
 

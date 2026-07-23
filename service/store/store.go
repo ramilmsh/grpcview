@@ -62,6 +62,14 @@ type RequestPatch struct {
 	DraftMetadata *structpb.Struct
 }
 
+// ScriptPatch is a partial update to a script. A nil field is left unchanged; a
+// non-nil field is applied. Name renames the script's display name (the slug/dir
+// stays stable, like RequestPatch.Name); Source replaces the authored source.
+type ScriptPatch struct {
+	Name   *string
+	Source *string
+}
+
 // Store manages filesystem-backed collections rooted under a common base
 // directory. Phase 1 uses name-based addressing: a workspace name maps to
 // <base>/<name>. It hands out per-name Collection handles that serialize their
@@ -129,6 +137,7 @@ func (c *Collection) Root() string { return c.root }
 
 func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, collectionFileName) }
 func (c *Collection) treeRoot() string           { return filepath.Join(c.root, treeDir) }
+func (c *Collection) scriptsRoot() string         { return filepath.Join(c.root, scriptsDir) }
 func (c *Collection) servicesCachePath() string {
 	return filepath.Join(c.root, stateDir, cacheSubdir, servicesCacheFileName)
 }

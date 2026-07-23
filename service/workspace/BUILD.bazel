@@ -38,6 +38,7 @@ go_test(
     srcs = [
         "invoke_history_test.go",
         "invoke_streaming_test.go",
+        "scripts_test.go",
         "workspace_test.go",
     ],
     embed = [":workspace"],

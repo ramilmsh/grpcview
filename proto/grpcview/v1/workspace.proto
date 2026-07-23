@@ -104,10 +104,28 @@ message Item {
   }
 }
 
+// ScriptKind classifies a saved script by how it is invoked. Mirrors the on-disk
+// grpcview.store.v1.ScriptKind.
+enum ScriptKind {
+  SCRIPT_KIND_UNSPECIFIED = 0;
+  SCRIPT_KIND_GENERATOR = 1;
+  SCRIPT_KIND_MIDDLEWARE = 2;
+  SCRIPT_KIND_SCENARIO = 3;
+}
+
+// Script is a saved script in the collection: a kind, a display name, and the
+// authored source. Persisted under scripts/<slug>/script.json.
+message Script {
+  string     name   = 1;
+  ScriptKind kind   = 2;
+  string     source = 3;
+}
+
 // Workspace is a state of the workspace
 message Workspace {
   string                    name     = 1;
   Item                      item     = 2;
   repeated DescriptorSource sources  = 3;
   repeated Service          services = 4;
+  repeated Script           scripts  = 5;
 }

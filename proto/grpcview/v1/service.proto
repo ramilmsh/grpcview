@@ -151,12 +151,51 @@ message InvokeStreamResponse {
   }
 }
 
-// RunScriptRequest evaluates an ad-hoc script through the scripting engine's
-// scenario profile (fresh isolated instance, no capabilities granted, no
-// workspace state touched). It is the scratchpad that validates the engine end
-// to end from the UI.
+// CreateScriptRequest creates a new, empty script of the given kind in the
+// collection. The name must be unique among scripts.
+message CreateScriptRequest {
+  string     workspace_name = 1;
+  string     name           = 2;
+  ScriptKind kind           = 3;
+}
+
+message CreateScriptResponse {
+  Workspace workspace = 1;
+}
+
+// UpdateScriptRequest applies a partial update to the script named `name`. An
+// unset field is left unchanged; source replaces the authored source, and new_name
+// renames the script (a collision with another script fails FailedPrecondition —
+// like UpdateRequest's rename).
+message UpdateScriptRequest {
+  string          workspace_name = 1;
+  string          name           = 2;
+  optional string source         = 3;
+  optional string new_name       = 4;
+}
+
+message UpdateScriptResponse {
+  Workspace workspace = 1;
+}
+
+message DeleteScriptRequest {
+  string workspace_name = 1;
+  string name           = 2;
+}
+
+message DeleteScriptResponse {
+  Workspace workspace = 1;
+}
+
+// RunScriptRequest evaluates a script through the scripting engine (fresh isolated
+// instance, no capabilities granted, no workspace state touched). kind selects the
+// execution profile and calling convention: a generator's `export default` is called,
+// a middleware's `handle`/default export is called with a ctx; unset (or scenario)
+// evaluates the buffer as an ad-hoc scratchpad (last-expression value) — the surface
+// that validates the engine end to end from the UI.
 message RunScriptRequest {
-  string source = 1;
+  string              source = 1;
+  optional ScriptKind kind   = 2;
 }
 
 // ScriptLog is one buffered console.* call captured during a run.
@@ -211,8 +250,14 @@ service WorkspaceService {
   // browser transport (connect-web) cannot stream a request body; see
   // InvokeStreamRequest for how client messages are supplied.
   rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamResponse);
-  // RunScript evaluates an ad-hoc script through the scripting engine and returns
-  // its value, console output, and any error — the scratchpad that validates the
-  // engine end to end.
+  // RunScript evaluates a script through the scripting engine and returns its
+  // value, console output, and any error — the scratchpad and the per-kind
+  // test-run surface that validates the engine end to end.
   rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
+  // CreateScript creates a new, empty script of a given kind in the workspace.
+  rpc CreateScript(CreateScriptRequest) returns (CreateScriptResponse);
+  // UpdateScript edits a script's source and/or renames it.
+  rpc UpdateScript(UpdateScriptRequest) returns (UpdateScriptResponse);
+  // DeleteScript removes a script from the workspace.
+  rpc DeleteScript(DeleteScriptRequest) returns (DeleteScriptResponse);
 }

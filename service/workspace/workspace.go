@@ -453,3 +453,41 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 	}
 	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Workspace: ws}), nil
 }
+
+// CreateScript implements [grpcviewv1.WorkspaceServiceHandler].
+func (w Workspace) CreateScript(ctx context.Context, request *connect.Request[grpcviewv1.CreateScriptRequest]) (*connect.Response[grpcviewv1.CreateScriptResponse], error) {
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.CreateScript(ctx, request.Msg.GetName(), request.Msg.GetKind())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.CreateScriptResponse{Workspace: ws}), nil
+}
+
+// UpdateScript implements [grpcviewv1.WorkspaceServiceHandler]. It patches a script's
+// source and/or renames it; NewName maps to the store's rename (slug stays stable).
+func (w Workspace) UpdateScript(ctx context.Context, request *connect.Request[grpcviewv1.UpdateScriptRequest]) (*connect.Response[grpcviewv1.UpdateScriptResponse], error) {
+	patch := store.ScriptPatch{
+		Name:   request.Msg.NewName,
+		Source: request.Msg.Source,
+	}
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.UpdateScript(ctx, request.Msg.GetName(), patch)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.UpdateScriptResponse{Workspace: ws}), nil
+}
+
+// DeleteScript implements [grpcviewv1.WorkspaceServiceHandler].
+func (w Workspace) DeleteScript(ctx context.Context, request *connect.Request[grpcviewv1.DeleteScriptRequest]) (*connect.Response[grpcviewv1.DeleteScriptResponse], error) {
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.DeleteScript(ctx, request.Msg.GetName())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.DeleteScriptResponse{Workspace: ws}), nil
+}

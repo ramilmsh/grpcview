@@ -48,6 +48,9 @@ export interface InvokeState {
 
 export type RequestSubtab = "message" | "metadata";
 export type ResponseSubtab = "messages" | "metadata" | "history";
+// The Scripts view's active detail subtab (plan §S1: Code / Dependencies /
+// Capabilities). Dependencies + Capabilities are the sandboxed empty states.
+export type ScriptSubtab = "code" | "deps" | "caps";
 
 interface UIState {
   activeView: ActiveView;
@@ -57,6 +60,14 @@ interface UIState {
   invokes: Record<string, InvokeState | undefined>;
   requestSubtab: RequestSubtab;
   responseSubtab: ResponseSubtab;
+
+  // Scripts view. Scripts themselves are server data (ride the Get snapshot); only
+  // the selection, per-script editor buffers, and the active detail subtab are UI
+  // state. scriptDrafts is keyed by the script's (unique) name and seeded from the
+  // server Script on first open, then authoritative — mirroring `drafts` above.
+  selectedScript: string | null;
+  scriptDrafts: Record<string, string | undefined>;
+  scriptSubtab: ScriptSubtab;
 
   setView: (view: ActiveView) => void;
   openTab: (item: ItemWithPath) => void;
@@ -82,6 +93,16 @@ interface UIState {
 
   setRequestSubtab: (tab: RequestSubtab) => void;
   setResponseSubtab: (tab: ResponseSubtab) => void;
+
+  selectScript: (name: string | null) => void;
+  setScriptSubtab: (tab: ScriptSubtab) => void;
+  seedScriptDraft: (name: string, source: string) => void; // only if absent
+  setScriptDraft: (name: string, source: string) => void;
+  // A script's identity is name-derived (like a request): a rename remaps the
+  // selection + open draft from the old name to the new one so they follow it.
+  renameScript: (oldName: string, newName: string) => void;
+  // Drop a deleted script's draft and clear the selection if it was selected.
+  forgetScript: (name: string) => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -92,6 +113,9 @@ export const useUIStore = create<UIState>()((set) => ({
   invokes: {},
   requestSubtab: "message",
   responseSubtab: "messages",
+  selectedScript: null,
+  scriptDrafts: {},
+  scriptSubtab: "code",
 
   setView: (activeView) => set({ activeView }),
 
@@ -191,4 +215,42 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setRequestSubtab: (requestSubtab) => set({ requestSubtab }),
   setResponseSubtab: (responseSubtab) => set({ responseSubtab }),
+
+  selectScript: (selectedScript) => set({ selectedScript }),
+  setScriptSubtab: (scriptSubtab) => set({ scriptSubtab }),
+
+  seedScriptDraft: (name, source) =>
+    set((s) =>
+      s.scriptDrafts[name] !== undefined
+        ? {}
+        : { scriptDrafts: { ...s.scriptDrafts, [name]: source } }
+    ),
+
+  setScriptDraft: (name, source) =>
+    set((s) => ({ scriptDrafts: { ...s.scriptDrafts, [name]: source } })),
+
+  renameScript: (oldName, newName) =>
+    set((s) => {
+      if (oldName === newName) return {};
+      const scriptDrafts = { ...s.scriptDrafts };
+      if (oldName in scriptDrafts) {
+        const moved = scriptDrafts[oldName];
+        delete scriptDrafts[oldName];
+        if (moved !== undefined) scriptDrafts[newName] = moved;
+      }
+      return {
+        selectedScript: s.selectedScript === oldName ? newName : s.selectedScript,
+        scriptDrafts,
+      };
+    }),
+
+  forgetScript: (name) =>
+    set((s) => {
+      const scriptDrafts = { ...s.scriptDrafts };
+      delete scriptDrafts[name];
+      return {
+        scriptDrafts,
+        selectedScript: s.selectedScript === name ? null : s.selectedScript,
+      };
+    }),
 }));

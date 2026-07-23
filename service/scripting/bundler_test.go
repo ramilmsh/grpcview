@@ -242,7 +242,7 @@ func TestBundleCacheReuse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first compile: %v", err)
 	}
-	key, ok := b.cacheKey(src, Grant{})
+	key, ok := b.cacheKey(src, Grant{}, "expr")
 	if !ok {
 		t.Fatal("cacheKey not derivable for an empty grant")
 	}

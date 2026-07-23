@@ -346,15 +346,22 @@ func (i *Instance) evalRaw(ctx context.Context, src string, async, asJSON bool) 
 // the run errors, so an interrupted or throwing script still surfaces what it logged
 // before failing. A JS exception comes back as a *JSError (line remapped to the author's
 // source via the compiled script's source map) in the second return.
-func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Input) (Result, error) {
+func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Input, postlude string) (Result, error) {
 	// A script that compiled to nothing — only comments, or the no-op `undefined` that
-	// esbuild elides — has no value and nothing to run.
-	if strings.TrimSpace(c.code) == "" {
+	// esbuild elides — has no value and nothing to run. An entry-point run always has a
+	// postlude (the call site), so it never trips this even for a tiny module.
+	if strings.TrimSpace(c.code) == "" && postlude == "" {
 		return Result{}, nil
 	}
 
 	prelude := buildInputPrelude(in)
 	full := prelude + c.code
+	// The postlude (entry-point calling convention) is appended AFTER the user code so
+	// its final expression — the awaited entry-point return — is the run's value. It sits
+	// past the author's lines, so error line-remapping of user code is unaffected.
+	if postlude != "" {
+		full += "\n;\n" + postlude + "\n"
+	}
 	preludeLines := strings.Count(prelude, "\n")
 
 	sink := &logCollector{}

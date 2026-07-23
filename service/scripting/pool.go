@@ -137,7 +137,13 @@ func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Resul
 	if err != nil {
 		return Result{}, err
 	}
+	return p.RunCompiled(ctx, c, g, in, "")
+}
 
+// RunCompiled is Run for an already-compiled blob plus an optional entry-point postlude
+// (the middleware calling convention appends the call site). The Engine compiles with the
+// shared bundler before calling in, so a compile failure never checks out an instance.
+func (p *Pool) RunCompiled(ctx context.Context, c compiled, g Grant, in Input, postlude string) (Result, error) {
 	inst, err := p.get(ctx)
 	if err != nil {
 		return Result{}, err
@@ -147,7 +153,7 @@ func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Resul
 		// Reuse the live context; do NOT dispose between runs. defer so a panic in the
 		// script path still returns the instance (or discards it if it died).
 		defer p.put(inst)
-		return inst.runCompiled(ctx, c, g, in)
+		return inst.runCompiled(ctx, c, g, in, postlude)
 	}
 
 	// Fresh context per run: create, run, dispose. If newContext fails the instance is
@@ -159,5 +165,5 @@ func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Resul
 	}
 	defer p.put(inst)
 	defer inst.disposeContext(context.WithoutCancel(ctx))
-	return inst.runCompiled(ctx, c, g, in)
+	return inst.runCompiled(ctx, c, g, in, postlude)
 }

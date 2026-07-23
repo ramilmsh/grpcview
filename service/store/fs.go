@@ -48,6 +48,10 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
+	scripts, err := c.loadScripts(col.GetScripts())
+	if err != nil {
+		return nil, err
+	}
 
 	name := cmp.Or(col.GetName(), c.name)
 	return &grpcviewv1.Workspace{
@@ -58,6 +62,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 		},
 		Sources:  sources,
 		Services: services,
+		Scripts:  scripts,
 	}, nil
 }
 

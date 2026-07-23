@@ -10,23 +10,36 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 )
 
-// RunScript evaluates an ad-hoc script through the scripting engine's scenario
-// profile and returns its value, console output, and any error. Like Invoke, a
-// failure of the *script itself* (a thrown exception, a timeout) is not an error
-// of this RPC: it is reported in the response's Error so the UI can render it.
-// Only grpcview's own inability to run the engine surfaces as a Connect error.
+// RunScript evaluates a script through the scripting engine and returns its value,
+// console output, and any error. Like Invoke, a failure of the *script itself* (a
+// thrown exception, a timeout) is not an error of this RPC: it is reported in the
+// response's Error so the UI can render it. Only grpcview's own inability to run the
+// engine surfaces as a Connect error.
 //
-// The scratchpad runs with NO capabilities granted and NO workspace inputs — it
-// is purely an end-to-end validation surface for the engine (eval, the async job
-// pump, console capture, structured JSON results, and error propagation), not a
-// hook into any request. Capability grants and request/vars/env inputs arrive
-// when generators/middleware are wired to real inputs (next-steps §6).
+// kind selects the profile and calling convention (§2.5): a generator's `export
+// default` is called, a middleware's `handle`/default export is called with a ctx;
+// unset (or scenario) evaluates the buffer as an ad-hoc scratchpad (last-expression
+// value), unchanged. All runs use NO capabilities and NO workspace inputs — this is
+// the engine's end-to-end validation + per-kind test-run surface, not a hook into a
+// request. Capability grants and request/vars/env inputs arrive in later milestones.
 func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcviewv1.RunScriptRequest]) (*connect.Response[grpcviewv1.RunScriptResponse], error) {
 	if w.engine == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("scripting engine not available"))
 	}
 
-	res, runErr := w.engine.RunScenario(ctx, request.Msg.GetSource(), scripting.Grant{}, scripting.Input{})
+	source := request.Msg.GetSource()
+	var (
+		res    scripting.Result
+		runErr error
+	)
+	switch request.Msg.GetKind() {
+	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
+		res, runErr = w.engine.RunGenerator(ctx, source, scripting.Grant{}, scripting.Input{})
+	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
+		res, runErr = w.engine.RunMiddleware(ctx, source, scripting.Grant{}, scripting.Input{})
+	default: // UNSPECIFIED (scratchpad) or SCENARIO
+		res, runErr = w.engine.RunScenario(ctx, source, scripting.Grant{}, scripting.Input{})
+	}
 
 	out := &grpcviewv1.RunScriptResponse{}
 	// Console output is returned even on failure, so a script that throws or times
