@@ -27,7 +27,7 @@ import { Centered } from "@/components/ui/Centered";
 import { MethodHeader } from "./MethodHeader";
 import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
-import { wrap } from "./body-wrapper";
+import { migrateBodyToTs } from "./body-wrapper";
 
 const DEBOUNCE_MS = 400;
 
@@ -65,7 +65,11 @@ export function RequestWorkspace() {
   // persisted primary; cs/bd requests grow it with ephemeral extras.
   useEffect(() => {
     if (activeKey && request) {
-      const primary = request.draftBody || "{}";
+      // Every body is authored as TypeScript now, and the editor can only host a canonical
+      // hidden-wrapper module — so migrate a legacy JSON / token / old-TS body to canonical on
+      // first seed (idempotent; a canonical body passes through). Lazy: the migrated form is only
+      // persisted once the user edits (onBodyChange), mirroring the old seed-on-toggle.
+      const primary = migrateBodyToTs(request.draftBody || "{}");
       seedDraft(activeKey, {
         body: primary,
         metadataRows: objectToRows(request.draftMetadata),
@@ -74,8 +78,8 @@ export function RequestWorkspace() {
     }
   }, [activeKey, request, seedDraft]);
 
-  // The method the request points at — one lookup feeds the editor's JSON schema,
-  // the "valid <type>" footer, and the method-kind branch (unary vs streaming).
+  // The method the request points at — one lookup feeds the editor's T2 typed body (input
+  // package/name/file), the "valid <type>" footer, and the method-kind branch (unary vs streaming).
   const activeMethod = useMemo(
     () => (request ? resolveMethod(services, request.service, request.method) : undefined),
     [services, request]
@@ -113,7 +117,9 @@ export function RequestWorkspace() {
   const key = activeKey;
   const path = activeItem.path;
   const itemName = activeItem.item.name;
-  const body = draft?.body ?? request.draftBody ?? "{}";
+  // Before the seed effect commits (first render), fall back to the migrated server body so the
+  // editor's very first load is already canonical (its reload keys on currentKey, not on `body`).
+  const body = draft?.body ?? migrateBodyToTs(request.draftBody || "{}");
   const metadataRows = draft?.metadataRows ?? objectToRows(request.draftMetadata);
   // Compose list for cs/bd. The primary (index 0) is always the current body —
   // the single source of truth for the persisted message — with any ephemeral
@@ -154,22 +160,6 @@ export function RequestWorkspace() {
 
   const onChangeMethod = (service: string, method: string) => {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
-  };
-
-  // Body-language toggle (JSON ⇄ TypeScript). A discrete edit like a method change:
-  // persist immediately, then the re-seeded Get cache flows request.bodyLanguage back
-  // down — the editor + the invoke payloads read it straight off `request`, so no
-  // local draft copy is needed (ts-request-body-plan §T1/§4.6).
-  const onBodyLanguageChange = (next: BodyLanguage) => {
-    updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, bodyLanguage: next });
-    // Seed the canonical hidden-wrapper module on JSON→TS when the body is trivial (§T4). The
-    // `=> (\n{ … }\n)` shape is what the editor hides down to a bare object; the RequestMessage
-    // return annotation must be literally present or TS infers `{}` and offers no completions
-    // (plan §T2). Only for an empty/`{}` body, so we never clobber a real object mid-migration.
-    const trimmed = body.trim();
-    if (next === BodyLanguage.TYPESCRIPT && (trimmed === "" || trimmed === "{}")) {
-      onBodyChange(wrap("{\n  \n}"));
-    }
   };
 
   // Middleware attach/detach/reorder persists the whole ordered list immediately
@@ -216,9 +206,10 @@ export function RequestWorkspace() {
           method: request.method,
           body: b,
           metadata: rowsToObject(rows),
-          // Carry the editor's current toggle so a TS body evaluates on the server
-          // (the invoke path reads this off the wire, not the saved Request).
-          bodyLanguage: request.bodyLanguage,
+          // The body is always TypeScript now (a canonical export-default module, migrated on
+          // load) — tell the server to eval it. The invoke path reads this off the wire, not the
+          // saved Request, so we send it unconditionally regardless of request.bodyLanguage.
+          bodyLanguage: BodyLanguage.TYPESCRIPT,
         },
         {
           // The server persists history before returning, so refresh on success.
@@ -237,7 +228,12 @@ export function RequestWorkspace() {
     // list for client-streaming / bidi. `key` and the request fields are captured
     // here so a mid-stream tab switch keeps writing into the request the stream
     // was started for (the store actions patch by this captured key).
-    const messagesToSend = kind === "ss" ? [b] : msgs;
+    // Migrate every outgoing message to a canonical TS module: the primary (index 0) is already
+    // canonical (migrated on load), but the cs/bd compose extras are authored as raw JSON in the
+    // plain-textarea MessagesTab, and a bare JSON object sent as TypeScript would misparse on the
+    // last-expression path. migrateBodyToTs is idempotent, so the already-canonical primary is
+    // untouched.
+    const messagesToSend = (kind === "ss" ? [b] : msgs).map(migrateBodyToTs);
     const req = {
       workspaceName: WORKSPACE_NAME,
       path,
@@ -246,9 +242,9 @@ export function RequestWorkspace() {
       method: request.method,
       messages: messagesToSend,
       metadata: rowsToObject(rows),
-      // Carry the editor's current toggle (mirrors the unary path) so a TS message
-      // evaluates on the server.
-      bodyLanguage: request.bodyLanguage,
+      // Always TypeScript (mirrors the unary path): every message is a canonical export-default
+      // module, so the server evals it. Read off the wire, not the saved Request.
+      bodyLanguage: BodyLanguage.TYPESCRIPT,
     };
 
     aborters.current[key]?.abort(); // supersede any prior stream for this key
@@ -293,10 +289,13 @@ export function RequestWorkspace() {
   // request body (bytes -> text) and metadata rows. Selecting a run loads it;
   // re-running loads it AND fires the call with those exact values.
   const historyDraft = (entry: History) => {
-    const b =
+    // History bodies are the bytes sent on that run (often legacy JSON). Migrate to canonical TS
+    // so selecting/re-running loads a body the always-TS editor can host and the server can eval.
+    const raw =
       entry.request && entry.request.body.length > 0
         ? new TextDecoder().decode(entry.request.body)
         : "{}";
+    const b = migrateBodyToTs(raw);
     const rows = objectToRows(entry.request?.metadata);
     return { b, rows };
   };
@@ -324,7 +323,6 @@ export function RequestWorkspace() {
       />
       <div className="flex" style={{ flex: 1, minHeight: 0 }}>
         <RequestPane
-          schema={activeMethod?.input?.schema as object | undefined}
           kind={kind}
           body={body}
           onBodyChange={onBodyChange}
@@ -334,14 +332,11 @@ export function RequestWorkspace() {
           onMetadataChange={onMetadataChange}
           middleware={request.middleware}
           onMiddlewareChange={onMiddlewareChange}
-          currentMethod={{ service: request.service, method: request.method }}
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}
-          bodyLanguage={request.bodyLanguage}
           descriptorSet={workspace?.descriptorSet}
           inputPackage={activeMethod?.input?.package}
           inputFile={activeMethod?.input?.file}
-          onBodyLanguageChange={onBodyLanguageChange}
           generators={generators}
         />
         <ResponsePane

@@ -1,4 +1,3 @@
-import type { BodyLanguage } from "@grpcview/v1/workspace_pb";
 import { ArrowsSplit, BracketsCurly } from "@/components/ui/icons";
 import { Subtab } from "@/components/ui/Subtab";
 import { Tag, type MethodKind } from "@/components/ui/Tag";
@@ -15,7 +14,6 @@ import { MiddlewareTab } from "./MiddlewareTab";
 // is the ordered pre-invoke chain attached to this request (server state — see
 // MiddlewareTab). Auth/Options/Variants land with later phases.
 export function RequestPane({
-  schema,
   kind,
   body,
   onBodyChange,
@@ -25,17 +23,13 @@ export function RequestPane({
   onMetadataChange,
   middleware,
   onMiddlewareChange,
-  currentMethod,
   currentKey,
   inputTypeName,
-  bodyLanguage,
   descriptorSet,
   inputPackage,
   inputFile,
-  onBodyLanguageChange,
   generators,
 }: {
-  schema?: object;
   kind: MethodKind;
   body: string;
   onBodyChange: (v: string) => void;
@@ -45,15 +39,12 @@ export function RequestPane({
   onMetadataChange: (rows: MetadataRow[]) => void;
   middleware: string[];
   onMiddlewareChange: (next: string[]) => void;
-  currentMethod: { service: string; method: string };
   currentKey: string;
   inputTypeName?: string;
-  bodyLanguage: BodyLanguage;
-  // T2 typed-body inputs, passed through to MessageTab → Editor (used only in TS mode).
+  // T2 typed-body inputs, passed through to MessageTab → Editor.
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
-  onBodyLanguageChange: (next: BodyLanguage) => void;
   // T3 composition: workspace generator names, forwarded to MessageTab → Editor.
   generators: string[];
 }) {
@@ -114,17 +105,13 @@ export function RequestPane({
           />
         ) : (
           <MessageTab
-            schema={schema}
             body={body}
             onChange={onBodyChange}
-            currentMethod={currentMethod}
             currentKey={currentKey}
             inputTypeName={inputTypeName}
-            bodyLanguage={bodyLanguage}
             descriptorSet={descriptorSet}
             inputPackage={inputPackage}
             inputFile={inputFile}
-            onBodyLanguageChange={onBodyLanguageChange}
             generators={generators}
           />
         )
