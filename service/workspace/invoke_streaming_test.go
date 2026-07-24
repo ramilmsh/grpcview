@@ -36,11 +36,17 @@ func startEchoServer(t *testing.T) int {
 // echoStreamReq builds a streaming invoke request aimed at the loopback echo
 // server. Target is set explicitly so no workspace store setup is needed.
 func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.InvokeStreamRequest {
+	// Every message is wrapped as a canonical TS module: the invoke path evaluates each body as
+	// TypeScript now (like the frontend's migrated bodies), so a raw JSON literal would misparse.
+	wrapped := make([]string, len(messages))
+	for i, m := range messages {
+		wrapped[i] = tsBody(m)
+	}
 	return &grpcviewv1.InvokeStreamRequest{
 		WorkspaceName: testWorkspace,
 		Service:       echoService,
 		Method:        method,
-		Messages:      messages,
+		Messages:      wrapped,
 		Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
 	}
 }
@@ -93,7 +99,7 @@ func splitFrames(t *testing.T, frames []*grpcviewv1.InvokeStreamResponse) (msgs 
 // echoed message. The two ServerStream rows (count 3 and 5) prove the emitted
 // frame count tracks the number of responses the server actually streams.
 func TestStreamInvokeKinds(t *testing.T) {
-	w := newTestWorkspace(t)
+	w := newTestWorkspaceWithEngine(t)
 	port := startEchoServer(t)
 
 	cases := []struct {
@@ -149,7 +155,7 @@ func TestStreamInvokeKinds(t *testing.T) {
 // treated as a single "{}" request, so a unary target still produces one message
 // frame and an OK terminal frame.
 func TestStreamInvokeDefaultsEmptyMessages(t *testing.T) {
-	w := newTestWorkspace(t)
+	w := newTestWorkspaceWithEngine(t)
 	port := startEchoServer(t)
 
 	frames, err := collectStream(context.Background(), w, echoStreamReq(port, "Unary"))

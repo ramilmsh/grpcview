@@ -202,7 +202,7 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	itemDir := filepath.Join(parentDir, ch.slug)
 
-	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware && patch.BodyLanguage == nil {
+	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware {
 		return nil
 	}
 	// Reuse the request.json readChildren already decoded (ch.request) rather
@@ -230,11 +230,6 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	if patch.DraftBody != nil {
 		dr.DraftBody = *patch.DraftBody
-	}
-	// dr is the DISK Request, so the wire enum in the patch must be bridged (unlike
-	// DraftBody's plain string / DraftMetadata's identical-both-sides Struct).
-	if patch.BodyLanguage != nil {
-		dr.BodyLanguage = wireToDiskBodyLanguage(*patch.BodyLanguage)
 	}
 	if patch.DraftMetadata != nil {
 		dr.DraftMetadata = patch.DraftMetadata // Struct: identical on both sides

@@ -17,10 +17,17 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
 const testWorkspace = "default"
+
+// tsBody wraps a JSON/JS object literal as a canonical TypeScript request-body module. Every
+// request body is evaluated as a TS module on invoke now (the frontend migrates legacy JSON to
+// this form before sending), so a test that wants to send a plain object writes tsBody(`{…}`)
+// to drive the real path; the module's returned object is the literal.
+func tsBody(obj string) string { return "export default () => (" + obj + ")" }
 
 // startReflectionServer starts an in-process gRPC server on a loopback port with
 // server reflection enabled. When withHealth is set it also registers the health
@@ -46,6 +53,38 @@ func startReflectionServer(t *testing.T, withHealth bool) int {
 func newTestWorkspace(t *testing.T) Workspace {
 	t.Helper()
 	return Workspace{store: store.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))}
+}
+
+// newTestWorkspaceWithEngine is newTestWorkspace plus a real scripting engine, needed by the
+// tests that evaluate TS bodies/metadata (the engine compile is the expensive step, so a test
+// builds one and reuses it across its subtests). The engine is torn down on cleanup.
+func newTestWorkspaceWithEngine(t *testing.T) Workspace {
+	t.Helper()
+	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	t.Cleanup(func() { _ = eng.Close(context.Background()) })
+	return Workspace{
+		store:  store.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		engine: eng,
+	}
+}
+
+// createGenerator saves a GENERATOR script through the store, the way the other workspace
+// tests set up requests (create then patch source).
+func createGenerator(t *testing.T, w Workspace, ctx context.Context, name, source string) {
+	t.Helper()
+	coll, err := w.store.Open(ctx, testWorkspace)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.CreateScript(ctx, name, grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR); err != nil {
+		t.Fatalf("CreateScript %q: %v", name, err)
+	}
+	if err := coll.UpdateScript(ctx, name, store.ScriptPatch{Source: &source}); err != nil {
+		t.Fatalf("UpdateScript %q: %v", name, err)
+	}
 }
 
 func reflectionAddReq(port int) *grpcviewv1.AddDescriptorSourceRequest {

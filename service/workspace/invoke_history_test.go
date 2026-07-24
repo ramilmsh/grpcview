@@ -11,13 +11,25 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
 // workspaceAt returns a handler backed by a store rooted at base, so a test can
-// reopen the same on-disk collection from a fresh store to prove persistence.
-func workspaceAt(base string) Workspace {
-	return Workspace{store: store.New(base, slog.New(slog.NewTextHandler(io.Discard, nil)))}
+// reopen the same on-disk collection from a fresh store to prove persistence. It
+// carries a real scripting engine because the invoke path now evaluates every body
+// as a TypeScript module; the engine is torn down on cleanup.
+func workspaceAt(t *testing.T, base string) Workspace {
+	t.Helper()
+	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	t.Cleanup(func() { _ = eng.Close(context.Background()) })
+	return Workspace{
+		store:  store.New(base, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		engine: eng,
+	}
 }
 
 // loadHistory reopens base with a fresh store and returns the named root
@@ -50,7 +62,7 @@ func loadHistory(t *testing.T, base, name string) []*grpcviewv1.History {
 // invoke (no item_name) records nothing.
 func TestInvokeRecordsHistory(t *testing.T) {
 	base := t.TempDir()
-	w := workspaceAt(base)
+	w := workspaceAt(t, base)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
@@ -75,7 +87,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 			ItemName:      "Echo",
 			Service:       echoService,
 			Method:        "Unary",
-			Body:          fmt.Sprintf(`{"message":"hi-%d"}`, i),
+			Body:          tsBody(fmt.Sprintf(`{"message":"hi-%d"}`, i)),
 			Metadata:      md,
 			Target:        target,
 		}))
@@ -92,7 +104,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 		WorkspaceName: testWorkspace,
 		Service:       echoService,
 		Method:        "Unary",
-		Body:          `{"message":"ad-hoc"}`,
+		Body:          tsBody(`{"message":"ad-hoc"}`),
 		Target:        target,
 	})); err != nil {
 		t.Fatalf("ad-hoc Invoke: %v", err)
@@ -104,7 +116,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 	}
 	for i, h := range hist {
 		req, res := h.GetRequest(), h.GetResponse()
-		if want := fmt.Sprintf(`{"message":"hi-%d"}`, i); string(req.GetBody()) != want {
+		if want := tsBody(fmt.Sprintf(`{"message":"hi-%d"}`, i)); string(req.GetBody()) != want {
 			t.Errorf("entry %d body = %s, want %s (append order)", i, req.GetBody(), want)
 		}
 		if req.GetService() != echoService || req.GetMethod() != "Unary" {
@@ -130,7 +142,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 // streamed payloads (the terminal frame's response bytes are empty for streams).
 func TestStreamInvokeRecordsHistory(t *testing.T) {
 	base := t.TempDir()
-	w := workspaceAt(base)
+	w := workspaceAt(t, base)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 

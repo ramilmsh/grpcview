@@ -54,7 +54,7 @@ func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemNa
 		ItemName:      itemName,
 		Service:       echoService,
 		Method:        "Unary",
-		Body:          body,
+		Body:          tsBody(body), // body is evaluated as a canonical TS module on invoke
 		Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
 	}))
 	if err != nil {
@@ -171,7 +171,7 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 			ItemName:      item,
 			Service:       echoService,
 			Method:        "Unary",
-			Body:          `{"message":"hi"}`,
+			Body:          tsBody(`{"message":"hi"}`),
 			Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
 		}))
 		if connect.CodeOf(err) != connect.CodeFailedPrecondition {

@@ -11,11 +11,9 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// TestResolveInvokeBody covers the §T1 pre-send body-evaluation step: the TYPESCRIPT
-// happy path (a body is run as a generator and its returned object replaces the body,
-// for one and for many bodies), the JSON/UNSPECIFIED no-op (bodies pass through
-// byte-identical and are never evaluated), and the error modes (throw / non-object /
-// undefined return → FailedPrecondition).
+// TestResolveInvokeBody covers the §T1 pre-send body-evaluation step: the happy path (a body
+// is run as a generator and its returned object replaces the body, for one and for many
+// bodies) and the error modes (throw / non-object / undefined return → FailedPrecondition).
 func TestResolveInvokeBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -24,8 +22,7 @@ func TestResolveInvokeBody(t *testing.T) {
 		// `export default` fires the entry-point convention; the returned object literal
 		// (with a computed field, to prove real evaluation) becomes the JSON body.
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`},
-			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`})
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -36,8 +33,7 @@ func TestResolveInvokeBody(t *testing.T) {
 
 	t.Run("typescript evaluates every body (streaming shape)", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ n: 1 })`, `export default () => ({ n: 2 })`},
-			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+			[]string{`export default () => ({ n: 1 })`, `export default () => ({ n: 2 })`})
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -45,29 +41,6 @@ func TestResolveInvokeBody(t *testing.T) {
 			t.Fatalf("got %q, want [{\"n\":1} {\"n\":2}]", out)
 		}
 	})
-
-	// JSON and UNSPECIFIED are both no-ops: the bodies are returned byte-identical and
-	// are NEVER evaluated — a body that is not even valid JS proves the eval is skipped.
-	for _, lang := range []grpcviewv1.BodyLanguage{
-		grpcviewv1.BodyLanguage_BODY_LANGUAGE_JSON,
-		grpcviewv1.BodyLanguage_BODY_LANGUAGE_UNSPECIFIED,
-	} {
-		t.Run("no-op for "+lang.String(), func(t *testing.T) {
-			in := []string{`{"a": 1, "b": "text with } braces {"}`, `not valid js {{ still passes through`}
-			out, err := w.resolveInvokeBody(ctx, testWorkspace, in, lang)
-			if err != nil {
-				t.Fatalf("resolveInvokeBody: %v", err)
-			}
-			if len(out) != len(in) {
-				t.Fatalf("got %d bodies, want %d", len(out), len(in))
-			}
-			for i := range in {
-				if out[i] != in[i] {
-					t.Fatalf("body[%d] = %q, want byte-identical %q", i, out[i], in[i])
-				}
-			}
-		})
-	}
 
 	for _, c := range []struct{ name, body string }{
 		{"throwing body", `export default () => { throw new Error("boom") }`},
@@ -78,7 +51,7 @@ func TestResolveInvokeBody(t *testing.T) {
 	} {
 		t.Run(c.name+" errors FailedPrecondition", func(t *testing.T) {
 			if _, err := w.resolveInvokeBody(ctx, testWorkspace,
-				[]string{c.body}, grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				[]string{c.body}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 			}
 		})
@@ -98,8 +71,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 
 	t.Run("typescript body composes a saved generator", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid(), n: 7 })`},
-			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+			[]string{`export default () => ({ id: mkid(), n: 7 })`})
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -113,8 +85,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		// names it — so referencedGenerators excludes it and the body still bundles and runs.
 		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid() })`},
-			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+			[]string{`export default () => ({ id: mkid() })`})
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (unreferenced broken generator): %v", err)
 		}
@@ -132,8 +103,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		createGenerator(t, w, ctx, "id", `export default () => "unterminated`)
 		createGenerator(t, w, ctx, "toString", `export default () => "also broken`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid(), label: (7).toString() })`},
-			grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT)
+			[]string{`export default () => ({ id: mkid(), label: (7).toString() })`})
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (name-collision isolation): %v", err)
 		}

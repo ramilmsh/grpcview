@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,9 +15,7 @@ import (
 	"github.com/jhump/protoreflect/grpcreflect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
-	"google.golang.org/protobuf/types/known/structpb"
 
-	"codeberg.org/ramilmsh/grpcview/inspector"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
@@ -358,27 +355,20 @@ func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, e
 
 	for j, methodDesc := range serviceDesc.GetMethods() {
 		inputDesc := methodDesc.GetInputType()
-		schemaStruct, err := messageSchema(inputDesc)
-		if err != nil {
-			return nil, err
-		}
-
 		outputDesc := methodDesc.GetOutputType()
-		outputSchema, err := messageSchema(outputDesc)
-		if err != nil {
-			return nil, err
-		}
 
 		// client_streaming/server_streaming carry the method's real kind so the
 		// tree/tabs render the right tag and InvokeStreaming maps onto the right
 		// call shape. Both reflection and descriptor-set sources funnel through
-		// here, so populating them once covers both branches.
+		// here, so populating them once covers both branches. The editor's typing
+		// comes from the client-side protoc-gen-es over Workspace.descriptor_set
+		// (§T2), keyed by each message's package/name/file — no per-message JSON
+		// schema is sent.
 		service.Methods[j] = &grpcviewv1.Method{
 			Name: methodDesc.GetName(),
 			Input: &grpcviewv1.Message{
 				Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    inputDesc.GetName(),
-				Schema:  schemaStruct,
 				// File is the proto path defining this message — the protoc-gen-es
 				// fileToGenerate selector into Workspace.descriptor_set (§T2). It
 				// rides the wire-typed services cache for free.
@@ -387,7 +377,6 @@ func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, e
 			Output: &grpcviewv1.Message{
 				Package: outputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    outputDesc.GetName(),
-				Schema:  outputSchema,
 				File:    outputDesc.GetFile().GetName(),
 			},
 			ClientStreaming: methodDesc.IsClientStreaming(),
@@ -395,28 +384,6 @@ func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, e
 		}
 	}
 	return service, nil
-}
-
-// messageSchema converts a message descriptor into the google.protobuf.Struct
-// JSON schema the UI editor consumes, via the shared inspector.ConvertMessage
-// path. Used for both a method's input and output types.
-func messageSchema(msgDesc *desc.MessageDescriptor) (*structpb.Struct, error) {
-	schema, err := inspector.ConvertMessage(msgDesc.UnwrapMessage())
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert message (%s) to schema: %w", msgDesc.Unwrap().FullName(), err)
-	}
-
-	encodedSchema, err := json.Marshal(schema)
-	if err != nil {
-		return nil, err
-	}
-
-	decodedSchema := make(map[string]any)
-	if err := json.Unmarshal(encodedSchema, &decodedSchema); err != nil {
-		return nil, err
-	}
-
-	return structpb.NewStruct(decodedSchema)
 }
 
 // mergeService replaces the entry sharing svc's package/name identity or appends
@@ -503,7 +470,6 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 		DraftMetadataScript: request.Msg.DraftMetadataScript, // optional *string, like DraftBody
 		Middleware:          request.Msg.GetMiddleware(),
 		SetMiddleware:       request.Msg.GetUpdateMiddleware(),
-		BodyLanguage:        request.Msg.BodyLanguage, // wire *grpcviewv1.BodyLanguage, optional
 	}
 	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
 		return coll.UpdateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)

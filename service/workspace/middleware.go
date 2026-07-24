@@ -252,7 +252,7 @@ func stringMapToStruct(m map[string]string) *structpb.Struct {
 
 // middlewareError renders a middleware failure as a Connect FailedPrecondition naming the
 // offending script, matching Invoke's policy that a pre-send failure grpcview itself can't get
-// past is a typed Connect error (mirrors tokens.go's tokenError).
+// past is a typed Connect error (mirrors invoke.go's bodyError).
 func middlewareError(name, detail string) error {
 	return connect.NewError(connect.CodeFailedPrecondition,
 		fmt.Errorf("middleware %q failed: %s", name, detail))
