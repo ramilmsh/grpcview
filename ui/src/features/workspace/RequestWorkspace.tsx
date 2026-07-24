@@ -19,6 +19,7 @@ import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
 import { migrateBodyToTs } from "./body-wrapper";
 import { migrateMetadataToTs } from "./metadata-wrapper";
+import type { GeneratorDef } from "./generator-libs";
 
 const DEBOUNCE_MS = 400;
 
@@ -82,17 +83,19 @@ export function RequestWorkspace() {
   );
   const kind = methodKind(activeMethod);
 
-  // The workspace's saved GENERATOR names, threaded down to the Monaco body editor
-  // for autocomplete + typing (ts-request-body-plan §T3). In TypeScript body mode the
-  // backend injects each referenced generator as an ambient `globalThis.<name>` and
-  // runs it, so the body calls it directly; the editor only needs the NAMES to declare
-  // them ambiently. Memoized on `workspace?.scripts` for a stable array identity, so the
-  // editor's ambient-decl effect re-runs only when the generator set actually changes.
-  const generators = useMemo(
+  // The workspace's saved GENERATORS (name + source), threaded down to the Monaco body + metadata
+  // editors for autocomplete + typing (ts-request-body-plan §T3, §P5). In TypeScript body mode the
+  // backend injects each referenced generator as an ambient `globalThis.<name>` and runs it, so the
+  // body/metadata calls it directly; §P5 also carries each generator's SOURCE so the editor can
+  // infer and surface its real signature (params + return), not just the name. Memoized on
+  // `workspace?.scripts`: including source means the identity changes whenever any generator's
+  // source changes (so the editors re-infer), but stays stable across unrelated re-renders — the
+  // ambient-decl effect still re-runs only when the generator set actually changes.
+  const generators = useMemo<GeneratorDef[]>(
     () =>
       workspace?.scripts
         .filter((s) => s.kind === ScriptKind.GENERATOR)
-        .map((s) => s.name) ?? [],
+        .map((s) => ({ name: s.name, source: s.source })) ?? [],
     [workspace?.scripts]
   );
 

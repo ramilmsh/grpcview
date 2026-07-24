@@ -10,6 +10,10 @@ import "@/features/scripts/monaco-scripts";
 // The canonical `export default (): Metadata => (\n<object>\n)` module shape + helpers. We HIDE
 // the prefix/suffix lines so the user edits a bare object.
 import { META_PREFIX_LINES, META_SUFFIX_LINES, isCanonical } from "./metadata-wrapper";
+// §P5 typed generator signatures — the SAME shared helper the body editor uses (see
+// generator-libs.ts). scope="metadata" keeps the per-generator module + globals URIs distinct from
+// the body editor's, so one editor's dispose never yanks the other's libs.
+import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
 
 // The request metadata is authored as TypeScript: a generator whose returned {[key]: string[]}
 // object becomes the outgoing gRPC metadata (multi-valued). It mounts language="typescript" on a
@@ -26,17 +30,6 @@ const TS_MODEL_URI = "file:///grpcview/request/metadata.ts";
 // .d.ts with no import/export is a GLOBAL (ambient) script, so `Metadata` is visible inside the
 // module body — the same idiom as the generator globals below.
 const METADATA_TYPE_DTS = "type Metadata = { [key: string]: string[] };";
-
-// JS reserved words that are ILLEGAL as a `function <name>` declaration identifier (see
-// Editor.tsx for the full rationale — a name like `default` would break the whole generators
-// .d.ts parse and silently kill ambient autocomplete). Kept in sync with Editor.tsx's copy.
-const GENERATOR_NAME_RESERVED = new Set([
-  "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
-  "do", "else", "enum", "export", "extends", "false", "finally", "for", "function", "if",
-  "import", "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw",
-  "true", "try", "typeof", "var", "void", "while", "with", "let", "static", "yield", "await",
-  "implements", "interface", "package", "private", "protected", "public",
-]);
 
 // --- Hidden-wrapper geometry (mirrors Editor.tsx) ---------------------------------------------
 // setHiddenAreas is real in monaco-editor 0.52.2 but stripped from the public monaco.d.ts. Cast
@@ -77,9 +70,10 @@ interface MetadataEditorProps {
   data: string;
   onChange: (value: string) => void;
   currentKey: string; // request identity — reload the buffer when it changes
-  // The workspace's saved GENERATOR names. Each simple-identifier name is declared as an ambient
-  // global so the metadata module can call it with autocomplete + typing. Optional; defaults [].
-  generators?: string[];
+  // The workspace's saved GENERATORS (name + source). Each emittable generator is declared as an
+  // ambient global with its INFERRED signature so the metadata module can call it with autocomplete
+  // + real param/return typing. Optional; defaults [].
+  generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
 
@@ -157,24 +151,21 @@ export function MetadataEditor({
     };
   }, [monaco]);
 
-  // Ambient autocomplete for the workspace's saved GENERATOR names — the SAME globals the body
-  // gets (Editor.tsx's T3 effect), so a metadata value can call `apiToken()` / `uuid()` directly.
-  // We emit ONLY simple-identifier names (mirroring the backend's composition rule); dispose-
-  // before-add on change since typescriptDefaults is global. DISTINCT path from the body's
-  // generators.d.ts so the two never "Duplicate definition".
-  const genLib = useRef<Monaco.IDisposable | null>(null);
+  // Ambient autocomplete for the workspace's saved GENERATORS WITH their inferred signatures — the
+  // SAME mechanism the body gets (Editor.tsx), so a metadata value can call `apiToken()` / `uuid()`
+  // directly and see its real params + return. registerGeneratorLibs with scope="metadata" keeps
+  // the per-generator module URIs (gen/metadata/…) and the globals .d.ts (metadata-generators.d.ts)
+  // distinct from the body editor's, so the two never collide / "Duplicate definition". It returns
+  // multiple disposables; dispose them all before re-adding on change and on unmount.
+  const genLibs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
     if (!monaco) return;
     const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-    const content = generators
-      .filter((name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !GENERATOR_NAME_RESERVED.has(name))
-      .map((name) => `declare function ${name}(...args: any[]): any;`)
-      .join("\n");
-    genLib.current?.dispose();
-    genLib.current = tsDefaults.addExtraLib(content, "file:///grpcview/request/metadata-generators.d.ts");
+    genLibs.current.forEach((d) => d.dispose());
+    genLibs.current = registerGeneratorLibs(tsDefaults, generators, "metadata");
     return () => {
-      genLib.current?.dispose();
-      genLib.current = null;
+      genLibs.current.forEach((d) => d.dispose());
+      genLibs.current = [];
     };
   }, [monaco, generators]);
 

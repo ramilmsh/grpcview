@@ -6,6 +6,7 @@ import { MessageTab } from "./MessageTab";
 import { MessagesTab } from "./MessagesTab";
 import { MetadataTab } from "./MetadataTab";
 import { MiddlewareTab } from "./MiddlewareTab";
+import type { GeneratorDef } from "./generator-libs";
 
 // RequestPane holds the Message + Metadata + Middleware subtabs (plan §1.4/§S3).
 // The message subtab is the single-body editor for unary / server-streaming and
@@ -44,8 +45,9 @@ export function RequestPane({
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
-  // T3 composition: workspace generator names, forwarded to MessageTab → Editor.
-  generators: string[];
+  // Composition (T3 + §P5): workspace generators (name + source), forwarded to MessageTab → Editor
+  // and MetadataTab → MetadataEditor for ambient autocomplete with inferred signatures.
+  generators: GeneratorDef[];
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
   const setSubtab = useUIStore((s) => s.setRequestSubtab);

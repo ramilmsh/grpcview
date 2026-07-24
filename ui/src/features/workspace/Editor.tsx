@@ -15,6 +15,11 @@ import "./vendor/bufbuild-stubs";
 // T4 hidden-wrapper: the canonical `export default (): RequestMessage => (\n<body>\n)` module
 // shape + helpers. We HIDE the prefix/suffix lines so the user edits a bare object.
 import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
+// §P5 typed generator signatures: the shared GeneratorDef shape (name + source) + the helper that
+// registers each generator's source as an isolated module and declares it as an ambient global
+// with its INFERRED signature. Centralizes the name-safety / failure-isolation / body-vs-metadata
+// URI invariants so the body + metadata editors can't diverge on them.
+import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
 
 // The request body is ALWAYS authored as TypeScript (ts-request-body-plan §T1–§T4 + the all-JS
 // phase): the body is a TS/JS generator whose returned object becomes the message. It mounts
@@ -27,21 +32,6 @@ import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
 // only ever hosts a canonical module — there is no JSON authoring mode anymore.
 // Ported from the previous Editor.tsx (plan §7), on the bundled Monaco + Nocturne theme.
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
-
-// JS reserved words that are ILLEGAL as a `function <name>` declaration identifier. A
-// generator so named (e.g. `default`) would emit `declare function default(...)`, a SYNTAX
-// error that makes Monaco fail to parse the whole generators.d.ts and silently kills ambient
-// autocomplete for EVERY generator — so we skip such names (they still run server-side if the
-// backend accepts them), the same graceful degradation as dotted names. (Names colliding with
-// lib globals like `Date` only produce a self-contained duplicate-identifier squiggle, so they
-// are left alone.)
-const GENERATOR_NAME_RESERVED = new Set([
-  "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
-  "do", "else", "enum", "export", "extends", "false", "finally", "for", "function", "if",
-  "import", "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw",
-  "true", "try", "typeof", "var", "void", "while", "with", "let", "static", "yield", "await",
-  "implements", "interface", "package", "private", "protected", "public",
-]);
 
 // --- Hidden-wrapper geometry (ts-request-body-plan §T4) ---------------------------------------
 // The model text is the canonical `export default (): RequestMessage => (\n<body>\n)` module
@@ -96,10 +86,10 @@ interface EditorProps {
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
-  // T3 composition: the workspace's saved GENERATOR names. Each simple-identifier name is
-  // declared as an ambient global so the body can call it with autocomplete + typing. Optional;
-  // defaults to [].
-  generators?: string[];
+  // Composition (T3 + §P5): the workspace's saved GENERATORS (name + source). Each emittable
+  // generator is declared as an ambient global with its INFERRED signature so the body can call it
+  // with autocomplete + real param/return typing. Optional; defaults to [].
+  generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
 
@@ -215,31 +205,26 @@ export function Editor({
     };
   }, [monaco, descriptorSet, inputPackage, inputName, inputFile]);
 
-  // T3 composition — ambient autocomplete for the workspace's saved GENERATOR names.
-  // The backend injects each referenced generator as `globalThis.<name>` and the body calls it
-  // directly (e.g. `mkid()`); we mirror that here so those names autocomplete + type-check instead
-  // of erroring "Cannot find name". The emitted .d.ts has NO import/export, so its `declare`s are
-  // AMBIENT GLOBALS visible even inside the module body (same idiom as the Scripts ENV_DTS in
-  // monaco-scripts.ts). We emit ONLY simple-identifier names (/^[A-Za-z_$][A-Za-z0-9_$]*$/, minus
-  // JS reserved words) — this mirrors the backend's rule: a name with dots/other chars can't be
-  // made a bare global, so it is skipped (see GENERATOR_NAME_RESERVED above for why reserved words
-  // are excluded too). Registered at a CONSTANT path DISTINCT from the T2 libs; dispose-before-add
-  // (like T2, since typescriptDefaults is global with no per-URI fileMatch) so the set updates
-  // cleanly on change with no leak / no "Duplicate definition". An empty list just registers empty
-  // content (harmless no-op decls).
-  const genLib = useRef<Monaco.IDisposable | null>(null);
+  // Composition (T3 + §P5) — ambient autocomplete for the workspace's saved GENERATORS WITH their
+  // inferred signatures. The backend injects each referenced generator as `globalThis.<name>` and
+  // the body calls it directly (e.g. `mkid()`); we mirror that here so those names autocomplete +
+  // type-check (instead of erroring "Cannot find name") AND carry each generator's real params +
+  // return type. registerGeneratorLibs registers, per emittable generator, its source as an
+  // isolated module plus one ambient-globals .d.ts declaring `const <name>: typeof
+  // import(...).default` (see generator-libs.ts for the mechanism + the name-safety / failure-
+  // isolation invariants). scope="body" namespaces the module + globals URIs away from the metadata
+  // editor's. It returns MULTIPLE disposables (one per module + the globals .d.ts); we dispose them
+  // ALL before re-adding on any change, and on unmount — typescriptDefaults is global with no
+  // per-URI fileMatch, and same-path re-add can throw "Duplicate definition".
+  const genLibs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
     if (!monaco) return;
     const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-    const content = generators
-      .filter((name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !GENERATOR_NAME_RESERVED.has(name))
-      .map((name) => `declare function ${name}(...args: any[]): any;`)
-      .join("\n");
-    genLib.current?.dispose();
-    genLib.current = tsDefaults.addExtraLib(content, "file:///grpcview/request/generators.d.ts");
+    genLibs.current.forEach((d) => d.dispose());
+    genLibs.current = registerGeneratorLibs(tsDefaults, generators, "body");
     return () => {
-      genLib.current?.dispose();
-      genLib.current = null;
+      genLibs.current.forEach((d) => d.dispose());
+      genLibs.current = [];
     };
   }, [monaco, generators]);
 

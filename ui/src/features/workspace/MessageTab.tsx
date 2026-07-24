@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle, Warning } from "@/components/ui/icons";
 import { Editor } from "./Editor";
+import type { GeneratorDef } from "./generator-libs";
 
 // MessageTab is the request body editor (Monaco) plus a footer that reports the body's
 // validity from Monaco's TS markers. The body is always authored as TypeScript (a generator
@@ -25,8 +26,9 @@ export function MessageTab({
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
-  // T3 composition: workspace generator names, forwarded to Editor for ambient autocomplete.
-  generators: string[];
+  // Composition (T3 + §P5): workspace generators (name + source), forwarded to Editor for ambient
+  // autocomplete with inferred signatures.
+  generators: GeneratorDef[];
 }) {
   const [errors, setErrors] = useState(0);
 

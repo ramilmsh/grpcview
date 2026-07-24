@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle, Warning } from "@/components/ui/icons";
 import { MetadataEditor } from "./MetadataEditor";
+import type { GeneratorDef } from "./generator-libs";
 
 // MetadataTab is the request-metadata editor (Monaco) plus a footer that reports the module's
 // validity from Monaco's TS markers. Metadata is authored as TypeScript — a single hidden-wrapper
@@ -16,8 +17,9 @@ export function MetadataTab({
   metadata: string;
   onChange: (value: string) => void;
   currentKey: string;
-  // Workspace generator names, forwarded to MetadataEditor for ambient autocomplete.
-  generators: string[];
+  // Workspace generators (name + source), forwarded to MetadataEditor for ambient autocomplete
+  // with inferred signatures (§P5).
+  generators: GeneratorDef[];
 }) {
   const [errors, setErrors] = useState(0);
 
