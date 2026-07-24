@@ -25,11 +25,12 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
 - **This is a Bazel workspace. Never run `go build`, `go test`, `go run`, or —
   especially — `go mod` / `go mod tidy`.** Bare `go` commands reach the network,
   hang, and can wedge git. Use Bazel for everything (see Commands below).
-- **Prefix every Go command with `env GOPROXY=off`** so nothing tries to
-  fetch modules. Offline builds are green; a command that wants the network is a
-  bug in the command, not a missing dependency.
-- The default shell here is fish. For commands that need bash semantics or inline
-  env vars, wrap them: `env GOPROXY=off bash -c '...'`.
+- **`.envrc` already exports `GOPROXY=off`** (via direnv), so Bazel/Go commands
+  run offline by default — you don't need to prefix anything. Offline builds are
+  green; a command that wants the network is a bug in the command, not a missing
+  dependency.
+- The default shell here is fish. For commands that need bash semantics, wrap
+  them: `bash -c '...'`.
 
 ## Architecture
 
@@ -120,39 +121,38 @@ current status are in `docs/design/ui-redesign-plan.md`.
 ## Build System (Bazel)
 
 Bazel drives building, testing, proto generation (Go + TypeScript), and embedding.
-Remember the `env GOPROXY=off` prefix on every command.
 
 ### Commands
 
 - **Build the release binary** (standalone, frontend embedded):
 
   ```bash
-  env GOPROXY=off bazel build //service/cmd
+  bazel build //service/cmd
   ```
 
 - **Build & test everything:**
 
   ```bash
-  env GOPROXY=off bazel build //...
-  env GOPROXY=off bazel test //...
+  bazel build //...
+  bazel test //...
   ```
 
 - **Run the dev backend** (serves the API without embedding the frontend):
 
   ```bash
-  env GOPROXY=off bazel run //service/cmd/dev
+  bazel run //service/cmd/dev
   ```
 
 - **Run the frontend dev server** (Vite):
 
   ```bash
-  env GOPROXY=off bazel run //ui:dev
+  bazel run //ui:dev
   ```
 
 - **Regenerate TypeScript proto types** (run after editing any `.proto`):
 
   ```bash
-  env GOPROXY=off bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy
+  bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy
   ```
 
   This copies the regenerated `.d.ts` declarations into the source tree. The

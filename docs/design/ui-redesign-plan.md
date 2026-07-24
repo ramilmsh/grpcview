@@ -102,15 +102,15 @@ Each item needs design + (mostly) backend work; plan when reached.
 
 ## 5. Verification recipe
 
-Bazel only — this is a Bazel workspace; never `go build`/`go test`/`npm`, and
-prefix every command with `env GOPROXY=off`.
+Bazel only — this is a Bazel workspace; never `go build`/`go test`/`npm`.
+`.envrc` already exports `GOPROXY=off` (direnv), so commands run offline as-is.
 
-- **Frontend dev:** `env GOPROXY=off bazel run //ui:dev` (Vite; backend expected at
+- **Frontend dev:** `bazel run //ui:dev` (Vite; backend expected at
   `:10000`). Must go through Bazel — the generated proto *runtime* JS comes from the
   `//proto/grpcview/v1:grpcviewv1_ts_proto` dep (only the `.d.ts` are committed), so
   a bare `pnpm vite` can't resolve `@grpcview/*`.
-- **Backend dev (no embed):** `env GOPROXY=off bazel run //service/cmd/dev`.
-- **Release/embedded binary:** `env GOPROXY=off bazel build //service/cmd` — run it
+- **Backend dev (no embed):** `bazel run //service/cmd/dev`.
+- **Release/embedded binary:** `bazel build //service/cmd` — run it
   and confirm the UI loads offline (fonts/icons/Monaco bundled).
 - **End-to-end Invoke check:** the prod binary **reflects itself** on `:10000`. Run
   it with an **isolated `HOME`** (fresh store), add a `reflection localhost:10000`

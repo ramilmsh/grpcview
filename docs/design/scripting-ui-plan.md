@@ -92,6 +92,6 @@ The "author a script, then use it in a request" loop is live:
   slug/key; the sidebar selection + open buffer must remap.
 - **Streaming parity** — middleware (and any future pre-send resolution) must apply
   to `InvokeStreaming` as well as unary `Invoke`; the pre-send pipeline is shared.
-- **Verification is Bazel + browser** — every milestone: `env GOPROXY=off bazel
+- **Verification is Bazel + browser** — every milestone: `bazel
   build //service/cmd` clean, then drive the real flow against the isolated-`HOME`
   prod binary (and the echo server) before it is called done.
