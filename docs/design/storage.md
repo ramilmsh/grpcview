@@ -1,6 +1,8 @@
 # grpcview storage layer — design
 
-Status: proposal / draft. Supersedes the SQLite-blob storage.
+Status: **implemented.** The git-versionable directory-tree storage described here
+has shipped and replaced the SQLite-blob storage; this doc is now the design
+rationale + layout reference (some phased-plan notes below are historical).
 
 ## 1. Goal & context
 
@@ -42,9 +44,9 @@ Two consequences of dropping the DB that this design must solve explicitly:
   + git stack cgo-free (go-git is pure Go), simplifying the static-binary Bazel
   toolchain story.
 
-Reusable "bones": the proto data model, `inspector.ConvertMessage` (pure
-descriptor→JSON-schema), the Connect RPC surface, and reflection-based descriptor
-fetching. Delete: SQLite and the single-blob persistence.
+Reusable "bones": the proto data model, the Connect RPC surface, and
+reflection-based descriptor fetching. Delete: SQLite and the single-blob
+persistence.
 
 ## 3. Design principles
 
@@ -270,7 +272,7 @@ type Store interface {
     CreateRequest(ctx context.Context, path []string, req *grpcviewv1.Request) error
     UpdateRequest(ctx context.Context, path []string, patch *RequestPatch) error
     Delete(ctx context.Context, path []string) error
-    Move(ctx context.Context, from, to []string) error            // enables rename
+    // rename is a field on RequestPatch (via UpdateRequest), not a separate Move
     // phase 2+: shared-resource CRUD, environments, Resolve(path) -> effective config
 }
 ```
