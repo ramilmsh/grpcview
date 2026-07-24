@@ -44,7 +44,6 @@ go_test(
         "compose_test.go",
         "engine_core_test.go",
         "entry_test.go",
-        "wasm_smoke_test.go",
     ],
     # Vendored npm packages (dayjs/mustache/ms) + entry package.jsons, embedded into the
     # test binary so the esbuild-bundling validation is hermetic (no node_modules, no net).

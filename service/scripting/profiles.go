@@ -60,9 +60,6 @@ type EngineOption func(*Engine)
 // (fresh context per invoke = full isolation).
 func WithLongLivedMiddleware() EngineOption { return func(e *Engine) { e.longLived = true } }
 
-// WithMiddlewarePoolSize caps the middleware pool's idle instances.
-func WithMiddlewarePoolSize(n int) EngineOption { return func(e *Engine) { e.poolMaxIdle = n } }
-
 // WithResolveDir anchors RELATIVE imports (`./util`) in a script to dir. Empty (the
 // default) means relative imports do not resolve — appropriate for the inline scripts of
 // production Phase 2.
@@ -112,23 +109,6 @@ func (e *Engine) initBundlerAndPool() {
 		popts = append(popts, WithLongLivedContext())
 	}
 	e.mwPool = NewPool(e.rt, Middleware.MemLimit, popts...)
-}
-
-// NewEngineWithRuntime wires an Engine over an existing Runtime (which the caller keeps
-// ownership of — Close will not close it). Useful when several engines share one
-// compiled module. Like NewEngine it self-provisions the embedded npm registry, so it
-// returns an error (extraction can fail); the runtime is the caller's, so a failure does
-// NOT close it here.
-func NewEngineWithRuntime(rt *Runtime, opts ...EngineOption) (*Engine, error) {
-	e := &Engine{rt: rt, ownsRT: false, poolMaxIdle: 8}
-	for _, o := range opts {
-		o(e)
-	}
-	if err := e.provisionNpmRegistry(); err != nil {
-		return nil, err
-	}
-	e.initBundlerAndPool()
-	return e, nil
 }
 
 // Close releases the middleware pool and, if the Engine created it, the Runtime, and
@@ -186,20 +166,11 @@ func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in In
 	return res, nil
 }
 
-// RunGeneratorUncached runs a generator WITHOUT consulting or populating the generator
-// cache, so a caller that must re-run every time gets a fresh value. Token resolution on
-// the invoke path uses this (scripting-ui-plan §S2): `uuid()`/`now()` must vary per invoke,
-// so the config-digest cache — which assumes the generator is a pure function of its
-// configuration — would hand back a stale value. The cache stays intact for a future
-// opt-in "by inputs" caching policy; RunGenerator remains the cached entry point.
-func (e *Engine) RunGeneratorUncached(ctx context.Context, source string, g Grant, in Input) (Result, error) {
-	return e.runGenerator(ctx, source, g, in)
-}
-
-// runGenerator is the shared compile-and-run core of the cached (RunGenerator) and uncached
-// (RunGeneratorUncached) paths. It applies the entry-point convention (§2.5) — a generator
-// that declares `export default` is called with in.Args, one that doesn't falls back to
-// last-expression eval — and runs on a fresh instance under the Generator bounds.
+// runGenerator is the shared compile-and-run core behind RunGenerator (the cached entry
+// point) and RunRequestBody's no-composition path. It applies the entry-point convention
+// (§2.5) — a generator that declares `export default` is called with in.Args, one that
+// doesn't falls back to last-expression eval — and runs on a fresh instance under the
+// Generator bounds.
 func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in Input) (Result, error) {
 	c, postlude, err := e.compileGenerator(source, g, in.Args)
 	if err != nil {
@@ -211,9 +182,9 @@ func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in In
 }
 
 // RunRequestBody runs a TypeScript request body, exposing the workspace's saved generators as
-// ambient globals so the body can COMPOSE them (ts-request-body-plan T3 / pillar C). Like
-// RunGeneratorUncached it is UNCACHED (a body may call now()/Math.random() and must vary per
-// invoke) and fully sandboxed (the invoke path passes an empty Grant and empty Input). gens is
+// ambient globals so the body can COMPOSE them (ts-request-body-plan T3 / pillar C). It is
+// UNCACHED (a body may call now()/Math.random() and must vary per invoke) and fully
+// sandboxed (the invoke path passes an empty Grant and empty Input). gens is
 // the per-run generator set (name -> source) the body may reference — the caller narrows it to
 // the generators the body actually names, so an unrelated generator's compile error can't break
 // an unrelated body.

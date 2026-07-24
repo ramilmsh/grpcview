@@ -10,6 +10,21 @@ import (
 	"time"
 )
 
+// generousPages is a high per-instance memory ceiling used by tests that are not
+// exercising the outer cap (32 MiB). QuickJS boots + evals trivial scripts well under it.
+const generousPages = 512 // 512 * 64 KiB = 32 MiB
+
+// newRuntime builds a Runtime for a test and closes it on cleanup.
+func newRuntime(t *testing.T, maxPages uint32) *Runtime {
+	t.Helper()
+	rt, err := New(context.Background(), maxPages)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = rt.Close(context.Background()) })
+	return rt
+}
+
 // newEngine builds an Engine for a test with the generous outer ceiling and tears it
 // down on cleanup.
 func newEngine(t *testing.T, opts ...EngineOption) *Engine {
@@ -121,17 +136,17 @@ func TestConsoleFormatting(t *testing.T) {
 // hostile fire-and-forget microtask behind must still return that value — the engine
 // must not run the detached microtask and lose the result to a spurious interrupt.
 func TestSettledResultSurvivesFireAndForget(t *testing.T) {
-	rt := newRuntime(t, generousPages)
+	e := newEngine(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	start := time.Now()
-	got, err := rt.EvalIsolated(ctx, `Promise.resolve().then(() => { while (true) {} }); 42`, 0)
+	res, err := e.RunScenario(ctx, `Promise.resolve().then(() => { while (true) {} }); 42`, Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("settled result lost to a fire-and-forget microtask: %v", err)
 	}
-	if got != "42" {
-		t.Fatalf("got %q, want 42", got)
+	if string(res.Value) != "42" {
+		t.Fatalf("got %s, want 42", res.Value)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("took %v — the detached spinning .then must never run", elapsed)
@@ -209,11 +224,11 @@ func TestUnsettledPromise(t *testing.T) {
 }
 
 // TestErrorLineInfo: a thrown Error surfaces as *JSError carrying the message and a
-// parsed source line. Uses the legacy (no-prelude) path so the line is the author's.
+// parsed source line, remapped through the source map back to the author's line.
 func TestErrorLineInfo(t *testing.T) {
-	rt := newRuntime(t, generousPages)
+	e := newEngine(t)
 	// throw is on line 2 (after one leading newline).
-	_, err := rt.EvalIsolated(context.Background(), "\nthrow new Error('boom')", 0)
+	_, err := e.RunScenario(context.Background(), "\nthrow new Error('boom')", Grant{}, Input{})
 	var je *JSError
 	if !errors.As(err, &je) {
 		t.Fatalf("thrown error: got %v, want *JSError", err)

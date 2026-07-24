@@ -2,9 +2,9 @@ package scripting
 
 // bundler.go — GATE 1 of the capability system, and the TS/dependency front end.
 //
-// The spike's Gate 1 was a regex over `import ... from "..."` (see Bundle, still used by
-// the legacy string-mode API). The STRUCTURED profiles (generator/middleware/scenario)
-// instead go through this esbuild-backed bundler, which:
+// The spike's Gate 1 was a regex over `import ... from "..."` (since removed). The
+// STRUCTURED profiles (generator/middleware/scenario) go through this esbuild-backed
+// bundler, which:
 //
 //   - transpiles TypeScript (and JSX) to JS;
 //   - resolves + inlines the module graph — the vendored node:* capability shims (grant-
@@ -326,8 +326,7 @@ type capModule struct {
 // The vendored node:* shims, as ES modules (default + named exports so both
 // `import fs from "node:fs"` and `import { readFileSync } from "node:fs"` resolve). The
 // capability shims are the ergonomic JS surface over the __grpcview_* marshallers that
-// qjs_wasm.c registers; they do no I/O themselves. (These mirror the legacy expression
-// shims in engine.go, restated as modules for esbuild.)
+// qjs_wasm.c registers; they do no I/O themselves.
 const (
 	capShimPath = `const join = (...parts) => parts.join("/").replace(/\/+/g, "/");
 const basename = (p) => { p = String(p); const i = p.lastIndexOf("/"); return i < 0 ? p : p.slice(i + 1); };

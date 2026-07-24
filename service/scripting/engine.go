@@ -10,7 +10,7 @@
 //
 //   - the low-level ABI calls (newContext/callEval/callPump/callResult/disposeContext)
 //     and the evalRaw pump loop, here;
-//   - the capability system (Grant + Bundle + the narrow Go host functions), here;
+//   - the capability system (Grant + the narrow Go host functions), here;
 //   - structured I/O, the three execution profiles, and the warm pool, in the sibling
 //     marshal.go / profiles.go / pool.go files.
 //
@@ -32,7 +32,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/tetratelabs/wazero"
@@ -78,8 +77,6 @@ var ErrUnsettled = errors.New("scripting: top-level promise did not settle")
 // when present, and Line is the source line. For the structured profiles, Line is
 // remapped through the compiled script's source map back to the AUTHOR's original line
 // (remapJSError, sourcemap.go), undoing the input-prelude offset and esbuild's bundling.
-// For the legacy Eval/RunScript path (no source map) Line is the raw line in the evaluated
-// string.
 type JSError struct {
 	Message string
 	Stack   string
@@ -90,7 +87,7 @@ func (e *JSError) Error() string { return "scripting: uncaught " + e.Message }
 
 // Runtime is a compiled-once, instantiate-many QuickJS engine. Compilation of the
 // ~660 KiB module is the expensive step; instances are cheap and disposable. Safe for
-// concurrent Instantiate/EvalIsolated calls.
+// concurrent Instantiate calls.
 type Runtime struct {
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
@@ -192,10 +189,6 @@ func (i *Instance) Close(ctx context.Context) error { return i.mod.Close(ctx) }
 // Dead reports whether the instance was left unusable by an interrupt or trap; the
 // warm pool uses this to discard rather than reuse it.
 func (i *Instance) Dead() bool { return i.dead }
-
-// MemoryPages reports the instance's current linear-memory size in 64 KiB pages —
-// used by the tests to size the outer ceiling relative to the real footprint.
-func (i *Instance) MemoryPages() uint32 { return i.mem.Size() / WasmPageSize }
 
 // ---- Low-level guest ABI calls ---------------------------------------------------
 
@@ -379,49 +372,14 @@ func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Inpu
 	return Result{Value: val, Logs: sink.lines}, derr
 }
 
-// ---- Legacy string-mode entry points (the spike's API, kept green) ---------------
-
-// Eval evaluates src in a FRESH context and returns its result String()-ified.
-// memLimitBytes is the INNER bound handed to JS_SetMemoryLimit (0 disables it, leaving
-// only the outer wazero page ceiling). A JS exception is returned as *JSError; a
-// context cancellation/deadline as ErrInterrupted. Reuse an Instance across Eval calls
-// for warm latency — each Eval still runs in a fresh JSRuntime, so evals never share
-// JS state.
-func (i *Instance) Eval(ctx context.Context, src string, memLimitBytes uint64) (string, error) {
-	if err := i.newContext(ctx, memLimitBytes); err != nil {
-		return "", err
-	}
-	defer i.disposeContext(context.WithoutCancel(ctx))
-
-	tag, payload, err := i.evalRaw(ctx, src, false /*async*/, false /*asJSON*/)
-	if err != nil {
-		return "", err
-	}
-	if tag == tagThrow {
-		return "", parseJSError(payload)
-	}
-	return string(payload), nil
-}
-
-// EvalIsolated instantiates a fresh instance, evaluates src on it, and tears it down —
-// the max-isolation, one-instance-per-run path.
-func (r *Runtime) EvalIsolated(ctx context.Context, src string, memLimitBytes uint64) (string, error) {
-	inst, err := r.Instantiate(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer inst.Close(context.WithoutCancel(ctx))
-	return inst.Eval(ctx, src, memLimitBytes)
-}
-
 // ---- Capability layer ------------------------------------------------------------
 //
 // grpcview runs UNTRUSTED scripts, so capabilities are default-DENY and cross into
 // real I/O only through two independent gates, both derived from one Grant:
 //
-//	Gate 1 (bundle time, Bundle): the std/* module for a capability is injected into
-//	  the script ONLY if granted. Ungranted => `import fs from "node:fs"` does not
-//	  resolve => there is no call site at all. This is the strongest "genuinely absent".
+//	Gate 1 (bundle time, the esbuild bundler — bundler.go): the shim for a capability
+//	  is injected into the script ONLY if granted. Ungranted => `import fs from "node:fs"`
+//	  does not resolve => there is no call site at all. The strongest "genuinely absent".
 //	Gate 2 (call time, the env host functions): even if a call site existed, the Go
 //	  host function refuses an ungranted (or out-of-scope) request BEFORE any syscall.
 //
@@ -595,94 +553,4 @@ func writeResult(ctx context.Context, mod api.Module, tag uint8, payload []byte)
 		return 0
 	}
 	return ptr
-}
-
-// stdModule is one entry in the (deliberately tiny) module registry Bundle resolves
-// against. A nil `granted` means the module is INERT (pure computation, no capability):
-// it is always injected and needs no grant. A non-nil `granted` means the module is a
-// capability: injected only when the grant permits it (Gate 1).
-type stdModule struct {
-	shim    string
-	granted func(Grant) bool
-}
-
-// The vendored node:* shims. Inert modules are pure JS. Capability modules are the
-// ergonomic JS surface over the __grpcview_* marshallers that qjs_wasm.c registers;
-// they do no I/O themselves. Node names/shapes are used so third-party libraries
-// importing these builtins resolve against our shims.
-const (
-	// node:path — INERT: pure string ops, no capability.
-	pathShim = `({join:function(){return Array.prototype.slice.call(arguments).join("/").replace(/\/+/g,"/");},` +
-		`basename:function(p){p=String(p);var i=p.lastIndexOf("/");return i<0?p:p.slice(i+1);}})`
-	// node:fs — CAPABILITY: readFileSync marshals to the fs import (returns a string).
-	fsShim = `({readFileSync:function(p,enc){return globalThis.__grpcview_fs_read(String(p));}})`
-	// node:net — CAPABILITY (stubbed): same shape, different import.
-	netShim = `({fetch:function(u){return globalThis.__grpcview_net_fetch(String(u));}})`
-)
-
-var stdModules = map[string]stdModule{
-	"node:path": {shim: pathShim}, // inert
-	"node:fs":   {shim: fsShim, granted: func(g Grant) bool { return g.FS != nil }},
-	"node:net":  {shim: netShim, granted: func(g Grant) bool { return g.Net != nil }},
-}
-
-// importRe matches a default import of a bare module, e.g. `import fs from "node:fs"`.
-// The import statement is what makes a capability request STATICALLY VISIBLE. A real
-// bundler parses the module graph; this scan is the spike stand-in and does not see
-// imports hidden in comments/strings — noted in the design doc.
-var importRe = regexp.MustCompile(`import[ \t]+(\w+)[ \t]+from[ \t]+["']([^"']+)["'][ \t]*;?`)
-
-// Bundle is GATE 1: a deliberately tiny stand-in for esbuild's grant-gated resolver.
-// It scans the static `import ... from "..."` lines, injects the vendored shim for each
-// INERT module and each GRANTED capability module, and REFUSES to resolve a capability
-// module that is not granted (or an unknown module). A refusal means the script cannot
-// even be assembled — there is no call site.
-func Bundle(userSrc string, g Grant) (string, error) {
-	var prelude strings.Builder
-	var bundleErr error
-	body := importRe.ReplaceAllStringFunc(userSrc, func(line string) string {
-		m := importRe.FindStringSubmatch(line)
-		local, name := m[1], m[2]
-		mod, ok := stdModules[name]
-		if !ok {
-			if bundleErr == nil {
-				bundleErr = fmt.Errorf("scripting: cannot resolve %q: unknown module", name)
-			}
-			return ""
-		}
-		if mod.granted != nil && !mod.granted(g) {
-			if bundleErr == nil {
-				bundleErr = fmt.Errorf("scripting: cannot resolve %q: capability not granted", name)
-			}
-			return ""
-		}
-		fmt.Fprintf(&prelude, "const %s = %s;\n", local, mod.shim)
-		return "" // strip the import line; the shim is inlined into the prelude
-	})
-	if bundleErr != nil {
-		return "", bundleErr
-	}
-	return prelude.String() + body, nil
-}
-
-// RunScript is the legacy capability entry point: bundle the script against the grant
-// (Gate 1), instantiate a fresh isolated instance, and evaluate with the grant on the
-// context so the host functions enforce it (Gate 2). Returns the result String()-ified;
-// the structured profiles (profiles.go) are the production entry points.
-func (r *Runtime) RunScript(ctx context.Context, userSrc string, g Grant, memLimitBytes uint64) (string, error) {
-	bundled, err := Bundle(userSrc, g)
-	if err != nil {
-		return "", err // Gate 1 denial: ungranted/unknown module did not resolve
-	}
-	inst, err := r.Instantiate(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer inst.Close(context.WithoutCancel(ctx))
-	return inst.EvalWithGrant(ctx, bundled, g, memLimitBytes)
-}
-
-// EvalWithGrant evaluates already-bundled source with g in force for the host functions.
-func (i *Instance) EvalWithGrant(ctx context.Context, src string, g Grant, memLimitBytes uint64) (string, error) {
-	return i.Eval(WithGrant(ctx, g), src, memLimitBytes)
 }
