@@ -308,6 +308,7 @@ function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; stream
         <div
           key={i}
           style={{
+            flex: "none", // don't shrink; shrinking + overflow:hidden would clip the card
             border: "1px solid var(--line)",
             borderRadius: 8,
             background: "var(--panel-2)",
