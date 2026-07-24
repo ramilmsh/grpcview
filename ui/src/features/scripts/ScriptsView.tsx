@@ -1,12 +1,18 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
   type ReactNode,
 } from "react";
 import clsx from "clsx";
-import { Editor as MonacoEditor, type OnMount } from "@monaco-editor/react";
+import { Editor as MonacoEditor, useMonaco, type OnMount } from "@monaco-editor/react";
+import type * as Monaco from "monaco-editor";
+import {
+  registerGeneratorLibs,
+  type GeneratorDef,
+} from "@/features/workspace/generator-libs";
 import {
   ArrowsSplit,
   BracketsCurly,
@@ -118,8 +124,8 @@ const NEW_KIND_ORDER: ScriptKind[] = [
 function starterSource(kind: ScriptKind): string {
   switch (kind) {
     case ScriptKind.GENERATOR:
-      return `// Generator — its return value is spliced into a request via {{ name() }} (S2).
-// Test run calls this default export with no arguments.
+      return `// Generator — its default export is invoked by name: call name() from a
+// request body/metadata or from another generator. Test run calls it with no arguments.
 export default () => {
   return new Date().toISOString();
 };
@@ -356,6 +362,9 @@ function ScriptDetail({ script }: { script: Script }) {
   const meta = kindMeta(script.kind);
   const KindIcon = meta.Icon;
 
+  const { workspace } = useWorkspace();
+  const monaco = useMonaco();
+
   const subtab = useUIStore((s) => s.scriptSubtab);
   const setSubtab = useUIStore((s) => s.setScriptSubtab);
   const draftSource = useUIStore((s) => s.scriptDrafts[script.name]);
@@ -388,7 +397,7 @@ function ScriptDetail({ script }: { script: Script }) {
   const testRun = () => {
     if (!source.trim() || runScript.isPending) return;
     setOutputOpen(true);
-    runScript.mutate({ source, kind: script.kind });
+    runScript.mutate({ workspaceName: WORKSPACE_NAME, source, kind: script.kind });
   };
   const rename = (next: string) => {
     updateScript.mutate(
@@ -420,6 +429,40 @@ function ScriptDetail({ script }: { script: Script }) {
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => testRunRef.current());
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => saveRef.current());
   };
+
+  // Generators can call each other, so a generator author gets the SAME ambient-global
+  // autocomplete for the OTHER saved generators that the body/metadata editors get. The live
+  // buffer owns its own name, so exclude the script being edited (its saved source may be stale
+  // relative to the buffer, and it must not shadow itself). Memoized on a stable string of the
+  // set so the effect below only re-runs when the set actually changes (mirrors
+  // RequestWorkspace.tsx's generators memo).
+  const otherGenerators = useMemo<GeneratorDef[]>(() => {
+    const gens = (workspace?.scripts ?? [])
+      .filter((s) => s.kind === ScriptKind.GENERATOR && s.name !== script.name)
+      .map((s) => ({ name: s.name, source: s.source }));
+    return gens;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    (workspace?.scripts ?? [])
+      .filter((s) => s.kind === ScriptKind.GENERATOR && s.name !== script.name)
+      .map((s) => s.name + "\0" + s.source)
+      .join("|"),
+  ]);
+
+  // Register the other generators as ambient globals on the (global) typescriptDefaults, disposing
+  // the previous set first — same dispose-before-add lifecycle as Editor.tsx's genLibs effect, with
+  // scope="scripts" namespacing the module + globals URIs away from the body/metadata editors'.
+  const genLibs = useRef<Monaco.IDisposable[]>([]);
+  useEffect(() => {
+    if (!monaco) return;
+    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+    genLibs.current.forEach((d) => d.dispose());
+    genLibs.current = registerGeneratorLibs(tsDefaults, otherGenerators, "scripts");
+    return () => {
+      genLibs.current.forEach((d) => d.dispose());
+      genLibs.current = [];
+    };
+  }, [monaco, otherGenerators]);
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>

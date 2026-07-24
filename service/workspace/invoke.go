@@ -395,7 +395,7 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 // runs) — and its returned JSON object REPLACES the body, which then flows through the existing
 // middleware/UnmarshalJSON pipeline unchanged. A body may also COMPOSE the
 // workspace's saved generators by calling them as ambient globals; the workspace generators are
-// loaded once and each body folds in only the ones it references (see referencedGenerators /
+// loaded once and each body folds in the ones it transitively reaches (see transitiveGenerators /
 // engine.RunRequestBody). A throw, timeout, or a non-object return is a Connect
 // FailedPrecondition, mirroring the middleware error policy (middlewareError).
 func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string) ([]string, error) {
@@ -414,12 +414,14 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 	out := make([]string, len(bodies))
 	for i, body := range bodies {
 		// The whole body is the generator source (its own `export default` fires the
-		// entry-point convention with no positional args, per entry.go). referencedGenerators
-		// narrows allGens to just what this body names, so composition folds in only those and
-		// an unrelated generator's compile error can't break a body that does not call it; an
-		// empty subset makes RunRequestBody take the plain generator path. Result.Value is
-		// the returned object as raw JSON — the replacement body.
-		res, err := w.engine.RunRequestBody(ctx, body, referencedGenerators(body, allGens), scripting.Grant{}, scripting.Input{})
+		// entry-point convention with no positional args, per entry.go). transitiveGenerators
+		// narrows allGens to just what this body reaches — the generators it calls plus, to a
+		// fixpoint, the generators THOSE call — so composition folds in the body's whole
+		// dependency subgraph while an unrelated generator's compile error can't break a body
+		// that does not (transitively) call it; an empty subset makes RunRequestBody take the
+		// plain generator path. Result.Value is the returned object as raw JSON — the
+		// replacement body.
+		res, err := w.engine.RunRequestBody(ctx, body, transitiveGenerators(body, allGens), scripting.Grant{}, scripting.Input{})
 		if err != nil {
 			return nil, bodyError(i, err.Error())
 		}
@@ -431,39 +433,71 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 	return out, nil
 }
 
-// referencedGenerators returns the subset of all whose name is CALLED in body. A generator is
-// "called" when its name appears as a call site — the name immediately followed by optional
-// whitespace and an opening paren (mkid(), dbl (7)) — and is NOT a property/method access
-// (x.format()). Recognizing calls this way is what makes FAILURE ISOLATION hold: an object key
-// ({ id: 7 }), a local variable, or a method call that merely shares a generator's name does
-// NOT pull that generator into the composed bundle, so an unrelated (possibly broken) generator
-// cannot break a body that never calls it. It also bounds each per-invoke bundle to the
-// generators the body actually calls; when the subset is empty RunRequestBody takes the plain
-// (uncached) generator path, so a TS body that calls nothing behaves exactly as before.
-// Dotted-named generators are excluded (a dotted name is never one identifier) — a documented v1
-// gap. Recognition stays textual, so the only residual over-approximation is a literal name(
-// inside a string or comment; a generator used without a direct call (passed as a bare callback,
-// e.g. arr.map(mkid)) is likewise not detected — both are acceptable for v1.
-func referencedGenerators(body string, all map[string]string) map[string]string {
+// calledNames returns the set of identifiers that appear as a CALL SITE in src — the name
+// immediately followed by optional whitespace and an opening paren (mkid(), dbl (7)) — EXCLUDING
+// a property/method access (x.format(), whose name is preceded by "."). This is the shared
+// call-site detection behind transitiveGenerators: recognizing calls this way (not bare
+// identifiers) is what makes FAILURE ISOLATION hold, so an object key ({ id: 7 }), a local
+// variable, or a method call that merely shares a generator's name does NOT count as a call.
+// Recognition stays textual, so the only residual over-approximation is a literal name( inside a
+// string or comment; a generator used without a direct call (passed as a bare callback, e.g.
+// arr.map(mkid)) is likewise not detected — both are acceptable for v1.
+func calledNames(src string) map[string]struct{} {
 	called := make(map[string]struct{})
-	for _, loc := range genCallRe.FindAllStringSubmatchIndex(body, -1) {
+	for _, loc := range genCallRe.FindAllStringSubmatchIndex(src, -1) {
 		start, end := loc[2], loc[3] // the captured identifier's byte bounds
-		if start > 0 && body[start-1] == '.' {
+		if start > 0 && src[start-1] == '.' {
 			continue // obj.name(...) — a property/method call, not a generator call
 		}
-		called[body[start:end]] = struct{}{}
+		called[src[start:end]] = struct{}{}
 	}
+	return called
+}
+
+// transitiveGenerators returns every generator in all TRANSITIVELY REACHABLE from the call sites
+// in source: it seeds from the generators source calls, then follows each included generator's
+// OWN call sites to a fixpoint, so a body that calls `outer` where `outer` itself calls `inner`
+// folds in BOTH (the engine binds every generator in the returned set as an ambient global, so a
+// generator calling another only resolves when the callee is present). Only names that exist in
+// all count as calls; anything else (a builtin, a local function) is ignored. The worklist tracks
+// added names, so a cycle (a -> b -> a) terminates.
+//
+// It preserves FAILURE ISOLATION at the transitive frontier: a generator NOT reachable from the
+// body's (transitive) call sites is never folded in, so an unrelated broken generator can't break
+// an unrelated body. The semantic shift from the old direct-only scan: a generator the body
+// TRANSITIVELY depends on, if broken, now correctly surfaces its compile error (it must, since
+// the body genuinely needs it) — where before the missing indirect dependency produced a runtime
+// "not defined". Dotted-named generators are excluded downstream (composeGeneratorPrelude skips a
+// non-identifier name) — a documented v1 gap; when the returned set is empty RunRequestBody takes
+// the plain (uncached) generator path, so a body that calls nothing behaves exactly as before.
+func transitiveGenerators(source string, all map[string]string) map[string]string {
 	out := make(map[string]string)
-	for name, source := range all {
-		if _, ok := called[name]; ok {
-			out[name] = source
+	var worklist []string
+	for name := range calledNames(source) {
+		worklist = append(worklist, name)
+	}
+	for len(worklist) > 0 {
+		name := worklist[len(worklist)-1]
+		worklist = worklist[:len(worklist)-1]
+		if _, done := out[name]; done {
+			continue // already folded in (guards against cycles)
+		}
+		src, ok := all[name]
+		if !ok {
+			continue // not a workspace generator: not a composition call
+		}
+		out[name] = src
+		for dep := range calledNames(src) {
+			if _, done := out[dep]; !done {
+				worklist = append(worklist, dep)
+			}
 		}
 	}
 	return out
 }
 
 // genCallRe matches a call site: an identifier (captured) followed by optional whitespace and an
-// opening paren. referencedGenerators additionally rejects a match preceded by "." (a method
+// opening paren. calledNames additionally rejects a match preceded by "." (a method
 // call) by inspecting the byte before the identifier — the identifier is always the start of a
 // maximal identifier run (the match is greedy and leftmost), so the preceding byte is never
 // itself an identifier char and only "." needs excluding.
@@ -535,13 +569,15 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName, met
 			errors.New("a TypeScript metadata script requires the scripting engine, which is not available"))
 	}
 	// Load the workspace's saved generators ONCE so the metadata module can call them as
-	// ambient globals, exactly like a composing body; referencedGenerators narrows the set to
-	// what the module names (failure isolation), and an empty subset takes the plain path.
+	// ambient globals, exactly like a composing body; transitiveGenerators narrows the set to
+	// what the module reaches — the generators it calls plus, to a fixpoint, the generators
+	// those call (failure isolation at the transitive frontier) — and an empty subset takes the
+	// plain path.
 	allGens, err := w.loadGenerators(ctx, workspaceName)
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.engine.RunRequestBody(ctx, metadataScript, referencedGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{})
+	res, err := w.engine.RunRequestBody(ctx, metadataScript, transitiveGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{})
 	if err != nil {
 		return nil, metadataError(connect.CodeFailedPrecondition, err.Error())
 	}

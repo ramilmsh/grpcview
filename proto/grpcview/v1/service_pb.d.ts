@@ -727,12 +727,17 @@ export declare const DeleteScriptResponseSchema: GenMessage<DeleteScriptResponse
  */
 export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> & {
   /**
-   * @generated from field: string source = 1;
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: string source = 2;
    */
   source: string;
 
   /**
-   * @generated from field: optional grpcview.v1.ScriptKind kind = 2;
+   * @generated from field: optional grpcview.v1.ScriptKind kind = 3;
    */
   kind?: ScriptKind | undefined;
 };

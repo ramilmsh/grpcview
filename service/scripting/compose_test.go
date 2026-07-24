@@ -53,6 +53,22 @@ func TestRunRequestBody(t *testing.T) {
 		}
 	})
 
+	t.Run("a multi-level generator chain composes when the full set is passed", func(t *testing.T) {
+		// outer calls inner: both must be bound as ambient globals for outer to resolve inner.
+		// This proves the engine composes a chain when the caller passes the full transitive set.
+		gens := map[string]string{
+			"outer": `export default () => inner() + 1`,
+			"inner": `export default () => 41`,
+		}
+		res, err := e.RunRequestBody(ctx, `export default () => ({ n: outer() })`, gens, Grant{}, Input{})
+		if err != nil {
+			t.Fatalf("RunRequestBody: %v", err)
+		}
+		if string(res.Value) != `{"n":42}` {
+			t.Fatalf("value = %s, want {\"n\":42}", res.Value)
+		}
+	})
+
 	t.Run("no generators falls back to the plain body path", func(t *testing.T) {
 		res, err := e.RunRequestBody(ctx, `export default () => ({ ok: true })`, map[string]string{}, Grant{}, Input{})
 		if err != nil {

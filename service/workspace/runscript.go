@@ -34,7 +34,17 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 	)
 	switch request.Msg.GetKind() {
 	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
-		res, runErr = w.engine.RunGenerator(ctx, source, scripting.Grant{}, scripting.Input{})
+		// A generator test-run COMPOSES other generators the same way an invoke body does: load
+		// the workspace's saved generators and fold in the ones this source transitively reaches,
+		// so a generator under test that calls another generator resolves it. A loadGenerators
+		// error is grpcview's own failure and surfaces as a Connect error; an empty reachable set
+		// makes RunRequestBody take the plain generator path, so a standalone generator still
+		// test-runs unchanged.
+		allGens, gerr := w.loadGenerators(ctx, request.Msg.GetWorkspaceName())
+		if gerr != nil {
+			return nil, gerr
+		}
+		res, runErr = w.engine.RunRequestBody(ctx, source, transitiveGenerators(source, allGens), scripting.Grant{}, scripting.Input{})
 	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
 		res, runErr = w.engine.RunMiddleware(ctx, source, scripting.Grant{}, scripting.Input{})
 	default: // UNSPECIFIED (scratchpad) or SCENARIO

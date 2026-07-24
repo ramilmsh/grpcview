@@ -225,8 +225,9 @@ message DeleteScriptResponse {
 // evaluates the buffer as an ad-hoc scratchpad (last-expression value) — the surface
 // that validates the engine end to end from the UI.
 message RunScriptRequest {
-  string              source = 1;
-  optional ScriptKind kind   = 2;
+  string              workspace_name = 1;
+  string              source         = 2;
+  optional ScriptKind kind           = 3;
 }
 
 // ScriptLog is one buffered console.* call captured during a run.

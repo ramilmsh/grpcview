@@ -76,7 +76,7 @@ const isEmittableName = (name: string): boolean =>
 export function registerGeneratorLibs(
   tsDefaults: Monaco.languages.typescript.LanguageServiceDefaults,
   generators: GeneratorDef[],
-  scope: "body" | "metadata"
+  scope: "body" | "metadata" | "scripts"
 ): Monaco.IDisposable[] {
   const emittable = generators.filter((g) => isEmittableName(g.name));
   const disposables: Monaco.IDisposable[] = [];
@@ -103,7 +103,9 @@ export function registerGeneratorLibs(
   const globalsPath =
     scope === "body"
       ? "file:///grpcview/request/generators.d.ts"
-      : "file:///grpcview/request/metadata-generators.d.ts";
+      : scope === "metadata"
+        ? "file:///grpcview/request/metadata-generators.d.ts"
+        : "file:///grpcview/request/scripts-generators.d.ts";
   disposables.push(tsDefaults.addExtraLib(globalsDts, globalsPath));
 
   return disposables;

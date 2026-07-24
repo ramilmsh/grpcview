@@ -62,8 +62,8 @@ func TestResolveInvokeBody(t *testing.T) {
 // TestResolveInvokeBodyComposition covers pillar C on the invoke path (ts-request-body-plan
 // T3): a TYPESCRIPT body calls a generator saved in the workspace (via the store), and the
 // produced JSON reflects the composed call. It also proves FAILURE ISOLATION — a broken
-// generator the body does NOT reference cannot break the body — because referencedGenerators
-// bounds each per-invoke bundle to the generators the body actually names.
+// generator the body does NOT reference cannot break the body — because transitiveGenerators
+// bounds each per-invoke bundle to the generators the body actually reaches.
 func TestResolveInvokeBodyComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -83,7 +83,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 
 	t.Run("an unreferenced broken generator does not break the body", func(t *testing.T) {
 		// A generator whose source does not compile lives in the workspace, but the body never
-		// names it — so referencedGenerators excludes it and the body still bundles and runs.
+		// names it — so transitiveGenerators excludes it and the body still bundles and runs.
 		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
 			[]string{`export default () => ({ id: mkid() })`})
@@ -110,6 +110,42 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		}
 		if len(out) != 1 || out[0] != `{"id":"id-42","label":"7"}` {
 			t.Fatalf("got %q, want [{\"id\":\"id-42\",\"label\":\"7\"}]", out)
+		}
+	})
+}
+
+// TestResolveInvokeBodyTransitiveComposition proves TRANSITIVE composition end-to-end on the
+// invoke path: a body that calls only `outer()` resolves even though `outer` itself calls
+// `inner` — transitiveGenerators folds in `inner` by following outer's own call sites to a
+// fixpoint. It also proves failure isolation still holds at the transitive frontier: an
+// UNRELATED broken generator that nothing reachable calls does not break the body.
+func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	createGenerator(t, w, ctx, "inner", `export default () => "in"`)
+	createGenerator(t, w, ctx, "outer", `export default () => inner()`)
+
+	t.Run("body calling only outer folds in inner transitively", func(t *testing.T) {
+		out, err := w.resolveInvokeBody(ctx, testWorkspace,
+			[]string{`export default () => ({ v: outer() })`})
+		if err != nil {
+			t.Fatalf("resolveInvokeBody: %v", err)
+		}
+		if len(out) != 1 || out[0] != `{"v":"in"}` {
+			t.Fatalf("got %q, want [{\"v\":\"in\"}]", out)
+		}
+	})
+
+	t.Run("an unrelated broken generator not reachable does not break the body", func(t *testing.T) {
+		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
+		out, err := w.resolveInvokeBody(ctx, testWorkspace,
+			[]string{`export default () => ({ v: outer() })`})
+		if err != nil {
+			t.Fatalf("resolveInvokeBody (unreachable broken generator): %v", err)
+		}
+		if len(out) != 1 || out[0] != `{"v":"in"}` {
+			t.Fatalf("got %q, want [{\"v\":\"in\"}]", out)
 		}
 	})
 }
