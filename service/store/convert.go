@@ -140,49 +140,49 @@ func wireToDiskSource(ws *grpcviewv1.DescriptorSource) (*grpcviewstorev1.Descrip
 	}
 }
 
-// serverFromHostPortTLS builds a wire Server from the host/port/tls triple every
+// serverFromAddressTLS builds a wire Server from the address/tls pair every
 // on-disk server-shaped message carries (a source's Reflection, a request's
 // Target). tls=true carries an empty TLS block; false leaves it nil.
-func serverFromHostPortTLS(host string, port int32, tls bool) *grpcviewv1.Server {
-	s := &grpcviewv1.Server{Host: host, Port: port}
+func serverFromAddressTLS(address string, tls bool) *grpcviewv1.Server {
+	s := &grpcviewv1.Server{Address: address}
 	if tls {
 		s.Tls = &grpcviewv1.Server_TLS{}
 	}
 	return s
 }
 
-// hostPortTLSFromServer decomposes a wire Server into the host/port/tls triple
-// the on-disk server-shaped messages store.
-func hostPortTLSFromServer(s *grpcviewv1.Server) (host string, port int32, tls bool) {
-	return s.GetHost(), s.GetPort(), s.GetTls() != nil
+// addressTLSFromServer decomposes a wire Server into the address/tls pair the
+// on-disk server-shaped messages store.
+func addressTLSFromServer(s *grpcviewv1.Server) (address string, tls bool) {
+	return s.GetAddress(), s.GetTls() != nil
 }
 
 func reflectionToServer(r *grpcviewstorev1.Reflection) *grpcviewv1.Server {
 	if r == nil {
 		return nil
 	}
-	return serverFromHostPortTLS(r.GetHost(), r.GetPort(), r.GetTls())
+	return serverFromAddressTLS(r.GetAddress(), r.GetTls())
 }
 
 func serverToReflection(s *grpcviewv1.Server) *grpcviewstorev1.Reflection {
 	if s == nil {
 		return nil
 	}
-	host, port, tls := hostPortTLSFromServer(s)
-	return &grpcviewstorev1.Reflection{Host: host, Port: port, Tls: tls}
+	address, tls := addressTLSFromServer(s)
+	return &grpcviewstorev1.Reflection{Address: address, Tls: tls}
 }
 
 func targetToServer(t *grpcviewstorev1.Target) *grpcviewv1.Server {
 	if t == nil {
 		return nil
 	}
-	return serverFromHostPortTLS(t.GetHost(), t.GetPort(), t.GetTls())
+	return serverFromAddressTLS(t.GetAddress(), t.GetTls())
 }
 
 func serverToTarget(s *grpcviewv1.Server) *grpcviewstorev1.Target {
 	if s == nil {
 		return nil
 	}
-	host, port, tls := hostPortTLSFromServer(s)
-	return &grpcviewstorev1.Target{Host: host, Port: port, Tls: tls}
+	address, tls := addressTLSFromServer(s)
+	return &grpcviewstorev1.Target{Address: address, Tls: tls}
 }

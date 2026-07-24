@@ -56,8 +56,7 @@ export const sourceForService = (
   return svc?.source ?? firstReflectionSource(ws);
 };
 
-export const hostLabel = (s: Server | null): string =>
-  s ? `${s.host}:${s.port}` : "";
+export const hostLabel = (s: Server | null): string => s?.address ?? "";
 
 // useWorkspaceKey is the react-query key for the Get query, used to seed the
 // cache from mutation results (every mutation returns the fresh Workspace).

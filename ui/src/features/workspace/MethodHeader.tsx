@@ -137,7 +137,7 @@ export function MethodHeader({
               size={14}
               style={{ color: reflection ? "var(--ok)" : "var(--color-neutral-600)" }}
             />
-            {reflection ? `reflection:${reflection.host}` : "no source"}
+            {reflection ? `reflection:${reflection.address}` : "no source"}
           </Button>
           <Button
             variant="primary"

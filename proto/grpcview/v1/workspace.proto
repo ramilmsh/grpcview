@@ -19,9 +19,11 @@ message Status {
 message Server {
   message TLS {}
 
-  string host = 1;
-  int32 port = 2;
-  optional TLS tls = 3;
+  // address is the target's dial string — a host:port (grpc.NewClient accepts it
+  // verbatim). It is both a reflection source's address and a request's invoke
+  // target.
+  string address = 1;
+  optional TLS tls = 2;
 }
 
 message Message {

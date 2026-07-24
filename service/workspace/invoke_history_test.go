@@ -77,7 +77,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 	}
 
 	port := startEchoServer(t)
-	target := &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)}
+	target := &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)}
 
 	const runs = 3
 	for i := 0; i < runs; i++ {

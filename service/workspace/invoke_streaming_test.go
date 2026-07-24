@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -47,7 +48,7 @@ func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.Invo
 		Service:       echoService,
 		Method:        method,
 		Messages:      wrapped,
-		Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
+		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 	}
 }
 
@@ -199,7 +200,7 @@ func TestStreamInvokePreflightErrors(t *testing.T) {
 		defer cancel()
 
 		msg := echoStreamReq(port, "Unary", `{}`)
-		msg.Target = &grpcviewv1.Server{Host: "127.0.0.1", Port: 1}
+		msg.Target = &grpcviewv1.Server{Address: "127.0.0.1:1"}
 
 		frames, err := collectStream(ctx, w, msg)
 		if err == nil {

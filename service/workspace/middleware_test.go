@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemNa
 		Service:       echoService,
 		Method:        "Unary",
 		Body:          tsBody(body), // body is evaluated as a canonical TS module on invoke
-		Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
+		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 	}))
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -172,7 +173,7 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 			Service:       echoService,
 			Method:        "Unary",
 			Body:          tsBody(`{"message":"hi"}`),
-			Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
+			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		}))
 		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 			t.Fatalf("%s: code = %v, want FailedPrecondition (err=%v)", item, connect.CodeOf(err), err)

@@ -44,17 +44,16 @@ export declare const StatusSchema: GenMessage<Status>;
  */
 export declare type Server = Message$1<"grpcview.v1.Server"> & {
   /**
-   * @generated from field: string host = 1;
+   * address is the target's dial string — a host:port (grpc.NewClient accepts it
+   * verbatim). It is both a reflection source's address and a request's invoke
+   * target.
+   *
+   * @generated from field: string address = 1;
    */
-  host: string;
+  address: string;
 
   /**
-   * @generated from field: int32 port = 2;
-   */
-  port: number;
-
-  /**
-   * @generated from field: optional grpcview.v1.Server.TLS tls = 3;
+   * @generated from field: optional grpcview.v1.Server.TLS tls = 2;
    */
   tls?: Server_TLS | undefined;
 };

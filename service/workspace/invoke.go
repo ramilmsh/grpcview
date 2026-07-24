@@ -668,7 +668,7 @@ func (w Workspace) resolveMethod(ctx context.Context, target *grpcviewv1.Server,
 
 	conn, err := dial(resolved)
 	if err != nil {
-		return nil, nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connect to %s:%d: %w", resolved.GetHost(), resolved.GetPort(), err))
+		return nil, nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connect to %s: %w", resolved.GetAddress(), err))
 	}
 
 	// Resolve the method descriptor by reflecting the target. Reflection sources
@@ -747,15 +747,16 @@ func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server,
 		fmt.Errorf("no target server: add a reflection source or specify a target"))
 }
 
-// dial opens a lazy client connection to the target. TLS is enabled when the
-// server carries a (possibly empty) TLS block, using the system roots.
+// dial opens a lazy client connection to the target. The target's address is a
+// host:port string passed straight to grpc.NewClient (which accepts exactly that
+// form). TLS is enabled when the server carries a (possibly empty) TLS block,
+// using the system roots.
 func dial(target *grpcviewv1.Server) (*grpc.ClientConn, error) {
 	creds := insecure.NewCredentials()
 	if target.GetTls() != nil {
 		creds = credentials.NewTLS(&tls.Config{})
 	}
-	addr := fmt.Sprintf("%s:%d", target.GetHost(), target.GetPort())
-	return grpc.NewClient(addr, grpc.WithTransportCredentials(creds))
+	return grpc.NewClient(target.GetAddress(), grpc.WithTransportCredentials(creds))
 }
 
 // mergeMD combines response header and trailer metadata into one set. Header

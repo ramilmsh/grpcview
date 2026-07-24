@@ -25,11 +25,11 @@ export function SourcesView() {
   // confirm holds the index of the source pending removal, or null.
   const [confirm, setConfirm] = useState<number | null>(null);
 
-  const onAdd = (host: string, port: number, tls: boolean) => {
+  const onAdd = (address: string, tls: boolean) => {
     addDescriptorSource.mutate(
       {
         workspaceName: WORKSPACE_NAME,
-        source: { case: "reflection", value: { host, port, tls: tls ? {} : undefined } },
+        source: { case: "reflection", value: { address, tls: tls ? {} : undefined } },
       },
       { onSuccess: () => setModalOpen(false) }
     );
@@ -129,7 +129,7 @@ export function SourcesView() {
                   )}
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, color: "var(--color-text)" }}>
-                      {reflection ? `reflection:${reflection.host}` : "descriptor set"}
+                      {reflection ? "reflection" : "descriptor set"}
                     </div>
                     <div
                       className="font-mono"

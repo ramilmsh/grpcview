@@ -90,7 +90,7 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	// here in practice.
 	targetStr := ""
 	if resolved, terr := w.resolveTarget(ctx, target, workspaceName, service); terr == nil {
-		targetStr = fmt.Sprintf("%s:%d", resolved.GetHost(), resolved.GetPort())
+		targetStr = resolved.GetAddress()
 	}
 
 	// mdMap and targetStr thread through the WHOLE sequence (every body, every middleware):

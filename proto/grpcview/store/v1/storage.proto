@@ -102,9 +102,8 @@ message DescriptorSource {
 // Reflection addresses a server to reflect schemas from. Disk-local (not the
 // wire grpcview.v1.Server) so this package stays decoupled from the API.
 message Reflection {
-  string host = 1;
-  int32 port = 2;
-  bool tls = 3;
+  string address = 1;  // host:port dial string
+  bool tls = 2;
 }
 
 // Target is a per-request invoke destination (host:port + TLS) — where this
@@ -114,7 +113,6 @@ message Reflection {
 // Reflection but kept a distinct message: the two are different concepts
 // (invoke destination vs schema source) and evolve independently.
 message Target {
-  string host = 1;
-  int32 port = 2;
-  bool tls = 3;
+  string address = 1;  // host:port dial string
+  bool tls = 2;
 }

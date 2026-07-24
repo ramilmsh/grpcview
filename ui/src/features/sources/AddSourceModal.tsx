@@ -18,18 +18,20 @@ export function AddSourceModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAddReflection: (host: string, port: number, tls: boolean) => void;
+  onAddReflection: (address: string, tls: boolean) => void;
   onAddDescriptorSet: (bytes: Uint8Array) => void;
   pending?: boolean;
 }) {
-  const [host, setHost] = useState("127.0.0.1");
-  const [port, setPort] = useState("10000");
+  // The address starts empty (a placeholder hints the host:port form) rather than
+  // pre-filled: pre-seeding grpcview's own listen port baked that misleading value
+  // into every added source, so a request then defaulted its target to grpcview
+  // itself instead of the reflected service.
+  const [address, setAddress] = useState("");
   const [tls, setTls] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const submit = () => {
-    const p = parseInt(port, 10);
-    if (host.trim() && Number.isFinite(p)) onAddReflection(host.trim(), p, tls);
+    if (address.trim()) onAddReflection(address.trim(), tls);
   };
 
   const onEnter = (e: KeyboardEvent) => {
@@ -46,24 +48,13 @@ export function AddSourceModal({
   return (
     <Dialog open={open} onClose={onClose} title="Add definition source" width={460}>
       <Field label="Server reflection">
-        <div className="flex gap-[8px]">
-          <Input
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="Host"
-            style={{ flex: 1 }}
-            autoFocus
-            onKeyDown={onEnter}
-          />
-          <Input
-            value={port}
-            onChange={(e) => setPort(e.target.value)}
-            placeholder="Port"
-            type="number"
-            style={{ width: 100 }}
-            onKeyDown={onEnter}
-          />
-        </div>
+        <Input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="host:port (e.g. localhost:50051)"
+          autoFocus
+          onKeyDown={onEnter}
+        />
       </Field>
 
       <label
@@ -100,7 +91,7 @@ export function AddSourceModal({
 
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={submit} disabled={pending || !host.trim()}>
+        <Button variant="primary" onClick={submit} disabled={pending || !address.trim()}>
           {pending ? "Adding…" : "Add source"}
         </Button>
       </div>

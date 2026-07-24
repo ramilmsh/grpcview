@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -91,7 +92,7 @@ func reflectionAddReq(port int) *grpcviewv1.AddDescriptorSourceRequest {
 	return &grpcviewv1.AddDescriptorSourceRequest{
 		WorkspaceName: testWorkspace,
 		Source: &grpcviewv1.AddDescriptorSourceRequest_Reflection{
-			Reflection: &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
+			Reflection: &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 	}
 }

@@ -23,8 +23,8 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	serverA := &grpcviewv1.Server{Host: "a.example.com", Port: 50051}
-	serverB := &grpcviewv1.Server{Host: "b.example.com", Port: 50052}
+	serverA := &grpcviewv1.Server{Address: "a.example.com:50051"}
+	serverB := &grpcviewv1.Server{Address: "b.example.com:50052"}
 
 	// Two reflection sources (A first, B second) and two services: OrderService
 	// attributed to the second source B, LegacyService with no attributed source.
@@ -50,9 +50,9 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveTarget(OrderService): %v", err)
 	}
-	if got.GetHost() != "b.example.com" || got.GetPort() != 50052 {
-		t.Errorf("OrderService target = %s:%d, want b.example.com:50052 (its attributed source)",
-			got.GetHost(), got.GetPort())
+	if got.GetAddress() != "b.example.com:50052" {
+		t.Errorf("OrderService target = %s, want b.example.com:50052 (its attributed source)",
+			got.GetAddress())
 	}
 
 	// A service with no attributed source falls back to the first reflection source A.
@@ -60,9 +60,9 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveTarget(LegacyService): %v", err)
 	}
-	if got.GetHost() != "a.example.com" || got.GetPort() != 50051 {
-		t.Errorf("LegacyService target = %s:%d, want a.example.com:50051 (first reflection source)",
-			got.GetHost(), got.GetPort())
+	if got.GetAddress() != "a.example.com:50051" {
+		t.Errorf("LegacyService target = %s, want a.example.com:50051 (first reflection source)",
+			got.GetAddress())
 	}
 
 	// An unrecognized service likewise falls back to the first reflection source.
@@ -70,18 +70,18 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveTarget(UnknownService): %v", err)
 	}
-	if got.GetHost() != "a.example.com" {
-		t.Errorf("unknown service target = %s, want a.example.com (first reflection source)", got.GetHost())
+	if got.GetAddress() != "a.example.com:50051" {
+		t.Errorf("unknown service target = %s, want a.example.com:50051 (first reflection source)", got.GetAddress())
 	}
 
 	// An explicit target overrides the service-aware default entirely (returned as-is,
 	// no store read), even for a service that would otherwise resolve to B.
-	override := &grpcviewv1.Server{Host: "override.example.com", Port: 9999}
+	override := &grpcviewv1.Server{Address: "override.example.com:9999"}
 	got, err = w.resolveTarget(ctx, override, testWorkspace, "acme.v1.OrderService")
 	if err != nil {
 		t.Fatalf("resolveTarget(override): %v", err)
 	}
-	if got.GetHost() != "override.example.com" || got.GetPort() != 9999 {
-		t.Errorf("override target = %s:%d, want override.example.com:9999", got.GetHost(), got.GetPort())
+	if got.GetAddress() != "override.example.com:9999" {
+		t.Errorf("override target = %s, want override.example.com:9999", got.GetAddress())
 	}
 }

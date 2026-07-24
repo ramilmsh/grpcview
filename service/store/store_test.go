@@ -293,7 +293,7 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
 	sources := []*grpcviewv1.DescriptorSource{
-		{Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Host: "localhost", Port: 50051}}},
+		{Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "localhost:50051"}}},
 	}
 	services := []*grpcviewv1.Service{
 		{Package: "acme.v1", Name: "UserService", Methods: []*grpcviewv1.Method{{Name: "GetUser"}}},
@@ -307,7 +307,7 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetReflection().GetPort() != 50051 {
+	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetReflection().GetAddress() != "localhost:50051" {
 		t.Errorf("sources not round-tripped: %v", ws.GetSources())
 	}
 	if len(ws.GetServices()) != 1 || ws.GetServices()[0].GetName() != "UserService" {
@@ -536,16 +536,16 @@ func TestUpdateRequestTarget(t *testing.T) {
 	}
 
 	// Set the target (TLS on).
-	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{SetTarget: true, Target: serverFromHostPortTLS("api.example.com", 8443, true)}); err != nil {
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{SetTarget: true, Target: serverFromAddressTLS("api.example.com:8443", true)}); err != nil {
 		t.Fatalf("UpdateRequest set target: %v", err)
 	}
-	if got := targetOf(t, coll); got == nil || got.GetHost() != "api.example.com" || got.GetPort() != 8443 || got.GetTls() == nil {
+	if got := targetOf(t, coll); got == nil || got.GetAddress() != "api.example.com:8443" || got.GetTls() == nil {
 		t.Fatalf("target after set = %+v, want api.example.com:8443 tls", got)
 	}
 	// On-disk shape: the target (with the tls bool) lands in request.json.
 	rf := &grpcviewstorev1.Request{}
 	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
-	if rf.GetTarget().GetHost() != "api.example.com" || rf.GetTarget().GetPort() != 8443 || !rf.GetTarget().GetTls() {
+	if rf.GetTarget().GetAddress() != "api.example.com:8443" || !rf.GetTarget().GetTls() {
 		t.Fatalf("request.json target = %+v, want api.example.com:8443 tls", rf.GetTarget())
 	}
 
@@ -554,7 +554,7 @@ func TestUpdateRequestTarget(t *testing.T) {
 	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{DraftBody: &body}); err != nil {
 		t.Fatalf("UpdateRequest body only: %v", err)
 	}
-	if got := targetOf(t, coll); got == nil || got.GetHost() != "api.example.com" {
+	if got := targetOf(t, coll); got == nil || got.GetAddress() != "api.example.com:8443" {
 		t.Fatalf("target after unrelated patch = %+v, want unchanged", got)
 	}
 
@@ -563,7 +563,7 @@ func TestUpdateRequestTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	if got := targetOf(t, reloaded); got == nil || got.GetPort() != 8443 {
+	if got := targetOf(t, reloaded); got == nil || got.GetAddress() != "api.example.com:8443" {
 		t.Fatalf("reloaded target = %+v, want api.example.com:8443", got)
 	}
 
