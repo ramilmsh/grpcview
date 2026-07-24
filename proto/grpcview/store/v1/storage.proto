@@ -28,17 +28,6 @@ message Collection {
   repeated string scripts = 5;            // ordered script slugs (scripts/<slug>/)
 }
 
-// BodyLanguage selects how a Request's draft_body is interpreted on invoke. It
-// mirrors the wire grpcview.v1.BodyLanguage (same ordinals) so convert.go can
-// bridge them; the two stay distinct types so the disk format can evolve
-// independently. UNSPECIFIED and JSON both mean "send as-is", so a request
-// written before this field existed reads as JSON.
-enum BodyLanguage {
-  BODY_LANGUAGE_UNSPECIFIED = 0;
-  BODY_LANGUAGE_JSON = 1;
-  BODY_LANGUAGE_TYPESCRIPT = 2;
-}
-
 // ScriptKind classifies a saved script by how it is invoked. It mirrors the wire
 // grpcview.v1.ScriptKind (same ordinals) so convert.go can bridge them; the two
 // stay distinct types so the disk format can evolve independently.
@@ -80,9 +69,6 @@ message Request {
   // attached to this request; each runs (in this order) before the call to
   // rewrite the outgoing body/metadata (scripting-ui-plan §S3).
   repeated string middleware = 6;
-  // body_language selects how draft_body is interpreted on invoke (JSON vs
-  // TYPESCRIPT). Mirrors the wire grpcview.v1.Request.body_language.
-  BodyLanguage body_language = 7;
   // draft_metadata_script is the request's metadata authored as a TypeScript
   // module whose returned {[key: string]: string[]} object is evaluated on
   // invoke to build the outgoing metadata. Mirrors the wire

@@ -26,7 +26,6 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 		DraftMetadata:       dr.GetDraftMetadata(), // Struct: identical on both sides
 		DraftMetadataScript: dr.GetDraftMetadataScript(),
 		Middleware:          dr.GetMiddleware(),
-		BodyLanguage:        diskToWireBodyLanguage(dr.GetBodyLanguage()),
 		Target:              targetToServer(dr.GetTarget()),
 	}
 }
@@ -41,7 +40,6 @@ func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Req
 		DraftMetadata:       wr.GetDraftMetadata(),
 		DraftMetadataScript: wr.GetDraftMetadataScript(),
 		Middleware:          wr.GetMiddleware(),
-		BodyLanguage:        wireToDiskBodyLanguage(wr.GetBodyLanguage()),
 		Target:              serverToTarget(wr.GetTarget()),
 	}
 }
@@ -82,34 +80,6 @@ func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
 		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_SCENARIO
 	default:
 		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_UNSPECIFIED
-	}
-}
-
-// diskToWireBodyLanguage / wireToDiskBodyLanguage bridge the two mirrored
-// BodyLanguage enums, exactly like the ScriptKind bridge above: the ordinals
-// match, but the mapping is explicit so a future divergence is a compile error
-// here rather than a silent misread. UNSPECIFIED (the zero value, so the default
-// for a request stored before this field existed) and JSON both mean "send
-// as-is", so the default case correctly maps an unknown/zero value to UNSPECIFIED.
-func diskToWireBodyLanguage(l grpcviewstorev1.BodyLanguage) grpcviewv1.BodyLanguage {
-	switch l {
-	case grpcviewstorev1.BodyLanguage_BODY_LANGUAGE_JSON:
-		return grpcviewv1.BodyLanguage_BODY_LANGUAGE_JSON
-	case grpcviewstorev1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT:
-		return grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT
-	default:
-		return grpcviewv1.BodyLanguage_BODY_LANGUAGE_UNSPECIFIED
-	}
-}
-
-func wireToDiskBodyLanguage(l grpcviewv1.BodyLanguage) grpcviewstorev1.BodyLanguage {
-	switch l {
-	case grpcviewv1.BodyLanguage_BODY_LANGUAGE_JSON:
-		return grpcviewstorev1.BodyLanguage_BODY_LANGUAGE_JSON
-	case grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT:
-		return grpcviewstorev1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT
-	default:
-		return grpcviewstorev1.BodyLanguage_BODY_LANGUAGE_UNSPECIFIED
 	}
 }
 

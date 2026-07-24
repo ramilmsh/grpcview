@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { BodyLanguage, ScriptKind } from "@grpcview/v1/workspace_pb";
+import { ScriptKind } from "@grpcview/v1/workspace_pb";
 import type { History, Server } from "@grpcview/v1/workspace_pb";
 import {
   useWorkspace,
@@ -246,10 +246,6 @@ export function RequestWorkspace() {
           // eval into the outgoing metadata (superseding the old metadata Struct, which we no
           // longer send for requests). Read off the wire, like body.
           metadataScript: md,
-          // The body is always TypeScript now (a canonical export-default module, migrated on
-          // load) — tell the server to eval it. The invoke path reads this off the wire, not the
-          // saved Request, so we send it unconditionally regardless of request.bodyLanguage.
-          bodyLanguage: BodyLanguage.TYPESCRIPT,
           // Per-request target override; undefined when none, which protobuf-es omits so the
           // backend defaults to the workspace's first reflection source (resolveTarget).
           target: targetOverride,
@@ -286,9 +282,6 @@ export function RequestWorkspace() {
       messages: messagesToSend,
       // Metadata as a canonical TS module, sent as metadataScript (mirrors the unary path).
       metadataScript: md,
-      // Always TypeScript (mirrors the unary path): every message is a canonical export-default
-      // module, so the server evals it. Read off the wire, not the saved Request.
-      bodyLanguage: BodyLanguage.TYPESCRIPT,
       // Per-request target override (mirrors the unary path); undefined → backend default.
       target: targetOverride,
     };

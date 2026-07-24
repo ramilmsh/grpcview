@@ -113,8 +113,8 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	})
 }
 
-// TestInvokeTypeScriptBody is the §T1 must-pass end-to-end: a unary Invoke with
-// body_language=TYPESCRIPT and the plan's example body runs the body as a generator,
+// TestInvokeTypeScriptBody is the §T1 must-pass end-to-end: a unary Invoke whose
+// TypeScript body (the plan's example) runs as a generator,
 // the returned object unmarshals into the request message, and the echo server sees
 // it — proving the produced JSON flows through UnmarshalJSON and the send unchanged.
 func TestInvokeTypeScriptBody(t *testing.T) {
@@ -128,7 +128,6 @@ func TestInvokeTypeScriptBody(t *testing.T) {
 		Service:       echoService,
 		Method:        "Unary",
 		Body:          `export default () => ({ message: "hi-" + Math.random() })`,
-		BodyLanguage:  grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT,
 		Target:        &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
 	}))
 	if err != nil {

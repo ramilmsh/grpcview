@@ -82,10 +82,6 @@ message UpdateRequestRequest {
   // clears it); when false/unset the list is left as-is.
   optional bool update_middleware = 9;
   repeated string middleware = 10;
-  // body_language patches how the request's body is interpreted on invoke
-  // (JSON vs TYPESCRIPT). A scalar enum, so a plain optional (no set-flag like
-  // update_middleware): unset leaves it unchanged, present replaces it.
-  optional BodyLanguage body_language = 11;
   // draft_metadata_script patches the request's metadata source: a TypeScript
   // module (`export default (): Metadata => ({ ... })`) whose returned
   // {[key: string]: string[]} object is evaluated on invoke to build the
@@ -130,12 +126,6 @@ message InvokeRequest {
   // target overrides where the call is sent; when unset it defaults to the
   // workspace's first reflection source.
   optional Server        target         = 8;
-  // body_language selects how `body` is interpreted: JSON — sent as-is (the
-  // default) — or TYPESCRIPT, where `body` is a TS/JS generator whose returned
-  // object becomes the message (ts-request-body-plan §T1). It carries the
-  // editor's current toggle, like body/metadata above, so a send never depends
-  // on a prior UpdateRequest landing first.
-  BodyLanguage           body_language  = 9;
   // metadata_script, when non-empty, is a TypeScript module
   // (`export default (): Metadata => ({ ... })`) whose returned
   // {[key: string]: string[]} object is evaluated on the backend (same engine as
@@ -172,10 +162,6 @@ message InvokeStreamRequest {
   // target overrides where the call is sent; unset defaults to the workspace's
   // first reflection source (same as Invoke).
   optional Server        target         = 8;
-  // body_language selects how each entry of `messages` is interpreted (JSON —
-  // sent as-is, the default — vs TYPESCRIPT: each is a TS/JS generator whose
-  // returned object becomes the message), mirroring InvokeRequest.
-  BodyLanguage           body_language  = 9;
   // metadata_script mirrors InvokeRequest.metadata_script: a TypeScript module
   // whose returned {[key: string]: string[]} object is evaluated on the backend
   // to build the outgoing metadata, superseding the `metadata` Struct when

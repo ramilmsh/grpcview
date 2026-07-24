@@ -108,11 +108,6 @@ message Request {
   // attached to this request; each runs (in this order) before the call to
   // rewrite the outgoing body/metadata (scripting-ui-plan §S3).
   repeated string           middleware        = 7;
-  // body_language selects how draft_body is interpreted on invoke: JSON — sent
-  // as-is (the default; today's path + {{ }} tokens) — or TYPESCRIPT, where
-  // draft_body is a TS/JS generator whose returned object is the request message
-  // (ts-request-body-plan §T1). See BodyLanguage.
-  BodyLanguage              body_language     = 8;
   // draft_metadata_script is the request's metadata authored as a TypeScript
   // module (`export default (): Metadata => ({ ... })`) whose returned
   // {[key: string]: string[]} object is evaluated on invoke to build the
@@ -135,16 +130,6 @@ message Item {
     Folder  folder  = 2;
     Request request = 3;
   }
-}
-
-// BodyLanguage selects how a Request's draft_body is interpreted on invoke.
-// Mirrors the on-disk grpcview.store.v1.BodyLanguage. UNSPECIFIED and JSON both
-// mean "send the body as-is" (today's JSON path + {{ }} tokens), so a request
-// saved before this field existed (UNSPECIFIED) behaves exactly as JSON.
-enum BodyLanguage {
-  BODY_LANGUAGE_UNSPECIFIED = 0;
-  BODY_LANGUAGE_JSON = 1;
-  BODY_LANGUAGE_TYPESCRIPT = 2;
 }
 
 // ScriptKind classifies a saved script by how it is invoked. Mirrors the on-disk

@@ -2,6 +2,10 @@
 
 `grpcview` is a gRPC tool similar to Postman, leveraging the Monaco editor's JSON schema autocompletion capabilities. It converts Proto descriptors into JSON schemas to provide intelligent editing for gRPC requests.
 
+## Project Stage
+
+**This project has no users yet — it is way pre-release.** Breaking any contract you like is perfectly fine. **SIMPLICITY is the important part; backwards compatibility is IRRELEVANT at this stage.** Don't add migrations, compatibility shims, or `reserved` proto markers to preserve old on-disk/wire data — change the schema and delete freely. Always favor the simplest change that works over the most backwards-compatible one.
+
 ## Architecture
 
 - **Frontend**: A Vue.js application using Monaco editor.

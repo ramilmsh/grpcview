@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { BodyLanguage, Request_Response, ScriptKind, Server, Workspace } from "./workspace_pb";
+import type { Request_Response, ScriptKind, Server, Workspace } from "./workspace_pb";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -301,15 +301,6 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
   middleware: string[];
 
   /**
-   * body_language patches how the request's body is interpreted on invoke
-   * (JSON vs TYPESCRIPT). A scalar enum, so a plain optional (no set-flag like
-   * update_middleware): unset leaves it unchanged, present replaces it.
-   *
-   * @generated from field: optional grpcview.v1.BodyLanguage body_language = 11;
-   */
-  bodyLanguage?: BodyLanguage | undefined;
-
-  /**
    * draft_metadata_script patches the request's metadata source: a TypeScript
    * module (`export default (): Metadata => ({ ... })`) whose returned
    * {[key: string]: string[]} object is evaluated on invoke to build the
@@ -320,6 +311,22 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
    * @generated from field: optional string draft_metadata_script = 12;
    */
   draftMetadataScript?: string | undefined;
+
+  /**
+   * target patches the request's per-request invoke destination (host:port +
+   * TLS). Like update_middleware, it needs a set-flag to distinguish "leave
+   * unchanged" from "clear": when update_target is true the target is replaced
+   * by `target` (a nil `target` clears it, reverting to the reflection-source
+   * default); when false/unset it is left unchanged.
+   *
+   * @generated from field: optional bool update_target = 13;
+   */
+  updateTarget?: boolean | undefined;
+
+  /**
+   * @generated from field: optional grpcview.v1.Server target = 14;
+   */
+  target?: Server | undefined;
 };
 
 /**
@@ -430,17 +437,6 @@ export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
   target?: Server | undefined;
 
   /**
-   * body_language selects how `body` is interpreted: JSON — sent as-is (the
-   * default) — or TYPESCRIPT, where `body` is a TS/JS generator whose returned
-   * object becomes the message (ts-request-body-plan §T1). It carries the
-   * editor's current toggle, like body/metadata above, so a send never depends
-   * on a prior UpdateRequest landing first.
-   *
-   * @generated from field: grpcview.v1.BodyLanguage body_language = 9;
-   */
-  bodyLanguage: BodyLanguage;
-
-  /**
    * metadata_script, when non-empty, is a TypeScript module
    * (`export default (): Metadata => ({ ... })`) whose returned
    * {[key: string]: string[]} object is evaluated on the backend (same engine as
@@ -535,15 +531,6 @@ export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamReque
    * @generated from field: optional grpcview.v1.Server target = 8;
    */
   target?: Server | undefined;
-
-  /**
-   * body_language selects how each entry of `messages` is interpreted (JSON —
-   * sent as-is, the default — vs TYPESCRIPT: each is a TS/JS generator whose
-   * returned object becomes the message), mirroring InvokeRequest.
-   *
-   * @generated from field: grpcview.v1.BodyLanguage body_language = 9;
-   */
-  bodyLanguage: BodyLanguage;
 
   /**
    * metadata_script mirrors InvokeRequest.metadata_script: a TypeScript module

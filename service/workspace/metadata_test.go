@@ -101,7 +101,6 @@ func TestInvokeMetadataScript(t *testing.T) {
 		Service:        echoService,
 		Method:         "Unary",
 		Body:           `export default () => ({ message: "hi" })`,
-		BodyLanguage:   grpcviewv1.BodyLanguage_BODY_LANGUAGE_TYPESCRIPT,
 		MetadataScript: `export default () => ({ authorization: [bearer()], "x-scope": ["read", "write"] })`,
 		Target:         &grpcviewv1.Server{Host: "127.0.0.1", Port: int32(port)},
 	}))

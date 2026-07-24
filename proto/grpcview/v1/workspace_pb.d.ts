@@ -172,6 +172,17 @@ export declare type Service = Message$1<"grpcview.v1.Service"> & {
    * @generated from field: repeated grpcview.v1.Method methods = 3;
    */
   methods: Method[];
+
+  /**
+   * source is the reflection server this service's schema was resolved from — the
+   * natural default invoke target for a request against it (see resolveTarget in
+   * invoke.go, and sourceForService in the UI). Unset for services from a
+   * descriptor-set upload (no dial target) or an older cache; such requests fall
+   * back to the workspace's first reflection source.
+   *
+   * @generated from field: optional grpcview.v1.Server source = 4;
+   */
+  source?: Server | undefined;
 };
 
 /**
@@ -356,16 +367,6 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
   middleware: string[];
 
   /**
-   * body_language selects how draft_body is interpreted on invoke: JSON — sent
-   * as-is (the default; today's path + {{ }} tokens) — or TYPESCRIPT, where
-   * draft_body is a TS/JS generator whose returned object is the request message
-   * (ts-request-body-plan §T1). See BodyLanguage.
-   *
-   * @generated from field: grpcview.v1.BodyLanguage body_language = 8;
-   */
-  bodyLanguage: BodyLanguage;
-
-  /**
    * draft_metadata_script is the request's metadata authored as a TypeScript
    * module (`export default (): Metadata => ({ ... })`) whose returned
    * {[key: string]: string[]} object is evaluated on invoke to build the
@@ -376,6 +377,17 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
    * @generated from field: string draft_metadata_script = 9;
    */
   draftMetadataScript: string;
+
+  /**
+   * target overrides where this request's invoke is sent (host:port + TLS).
+   * Unset means "use the workspace's first reflection source" (see
+   * resolveTarget in invoke.go). The first slice of the storage.md §6
+   * target-vs-source split: a plain per-request inline target — no
+   * refs/inheritance yet.
+   *
+   * @generated from field: optional grpcview.v1.Server target = 10;
+   */
+  target?: Server | undefined;
 };
 
 /**
@@ -537,36 +549,6 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
  * Use `create(WorkspaceSchema)` to create a new message.
  */
 export declare const WorkspaceSchema: GenMessage<Workspace>;
-
-/**
- * BodyLanguage selects how a Request's draft_body is interpreted on invoke.
- * Mirrors the on-disk grpcview.store.v1.BodyLanguage. UNSPECIFIED and JSON both
- * mean "send the body as-is" (today's JSON path + {{ }} tokens), so a request
- * saved before this field existed (UNSPECIFIED) behaves exactly as JSON.
- *
- * @generated from enum grpcview.v1.BodyLanguage
- */
-export enum BodyLanguage {
-  /**
-   * @generated from enum value: BODY_LANGUAGE_UNSPECIFIED = 0;
-   */
-  UNSPECIFIED = 0,
-
-  /**
-   * @generated from enum value: BODY_LANGUAGE_JSON = 1;
-   */
-  JSON = 1,
-
-  /**
-   * @generated from enum value: BODY_LANGUAGE_TYPESCRIPT = 2;
-   */
-  TYPESCRIPT = 2,
-}
-
-/**
- * Describes the enum grpcview.v1.BodyLanguage.
- */
-export declare const BodyLanguageSchema: GenEnum<BodyLanguage>;
 
 /**
  * ScriptKind classifies a saved script by how it is invoked. Mirrors the on-disk
