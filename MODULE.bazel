@@ -70,7 +70,6 @@ use_repo(
     "com_connectrpc_cors",
     "com_connectrpc_grpcreflect",
     "com_github_evanw_esbuild",
-    "com_github_invopop_jsonschema",
     "com_github_jhump_protoreflect",
     "com_github_rs_cors",
     "com_github_tetratelabs_wazero",
