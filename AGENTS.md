@@ -25,7 +25,7 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
 - **This is a Bazel workspace. Never run `go build`, `go test`, `go run`, or —
   especially — `go mod` / `go mod tidy`.** Bare `go` commands reach the network,
   hang, and can wedge git. Use Bazel for everything (see Commands below).
-- **Prefix every Bazel/Go command with `env GOPROXY=off`** so nothing tries to
+- **Prefix every Go command with `env GOPROXY=off`** so nothing tries to
   fetch modules. Offline builds are green; a command that wants the network is a
   bug in the command, not a missing dependency.
 - The default shell here is fish. For commands that need bash semantics or inline
@@ -45,8 +45,10 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
   (`grpcview.v1`) and bridged by `convert.go`.
 - **Scripting** (`service/scripting/`): a QuickJS-WASM engine (wazero) that runs
   user JS/TS — request-body/metadata evaluation, generators, middleware, and
-  scenarios — under a **capability grant** (filesystem/network access is
-  deny-by-default). Sources are bundled with **esbuild** before execution.
+  scenarios. **Network is on for every script**: a browser-style global `fetch`
+  (a deliberate subset of WHATWG fetch — see `net.go`) is available with no grant
+  and no capability manager. The **filesystem** capability is still deny-by-default
+  behind a `Grant` (`node:fs`). Sources are bundled with **esbuild** before execution.
 
 [Connect]: https://connectrpc.com
 
@@ -86,6 +88,24 @@ between three feature views:
 
 Server state is fetched via `@connectrpc/connect-query` on top of
 `@tanstack/react-query`; local/view state lives in `zustand`.
+
+## Browser verification hook (editors)
+
+Driving the app in a real browser is the preferred way to verify UI / invoke
+changes. Because several Monaco editors coexist (each with its own model) and there
+is no global `monaco`, the request **body** and **metadata** editors register
+themselves on a `window` map keyed by model URI (`ui/src/lib/editor-debug.ts`), so
+the devtools console — or a browser-automation harness — can read and drive their
+exact contents without reaching into React or guessing which DOM node is which:
+
+- `window.__grpcviewEditors["file:///grpcview/request/body.ts"]` — the body editor
+- `window.__grpcviewEditors["file:///grpcview/request/metadata.ts"]` — the metadata editor
+
+Each value is a Monaco `IStandaloneCodeEditor`: `.getValue()` reads the exact buffer
+and `.setValue(src)` drives it (the latter also sidesteps Monaco's auto-closing
+brackets/quotes, which corrupt naively *typed* code — set the value instead of
+typing it). App code only ever WRITES the map, so it is inert in normal use. The
+Scripts scratchpad editor is not registered (its model is `SCRATCH_PATH`).
 
 ## Design language
 
@@ -177,3 +197,11 @@ docs/design/          Design docs and plans (see below)
 `ui-redesign-plan.md`) and background research under `research/`. Shipped
 one-off implementation plans are deleted once their work lands — the code and this
 file are the source of truth, not a plan archive.
+
+# Claude for Chrome
+
+- Use `read_page` to get element refs from the accessibility tree
+- Use `find` to locate elements by description
+- Click/interact using `ref`, not coordinates
+- NEVER take screenshots unless explicitly requested by the user
+- Prepare and execute sequences of actions, evaluate the final result. Only go step by step, if it failed in an unobvious manner
