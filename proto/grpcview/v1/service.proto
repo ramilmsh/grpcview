@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package grpcview.v1;
 
-import "google/protobuf/descriptor.proto";
 import "google/protobuf/struct.proto";
 import "proto/grpcview/v1/workspace.proto";
 

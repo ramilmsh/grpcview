@@ -12,7 +12,6 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "@protobuf//:any_proto",
-        "@protobuf//:descriptor_proto",
         "@protobuf//:duration_proto",
         "@protobuf//:struct_proto",
         "@protobuf//:timestamp_proto",

@@ -3,7 +3,6 @@ syntax = "proto3";
 package grpcview.v1;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/descriptor.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -28,7 +27,6 @@ message Server {
 message Message {
   string                          package = 1;
   string                          name    = 2;
-  optional google.protobuf.Struct schema  = 3;
   // file is the proto file path that defines this message (e.g.
   // proto/foo/v1/foo.proto). It is the protoc-gen-es fileToGenerate selector and
   // identifies which generated _pb.ts exports this message's Json type

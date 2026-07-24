@@ -92,11 +92,6 @@ export declare type Message = Message$1<"grpcview.v1.Message"> & {
   name: string;
 
   /**
-   * @generated from field: optional google.protobuf.Struct schema = 3;
-   */
-  schema?: JsonObject | undefined;
-
-  /**
    * file is the proto file path that defines this message (e.g.
    * proto/foo/v1/foo.proto). It is the protoc-gen-es fileToGenerate selector and
    * identifies which generated _pb.ts exports this message's Json type
