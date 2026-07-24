@@ -22,7 +22,7 @@
 // metadata-specific.
 import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 
-export const META_WRAP_PREFIX = "export default (): Metadata => (\n";
+export const META_WRAP_PREFIX = "export default async (): Promise<Metadata> => (\n";
 export const META_WRAP_SUFFIX = "\n)";
 export const META_PREFIX_LINES = 1; // model lines occupied by META_WRAP_PREFIX (the `=> (` line)
 export const META_SUFFIX_LINES = 1; // model lines occupied by META_WRAP_SUFFIX (the `)` line)

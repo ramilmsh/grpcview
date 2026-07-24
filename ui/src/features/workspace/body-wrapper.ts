@@ -19,7 +19,7 @@
 //     path where a bare `{ … }` also misparses. So invoke + composition are byte-identical to the
 //     shipped T2/T3 explicit form; this feature is a view-only delta over it.
 
-export const WRAP_PREFIX = "export default (): RequestMessage => (\n";
+export const WRAP_PREFIX = "export default async (): Promise<RequestMessage> => (\n";
 export const WRAP_SUFFIX = "\n)";
 export const PREFIX_LINES = 1; // model lines occupied by WRAP_PREFIX (the `=> (` line)
 export const SUFFIX_LINES = 1; // model lines occupied by WRAP_SUFFIX (the `)` line)
