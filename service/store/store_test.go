@@ -198,34 +198,6 @@ func TestOrderedListReconciliation(t *testing.T) {
 	}
 }
 
-func TestRenameSameParent(t *testing.T) {
-	coll, ctx := newTestCollection(t)
-	if err := coll.CreateFolder(ctx, nil, "Folder"); err != nil {
-		t.Fatal(err)
-	}
-	if err := coll.CreateRequest(ctx, []string{"Folder"}, "Req", "s", "m"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Rename the request; slug/dir must stay stable, only meta.name changes.
-	if err := coll.Move(ctx, []string{"Folder", "Req"}, []string{"Folder", "Renamed"}); err != nil {
-		t.Fatalf("Move(rename): %v", err)
-	}
-	tree := filepath.Join(coll.Root(), treeDir)
-	if _, err := os.Stat(filepath.Join(tree, "folder", "req")); err != nil {
-		t.Errorf("slug dir should be stable across rename: %v", err)
-	}
-	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(tree, "folder", "req", requestFileName), rf)
-	if rf.GetMeta().GetName() != "Renamed" {
-		t.Errorf("meta.name = %q, want Renamed", rf.GetMeta().GetName())
-	}
-	folder := childByName(rootItems(t, coll, ctx), "Folder")
-	if childByName(folder.GetFolder().GetItems(), "Renamed") == nil {
-		t.Errorf("renamed request not found: %v", names(folder.GetFolder().GetItems()))
-	}
-}
-
 func TestUpdateRequestRename(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	if err := coll.CreateRequest(ctx, nil, "Get User", "s.S", "GetUser"); err != nil {
@@ -282,45 +254,6 @@ func TestUpdateRequestRename(t *testing.T) {
 	}
 }
 
-func TestMoveCrossFolder(t *testing.T) {
-	coll, ctx := newTestCollection(t)
-	for _, n := range []string{"A", "B"} {
-		if err := coll.CreateFolder(ctx, nil, n); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := coll.CreateRequest(ctx, []string{"A"}, "Req", "s", "m"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Move A/Req -> B/Req (slug kept since free in B).
-	if err := coll.Move(ctx, []string{"A", "Req"}, []string{"B", "Req"}); err != nil {
-		t.Fatalf("Move: %v", err)
-	}
-	tree := filepath.Join(coll.Root(), treeDir)
-	if _, err := os.Stat(filepath.Join(tree, "b", "req")); err != nil {
-		t.Errorf("moved dir missing in B: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(tree, "a", "req")); !os.IsNotExist(err) {
-		t.Errorf("source dir should be gone, stat err = %v", err)
-	}
-	root := rootItems(t, coll, ctx)
-	if a := childByName(root, "A"); len(a.GetFolder().GetItems()) != 0 {
-		t.Errorf("A should be empty, got %v", names(a.GetFolder().GetItems()))
-	}
-	if b := childByName(root, "B"); childByName(b.GetFolder().GetItems(), "Req") == nil {
-		t.Errorf("Req not in B")
-	}
-
-	// Moving a folder into its own descendant is rejected.
-	if err := coll.CreateFolder(ctx, []string{"B"}, "Inner"); err != nil {
-		t.Fatal(err)
-	}
-	if err := coll.Move(ctx, []string{"B"}, []string{"B", "Inner", "B"}); err == nil {
-		t.Error("expected move-into-descendant to be rejected")
-	}
-}
-
 func TestDelete(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	if err := coll.CreateFolder(ctx, nil, "Folder"); err != nil {
@@ -353,61 +286,6 @@ func TestDelete(t *testing.T) {
 	}
 	if len(rootItems(t, coll, ctx)) != 0 {
 		t.Error("folder not deleted from root")
-	}
-}
-
-func TestMigrationFromLegacyBlob(t *testing.T) {
-	base := t.TempDir()
-	ctx := context.Background()
-
-	ws := &grpcviewv1.Workspace{
-		Name: "legacy",
-		Item: &grpcviewv1.Item{
-			Name: "legacy",
-			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: []*grpcviewv1.Item{
-				{Name: "Folder", Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: []*grpcviewv1.Item{
-					{Name: "Req", Content: &grpcviewv1.Item_Request{Request: &grpcviewv1.Request{
-						Name: "Req", Service: "s.S", Method: "M", DraftBody: `{"x":1}`,
-					}}},
-				}}}},
-			}}},
-		},
-	}
-	blob, err := proto.Marshal(ws)
-	if err != nil {
-		t.Fatal(err)
-	}
-	blobPath := filepath.Join(base, "legacy")
-	if err := os.WriteFile(blobPath, blob, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	s := New(base, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	coll, err := s.Open(ctx, "legacy") // triggers migration
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-
-	if info, err := os.Stat(blobPath); err != nil || !info.IsDir() {
-		t.Errorf("collection path should now be a directory (err %v)", err)
-	}
-	if _, err := os.Stat(blobPath + ".blob.bak"); err != nil {
-		t.Errorf("legacy blob backup missing: %v", err)
-	}
-
-	root := rootItems(t, coll, ctx)
-	folder := childByName(root, "Folder")
-	if folder == nil || folder.GetFolder() == nil {
-		t.Fatalf("migrated tree missing Folder: %v", names(root))
-	}
-	req := childByName(folder.GetFolder().GetItems(), "Req")
-	if req == nil || req.GetRequest().GetDraftBody() != `{"x":1}` {
-		t.Fatalf("migrated request wrong: %+v", req)
-	}
-
-	// Idempotent: opening again does not error or double-migrate.
-	if _, err := s.Open(ctx, "legacy"); err != nil {
-		t.Errorf("second Open: %v", err)
 	}
 }
 
@@ -626,53 +504,6 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 	if got := middlewareOf(t, reloaded, "Echo"); len(got) != 0 {
 		t.Fatalf("middleware after clear = %v, want empty", got)
 	}
-}
-
-// TestRequestTargetConvertRoundTrip covers the per-request target bridging in
-// convert.go: a wire Request.target survives wire→disk→wire with TLS on and off
-// (the on-disk Target carries the decomposed tls bool, which re-inflates to an
-// empty TLS block iff set), and a nil target stays nil — the reflection-source
-// default — in both directions.
-func TestRequestTargetConvertRoundTrip(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		tls  bool
-	}{
-		{"insecure", false},
-		{"tls", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			wr := &grpcviewv1.Request{
-				Name:    "R",
-				Service: "s.S",
-				Method:  "M",
-				Target:  serverFromHostPortTLS("api.example.com", 8443, tc.tls),
-			}
-			// wire → disk: the triple is decomposed, tls flattened to a bool.
-			dr := wireToDiskRequest("R", wr)
-			if got := dr.GetTarget(); got == nil || got.GetHost() != "api.example.com" || got.GetPort() != 8443 || got.GetTls() != tc.tls {
-				t.Fatalf("disk target = %+v, want host/port/tls api.example.com/8443/%v", got, tc.tls)
-			}
-			// disk → wire: the tls bool re-inflates to an (empty) TLS block iff set.
-			back := diskToWireRequest("R", dr).GetTarget()
-			if back.GetHost() != "api.example.com" || back.GetPort() != 8443 {
-				t.Errorf("wire target host/port = %s:%d, want api.example.com:8443", back.GetHost(), back.GetPort())
-			}
-			if (back.GetTls() != nil) != tc.tls {
-				t.Errorf("wire target tls set = %v, want %v", back.GetTls() != nil, tc.tls)
-			}
-		})
-	}
-
-	// A request with no target stays nil both ways (unset = reflection default).
-	t.Run("nil", func(t *testing.T) {
-		if dr := wireToDiskRequest("R", &grpcviewv1.Request{Name: "R"}); dr.GetTarget() != nil {
-			t.Errorf("disk target = %+v, want nil for an unset wire target", dr.GetTarget())
-		}
-		if back := diskToWireRequest("R", &grpcviewstorev1.Request{}); back.GetTarget() != nil {
-			t.Errorf("wire target = %+v, want nil for an unset disk target", back.GetTarget())
-		}
-	})
 }
 
 // TestUpdateRequestTarget covers the per-request target patch, mirroring

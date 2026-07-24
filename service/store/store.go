@@ -45,8 +45,6 @@ var (
 	// ErrAlreadyExists means an item with that display name already exists in
 	// the parent folder.
 	ErrAlreadyExists = errors.New("item already exists")
-	// ErrInvalidMove means a move destination is illegal (e.g. into itself).
-	ErrInvalidMove = errors.New("invalid move")
 )
 
 // RequestPatch is a partial update to a request. A nil field is left unchanged;
@@ -110,11 +108,11 @@ func New(base string, logger *slog.Logger) *Store {
 	}
 }
 
-// Open returns the handle for the named collection, first migrating a legacy
-// blob found at the same path (see Collection.migrateLegacyBlob). It does not
-// create a new collection; callers that must (Get) use Collection.EnsureCreated.
-func (s *Store) Open(ctx context.Context, name string) (*Collection, error) {
+// Open returns the handle for the named collection. It does not create a new
+// collection; callers that must (Get) use Collection.EnsureCreated.
+func (s *Store) Open(_ context.Context, name string) (*Collection, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	coll, ok := s.colls[name]
 	if !ok {
 		coll = &Collection{
@@ -123,11 +121,6 @@ func (s *Store) Open(ctx context.Context, name string) (*Collection, error) {
 			logger: s.logger.With("collection", name),
 		}
 		s.colls[name] = coll
-	}
-	s.mu.Unlock()
-
-	if err := coll.migrateLegacyBlob(ctx); err != nil {
-		return nil, err
 	}
 	return coll, nil
 }
@@ -140,11 +133,6 @@ type Collection struct {
 	logger *slog.Logger
 
 	mu sync.Mutex
-
-	// migrateOnce guards the at-most-once legacy-blob migration (Store.Open
-	// calls it on every RPC); migrateErr caches its outcome for later Opens.
-	migrateOnce sync.Once
-	migrateErr  error
 }
 
 // Root returns the collection's on-disk directory.
@@ -152,7 +140,7 @@ func (c *Collection) Root() string { return c.root }
 
 func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, collectionFileName) }
 func (c *Collection) treeRoot() string           { return filepath.Join(c.root, treeDir) }
-func (c *Collection) scriptsRoot() string         { return filepath.Join(c.root, scriptsDir) }
+func (c *Collection) scriptsRoot() string        { return filepath.Join(c.root, scriptsDir) }
 func (c *Collection) servicesCachePath() string {
 	return filepath.Join(c.root, stateDir, cacheSubdir, servicesCacheFileName)
 }

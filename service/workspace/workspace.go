@@ -73,7 +73,7 @@ func toConnectError(err error) error {
 	case errors.Is(err, store.ErrItemNotFound), errors.Is(err, store.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, store.ErrNotAFolder), errors.Is(err, store.ErrNotARequest),
-		errors.Is(err, store.ErrAlreadyExists), errors.Is(err, store.ErrInvalidMove):
+		errors.Is(err, store.ErrAlreadyExists):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	default:
 		return err

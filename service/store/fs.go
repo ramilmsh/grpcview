@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
@@ -222,10 +221,10 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	// than re-opening and re-decoding the same file.
 	p := filepath.Join(itemDir, requestFileName)
 	dr := ch.request
-	// Rename: same slug-identity model as Move/renameMeta — only meta.name
-	// changes; the slug/dir is stable so open tabs/history keyed by slug survive.
-	// A collision with a different sibling is rejected (ErrAlreadyExists); a
-	// no-op rename to the current name is skipped so it doesn't self-collide.
+	// Rename follows the slug-identity model: only meta.name changes; the
+	// slug/dir is stable so open tabs/history keyed by slug survive. A collision
+	// with a different sibling is rejected (ErrAlreadyExists); a no-op rename to
+	// the current name is skipped so it doesn't self-collide.
 	if patch.Name != nil && *patch.Name != name {
 		if _, exists := findByName(present, *patch.Name); exists {
 			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
@@ -366,101 +365,6 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	return c.writeOrder(parentDir, slices.DeleteFunc(base, func(s string) bool { return s == ch.slug }))
 }
 
-// Move relocates and/or renames an item. from and to are full display-name
-// paths including the item name as the last segment.
-//
-//   - Same parent, different last segment: a rename. Per the slug-identity model
-//     this only edits the config's meta.name; the slug/dir is stable so any
-//     references survive.
-//   - Different parent: the directory is moved (keeping its slug when free in the
-//     destination) and, if the last segment differs, its meta.name is updated.
-func (c *Collection) Move(_ context.Context, from, to []string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureExists(); err != nil {
-		return err
-	}
-	if len(from) == 0 || len(to) == 0 {
-		return fmt.Errorf("%w: empty path", ErrInvalidMove)
-	}
-	srcParent, srcName := from[:len(from)-1], from[len(from)-1]
-	dstParent, dstName := to[:len(to)-1], to[len(to)-1]
-
-	srcParentDir, err := c.resolveFolder(srcParent)
-	if err != nil {
-		return err
-	}
-	srcPresent, err := c.readChildren(srcParentDir)
-	if err != nil {
-		return err
-	}
-	srcCh, ok := findByName(srcPresent, srcName)
-	if !ok {
-		return fmt.Errorf("%w: %q", ErrItemNotFound, srcName)
-	}
-	srcItemDir := filepath.Join(srcParentDir, srcCh.slug)
-
-	dstParentDir, err := c.resolveFolder(dstParent)
-	if err != nil {
-		return err
-	}
-
-	// Same parent -> pure rename (edit meta.name; the slug/dir stays stable).
-	if srcParentDir == dstParentDir {
-		if dstName == srcName {
-			return nil
-		}
-		if _, exists := findByName(srcPresent, dstName); exists {
-			return fmt.Errorf("%w: %q", ErrAlreadyExists, dstName)
-		}
-		return c.renameMeta(srcItemDir, srcCh.kind, dstName)
-	}
-
-	// Cross-folder move: can't move a folder into itself or a descendant.
-	if dstParentDir == srcItemDir || strings.HasPrefix(dstParentDir, srcItemDir+string(filepath.Separator)) {
-		return fmt.Errorf("%w: cannot move an item into itself", ErrInvalidMove)
-	}
-
-	dstPresent, err := c.readChildren(dstParentDir)
-	if err != nil {
-		return err
-	}
-	if _, exists := findByName(dstPresent, dstName); exists {
-		return fmt.Errorf("%w: %q", ErrAlreadyExists, dstName)
-	}
-
-	// Keep the slug (stable identity) if free in the destination; otherwise
-	// derive a fresh unique one from the new name.
-	dstUsed := slugSet(dstPresent)
-	dstSlug := srcCh.slug
-	if dstUsed[strings.ToLower(dstSlug)] || isReserved(dstSlug) {
-		dstSlug = uniqueSlug(dstName, dstUsed)
-	}
-
-	srcBase, err := c.reconciledSlugsFrom(srcParentDir, srcPresent)
-	if err != nil {
-		return err
-	}
-	dstBase, err := c.reconciledSlugsFrom(dstParentDir, dstPresent)
-	if err != nil {
-		return err
-	}
-
-	dstItemDir := filepath.Join(dstParentDir, dstSlug)
-	if err := os.Rename(srcItemDir, dstItemDir); err != nil {
-		return fmt.Errorf("move %s -> %s: %w", srcItemDir, dstItemDir, err)
-	}
-	if dstName != srcName {
-		if err := c.renameMeta(dstItemDir, srcCh.kind, dstName); err != nil {
-			return err
-		}
-	}
-	if err := c.writeOrder(srcParentDir, slices.DeleteFunc(srcBase, func(s string) bool { return s == srcCh.slug })); err != nil {
-		return err
-	}
-	return c.writeOrder(dstParentDir, append(dstBase, dstSlug))
-}
-
 // PutDescriptorState persists the committed descriptor sources (grpcview.json)
 // and the resolved-schema cache (gitignored .grpcview/cache/services.json). The
 // derived, merged descriptorSet is cached alongside the services (same wire
@@ -484,146 +388,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, sources []*grpcviewv1
 	}
 	col.Sources = diskSources
 	return c.writeCollection(col)
-}
-
-// migrateLegacyBlob detects a legacy single-blob workspace file at the
-// collection path and materializes it into the new directory tree, backing up
-// the original as <name>.blob.bak. It runs at most once per collection: Store.Open
-// calls it on every RPC, but migrateOnce collapses all but the first to a cached
-// result. Once the path is a directory (migrated or fresh) it is a no-op.
-func (c *Collection) migrateLegacyBlob(_ context.Context) error {
-	c.migrateOnce.Do(func() { c.migrateErr = c.migrate() })
-	return c.migrateErr
-}
-
-func (c *Collection) migrate() error {
-	info, err := os.Stat(c.root)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil // new collection; nothing to migrate
-	}
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return nil // already a directory tree
-	}
-
-	data, err := os.ReadFile(c.root)
-	if err != nil {
-		return fmt.Errorf("read legacy blob: %w", err)
-	}
-	ws := &grpcviewv1.Workspace{}
-	if err := proto.Unmarshal(data, ws); err != nil {
-		return fmt.Errorf("unmarshal legacy blob %s: %w", c.root, err)
-	}
-
-	backup := c.root + ".blob.bak"
-	if err := os.Rename(c.root, backup); err != nil {
-		return fmt.Errorf("back up legacy blob: %w", err)
-	}
-	if err := c.writeWorkspace(ws); err != nil {
-		return fmt.Errorf("materialize migrated tree: %w", err)
-	}
-	c.logger.Info("migrated legacy blob to directory tree", "backup", backup)
-	return nil
-}
-
-// writeWorkspace materializes a complete (wire) Workspace to disk. Used by
-// migration.
-func (c *Collection) writeWorkspace(ws *grpcviewv1.Workspace) error {
-	if err := os.MkdirAll(c.treeRoot(), 0o755); err != nil {
-		return err
-	}
-	if err := c.ensureGitignore(); err != nil {
-		return err
-	}
-	rootSlugs, err := c.writeItems(c.treeRoot(), ws.GetItem().GetFolder().GetItems())
-	if err != nil {
-		return err
-	}
-	if len(ws.GetServices()) > 0 {
-		if err := c.writeServicesCache(ws.GetServices(), ws.GetDescriptorSet()); err != nil {
-			return err
-		}
-	}
-	sources, err := wireToDiskSources(ws.GetSources())
-	if err != nil {
-		return err
-	}
-	return c.writeCollection(&grpcviewstorev1.Collection{
-		Name:    ws.GetName(),
-		Items:   rootSlugs,
-		Sources: sources,
-	})
-}
-
-// writeItems writes each wire item as a directory under dir and returns their
-// slugs in order. Folders recurse (writing their own folder.json); requests get
-// request.json.
-func (c *Collection) writeItems(dir string, items []*grpcviewv1.Item) ([]string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-	used := make(map[string]bool, len(items))
-	slugs := make([]string, 0, len(items))
-	for _, item := range items {
-		slug := uniqueSlug(item.GetName(), used)
-		used[strings.ToLower(slug)] = true
-		slugs = append(slugs, slug)
-
-		itemDir := filepath.Join(dir, slug)
-		if err := os.MkdirAll(itemDir, 0o755); err != nil {
-			return nil, err
-		}
-		switch content := item.GetContent().(type) {
-		case *grpcviewv1.Item_Folder:
-			childSlugs, err := c.writeItems(itemDir, content.Folder.GetItems())
-			if err != nil {
-				return nil, err
-			}
-			if err := writeMessage(filepath.Join(itemDir, folderFileName), &grpcviewstorev1.Folder{
-				Meta:  &grpcviewstorev1.ItemMeta{Name: item.GetName()},
-				Items: childSlugs,
-			}); err != nil {
-				return nil, err
-			}
-		case *grpcviewv1.Item_Request:
-			if err := writeMessage(filepath.Join(itemDir, requestFileName), wireToDiskRequest(item.GetName(), content.Request)); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return slugs, nil
-}
-
-// renameMeta edits only the display name in an item's config, leaving the slug
-// (directory name) untouched.
-func (c *Collection) renameMeta(itemDir string, kind itemKind, newName string) error {
-	switch kind {
-	case kindFolder:
-		p := filepath.Join(itemDir, folderFileName)
-		ff := &grpcviewstorev1.Folder{}
-		if err := readMessage(p, ff); err != nil {
-			return err
-		}
-		if ff.Meta == nil {
-			ff.Meta = &grpcviewstorev1.ItemMeta{}
-		}
-		ff.Meta.Name = newName
-		return writeMessage(p, ff)
-	case kindRequest:
-		p := filepath.Join(itemDir, requestFileName)
-		rf := &grpcviewstorev1.Request{}
-		if err := readMessage(p, rf); err != nil {
-			return err
-		}
-		if rf.Meta == nil {
-			rf.Meta = &grpcviewstorev1.ItemMeta{}
-		}
-		rf.Meta.Name = newName
-		return writeMessage(p, rf)
-	}
-	return fmt.Errorf("unknown item kind")
 }
 
 // resolveFolder walks the display-name path from the tree root and returns the

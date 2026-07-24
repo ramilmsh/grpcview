@@ -27,19 +27,6 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 	}
 }
 
-// wireToDiskRequest builds a disk Request from a wire Request.
-func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Request {
-	return &grpcviewstorev1.Request{
-		Meta:                &grpcviewstorev1.ItemMeta{Name: name},
-		Service:             wr.GetService(),
-		Method:              wr.GetMethod(),
-		DraftBody:           wr.GetDraftBody(),
-		DraftMetadataScript: wr.GetDraftMetadataScript(),
-		Middleware:          wr.GetMiddleware(),
-		Target:              serverToTarget(wr.GetTarget()),
-	}
-}
-
 // diskToWireScript builds a wire Script from a disk Script (name carried
 // separately, like requests: the display name lives in meta on disk).
 func diskToWireScript(name string, ds *grpcviewstorev1.Script) *grpcviewv1.Script {

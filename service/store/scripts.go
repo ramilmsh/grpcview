@@ -17,8 +17,8 @@ import (
 // Scripts live in scripts/<slug>/script.json, a committed directory sibling of tree/
 // (scripting.md's threat model assumes scripts ship with the collection). They are a
 // flat, ordered list — the parent's order is Collection.scripts — so they reuse the
-// request machinery's slug/rename/reconcile helpers (slugify, uniqueSlug, renameMeta's
-// meta-only rename, reconcileOrder) but not the tree's folder-path resolution.
+// request machinery's slug/rename/reconcile helpers (slugify, uniqueSlug,
+// reconcileOrder) but not the tree's folder-path resolution.
 
 // scriptEntry is a classified on-disk script directory: its stable slug (dir name),
 // display name (from meta), and the decoded config (reused by loadScripts so it need
