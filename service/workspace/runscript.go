@@ -19,9 +19,11 @@ import (
 // kind selects the profile and calling convention: a generator's `export
 // default` is called, a middleware's `handle`/default export is called with a ctx;
 // unset (or scenario) evaluates the buffer as an ad-hoc scratchpad (last-expression
-// value), unchanged. All runs use NO capabilities and NO workspace inputs — this is
-// the engine's end-to-end validation + per-kind test-run surface, not a hook into a
-// request. Capability grants and request/vars/env inputs arrive in later milestones.
+// value), unchanged. All runs pass an empty Grant (no filesystem) and NO workspace
+// inputs — this is the engine's end-to-end validation + per-kind test-run surface, not
+// a hook into a request. (Network `fetch` still works: it is an unconditional global,
+// not a Grant capability — see scripting/net.go.) Filesystem grants and
+// request/vars/env inputs arrive in later milestones.
 func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcviewv1.RunScriptRequest]) (*connect.Response[grpcviewv1.RunScriptResponse], error) {
 	if w.engine == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("scripting engine not available"))

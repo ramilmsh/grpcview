@@ -13,6 +13,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,27 +163,66 @@ out`, secret)
 	}
 }
 
-// TestNetStubGeneralizes: the SAME uniform ABI carries a second capability. The net
-// import is stubbed (no real network) but proves the pattern is not fs-specific:
-// granted -> a value crosses back; the deny path is exercised by the ungranted case.
-func TestNetStubGeneralizes(t *testing.T) {
+// TestFetchGlobal: the network capability is an UNCONDITIONAL global `fetch` — no import,
+// no grant. It drives a real request end-to-end through the whole seam: JS shim -> request
+// envelope -> __grpcview_net_fetch bridge -> Go hostNetFetch -> net/http -> response
+// envelope -> a Response the script reads back (status, ok, a header, and the parsed body).
+func TestFetchGlobal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("X-Grpcview", "pong")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, `{"method":%q,"echo":%q,"auth":%q}`, r.Method, string(body), r.Header.Get("Authorization"))
+	}))
+	defer srv.Close()
+
 	e := newEngine(t)
+	// A POST with a header + body, then read the Response every which way. Under an EMPTY
+	// grant: fetch is not grant-gated. Top-level await settles under the host-driven pump.
+	src := fmt.Sprintf(`
+const res = await fetch(%q, { method: "post", headers: { Authorization: "Bearer t0ken" }, body: "hi" });
+const j = await res.json();
+({ status: res.status, ok: res.ok, header: res.headers.get("x-grpcview"),
+   method: j.method, echo: j.echo, auth: j.auth })`, srv.URL)
 
-	// Granted: a value crosses back through the identical [tag|len|payload] envelope.
-	res, err := e.RunScenario(context.Background(),
-		`import net from "node:net"; net.fetch("hello")`,
-		Grant{Net: &NetGrant{}}, Input{})
+	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
 	if err != nil {
-		t.Fatalf("granted net stub: %v", err)
+		t.Fatalf("fetch: %v", err)
 	}
-	if got := jsonString(t, res); got != "stub-fetched:hello" {
-		t.Fatalf("net.fetch = %q, want %q", got, "stub-fetched:hello")
+	var got struct {
+		Status         int
+		OK             bool
+		Header, Method string
+		Echo, Auth     string
 	}
+	if err := json.Unmarshal(res.Value, &got); err != nil {
+		t.Fatalf("decode %s: %v", res.Value, err)
+	}
+	want := struct {
+		Status         int
+		OK             bool
+		Header, Method string
+		Echo, Auth     string
+	}{201, true, "pong", "POST", "hi", "Bearer t0ken"}
+	if got != want {
+		t.Fatalf("fetch result = %+v, want %+v", got, want)
+	}
+}
 
-	// Ungranted: Gate 1 refuses to resolve node:net at bundle time.
-	if _, err := e.RunScenario(context.Background(),
-		`import net from "node:net"; net.fetch("hello")`, Grant{}, Input{}); err == nil ||
-		!strings.Contains(err.Error(), "capability not granted") {
-		t.Fatalf("ungranted net: got %v, want Gate 1 denial", err)
+// TestFetchRejects: a transport-level failure (a dead address) surfaces as a REJECTED
+// promise the script can catch — fetch never throws synchronously.
+func TestFetchRejects(t *testing.T) {
+	e := newEngine(t)
+	// 127.0.0.1:0 is never listening, so Do fails fast; the shim turns the host throw into
+	// a rejection .catch observes.
+	res, err := e.RunScenario(context.Background(),
+		`await fetch("http://127.0.0.1:0").then(() => "resolved").catch((e) => "caught:" + String(e.message || e))`,
+		Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("fetch reject: %v", err)
+	}
+	if got := jsonString(t, res); !strings.HasPrefix(got, "caught:fetch:") {
+		t.Fatalf("rejection = %q, want a caught fetch error", got)
 	}
 }

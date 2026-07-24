@@ -18,6 +18,7 @@ go_library(
         "engine.go",
         "entry.go",
         "marshal.go",
+        "net.go",
         "npm.go",
         "pool.go",
         "profiles.go",
@@ -45,8 +46,9 @@ go_test(
         "engine_core_test.go",
         "entry_test.go",
     ],
+    data = glob(["testdata/**"]),
+    embed = [":scripting"],
     # Vendored npm packages (dayjs/mustache/ms) + entry package.jsons, embedded into the
     # test binary so the esbuild-bundling validation is hermetic (no node_modules, no net).
     embedsrcs = glob(["testdata/npm/**"]),
-    embed = [":scripting"],
 )

@@ -54,8 +54,10 @@ ts.typescriptDefaults.setCompilerOptions({
   strict: false,
   noEmit: true,
   // ES2022 built-ins only. Deliberately NO "dom": the engine provides no
-  // window/document/fetch/setTimeout/localStorage, so surfacing them would be a
-  // lie — the only host global is `console`, which we declare ourselves below.
+  // window/document/setTimeout/localStorage, and its `fetch` is a small SUBSET of
+  // the WHATWG one — pulling in "dom" would type it as the full `window.fetch` and
+  // lie about (blob/formData/streaming/Request/Headers.set/…). The two host globals
+  // it does provide — `console` and that custom `fetch` — we declare ourselves below.
   lib: ["es2022"],
   // Don't type-check the vendored dayjs .d.ts itself; we only care about the user
   // buffer's diagnostics, and this keeps the worker fast.
@@ -92,18 +94,21 @@ ts.typescriptDefaults.addExtraLib(dayjsTypes, "file:///node_modules/dayjs/index.
 
 // --- Ambient script-environment types ------------------------------------------
 // A SCRIPT (no import/export) so these are GLOBAL in the scratch module. Describes
-// exactly what the RunScript scenario profile grants: a buffered `console` and
-// nothing else (no capabilities, no request/vars/env inputs — those arrive when
-// generators/middleware are wired up; typing them now would be a lie). `console`
-// is safe to declare because `lib: ["es2022"]` above excludes the DOM's Console.
+// what the engine gives every run: a buffered `console` and a browser-style `fetch`
+// (network is on for ALL scripts — there is no capability grant). It intentionally
+// omits request/vars/env inputs, which arrive when generators/middleware are wired
+// up. `console`, `fetch`, and the fetch types are a CUSTOM shim — not the DOM's —
+// so they mirror only what the engine actually implements; this is safe (no
+// duplicate-identifier clash) because `lib: ["es2022"]` above excludes the DOM.
 const ENV_DTS = `
 /**
  * grpcview scripting environment — QuickJS compiled to WebAssembly.
  *
  * The scratch buffer is evaluated as an ES module: top-level \`await\` is allowed,
  * and the script's VALUE is its LAST top-level expression (there is no
- * \`return\` — the trailing expression is the result). It runs with no
- * capabilities and no workspace inputs, so \`console\` is the only host global.
+ * \`return\` — the trailing expression is the result). Its host globals are a
+ * buffered \`console\` and a browser-style \`fetch\` (both declared below); there
+ * are no workspace inputs yet.
  */
 interface Console {
   /** Buffered at level "debug". */
@@ -118,5 +123,37 @@ interface Console {
   error(...data: unknown[]): void;
 }
 declare const console: Console;
+
+/** The case-insensitive header bag on a fetch \`Response\`. */
+interface Headers {
+  /** The header's comma-joined value, or null if absent. Name is case-insensitive. */
+  get(name: string): string | null;
+  has(name: string): boolean;
+  forEach(callback: (value: string, name: string) => void): void;
+}
+type HeadersInit = Record<string, string> | [string, string][] | Headers;
+/** Options for \`fetch\`. Only these fields are honored by the engine. */
+interface RequestInit {
+  method?: string;
+  headers?: HeadersInit;
+  /** Request body; a non-string is coerced with String(). */
+  body?: string;
+}
+/** The subset of the WHATWG Response the engine reconstructs. */
+interface Response {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly statusText: string;
+  readonly url: string;
+  readonly headers: Headers;
+  text(): Promise<string>;
+  json(): Promise<any>;
+}
+/**
+ * Perform an HTTP request. Enabled for EVERY script — there is no capability
+ * grant to network. The request is bounded by the run's wall-clock budget; a bad
+ * URL or transport failure REJECTS the promise (fetch never throws synchronously).
+ */
+declare function fetch(input: string, init?: RequestInit): Promise<Response>;
 `;
 ts.typescriptDefaults.addExtraLib(ENV_DTS, "file:///grpcview-scripts-env.d.ts");

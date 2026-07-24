@@ -304,16 +304,17 @@ var (
 
 // ---- Gate 1: the capability resolve/load plugin ----------------------------------
 //
-// node:* (and the bare fs/path/net aliases libraries use) are intercepted here BEFORE
+// node:* (and the bare fs/path aliases libraries use) are intercepted here BEFORE
 // esbuild's own resolver. An inert module (path) always resolves; a capability module
-// (fs/net) resolves only if the grant permits it, otherwise the resolve fails and the
+// (fs) resolves only if the grant permits it, otherwise the resolve fails and the
 // bundle cannot be assembled. The check runs for the user's imports AND any transitive
 // dependency's imports, so a dependency cannot smuggle in an ungranted capability.
 
 const capNamespace = "grpcview-cap"
 
-// capFilter matches node:fs / fs / node:path / path / node:net / net.
-var capFilter = `^(node:)?(fs|path|net)$`
+// capFilter matches node:fs / fs / node:path / path. (Network is not here — `fetch` is an
+// unconditional global, see net.go — so there is no node:net module to resolve.)
+var capFilter = `^(node:)?(fs|path)$`
 
 // capModule is one entry in the capability/shim registry. A nil `granted` marks an INERT
 // module (pure computation, always injected); a non-nil `granted` marks a CAPABILITY
@@ -336,16 +337,11 @@ export default { join, basename };`
 	capShimFS = `const readFileSync = (p, _enc) => globalThis.__grpcview_fs_read(String(p));
 export { readFileSync };
 export default { readFileSync };`
-
-	capShimNet = `const fetch = (u) => globalThis.__grpcview_net_fetch(String(u));
-export { fetch };
-export default { fetch };`
 )
 
 var capModules = map[string]capModule{
 	"path": {shim: capShimPath}, // inert
 	"fs":   {shim: capShimFS, granted: func(g Grant) bool { return g.FS != nil }},
-	"net":  {shim: capShimNet, granted: func(g Grant) bool { return g.Net != nil }},
 }
 
 // plugins is the ordered esbuild plugin chain for one run. The capability plugin (Gate 1)

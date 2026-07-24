@@ -316,9 +316,10 @@ func (i *Instance) evalRaw(ctx context.Context, src string, async, asJSON bool) 
 			return 0, nil, err
 		}
 		if st == statusPending {
-			// The queue drained but the top-level promise is still pending, and there
-			// are no outstanding host tickets to advance it (net is stubbed). Waiting
-			// for the deadline would be pointless — report it now.
+			// The queue drained but the top-level promise is still pending. Every host
+			// call (fs, fetch) is synchronous and has returned by now, so nothing
+			// outstanding can advance the promise — waiting for the deadline would be
+			// pointless. Report it now.
 			return 0, nil, ErrUnsettled
 		}
 	}
@@ -374,8 +375,8 @@ func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Inpu
 
 // ---- Capability layer ------------------------------------------------------------
 //
-// grpcview runs UNTRUSTED scripts, so capabilities are default-DENY and cross into
-// real I/O only through two independent gates, both derived from one Grant:
+// grpcview runs UNTRUSTED scripts. The FILESYSTEM capability is default-DENY and crosses
+// into real I/O only through two independent gates, both derived from one Grant:
 //
 //	Gate 1 (bundle time, the esbuild bundler — bundler.go): the shim for a capability
 //	  is injected into the script ONLY if granted. Ungranted => `import fs from "node:fs"`
@@ -385,12 +386,15 @@ func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Inpu
 //
 // Either gate alone denies. Enforcement (grant + scope + syscall) is entirely in Go,
 // outside the sandbox, so the module never holds a capability the script can reach.
+//
+// NETWORK is the exception: `fetch` is an unconditional global for every run, gated by
+// neither the Grant nor Gate 1 (there is no capability manager yet). See net.go.
 
 // Grant is the set of capabilities a single script run is allowed. A nil sub-grant
-// means that capability is not granted.
+// means that capability is not granted. Note network is NOT here: `fetch` is an
+// unconditional global for every run (see net.go), gated by no grant at all.
 type Grant struct {
-	FS  *FSGrant  // filesystem read, scoped to an allowlist; nil => no fs
-	Net *NetGrant // network (stubbed in this spike); nil => no net
+	FS *FSGrant // filesystem read, scoped to an allowlist; nil => no fs
 }
 
 // FSGrant scopes the fs capability to an allowlist of paths. Scope lives HERE, in Go:
@@ -412,9 +416,6 @@ func (f *FSGrant) allows(cleaned string) bool {
 	}
 	return false
 }
-
-// NetGrant marks the (stubbed) net capability as granted; its presence is the grant.
-type NetGrant struct{}
 
 // fsRead is the actual privileged operation: grant check, scope check, then the
 // syscall — all in Go. Returned errors become catchable JS exceptions in the guest.
@@ -499,18 +500,6 @@ func hostFSRead(ctx context.Context, mod api.Module, stack []uint64) {
 		return
 	}
 	stack[0] = uint64(writeResult(ctx, mod, tagValue, data))
-}
-
-// hostNetFetch is a STUB proving the same ABI carries a second capability. Granted, it
-// echoes; ungranted, it refuses. A real net cap would do the request off-thread and
-// resolve a JS Promise via the host-driven job pump (evalRaw already drives it).
-func hostNetFetch(ctx context.Context, mod api.Module, stack []uint64) {
-	req, _ := mod.Memory().Read(uint32(stack[0]), uint32(stack[1]))
-	if grantFromContext(ctx).Net == nil {
-		stack[0] = uint64(writeResult(ctx, mod, tagThrow, []byte(`capability "net" not granted`)))
-		return
-	}
-	stack[0] = uint64(writeResult(ctx, mod, tagValue, []byte("stub-fetched:"+string(req))))
 }
 
 // hostConsole is the fire-and-forget log sink: read the formatted line out of guest

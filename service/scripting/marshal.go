@@ -94,6 +94,7 @@ const preludeHelpers = `var __ff=function f(o){if(o&&typeof o==="object"){` +
 func buildInputPrelude(in Input) string {
 	var b strings.Builder
 	b.WriteString(preludeHelpers)
+	b.WriteString(netFetchPrelude) // the unconditional global `fetch` (net.go)
 
 	req := in.Request
 	if req.Metadata == nil {
