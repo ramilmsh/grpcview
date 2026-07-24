@@ -1,12 +1,11 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import clsx from "clsx";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "danger";
 
 const VARIANT: Record<Variant, string> = {
   primary: "btn-primary",
   secondary: "btn-secondary",
-  ghost: "btn-ghost",
   danger: "btn-danger",
 };
 

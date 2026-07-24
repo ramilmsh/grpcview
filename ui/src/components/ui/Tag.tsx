@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 
-type TagVariant = "accent" | "accent-2" | "neutral" | "outline";
+type TagVariant = "accent" | "neutral";
 
 export function Tag({
   variant = "neutral",

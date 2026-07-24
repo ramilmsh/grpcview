@@ -7,7 +7,7 @@ import type { GeneratorDef } from "./generator-libs";
 // validity from Monaco's TS markers. Metadata is authored as TypeScript — a single hidden-wrapper
 // module whose returned `{ [key: string]: string[] }` object becomes the outgoing gRPC metadata
 // (multi-valued) — replacing the old key/value grid and the metadata `{{ }}` tokens (chips,
-// enable toggles, add/remove, openBinding are all gone). Mirrors MessageTab.
+// enable toggles, add/remove, and the binding editor are all gone). Mirrors MessageTab.
 export function MetadataTab({
   metadata,
   onChange,

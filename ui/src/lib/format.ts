@@ -159,8 +159,9 @@ export const prettyBody = (bytes: Uint8Array): string => {
 // gone. What remains here is RESPONSE-side: rendering a received Struct's values for display.
 
 // metadataValueToString renders a metadata value for display: list values
-// (multi-valued metadata) are comma-joined; scalars are stringified.
-export const metadataValueToString = (value: unknown): string =>
+// (multi-valued metadata) are comma-joined; scalars are stringified. Internal to
+// metadataEntries below.
+const metadataValueToString = (value: unknown): string =>
   Array.isArray(value)
     ? value.map((v) => String(v)).join(", ")
     : String(value ?? "");
