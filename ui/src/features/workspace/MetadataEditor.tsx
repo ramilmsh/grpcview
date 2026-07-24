@@ -14,6 +14,9 @@ import { META_PREFIX_LINES, META_SUFFIX_LINES, isCanonical } from "./metadata-wr
 // generator-libs.ts). scope="metadata" keeps the per-generator module + globals URIs distinct from
 // the body editor's, so one editor's dispose never yanks the other's libs.
 import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
+// Dev/verification hook: register this editor by its model URI on window.__grpcviewEditors (there
+// is no single global monaco). App code never reads it.
+import { registerEditorForDebug } from "@/lib/editor-debug";
 
 // The request metadata is authored as TypeScript: a generator whose returned {[key]: string[]}
 // object becomes the outgoing gRPC metadata (multi-valued). It mounts language="typescript" on a
@@ -53,8 +56,9 @@ function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
   ];
 }
 
-// Hide the wrapper lines (idempotent; re-call after setValue and after any object line-count
-// change). Also nudges the cursor off a hidden prefix line if it landed there.
+// Hide the wrapper lines (idempotent; re-call after setValue, after any object line-count change,
+// and on relayout — hidden areas live on the editor, not the model, so a visibility/size
+// transition drops them). Also nudges the cursor off a hidden prefix line if it landed there.
 function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor) {
   const model = editor.getModel();
   const ha = editor as unknown as HasHiddenAreas;
@@ -96,14 +100,19 @@ export function MetadataEditor({
   // never clobbers the buffer mid-typing (onChange keeps `data` === buffer).
   useEffect(() => {
     const ed = editorRef.current;
-    if (ed && ed.getValue() !== data) {
+    if (!ed) return;
+    if (ed.getValue() !== data) {
       suppressChange.current = true;
       ed.setValue(data);
       suppressChange.current = false;
-      // Hidden areas do NOT survive setValue — re-hide and reset the backstop snapshot.
+      // Hidden areas do NOT survive setValue — reset the backstop snapshot.
       lastGood.current = data;
-      applyHidden(ed);
     }
+    // Re-hide UNCONDITIONALLY. On a view/subtab REMOUNT the model is cached by path so
+    // getValue() already equals data (the setValue branch is skipped), yet the fresh editor
+    // instance starts with NO hidden areas — re-hiding here (idempotent) covers that remount
+    // case as well as the post-setValue reload.
+    applyHidden(ed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey]);
 
@@ -171,27 +180,51 @@ export function MetadataEditor({
 
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
-    // ⌘S / Ctrl+S formats only the visible object range and re-hides (a full-document format
-    // reflows the wrapper across the hidden boundary).
+    registerEditorForDebug(TS_MODEL_URI, editor);
+    // ⌘S / Ctrl+S formats. Format only the visible object range, then dedent one level and re-hide.
+    // (A full-document format reflows the wrapper across the hidden boundary; a range format of the
+    // object over-indents it — see the outdent step below.)
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
       const model = editor.getModel();
       if (!model) return;
-      const { first, last } = metaBounds(model);
-      editor.setSelection({
-        startLineNumber: first,
-        startColumn: 1,
-        endLineNumber: last,
-        endColumn: model.getLineMaxColumn(last),
-      });
-      void Promise.resolve(editor.getAction("editor.action.formatSelection")?.run()).then(() =>
-        applyHidden(editor)
-      );
+      // Select the visible object range [first, last], recomputed each call (formatting can change
+      // the line count).
+      const selectObject = () => {
+        const { first, last } = metaBounds(model);
+        editor.setSelection({
+          startLineNumber: first,
+          startColumn: 1,
+          endLineNumber: last,
+          endColumn: model.getLineMaxColumn(last),
+        });
+      };
+      selectObject();
+      void Promise.resolve(editor.getAction("editor.action.formatSelection")?.run())
+        .then(() => {
+          // formatSelection reindents the object to match its nesting one level inside the hidden
+          // `=> (` wrapper, shifting the whole visible region right by one indent. Re-select and
+          // OUTDENT once to pull the base back to column 0 (relative nesting preserved; outdent
+          // clamps at column 0, so repeated ⌘S is stable and the empty seed stays put). The wrapper
+          // lines stay outside the selection, so the model remains canonical (Layer 3 no-ops).
+          selectObject();
+          return Promise.resolve(editor.getAction("editor.action.outdentLines")?.run());
+        })
+        .then(() => applyHidden(editor));
     });
 
     // Hide the wrapper lines + guard their integrity (the module is always canonical, migrated
     // on load).
     lastGood.current = editor.getValue();
     applyHidden(editor);
+
+    // Re-hide on relayout. setHiddenAreas state lives on the EDITOR (viewModel), not the model,
+    // so when this editor mounts inside a hidden/zero-size container (a view or subtab switch
+    // remounts it) and the container later becomes visible, monaco's first real layout re-projects
+    // the lines and DROPS the hidden areas set just above — leaving the wrapper prefix/suffix
+    // visible until the next edit. Re-hiding on every layout change closes that window. Idempotent:
+    // monaco short-circuits an identical setHiddenAreas (no re-projection, no view events), so this
+    // never re-triggers a layout — no loop. Tied to the editor, so disposed when it is.
+    editor.onDidLayoutChange(() => applyHidden(editor));
 
     // Layer 1 (proactive) — swallow the two boundary keystrokes that would merge a visible object
     // line into a hidden wrapper line (Backspace at object start, Delete at object end).

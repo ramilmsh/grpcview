@@ -20,6 +20,9 @@ import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
 // with its INFERRED signature. Centralizes the name-safety / failure-isolation / body-vs-metadata
 // URI invariants so the body + metadata editors can't diverge on them.
 import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
+// Dev/verification hook: register this editor by its model URI on window.__grpcviewEditors (there
+// is no single global monaco). App code never reads it.
+import { registerEditorForDebug } from "@/lib/editor-debug";
 
 // The request body is ALWAYS authored as TypeScript (ts-request-body-plan §T1–§T4 + the all-JS
 // phase): the body is a TS/JS generator whose returned object becomes the message. It mounts
@@ -62,8 +65,9 @@ function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
   ];
 }
 
-// Hide the wrapper lines (idempotent; re-call after setValue and after any body line-count
-// change). Also nudges the cursor off a hidden prefix line if it landed there.
+// Hide the wrapper lines (idempotent; re-call after setValue, after any body line-count change,
+// and on relayout — hidden areas live on the editor, not the model, so a visibility/size
+// transition drops them). Also nudges the cursor off a hidden prefix line if it landed there.
 function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor) {
   const model = editor.getModel();
   const ha = editor as unknown as HasHiddenAreas;
@@ -123,15 +127,20 @@ export function Editor({
   // it never clobbers the buffer mid-typing (onChange keeps `data` === buffer).
   useEffect(() => {
     const ed = editorRef.current;
-    if (ed && ed.getValue() !== data) {
+    if (!ed) return;
+    if (ed.getValue() !== data) {
       suppressChange.current = true;
       ed.setValue(data);
       suppressChange.current = false;
-      // Hidden areas do NOT survive setValue — re-hide the wrapper and reset the
-      // structural backstop's last-good snapshot to the freshly loaded body.
+      // Hidden areas do NOT survive setValue — reset the structural backstop's
+      // last-good snapshot to the freshly loaded body.
       lastGood.current = data;
-      applyHidden(ed);
     }
+    // Re-hide UNCONDITIONALLY. On a view/subtab REMOUNT the model is cached by path so
+    // getValue() already equals data (the setValue branch is skipped), yet the fresh editor
+    // instance starts with NO hidden areas — re-hiding here (idempotent) covers that remount
+    // case as well as the post-setValue reload.
+    applyHidden(ed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey]);
 
@@ -230,27 +239,51 @@ export function Editor({
 
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
-    // ⌘S / Ctrl+S formats. Format only the visible BODY range and re-hide — a full-document
-    // format reflows the wrapper across the hidden boundary.
+    registerEditorForDebug(TS_MODEL_URI, editor);
+    // ⌘S / Ctrl+S formats. Format only the visible BODY range, then dedent one level and re-hide.
+    // (A full-document format reflows the wrapper across the hidden boundary; a range format of the
+    // body over-indents it — see the outdent step below.)
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
       const model = editor.getModel();
       if (!model) return;
-      const { first, last } = bodyBounds(model);
-      editor.setSelection({
-        startLineNumber: first,
-        startColumn: 1,
-        endLineNumber: last,
-        endColumn: model.getLineMaxColumn(last),
-      });
-      void Promise.resolve(editor.getAction("editor.action.formatSelection")?.run()).then(() =>
-        applyHidden(editor)
-      );
+      // Select the visible body range [first, last], recomputed each call (formatting can change
+      // the line count).
+      const selectBody = () => {
+        const { first, last } = bodyBounds(model);
+        editor.setSelection({
+          startLineNumber: first,
+          startColumn: 1,
+          endLineNumber: last,
+          endColumn: model.getLineMaxColumn(last),
+        });
+      };
+      selectBody();
+      void Promise.resolve(editor.getAction("editor.action.formatSelection")?.run())
+        .then(() => {
+          // formatSelection reindents the body to match its nesting one level inside the hidden
+          // `=> (` wrapper, shifting the whole visible region right by one indent. Re-select and
+          // OUTDENT once to pull the base back to column 0 (relative nesting preserved; outdent
+          // clamps at column 0, so repeated ⌘S is stable and the empty seed stays put). The wrapper
+          // lines stay outside the selection, so the model remains canonical (Layer 3 no-ops).
+          selectBody();
+          return Promise.resolve(editor.getAction("editor.action.outdentLines")?.run());
+        })
+        .then(() => applyHidden(editor));
     });
 
     // Hide the wrapper lines + guard their integrity. onMount is captured at mount; the body is
     // always a canonical hidden-wrapper module (migrated on load), so this always applies.
     lastGood.current = editor.getValue();
     applyHidden(editor);
+
+    // Re-hide on relayout. setHiddenAreas state lives on the EDITOR (viewModel), not the model,
+    // so when this editor mounts inside a hidden/zero-size container (a view or subtab switch
+    // remounts it) and the container later becomes visible, monaco's first real layout re-projects
+    // the lines and DROPS the hidden areas set just above — leaving the wrapper prefix/suffix
+    // visible until the next edit. Re-hiding on every layout change closes that window. Idempotent:
+    // monaco short-circuits an identical setHiddenAreas (no re-projection, no view events), so this
+    // never re-triggers a layout — no loop. Tied to the editor, so disposed when it is.
+    editor.onDidLayoutChange(() => applyHidden(editor));
 
     // Layer 1 (proactive) — swallow the two boundary keystrokes that would merge a visible
     // body line into a hidden wrapper line (Backspace at body start, Delete at body end).
