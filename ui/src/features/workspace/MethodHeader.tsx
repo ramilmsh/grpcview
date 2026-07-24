@@ -17,23 +17,29 @@ export function MethodHeader({
   services,
   kind,
   reflection,
+  targetOverride,
   invoking,
   onChangeMethod,
   onRename,
   onInvoke,
+  onTargetChange,
 }: {
   request: Request;
   services: Service[];
   kind: MethodKind;
   reflection: Server | null;
+  targetOverride?: Server;
   invoking: boolean;
   onChangeMethod: (service: string, method: string) => void;
   onRename: (name: string) => void;
   onInvoke: () => void;
+  onTargetChange: (t: Server) => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const canInvoke = !!reflection;
+  // An explicit per-request target lets you invoke even without a saved source
+  // (the schema still reflects off that target — resolveMethod handles it).
+  const canInvoke = !!(targetOverride ?? reflection);
 
   const onPick = (service: Service, method: Method) => {
     onChangeMethod(serviceName(service), method.name);
@@ -135,7 +141,7 @@ export function MethodHeader({
             style={{ padding: "6px 16px", fontSize: 14, gap: 7 }}
             onClick={onInvoke}
             disabled={invoking || !canInvoke}
-            title={!canInvoke ? "Add a reflection source to invoke" : "Invoke"}
+            title={!canInvoke ? "Set a target or add a reflection source to invoke" : "Invoke"}
           >
             <Play weight="fill" size={13} />
             {invoking ? "Invoking…" : "Invoke"}
@@ -143,7 +149,7 @@ export function MethodHeader({
         </div>
       </div>
 
-      <TargetBar target={reflection} />
+      <TargetBar reflection={reflection} override={targetOverride} onChange={onTargetChange} />
 
       <MethodPickerModal
         open={pickerOpen}

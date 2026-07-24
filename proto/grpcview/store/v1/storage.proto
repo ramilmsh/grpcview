@@ -90,6 +90,10 @@ message Request {
   // UTF-8 string so request.json stays human-readable. The legacy draft_metadata
   // Struct above is kept only for reading requests written before this field.
   string draft_metadata_script = 8;
+  // target is the optional per-request invoke destination. Unset means "use the
+  // workspace's first reflection source" (resolveTarget). Mirrors the wire
+  // grpcview.v1.Request.target.
+  Target target = 9;
 }
 
 // ItemMeta is the identity block embedded in every managed tree file. The
@@ -115,6 +119,18 @@ message DescriptorSource {
 // Reflection addresses a server to reflect schemas from. Disk-local (not the
 // wire grpcview.v1.Server) so this package stays decoupled from the API.
 message Reflection {
+  string host = 1;
+  int32 port = 2;
+  bool tls = 3;
+}
+
+// Target is a per-request invoke destination (host:port + TLS) — where this
+// request's call is sent, independent of the descriptor/reflection source it
+// resolves schema from. The first slice of the storage.md §6 target-vs-source
+// split (inline only; no refs/inheritance yet). Structurally identical to
+// Reflection but kept a distinct message: the two are different concepts
+// (invoke destination vs schema source) and evolve independently.
+message Target {
   string host = 1;
   int32 port = 2;
   bool tls = 3;

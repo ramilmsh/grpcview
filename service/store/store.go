@@ -29,6 +29,8 @@ import (
 	"sync"
 
 	"google.golang.org/protobuf/types/known/structpb"
+
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
 // Sentinel errors. Callers (the RPC handlers) map these to transport error
@@ -71,6 +73,11 @@ type RequestPatch struct {
 	DraftMetadataScript *string
 	Middleware          []string
 	SetMiddleware       bool
+	// Target patches the per-request invoke destination. Like Middleware it is a
+	// message with no pointer-nil "unset", so SetTarget is its set-flag: when true
+	// the target is replaced by Target (nil clears it); when false it is unchanged.
+	Target    *grpcviewv1.Server
+	SetTarget bool
 }
 
 // ScriptPatch is a partial update to a script. A nil field is left unchanged; a

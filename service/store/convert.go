@@ -27,6 +27,7 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 		DraftMetadataScript: dr.GetDraftMetadataScript(),
 		Middleware:          dr.GetMiddleware(),
 		BodyLanguage:        diskToWireBodyLanguage(dr.GetBodyLanguage()),
+		Target:              targetToServer(dr.GetTarget()),
 	}
 }
 
@@ -41,6 +42,7 @@ func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Req
 		DraftMetadataScript: wr.GetDraftMetadataScript(),
 		Middleware:          wr.GetMiddleware(),
 		BodyLanguage:        wireToDiskBodyLanguage(wr.GetBodyLanguage()),
+		Target:              serverToTarget(wr.GetTarget()),
 	}
 }
 
@@ -185,24 +187,49 @@ func wireToDiskSource(ws *grpcviewv1.DescriptorSource) (*grpcviewstorev1.Descrip
 	}
 }
 
+// serverFromHostPortTLS builds a wire Server from the host/port/tls triple every
+// on-disk server-shaped message carries (a source's Reflection, a request's
+// Target). tls=true carries an empty TLS block; false leaves it nil.
+func serverFromHostPortTLS(host string, port int32, tls bool) *grpcviewv1.Server {
+	s := &grpcviewv1.Server{Host: host, Port: port}
+	if tls {
+		s.Tls = &grpcviewv1.Server_TLS{}
+	}
+	return s
+}
+
+// hostPortTLSFromServer decomposes a wire Server into the host/port/tls triple
+// the on-disk server-shaped messages store.
+func hostPortTLSFromServer(s *grpcviewv1.Server) (host string, port int32, tls bool) {
+	return s.GetHost(), s.GetPort(), s.GetTls() != nil
+}
+
 func reflectionToServer(r *grpcviewstorev1.Reflection) *grpcviewv1.Server {
 	if r == nil {
 		return nil
 	}
-	s := &grpcviewv1.Server{Host: r.GetHost(), Port: r.GetPort()}
-	if r.GetTls() {
-		s.Tls = &grpcviewv1.Server_TLS{}
-	}
-	return s
+	return serverFromHostPortTLS(r.GetHost(), r.GetPort(), r.GetTls())
 }
 
 func serverToReflection(s *grpcviewv1.Server) *grpcviewstorev1.Reflection {
 	if s == nil {
 		return nil
 	}
-	return &grpcviewstorev1.Reflection{
-		Host: s.GetHost(),
-		Port: s.GetPort(),
-		Tls:  s.GetTls() != nil,
+	host, port, tls := hostPortTLSFromServer(s)
+	return &grpcviewstorev1.Reflection{Host: host, Port: port, Tls: tls}
+}
+
+func targetToServer(t *grpcviewstorev1.Target) *grpcviewv1.Server {
+	if t == nil {
+		return nil
 	}
+	return serverFromHostPortTLS(t.GetHost(), t.GetPort(), t.GetTls())
+}
+
+func serverToTarget(s *grpcviewv1.Server) *grpcviewstorev1.Target {
+	if s == nil {
+		return nil
+	}
+	host, port, tls := hostPortTLSFromServer(s)
+	return &grpcviewstorev1.Target{Host: host, Port: port, Tls: tls}
 }

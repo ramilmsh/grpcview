@@ -627,3 +627,120 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 		t.Fatalf("middleware after clear = %v, want empty", got)
 	}
 }
+
+// TestRequestTargetConvertRoundTrip covers the per-request target bridging in
+// convert.go: a wire Request.target survives wire→disk→wire with TLS on and off
+// (the on-disk Target carries the decomposed tls bool, which re-inflates to an
+// empty TLS block iff set), and a nil target stays nil — the reflection-source
+// default — in both directions.
+func TestRequestTargetConvertRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		tls  bool
+	}{
+		{"insecure", false},
+		{"tls", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wr := &grpcviewv1.Request{
+				Name:    "R",
+				Service: "s.S",
+				Method:  "M",
+				Target:  serverFromHostPortTLS("api.example.com", 8443, tc.tls),
+			}
+			// wire → disk: the triple is decomposed, tls flattened to a bool.
+			dr := wireToDiskRequest("R", wr)
+			if got := dr.GetTarget(); got == nil || got.GetHost() != "api.example.com" || got.GetPort() != 8443 || got.GetTls() != tc.tls {
+				t.Fatalf("disk target = %+v, want host/port/tls api.example.com/8443/%v", got, tc.tls)
+			}
+			// disk → wire: the tls bool re-inflates to an (empty) TLS block iff set.
+			back := diskToWireRequest("R", dr).GetTarget()
+			if back.GetHost() != "api.example.com" || back.GetPort() != 8443 {
+				t.Errorf("wire target host/port = %s:%d, want api.example.com:8443", back.GetHost(), back.GetPort())
+			}
+			if (back.GetTls() != nil) != tc.tls {
+				t.Errorf("wire target tls set = %v, want %v", back.GetTls() != nil, tc.tls)
+			}
+		})
+	}
+
+	// A request with no target stays nil both ways (unset = reflection default).
+	t.Run("nil", func(t *testing.T) {
+		if dr := wireToDiskRequest("R", &grpcviewv1.Request{Name: "R"}); dr.GetTarget() != nil {
+			t.Errorf("disk target = %+v, want nil for an unset wire target", dr.GetTarget())
+		}
+		if back := diskToWireRequest("R", &grpcviewstorev1.Request{}); back.GetTarget() != nil {
+			t.Errorf("wire target = %+v, want nil for an unset disk target", back.GetTarget())
+		}
+	})
+}
+
+// TestUpdateRequestTarget covers the per-request target patch, mirroring
+// TestUpdateRequestMiddleware: the set-flag distinguishes "set" from "leave
+// unchanged", the target persists in request.json (with the tls bool) and
+// round-trips through a fresh Store, an unrelated patch leaves it intact, and
+// SetTarget with a nil Target clears it (reverting to the reflection default).
+func TestUpdateRequestTarget(t *testing.T) {
+	base := t.TempDir()
+	ctx := context.Background()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	coll, err := New(base, discard).Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		t.Fatalf("EnsureCreated: %v", err)
+	}
+	if err := coll.CreateRequest(ctx, nil, "Echo", "echo.v1.EchoService", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	targetOf := func(t *testing.T, c *Collection) *grpcviewv1.Server {
+		t.Helper()
+		req := childByName(rootItems(t, c, ctx), "Echo")
+		if req == nil || req.GetRequest() == nil {
+			t.Fatalf("request Echo not found")
+		}
+		return req.GetRequest().GetTarget()
+	}
+
+	// Set the target (TLS on).
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{SetTarget: true, Target: serverFromHostPortTLS("api.example.com", 8443, true)}); err != nil {
+		t.Fatalf("UpdateRequest set target: %v", err)
+	}
+	if got := targetOf(t, coll); got == nil || got.GetHost() != "api.example.com" || got.GetPort() != 8443 || got.GetTls() == nil {
+		t.Fatalf("target after set = %+v, want api.example.com:8443 tls", got)
+	}
+	// On-disk shape: the target (with the tls bool) lands in request.json.
+	rf := &grpcviewstorev1.Request{}
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
+	if rf.GetTarget().GetHost() != "api.example.com" || rf.GetTarget().GetPort() != 8443 || !rf.GetTarget().GetTls() {
+		t.Fatalf("request.json target = %+v, want api.example.com:8443 tls", rf.GetTarget())
+	}
+
+	// An unrelated patch (set-flag off) leaves the target untouched.
+	body := `{"m":1}`
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{DraftBody: &body}); err != nil {
+		t.Fatalf("UpdateRequest body only: %v", err)
+	}
+	if got := targetOf(t, coll); got == nil || got.GetHost() != "api.example.com" {
+		t.Fatalf("target after unrelated patch = %+v, want unchanged", got)
+	}
+
+	// The target survives a fresh reload from a brand-new Store over the same directory.
+	reloaded, err := New(base, discard).Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := targetOf(t, reloaded); got == nil || got.GetPort() != 8443 {
+		t.Fatalf("reloaded target = %+v, want api.example.com:8443", got)
+	}
+
+	// SetTarget with a nil Target clears it (reverting to the reflection default).
+	if err := reloaded.UpdateRequest(ctx, nil, "Echo", RequestPatch{SetTarget: true, Target: nil}); err != nil {
+		t.Fatalf("UpdateRequest clear target: %v", err)
+	}
+	if got := targetOf(t, reloaded); got != nil {
+		t.Fatalf("target after clear = %+v, want nil", got)
+	}
+}

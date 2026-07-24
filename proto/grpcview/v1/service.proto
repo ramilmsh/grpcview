@@ -93,6 +93,13 @@ message UpdateRequestRequest {
   // like draft_body); the legacy draft_metadata Struct is kept only for reading
   // old requests. Unset leaves it unchanged, an empty-but-present value clears it.
   optional string draft_metadata_script = 12;
+  // target patches the request's per-request invoke destination (host:port +
+  // TLS). Like update_middleware, it needs a set-flag to distinguish "leave
+  // unchanged" from "clear": when update_target is true the target is replaced
+  // by `target` (a nil `target` clears it, reverting to the reflection-source
+  // default); when false/unset it is left unchanged.
+  optional bool update_target = 13;
+  optional Server target = 14;
 }
 
 message UpdateRequestResponse {

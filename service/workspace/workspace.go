@@ -470,6 +470,8 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 		DraftMetadataScript: request.Msg.DraftMetadataScript, // optional *string, like DraftBody
 		Middleware:          request.Msg.GetMiddleware(),
 		SetMiddleware:       request.Msg.GetUpdateMiddleware(),
+		Target:              request.Msg.GetTarget(),
+		SetTarget:           request.Msg.GetUpdateTarget(),
 	}
 	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
 		return coll.UpdateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)

@@ -114,6 +114,12 @@ message Request {
   // draft_metadata (kept above only for reading requests saved before this
   // field). Mirrors draft_body — a plain UTF-8 string.
   string                    draft_metadata_script = 9;
+  // target overrides where this request's invoke is sent (host:port + TLS).
+  // Unset means "use the workspace's first reflection source" (see
+  // resolveTarget in invoke.go). The first slice of the storage.md §6
+  // target-vs-source split: a plain per-request inline target — no
+  // refs/inheritance yet.
+  optional Server           target                = 10;
 }
 
 // Item is a single element in the treeview

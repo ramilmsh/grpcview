@@ -2,7 +2,7 @@
 // the active tab, in-progress editor drafts, and ephemeral Invoke results. Server
 // data never lives here — that is the react-query cache (workspace-query.ts).
 import { create } from "zustand";
-import type { Request_Response } from "@grpcview/v1/workspace_pb";
+import type { Request_Response, Server } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "./format";
 import { itemKey } from "./format";
 
@@ -28,6 +28,11 @@ export interface Draft {
   // (the persisted primary — see RequestWorkspace); messages[1..] are ephemeral
   // extras the user adds before sending. Unused by unary / server-streaming.
   messages?: string[];
+  // Per-request invoke target override (host:port + TLS). Undefined = "follow the
+  // workspace's first reflection source" (the effective default). Seeded from the
+  // persisted request.target, set when the user edits the target bar, and sent as
+  // InvokeRequest.target on invoke (undefined → backend defaults to reflection).
+  target?: Server;
 }
 
 // One received streaming payload, kept for a response card: body is the pretty

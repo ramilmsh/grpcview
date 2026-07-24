@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { BodyLanguage, ScriptKind } from "@grpcview/v1/workspace_pb";
-import type { History } from "@grpcview/v1/workspace_pb";
+import type { History, Server } from "@grpcview/v1/workspace_pb";
 import {
   useWorkspace,
   useRootItems,
@@ -71,6 +71,8 @@ export function RequestWorkspace() {
         body: primary,
         metadata,
         messages: [primary],
+        // Per-request invoke target override; undefined follows the reflection source.
+        target: request.target,
       });
     }
   }, [activeKey, request, seedDraft]);
@@ -127,12 +129,22 @@ export function RequestWorkspace() {
   // the single source of truth for the persisted message — with any ephemeral
   // extras appended, so the two can never drift.
   const messages = draft?.messages ? [body, ...draft.messages.slice(1)] : [body];
+  // The invoke target displayed + sent: the per-request override (draft, then the
+  // persisted request.target before the seed effect commits) with a live fallback
+  // to the reflection source handled downstream. Undefined here means "follow the
+  // reflection source" — protobuf-es omits it, so the backend defaults it.
+  const targetOverride = draft?.target ?? request.target;
 
-  // Debounced persistence, one timer per field so a body save and a metadata
-  // save don't cancel each other.
+  // Debounced persistence, one timer per field (distinct slot -> distinct timerKey)
+  // so a body, metadata, and target save never cancel each other.
   const scheduleSave = (
-    slot: "body" | "meta",
-    fields: { draftBody?: string; draftMetadataScript?: string }
+    slot: "body" | "meta" | "target",
+    fields: {
+      draftBody?: string;
+      draftMetadataScript?: string;
+      updateTarget?: boolean;
+      target?: Server;
+    }
   ) => {
     const timerKey = `${key}:${slot}`;
     window.clearTimeout(timers.current[timerKey]);
@@ -164,6 +176,15 @@ export function RequestWorkspace() {
 
   const onChangeMethod = (service: string, method: string) => {
     updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
+  };
+
+  // Editing the target bar sets a full Server override on the draft and debounces
+  // its persistence (updateTarget set-flag; its own timer slot so it doesn't cancel
+  // a pending body/meta save). Clearing back to the reflection default is a future
+  // affordance — an edit always produces a concrete override.
+  const onTargetChange = (t: Server) => {
+    setDraft(key, { target: t });
+    scheduleSave("target", { updateTarget: true, target: t });
   };
 
   // Middleware attach/detach/reorder persists the whole ordered list immediately
@@ -218,6 +239,9 @@ export function RequestWorkspace() {
           // load) — tell the server to eval it. The invoke path reads this off the wire, not the
           // saved Request, so we send it unconditionally regardless of request.bodyLanguage.
           bodyLanguage: BodyLanguage.TYPESCRIPT,
+          // Per-request target override; undefined when none, which protobuf-es omits so the
+          // backend defaults to the workspace's first reflection source (resolveTarget).
+          target: targetOverride,
         },
         {
           // The server persists history before returning, so refresh on success.
@@ -254,6 +278,8 @@ export function RequestWorkspace() {
       // Always TypeScript (mirrors the unary path): every message is a canonical export-default
       // module, so the server evals it. Read off the wire, not the saved Request.
       bodyLanguage: BodyLanguage.TYPESCRIPT,
+      // Per-request target override (mirrors the unary path); undefined → backend default.
+      target: targetOverride,
     };
 
     aborters.current[key]?.abort(); // supersede any prior stream for this key
@@ -327,10 +353,12 @@ export function RequestWorkspace() {
         services={services}
         kind={kind}
         reflection={reflection}
+        targetOverride={targetOverride}
         invoking={!!invokeState?.loading || !!invokeState?.streaming}
         onChangeMethod={onChangeMethod}
         onRename={onRename}
         onInvoke={onInvoke}
+        onTargetChange={onTargetChange}
       />
       <div className="flex" style={{ flex: 1, minHeight: 0 }}>
         <RequestPane

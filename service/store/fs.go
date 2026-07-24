@@ -202,7 +202,7 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	itemDir := filepath.Join(parentDir, ch.slug)
 
-	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware {
+	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware && !patch.SetTarget {
 		return nil
 	}
 	// Reuse the request.json readChildren already decoded (ch.request) rather
@@ -241,6 +241,12 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	// replace it (nil/empty clears; protojson then omits it).
 	if patch.SetMiddleware {
 		dr.Middleware = patch.Middleware
+	}
+	// SetTarget gates the per-request target message (no nil "unset"): replace it
+	// (a nil Server clears it, so protojson omits it and it reads back as the
+	// reflection default).
+	if patch.SetTarget {
+		dr.Target = serverToTarget(patch.Target)
 	}
 	return writeMessage(p, dr)
 }
