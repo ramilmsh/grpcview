@@ -11,7 +11,7 @@
 //	      folder.json          {meta:{name}, items:[child slugs]}
 //	      <slug>/ ...
 //	    <slug>/              a request
-//	      request.json         {meta:{name}, service, method, draftBody?, draftMetadata?}
+//	      request.json         {meta:{name}, service, method, draftBody?, draftMetadataScript?}
 //	  .grpcview/             gitignored local state
 //	    cache/services.json    resolved-schema cache
 //
@@ -27,8 +27,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
-
-	"google.golang.org/protobuf/types/known/structpb"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
@@ -62,11 +60,10 @@ var (
 // true the list is replaced by Middleware (nil/empty clears it); when false the
 // list is left unchanged.
 type RequestPatch struct {
-	Name          *string
-	Service       *string
-	Method        *string
-	DraftBody     *string
-	DraftMetadata *structpb.Struct
+	Name      *string
+	Service   *string
+	Method    *string
+	DraftBody *string
 	// DraftMetadataScript patches the request's metadata source (the TypeScript
 	// module evaluated on invoke). Like DraftBody it is a plain *string: nil
 	// leaves it unchanged, an empty-but-present value clears it.

@@ -343,11 +343,6 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
   draftBody: string;
 
   /**
-   * @generated from field: google.protobuf.Struct draft_metadata = 5;
-   */
-  draftMetadata?: JsonObject | undefined;
-
-  /**
    * @generated from field: repeated grpcview.v1.History history = 6;
    */
   history: History[];
@@ -365,9 +360,8 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
    * draft_metadata_script is the request's metadata authored as a TypeScript
    * module (`export default (): Metadata => ({ ... })`) whose returned
    * {[key: string]: string[]} object is evaluated on invoke to build the
-   * outgoing metadata. It replaces the key/value grid that persisted through
-   * draft_metadata (kept above only for reading requests saved before this
-   * field). Mirrors draft_body — a plain UTF-8 string.
+   * outgoing metadata. It replaces the old key/value metadata grid. Mirrors
+   * draft_body — a plain UTF-8 string.
    *
    * @generated from field: string draft_metadata_script = 9;
    */

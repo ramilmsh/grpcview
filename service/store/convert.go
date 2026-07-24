@@ -12,9 +12,7 @@ import (
 
 // This file maps between the on-disk schema (grpcview.store.v1) and the wire
 // schema (grpcview.v1). The two are intentionally decoupled; conversions here
-// are the single place that knows both. Where a type is genuinely identical on
-// both sides — google.protobuf.Struct for draft metadata — it passes straight
-// through with no copy.
+// are the single place that knows both.
 
 // diskToWireRequest builds a wire Request from a disk Request.
 func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Request {
@@ -23,7 +21,6 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 		Service:             dr.GetService(),
 		Method:              dr.GetMethod(),
 		DraftBody:           dr.GetDraftBody(),
-		DraftMetadata:       dr.GetDraftMetadata(), // Struct: identical on both sides
 		DraftMetadataScript: dr.GetDraftMetadataScript(),
 		Middleware:          dr.GetMiddleware(),
 		Target:              targetToServer(dr.GetTarget()),
@@ -37,7 +34,6 @@ func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Req
 		Service:             wr.GetService(),
 		Method:              wr.GetMethod(),
 		DraftBody:           wr.GetDraftBody(),
-		DraftMetadata:       wr.GetDraftMetadata(),
 		DraftMetadataScript: wr.GetDraftMetadataScript(),
 		Middleware:          wr.GetMiddleware(),
 		Target:              serverToTarget(wr.GetTarget()),

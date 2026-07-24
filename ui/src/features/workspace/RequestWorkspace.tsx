@@ -74,10 +74,8 @@ export function RequestWorkspace() {
       // persisted once the user edits (onBodyChange), mirroring the old seed-on-toggle.
       const primary = migrateBodyToTs(request.draftBody || "{}");
       // Metadata is authored as a canonical TS module now. Seed from the persisted
-      // draft_metadata_script if present; otherwise migrate the legacy draft_metadata Struct
-      // (grid data) to the canonical module. Idempotent + lazy — the migrated form is only
-      // persisted once the user edits (onMetadataChange), mirroring the body seed.
-      const metadata = request.draftMetadataScript || migrateMetadataToTs(request.draftMetadata);
+      // draft_metadata_script if present; otherwise seed an empty canonical module.
+      const metadata = request.draftMetadataScript || migrateMetadataToTs();
       seedDraft(activeKey, {
         body: primary,
         metadata,
@@ -132,10 +130,10 @@ export function RequestWorkspace() {
   // Before the seed effect commits (first render), fall back to the migrated server body so the
   // editor's very first load is already canonical (its reload keys on currentKey, not on `body`).
   const body = draft?.body ?? migrateBodyToTs(request.draftBody || "{}");
-  // Before the seed effect commits (first render), fall back to the persisted script or the
-  // migrated legacy Struct so the editor's very first load is already a canonical module.
+  // Before the seed effect commits (first render), fall back to the persisted script or an
+  // empty canonical module so the editor's very first load is already canonical.
   const metadata =
-    draft?.metadata ?? (request.draftMetadataScript || migrateMetadataToTs(request.draftMetadata));
+    draft?.metadata ?? (request.draftMetadataScript || migrateMetadataToTs());
   // Compose list for cs/bd. The primary (index 0) is always the current body —
   // the single source of truth for the persisted message — with any ephemeral
   // extras appended, so the two can never drift.
@@ -170,7 +168,7 @@ export function RequestWorkspace() {
   };
 
   // Metadata is a canonical TS module string now (like the body), persisted as
-  // draft_metadata_script — we no longer write the draft_metadata Struct.
+  // draft_metadata_script.
   const onMetadataChange = (v: string) => {
     setDraft(key, { metadata: v });
     scheduleSave("meta", { draftMetadataScript: v });

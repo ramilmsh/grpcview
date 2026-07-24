@@ -13,7 +13,6 @@ syntax = "proto3";
 package grpcview.store.v1;
 
 import "google/protobuf/descriptor.proto";
-import "google/protobuf/struct.proto";
 
 option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1;grpcviewstorev1";
 
@@ -63,7 +62,6 @@ message Request {
   ItemMeta meta = 1;
   string service = 2;
   string method = 3;
-  google.protobuf.Struct draft_metadata = 4;
   string draft_body = 5;
   // middleware is the ordered display names of the MIDDLEWARE-kind scripts
   // attached to this request; each runs (in this order) before the call to
@@ -73,8 +71,7 @@ message Request {
   // module whose returned {[key: string]: string[]} object is evaluated on
   // invoke to build the outgoing metadata. Mirrors the wire
   // grpcview.v1.Request.draft_metadata_script and, like draft_body, is an inline
-  // UTF-8 string so request.json stays human-readable. The legacy draft_metadata
-  // Struct above is kept only for reading requests written before this field.
+  // UTF-8 string so request.json stays human-readable.
   string draft_metadata_script = 8;
   // target is the optional per-request invoke destination. Unset means "use the
   // workspace's first reflection source" (resolveTarget). Mirrors the wire

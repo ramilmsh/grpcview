@@ -473,7 +473,6 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 		Service:             request.Msg.Service,
 		Method:              request.Msg.Method,
 		DraftBody:           request.Msg.DraftBody,
-		DraftMetadata:       request.Msg.DraftMetadata,
 		DraftMetadataScript: request.Msg.DraftMetadataScript, // optional *string, like DraftBody
 		Middleware:          request.Msg.GetMiddleware(),
 		SetMiddleware:       request.Msg.GetUpdateMiddleware(),

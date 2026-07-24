@@ -272,11 +272,6 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
   draftBody?: string | undefined;
 
   /**
-   * @generated from field: optional google.protobuf.Struct draft_metadata = 7;
-   */
-  draftMetadata?: JsonObject | undefined;
-
-  /**
    * name renames the request (its display name). Unset leaves the name unchanged;
    * a rename that collides with a sibling fails with FailedPrecondition.
    *
@@ -305,8 +300,7 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
    * module (`export default (): Metadata => ({ ... })`) whose returned
    * {[key: string]: string[]} object is evaluated on invoke to build the
    * outgoing metadata. It mirrors draft_body's plumbing (a plain string patched
-   * like draft_body); the legacy draft_metadata Struct is kept only for reading
-   * old requests. Unset leaves it unchanged, an empty-but-present value clears it.
+   * like draft_body). Unset leaves it unchanged, an empty-but-present value clears it.
    *
    * @generated from field: optional string draft_metadata_script = 12;
    */

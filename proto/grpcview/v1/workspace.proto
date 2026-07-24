@@ -100,7 +100,6 @@ message Request {
   string                    service           = 2;
   string                    method            = 3;
   string                    draft_body        = 4;
-  google.protobuf.Struct    draft_metadata    = 5;
   repeated History          history           = 6;
   // middleware is the ordered display names of the MIDDLEWARE-kind scripts
   // attached to this request; each runs (in this order) before the call to
@@ -109,9 +108,8 @@ message Request {
   // draft_metadata_script is the request's metadata authored as a TypeScript
   // module (`export default (): Metadata => ({ ... })`) whose returned
   // {[key: string]: string[]} object is evaluated on invoke to build the
-  // outgoing metadata. It replaces the key/value grid that persisted through
-  // draft_metadata (kept above only for reading requests saved before this
-  // field). Mirrors draft_body — a plain UTF-8 string.
+  // outgoing metadata. It replaces the old key/value metadata grid. Mirrors
+  // draft_body — a plain UTF-8 string.
   string                    draft_metadata_script = 9;
   // target overrides where this request's invoke is sent (host:port + TLS).
   // Unset means "use the workspace's first reflection source" (see
