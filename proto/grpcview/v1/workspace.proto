@@ -52,6 +52,12 @@ message Service {
   string          package = 1;
   string          name    = 2;
   repeated Method methods = 3;
+  // source is the reflection server this service's schema was resolved from — the
+  // natural default invoke target for a request against it (see resolveTarget in
+  // invoke.go, and sourceForService in the UI). Unset for services from a
+  // descriptor-set upload (no dial target) or an older cache; such requests fall
+  // back to the workspace's first reflection source.
+  optional Server source  = 4;
 }
 
 message DescriptorSource {

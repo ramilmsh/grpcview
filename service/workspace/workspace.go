@@ -265,7 +265,9 @@ func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) (
 			return nil, nil, fmt.Errorf("failed to get file for service [%s]: %w", serviceName, err)
 		}
 		serviceDesc := fileDesc.FindSymbol(serviceName).(*desc.ServiceDescriptor)
-		service, err := convertService(serviceDesc)
+		// Attribute every service from this source to the server being reflected, so a
+		// request against it defaults its invoke target to the source that provides it.
+		service, err := convertService(serviceDesc, server)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -304,7 +306,9 @@ func resolveDescriptorSetServices(raw []byte) ([]*grpcviewv1.Service, []*desc.Fi
 		}
 		fileDescs = append(fileDescs, file)
 		for _, serviceDesc := range file.GetServices() {
-			service, err := convertService(serviceDesc)
+			// A descriptor-set upload has no dial target, so its services carry no
+			// source; a request against one falls back to the first reflection source.
+			service, err := convertService(serviceDesc, nil)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -345,12 +349,15 @@ func mergeDescriptorSet(existing []byte, fileDescs []*desc.FileDescriptor) ([]by
 // convertService builds a wire Service (package/name + methods with input JSON
 // schemas) from a resolved service descriptor. This is the schema-conversion
 // step shared across descriptor source types — reflection and descriptor-set
-// upload both funnel through here.
-func convertService(serviceDesc *desc.ServiceDescriptor) (*grpcviewv1.Service, error) {
+// upload both funnel through here. source is the reflection server the service
+// was resolved from (nil for a descriptor-set upload, which has no dial target);
+// it becomes Service.source, the request's default invoke target (resolveTarget).
+func convertService(serviceDesc *desc.ServiceDescriptor, source *grpcviewv1.Server) (*grpcviewv1.Service, error) {
 	service := &grpcviewv1.Service{
 		Package: serviceDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 		Name:    serviceDesc.GetName(),
 		Methods: make([]*grpcviewv1.Method, len(serviceDesc.GetMethods())),
+		Source:  source,
 	}
 
 	for j, methodDesc := range serviceDesc.GetMethods() {

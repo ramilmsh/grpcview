@@ -43,6 +43,19 @@ export const firstReflectionSource = (ws?: Workspace): Server | null => {
   return null;
 };
 
+// sourceForService returns the reflection Server a service's schema was resolved
+// from (Service.source), so a request defaults its invoke target to the source
+// that actually provides it — not merely the workspace's first reflection source.
+// Falls back to the first reflection source when the service has no attributed
+// source (descriptor-set upload, or a cache written before this field existed).
+export const sourceForService = (
+  ws: Workspace | undefined,
+  service: string
+): Server | null => {
+  const svc = ws?.services.find((s) => `${s.package}.${s.name}` === service);
+  return svc?.source ?? firstReflectionSource(ws);
+};
+
 export const hostLabel = (s: Server | null): string =>
   s ? `${s.host}:${s.port}` : "";
 

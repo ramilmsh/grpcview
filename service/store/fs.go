@@ -84,6 +84,19 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 	return diskToWireSources(col.GetSources())
 }
 
+// Services returns just the resolved-schema cache's services, without walking the
+// request tree or reading the committed manifest — the cheap read Invoke's target
+// resolution needs to find a service's attributed source (Service.source, see
+// resolveTarget), mirroring Sources. An absent cache (no source resolved yet, or a
+// collection that predates it) yields an empty slice, not an error, so a request
+// with no cached service simply falls back to the first reflection source.
+func (c *Collection) Services(_ context.Context) ([]*grpcviewv1.Service, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	services, _, err := c.readServicesCache()
+	return services, err
+}
+
 // Scripts returns just the collection's ordered scripts (manifest order + the
 // scripts/ directory), without walking the request tree or reading the schema
 // cache — the cheap read the invoke path's token resolution needs, mirroring

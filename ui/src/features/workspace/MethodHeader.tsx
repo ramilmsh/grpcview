@@ -10,8 +10,9 @@ import { TargetBar } from "./TargetBar";
 
 // MethodHeader: request name (click to rename inline; persists via UpdateRequest),
 // the service/method selector (opens the picker; persists via UpdateRequest), the
-// resolving-source chip (read-only), and Invoke. The first reflection source is
-// both the invoke target and the enable/disable signal.
+// resolving-source chip (read-only), and Invoke. `reflection` is the source backing
+// THIS request (its service's origin, else the first reflection source) — it is both
+// the default invoke target (when there is no override) and the enable/disable signal.
 export function MethodHeader({
   request,
   services,
@@ -27,6 +28,8 @@ export function MethodHeader({
   request: Request;
   services: Service[];
   kind: MethodKind;
+  // reflection is the source backing THIS request (its service's origin, else the
+  // first reflection source), the live default target when there's no override.
   reflection: Server | null;
   targetOverride?: Server;
   invoking: boolean;

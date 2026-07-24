@@ -3,15 +3,18 @@ import { HardDrives, LockSimple, LockSimpleOpen } from "@/components/ui/icons";
 import { ServerSchema, Server_TLSSchema, type Server } from "@grpcview/v1/workspace_pb";
 
 // TargetBar shows and edits the request's invoke target (host:port + TLS). The
-// displayed value is the per-request override when set, otherwise the workspace's
-// first reflection source (a live fallback). Editing any field emits a full Server
-// override (seeded from the currently-displayed value) via onChange; the empty
-// state shows only when there is neither an override nor a reflection source.
+// displayed value is the per-request override when set, otherwise `reflection` — the
+// source backing THIS request (its service's origin, else the first reflection
+// source), a live fallback. Editing any field emits a full Server override (seeded
+// from the currently-displayed value) via onChange; the empty state shows only when
+// there is neither an override nor a reflection source.
 export function TargetBar({
   reflection,
   override,
   onChange,
 }: {
+  // reflection is the source backing THIS request (its service's origin, else the
+  // first reflection source) — the live default shown when there is no override.
   reflection: Server | null;
   override?: Server;
   onChange: (t: Server) => void;

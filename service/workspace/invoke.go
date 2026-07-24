@@ -90,7 +90,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	// request — middleware rewrites the body/metadata in order. The same shared pre-send step
 	// streamInvoke runs; a no-op when nothing is attached, and a per-middleware failure is a
 	// Connect error grpcview can't get past, like a bad body.
-	resolvedBodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetTarget(), evaluatedBodies, outgoingMD)
+	resolvedBodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetTarget(), evaluatedBodies, outgoingMD)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	// Run the saved request's attached middleware chain (§S3) on the evaluated outgoing
 	// request, the same shared pre-send step unary Invoke runs. A per-middleware failure is a
 	// pre-flight Connect error that sends no frames.
-	bodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetTarget(), bodies, outgoingMD)
+	bodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetTarget(), bodies, outgoingMD)
 	if err != nil {
 		return err
 	}
@@ -663,7 +663,7 @@ const codeOK = 0
 // itself can't get past, so they surface as Connect errors, with the same codes
 // unary Invoke has always used.
 func (w Workspace) resolveMethod(ctx context.Context, target *grpcviewv1.Server, workspaceName, service, method string) (*grpc.ClientConn, *desc.MethodDescriptor, func(), error) {
-	resolved, err := w.resolveTarget(ctx, target, workspaceName)
+	resolved, err := w.resolveTarget(ctx, target, workspaceName, service)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -697,10 +697,21 @@ func (w Workspace) resolveMethod(ctx context.Context, target *grpcviewv1.Server,
 }
 
 // resolveTarget returns the server to send the call to: the explicit target if
-// set, otherwise the named workspace's first reflection source. Both invoke
-// request types expose GetTarget/GetWorkspaceName, so this takes those two
-// values rather than a concrete request type.
-func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server, workspaceName string) (*grpcviewv1.Server, error) {
+// set, else the reflection source the request's service was resolved from, else
+// the workspace's first reflection source. Both invoke request types expose
+// GetTarget/GetWorkspaceName/GetService, so this takes those values rather than a
+// concrete request type.
+//
+// The service-aware default (Service.source, attributed per source in
+// convertService) is what makes a request against a method from the 2nd+ reflection
+// source dial THAT source instead of always the first: an unset request.target means
+// "follow the service's origin live", so this default holds for both new and
+// pre-existing mis-defaulted requests without persisting anything on the request. A
+// service with no attributed source (a descriptor-set upload, or a services cache
+// written before Service.source existed), an unrecognized service, and an ad-hoc
+// invoke with no service all fall back to the first reflection source — the exact
+// pre-attribution behavior.
+func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server, workspaceName, service string) (*grpcviewv1.Server, error) {
 	if target != nil {
 		return target, nil
 	}
@@ -709,6 +720,22 @@ func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server,
 	if err != nil {
 		return nil, err
 	}
+
+	// Prefer the source the request's service was resolved from. Match on the same
+	// `${package}.${name}` identity the UI stores on the request and passes to invoke.
+	services, err := coll.Services(ctx)
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	for _, svc := range services {
+		if fmt.Sprintf("%s.%s", svc.GetPackage(), svc.GetName()) == service {
+			if src := svc.GetSource(); src != nil {
+				return src, nil
+			}
+			break // service found but unattributed: fall through to the first source
+		}
+	}
+
 	sources, err := coll.Sources(ctx)
 	if err != nil {
 		return nil, toConnectError(err)

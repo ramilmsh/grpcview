@@ -9,6 +9,7 @@ import {
   useInvoke,
   useStreamingClient,
   useRefreshWorkspace,
+  sourceForService,
   WORKSPACE_NAME,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
@@ -28,7 +29,7 @@ const DEBOUNCE_MS = 400;
 // wires debounced persistence + Invoke. The draft/response are keyed by itemKey
 // so they survive tab switches (plan §6/§7).
 export function RequestWorkspace() {
-  const { workspace, services, reflection } = useWorkspace();
+  const { workspace, services } = useWorkspace();
   const rootItems = useRootItems(workspace);
   const { updateRequest } = useWorkspaceMutations();
   const invokeMut = useInvoke();
@@ -51,6 +52,16 @@ export function RequestWorkspace() {
   const activeItem = useMemo(() => findByKey(rootItems, activeKey), [rootItems, activeKey]);
   const request =
     activeItem?.item.content.case === "request" ? activeItem.item.content.value : null;
+
+  // The reflection source backing THIS request — the origin of its service's schema
+  // (Service.source), else the workspace's first reflection source. This is the live
+  // default invoke target the header/target-bar display and the backend dials when the
+  // request has no explicit target override, so a request against a method from the 2nd+
+  // source no longer mis-defaults to the first (mirrors resolveTarget's server-side default).
+  const requestSource = useMemo(
+    () => (request ? sourceForService(workspace, request.service) : null),
+    [workspace, request]
+  );
 
   // Seed the draft from the server Request once per request (idempotent). The
   // compose list is seeded with the single draft body — its first entry is the
@@ -352,7 +363,7 @@ export function RequestWorkspace() {
         request={request}
         services={services}
         kind={kind}
-        reflection={reflection}
+        reflection={requestSource}
         targetOverride={targetOverride}
         invoking={!!invokeState?.loading || !!invokeState?.streaming}
         onChangeMethod={onChangeMethod}

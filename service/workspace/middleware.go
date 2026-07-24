@@ -51,7 +51,7 @@ import (
 // by path/item_name; an ad-hoc invoke (empty item_name), a request that isn't stored, or one
 // with no attached middleware is a no-op that returns its inputs unchanged. Failures are
 // Connect FailedPrecondition naming the offending script.
-func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName string, path []string, itemName string, target *grpcviewv1.Server, bodies []string, md *structpb.Struct) ([]string, *structpb.Struct, error) {
+func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName string, path []string, itemName, service string, target *grpcviewv1.Server, bodies []string, md *structpb.Struct) ([]string, *structpb.Struct, error) {
 	if itemName == "" {
 		return bodies, md, nil // ad-hoc invoke: no saved request to attach middleware to
 	}
@@ -83,10 +83,12 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	}
 
 	// ctx.target is informational this pass (not applied to the dialed connection); resolve
-	// it only now that middleware is actually attached. resolveMethod has already resolved +
-	// dialed this target, so this cannot fail here in practice.
+	// it only now that middleware is actually attached. Pass service so the informational
+	// target matches the one resolveMethod actually dialed (the request's service-aware
+	// default). resolveMethod has already resolved + dialed this target, so this cannot fail
+	// here in practice.
 	targetStr := ""
-	if resolved, terr := w.resolveTarget(ctx, target, workspaceName); terr == nil {
+	if resolved, terr := w.resolveTarget(ctx, target, workspaceName, service); terr == nil {
 		targetStr = fmt.Sprintf("%s:%d", resolved.GetHost(), resolved.GetPort())
 	}
 
