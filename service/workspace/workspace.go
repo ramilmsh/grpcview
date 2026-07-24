@@ -244,7 +244,7 @@ func resolveServicesFromSources(ctx context.Context, sources []*grpcviewv1.Descr
 // converts each into a wire Service (package/name + methods with input schemas).
 // It also returns the resolved *desc.FileDescriptor for each service (carrying its
 // transitive dependency graph incl. WKTs), which the caller merges into the
-// workspace's cached descriptor_set (§T2). One network round-trip per call.
+// workspace's cached descriptor_set. One network round-trip per call.
 func resolveReflectionServices(ctx context.Context, server *grpcviewv1.Server) ([]*grpcviewv1.Service, []*desc.FileDescriptor, error) {
 	conn, err := dial(server)
 	if err != nil {
@@ -369,7 +369,7 @@ func convertService(serviceDesc *desc.ServiceDescriptor, source *grpcviewv1.Serv
 		// call shape. Both reflection and descriptor-set sources funnel through
 		// here, so populating them once covers both branches. The editor's typing
 		// comes from the client-side protoc-gen-es over Workspace.descriptor_set
-		// (§T2), keyed by each message's package/name/file — no per-message JSON
+		// keyed by each message's package/name/file — no per-message JSON
 		// schema is sent.
 		service.Methods[j] = &grpcviewv1.Method{
 			Name: methodDesc.GetName(),
@@ -377,7 +377,7 @@ func convertService(serviceDesc *desc.ServiceDescriptor, source *grpcviewv1.Serv
 				Package: inputDesc.GetFile().AsFileDescriptorProto().GetPackage(),
 				Name:    inputDesc.GetName(),
 				// File is the proto path defining this message — the protoc-gen-es
-				// fileToGenerate selector into Workspace.descriptor_set (§T2). It
+				// fileToGenerate selector into Workspace.descriptor_set. It
 				// rides the wire-typed services cache for free.
 				File: inputDesc.GetFile().GetName(),
 			},

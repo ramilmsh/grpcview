@@ -16,7 +16,7 @@ import (
 // response's Error so the UI can render it. Only grpcview's own inability to run the
 // engine surfaces as a Connect error.
 //
-// kind selects the profile and calling convention (§2.5): a generator's `export
+// kind selects the profile and calling convention: a generator's `export
 // default` is called, a middleware's `handle`/default export is called with a ctx;
 // unset (or scenario) evaluates the buffer as an ad-hoc scratchpad (last-expression
 // value), unchanged. All runs use NO capabilities and NO workspace inputs — this is

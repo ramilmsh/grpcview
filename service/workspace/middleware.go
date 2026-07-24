@@ -2,9 +2,10 @@ package workspace
 
 // middleware.go runs a request's attached MIDDLEWARE scripts on the invoke path, pre-send
 // (scripting-ui-plan §S3 — the "use scripts (rewrite)" half). applyRequestMiddleware is the
-// shared pre-send step for both unary Invoke and streaming InvokeStreaming, run AFTER token
-// resolution: tokens resolve to values first, then middleware rewrites the resolved outgoing
-// request. Each attached middleware runs via Engine.RunMiddleware with a ctx built from the
+// shared pre-send step for both unary Invoke and streaming InvokeStreaming, run AFTER the
+// request's TypeScript body/metadata are evaluated to their outgoing values; middleware then
+// rewrites those resolved values. Each attached middleware runs via Engine.RunMiddleware with a
+// ctx built from the
 // current {body, metadata, target}; the returned ctx threads into the next middleware and
 // finally into the gRPC call.
 //
@@ -26,8 +27,8 @@ package workspace
 //
 // Middleware run fully SANDBOXED: an empty Grant (no host capabilities), no vars/secrets/env,
 // and no invoke() into other requests (deferred to S4). A middleware that throws/times out or
-// returns a malformed ctx is a Connect FailedPrecondition naming the offending script, like
-// the token errors.
+// returns a malformed ctx is a Connect FailedPrecondition naming the offending script — the
+// same failure mode as a body/metadata evaluation error.
 
 import (
 	"context"
@@ -154,7 +155,7 @@ func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName str
 }
 
 // loadMiddlewareSources reads the workspace's committed scripts and returns a map from a
-// MIDDLEWARE script's display name to its source (mirroring tokens.go's loadGenerators). A
+// MIDDLEWARE script's display name to its source (mirroring loadGenerators in invoke.go). A
 // collection that does not exist yet yields an empty map (an attached name then fails as
 // "no middleware script", not as a missing workspace).
 func (w Workspace) loadMiddlewareSources(ctx context.Context, workspaceName string) (map[string]string, error) {

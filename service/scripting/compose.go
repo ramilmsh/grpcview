@@ -1,13 +1,12 @@
 package scripting
 
-// compose.go — pillar C (COMPOSITION) of the TypeScript request-body feature
-// (ts-request-body-plan T3): let a request body call the workspace's saved GENERATORS as
-// ambient globals. A synthetic prelude imports each referenced generator through the
-// grpcview:gen/<name> specifier (resolved and inlined by generatorResolverPlugin, bundler.go)
-// and binds it onto globalThis under its display name, so the body can call it directly — a
-// body `export default () => ({ id: uuid() })` runs the saved `uuid` generator. This is
-// OPT-IN and additive: it flips no default and rewrites no {{ }} token; a body that references
-// nothing takes the plain (uncached) generator path unchanged (RunRequestBody).
+// compose.go — the COMPOSITION half of the TypeScript request-body feature: let a request
+// body call the workspace's saved GENERATORS as ambient globals. A synthetic prelude imports
+// each referenced generator through the grpcview:gen/<name> specifier (resolved and inlined by
+// generatorResolverPlugin, bundler.go) and binds it onto globalThis under its display name, so
+// the body can call it directly — a body `export default () => ({ id: uuid() })` runs the saved
+// `uuid` generator. This is OPT-IN and additive: a body that references nothing takes the plain
+// (uncached) generator path unchanged (RunRequestBody).
 
 import (
 	"fmt"
@@ -18,8 +17,8 @@ import (
 
 // simpleIdentRe matches a generator display name that is a single JS identifier, so it can be
 // bound as `globalThis.<name>`. A dotted name (e.g. `auth.bearer`) is not one identifier and is
-// skipped — a documented v1 gap: such generators stay reachable via {{ }} tokens (tokens.go),
-// which do accept dotted names, just not as a composition global.
+// skipped — a documented v1 gap: a dotted-name generator cannot be bound as a composition
+// global (only single-identifier names can).
 var simpleIdentRe = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
 
 // composeGeneratorPrelude builds the synthetic import+bind prelude that exposes gens to a

@@ -446,7 +446,7 @@ func withinDir(dir, path string) bool {
 // ---- Generator composition resolver ----------------------------------------------
 //
 // generatorResolverPlugin lets a TypeScript request body call the workspace's saved
-// generators as ambient globals (ts-request-body-plan T3 / pillar C). compose.go emits a
+// generators as ambient globals (the request-body composition feature). compose.go emits a
 // synthetic prelude of `import __gen$i from "grpcview:gen/<name>"` lines; this plugin resolves
 // each such specifier to the named generator's SOURCE, which esbuild then inlines into the
 // bundle like any other module (mirroring how registryResolverPlugin serves npm packages).

@@ -1,6 +1,6 @@
 package scripting
 
-// entry.go — the ENTRY-POINT calling convention (scripting-ui-plan §2.5).
+// entry.go — the ENTRY-POINT calling convention.
 //
 // A saved GENERATOR runs its `export default (…args) => value`; a saved MIDDLEWARE runs
 // its `handle(ctx)` (or default export) with a ctx built from the request Input, and its
@@ -36,7 +36,7 @@ func hasHandleOrDefaultExport(source string) bool {
 }
 
 // generatorPostlude is the call site for a generator: await the default export applied to
-// the token's positional args (marshalled to a JSON array literal, which is a valid JS
+// the generator's positional args (marshalled to a JSON array literal, which is a valid JS
 // array literal). No args => a plain call.
 func generatorPostlude(args []any) string {
 	if len(args) == 0 {

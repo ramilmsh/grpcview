@@ -98,7 +98,7 @@ func (c *Collection) Services(_ context.Context) ([]*grpcviewv1.Service, error) 
 
 // Scripts returns just the collection's ordered scripts (manifest order + the
 // scripts/ directory), without walking the request tree or reading the schema
-// cache — the cheap read the invoke path's token resolution needs, mirroring
+// cache — the cheap read the invoke path's script loading needs, mirroring
 // Sources. It returns ErrNotFound if the collection has not been created.
 func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	c.mu.Lock()

@@ -167,8 +167,8 @@ func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in In
 }
 
 // runGenerator is the shared compile-and-run core behind RunGenerator (the cached entry
-// point) and RunRequestBody's no-composition path. It applies the entry-point convention
-// (§2.5) — a generator that declares `export default` is called with in.Args, one that
+// point) and RunRequestBody's no-composition path. It applies the entry-point convention —
+// a generator that declares `export default` is called with in.Args, one that
 // doesn't falls back to last-expression eval — and runs on a fresh instance under the
 // Generator bounds.
 func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in Input) (Result, error) {
@@ -182,7 +182,7 @@ func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in In
 }
 
 // RunRequestBody runs a TypeScript request body, exposing the workspace's saved generators as
-// ambient globals so the body can COMPOSE them (ts-request-body-plan T3 / pillar C). It is
+// ambient globals so the body can COMPOSE them (the request-body composition feature). It is
 // UNCACHED (a body may call now()/Math.random() and must vary per invoke) and fully
 // sandboxed (the invoke path passes an empty Grant and empty Input). gens is
 // the per-run generator set (name -> source) the body may reference — the caller narrows it to
@@ -190,7 +190,7 @@ func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in In
 // an unrelated body.
 //
 // When gens is empty there is nothing to compose, so it defers to runGenerator VERBATIM — the
-// plain §T1 body path, byte-identical (no synthetic prelude, no extra cache bypass). Otherwise
+// plain body path, byte-identical (no synthetic prelude, no extra cache bypass). Otherwise
 // it compiles the body with the composition prelude (compileRequestBody) and runs it on a fresh
 // instance under the Generator bounds, never touching the generator result cache.
 func (e *Engine) RunRequestBody(ctx context.Context, body string, gens map[string]string, g Grant, in Input) (Result, error) {
@@ -207,7 +207,7 @@ func (e *Engine) RunRequestBody(ctx context.Context, body string, gens map[strin
 }
 
 // RunMiddleware runs a middleware invoke through the warm instance pool. A middleware that
-// declares a `handle`/default export is called with a ctx built from in.Request (§2.5);
+// declares a `handle`/default export is called with a ctx built from in.Request;
 // otherwise it falls back to last-expression eval.
 func (e *Engine) RunMiddleware(ctx context.Context, source string, g Grant, in Input) (Result, error) {
 	c, postlude, err := e.compileMiddleware(source, g)

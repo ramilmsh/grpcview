@@ -70,7 +70,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	if body == "" {
 		body = emptyTSBody
 	}
-	// Evaluate the TypeScript body → JSON (ts-request-body-plan §T1/§T3): the body is always a
+	// Evaluate the TypeScript body → JSON: the body is always a
 	// canonical TS module (the frontend migrates any legacy body before sending), so it is run
 	// through the engine and its returned object becomes the JSON message. The same shared
 	// pre-send step streamInvoke runs.
@@ -190,7 +190,7 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	if len(bodies) == 0 {
 		bodies = []string{emptyTSBody}
 	}
-	// Evaluate the TypeScript bodies → JSON (§T1/§T3): every message is a canonical TS module
+	// Evaluate the TypeScript bodies → JSON: every message is a canonical TS module
 	// (the frontend migrates before sending), so each is run through the engine and its
 	// returned object becomes the JSON message. The same shared pre-send step unary Invoke
 	// runs; a failure is a pre-flight Connect error that sends no frames.
@@ -387,13 +387,13 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	return nil
 }
 
-// resolveInvokeBody is the shared pre-send body-evaluation step (ts-request-body-plan §T1 +
-// T3) for unary Invoke (one body) and streaming InvokeStreaming (many). Every body is a
+// resolveInvokeBody is the shared pre-send body-evaluation step for unary Invoke (one body)
+// and streaming InvokeStreaming (many). Every body is a
 // canonical TS/JS module (the frontend migrates any legacy body/JSON to this form before
 // sending), so each is run through the engine — uncached, so Math.random()/now() vary per
 // invoke, and fully sandboxed (empty Grant, no vars/secrets/env, exactly like the middleware
 // runs) — and its returned JSON object REPLACES the body, which then flows through the existing
-// middleware/UnmarshalJSON pipeline unchanged. As of T3 (pillar C) a body may also COMPOSE the
+// middleware/UnmarshalJSON pipeline unchanged. A body may also COMPOSE the
 // workspace's saved generators by calling them as ambient globals; the workspace generators are
 // loaded once and each body folds in only the ones it references (see referencedGenerators /
 // engine.RunRequestBody). A throw, timeout, or a non-object return is a Connect
@@ -403,10 +403,10 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("a TypeScript request body requires the scripting engine, which is not available"))
 	}
-	// Load the workspace's saved generators ONCE so a body can call them as ambient globals
-	// (pillar C / T3). loadGenerators returns an empty map when the scripts collection does not
-	// exist, so a workspace with no scripts still evaluates a plain (non-composing) body; a real
-	// store error propagates (it is grpcview's own failure, like the token path's).
+	// Load the workspace's saved generators ONCE so a body can call them as ambient globals.
+	// loadGenerators returns an empty map when the scripts collection does not exist, so a
+	// workspace with no scripts still evaluates a plain (non-composing) body; a real store error
+	// propagates (it is grpcview's own failure, not the user script's).
 	allGens, err := w.loadGenerators(ctx, workspaceName)
 	if err != nil {
 		return nil, err
@@ -417,7 +417,7 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 		// entry-point convention with no positional args, per entry.go). referencedGenerators
 		// narrows allGens to just what this body names, so composition folds in only those and
 		// an unrelated generator's compile error can't break a body that does not call it; an
-		// empty subset makes RunRequestBody take the plain §T1 generator path. Result.Value is
+		// empty subset makes RunRequestBody take the plain generator path. Result.Value is
 		// the returned object as raw JSON — the replacement body.
 		res, err := w.engine.RunRequestBody(ctx, body, referencedGenerators(body, allGens), scripting.Grant{}, scripting.Input{})
 		if err != nil {
@@ -434,18 +434,16 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 // referencedGenerators returns the subset of all whose name is CALLED in body. A generator is
 // "called" when its name appears as a call site — the name immediately followed by optional
 // whitespace and an opening paren (mkid(), dbl (7)) — and is NOT a property/method access
-// (x.format()). This mirrors how generators were used as tokens ({{ name(args) }} is always a
-// call) and is what makes FAILURE ISOLATION hold: an object key ({ id: 7 }), a local variable,
-// or a method call that merely shares a generator's name does NOT pull that generator into the
-// composed bundle, so an unrelated (possibly broken) generator cannot break a body that never
-// calls it. It also bounds each per-invoke bundle to the generators the body actually calls;
-// when the subset is empty RunRequestBody takes the plain (uncached) §T1 path, so a TS body that
-// calls nothing behaves exactly as before. Dotted-named generators are excluded (a dotted name is
-// never one identifier) — a documented v1 gap. Recognition stays textual (like the token scan),
-// so the only residual over-approximation is a literal name( inside a string or comment; a
-// generator used without a direct call (passed as a bare callback, e.g. arr.map(mkid)) is
-// likewise not detected — both are acceptable for v1 (parity with the token model, which only
-// ever called generators).
+// (x.format()). Recognizing calls this way is what makes FAILURE ISOLATION hold: an object key
+// ({ id: 7 }), a local variable, or a method call that merely shares a generator's name does
+// NOT pull that generator into the composed bundle, so an unrelated (possibly broken) generator
+// cannot break a body that never calls it. It also bounds each per-invoke bundle to the
+// generators the body actually calls; when the subset is empty RunRequestBody takes the plain
+// (uncached) generator path, so a TS body that calls nothing behaves exactly as before.
+// Dotted-named generators are excluded (a dotted name is never one identifier) — a documented v1
+// gap. Recognition stays textual, so the only residual over-approximation is a literal name(
+// inside a string or comment; a generator used without a direct call (passed as a bare callback,
+// e.g. arr.map(mkid)) is likewise not detected — both are acceptable for v1.
 func referencedGenerators(body string, all map[string]string) map[string]string {
 	called := make(map[string]struct{})
 	for _, loc := range genCallRe.FindAllStringSubmatchIndex(body, -1) {
