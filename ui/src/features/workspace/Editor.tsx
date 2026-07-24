@@ -368,6 +368,13 @@ export function Editor({
         formatOnPaste: false,
         folding: false,
         lineNumbers: (n: number) => (n <= PREFIX_LINES ? "" : String(n - PREFIX_LINES)),
+        // Auto-trigger completions INSIDE string literals too. Monaco defaults
+        // quickSuggestions.strings=false, so it stays silent between quotes
+        // (microsoft/monaco-editor#2883) — which hid the body's most useful completion:
+        // a proto enum field typed as a string-literal union (`"FOO" | "BAR"`) offers
+        // its values only when the caret is in the quotes. Manual Ctrl+Space always
+        // worked; this makes it pop automatically like it does outside strings.
+        quickSuggestions: { other: true, comments: false, strings: true },
         automaticLayout: true,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,

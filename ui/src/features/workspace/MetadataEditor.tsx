@@ -306,6 +306,10 @@ export function MetadataEditor({
         formatOnPaste: false,
         folding: false,
         lineNumbers: (n: number) => (n <= META_PREFIX_LINES ? "" : String(n - META_PREFIX_LINES)),
+        // Auto-trigger completions inside string literals too (monaco defaults
+        // quickSuggestions.strings=false — microsoft/monaco-editor#2883); matches the body
+        // editor so metadata values get in-quote suggestions, not only manual Ctrl+Space.
+        quickSuggestions: { other: true, comments: false, strings: true },
         automaticLayout: true,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,

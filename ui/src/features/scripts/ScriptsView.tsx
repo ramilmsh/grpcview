@@ -578,6 +578,10 @@ function ScriptDetail({ script }: { script: Script }) {
             onChange={(v: string | undefined) => setScriptDraft(script.name, v ?? "")}
             onMount={onMount}
             options={{
+              // Auto-trigger completions inside string literals too (monaco defaults
+              // quickSuggestions.strings=false — microsoft/monaco-editor#2883), so a
+              // script gets in-quote suggestions instead of only manual Ctrl+Space.
+              quickSuggestions: { other: true, comments: false, strings: true },
               automaticLayout: true,
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
