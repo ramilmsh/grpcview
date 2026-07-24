@@ -67,8 +67,12 @@ type RequestPatch struct {
 	Method        *string
 	DraftBody     *string
 	DraftMetadata *structpb.Struct
-	Middleware    []string
-	SetMiddleware bool
+	// DraftMetadataScript patches the request's metadata source (the TypeScript
+	// module evaluated on invoke). Like DraftBody it is a plain *string: nil
+	// leaves it unchanged, an empty-but-present value clears it.
+	DraftMetadataScript *string
+	Middleware          []string
+	SetMiddleware       bool
 	// BodyLanguage patches how the body is interpreted on invoke (JSON vs
 	// TYPESCRIPT). It is the WIRE enum (bridged to the disk enum on apply, like
 	// the request converters); nil leaves it unchanged, matching the optional RPC

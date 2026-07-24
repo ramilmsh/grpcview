@@ -308,6 +308,18 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
    * @generated from field: optional grpcview.v1.BodyLanguage body_language = 11;
    */
   bodyLanguage?: BodyLanguage | undefined;
+
+  /**
+   * draft_metadata_script patches the request's metadata source: a TypeScript
+   * module (`export default (): Metadata => ({ ... })`) whose returned
+   * {[key: string]: string[]} object is evaluated on invoke to build the
+   * outgoing metadata. It mirrors draft_body's plumbing (a plain string patched
+   * like draft_body); the legacy draft_metadata Struct is kept only for reading
+   * old requests. Unset leaves it unchanged, an empty-but-present value clears it.
+   *
+   * @generated from field: optional string draft_metadata_script = 12;
+   */
+  draftMetadataScript?: string | undefined;
 };
 
 /**
@@ -427,6 +439,19 @@ export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
    * @generated from field: grpcview.v1.BodyLanguage body_language = 9;
    */
   bodyLanguage: BodyLanguage;
+
+  /**
+   * metadata_script, when non-empty, is a TypeScript module
+   * (`export default (): Metadata => ({ ... })`) whose returned
+   * {[key: string]: string[]} object is evaluated on the backend (same engine as
+   * the TS body, generators composable as ambient globals) to build the outgoing
+   * metadata — superseding the `metadata` Struct above. Empty means "use
+   * `metadata` as-is" (today's path). Carries the editor's current source, like
+   * `body`, so a send never depends on a prior UpdateRequest landing first.
+   *
+   * @generated from field: string metadata_script = 10;
+   */
+  metadataScript: string;
 };
 
 /**
@@ -519,6 +544,16 @@ export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamReque
    * @generated from field: grpcview.v1.BodyLanguage body_language = 9;
    */
   bodyLanguage: BodyLanguage;
+
+  /**
+   * metadata_script mirrors InvokeRequest.metadata_script: a TypeScript module
+   * whose returned {[key: string]: string[]} object is evaluated on the backend
+   * to build the outgoing metadata, superseding the `metadata` Struct when
+   * non-empty. Empty means "use `metadata` as-is".
+   *
+   * @generated from field: string metadata_script = 10;
+   */
+  metadataScript: string;
 };
 
 /**

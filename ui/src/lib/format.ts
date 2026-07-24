@@ -4,7 +4,6 @@
 
 import type { Item, Service, Method } from "@grpcview/v1/workspace_pb";
 import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { JsonObject } from "@bufbuild/protobuf";
 // Type-only import — no runtime dependency on the component, so no import cycle.
 import type { MethodKind } from "@/components/ui/Tag";
 
@@ -154,16 +153,10 @@ export const prettyBody = (bytes: Uint8Array): string => {
   }
 };
 
-// ── metadata ⇄ Struct ────────────────────────────────────────────────────────
-
-// A single metadata (header) entry. Rows are the editor's working
-// representation: they keep insertion order, an enabled flag, and allow a
-// half-typed empty key — none of which a plain object preserves.
-export interface MetadataRow {
-  key: string;
-  value: string;
-  enabled: boolean;
-}
+// ── response metadata → display ──────────────────────────────────────────────
+// Request metadata is now authored as a TypeScript module (see metadata-wrapper.ts /
+// MetadataEditor.tsx), so the old grid helpers (MetadataRow / rowsToObject / objectToRows) are
+// gone. What remains here is RESPONSE-side: rendering a received Struct's values for display.
 
 // metadataValueToString renders a metadata value for display: list values
 // (multi-valued metadata) are comma-joined; scalars are stringified.
@@ -171,29 +164,6 @@ export const metadataValueToString = (value: unknown): string =>
   Array.isArray(value)
     ? value.map((v) => String(v)).join(", ")
     : String(value ?? "");
-
-// rowsToObject drops disabled rows and rows with a blank key, producing the
-// JsonObject that maps onto the request's google.protobuf.Struct metadata field.
-// KNOWN ASYMMETRY (preserved): a multi-valued header is comma-joined for display
-// and saved back as one string, so lists don't round-trip — see plan §7/§11.
-export const rowsToObject = (rows: MetadataRow[]): JsonObject => {
-  const obj: JsonObject = {};
-  for (const { key, value, enabled } of rows) {
-    const k = key.trim();
-    if (enabled && k) obj[k] = value;
-  }
-  return obj;
-};
-
-// objectToRows expands persisted metadata back into editable rows (all enabled).
-export const objectToRows = (obj?: JsonObject): MetadataRow[] => {
-  if (!obj) return [];
-  return Object.entries(obj).map(([key, value]) => ({
-    key,
-    value: metadataValueToString(value),
-    enabled: true,
-  }));
-};
 
 // metadataEntries flattens a response's Struct metadata for display.
 export const metadataEntries = (

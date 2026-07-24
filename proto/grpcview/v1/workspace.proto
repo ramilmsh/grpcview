@@ -107,6 +107,13 @@ message Request {
   // draft_body is a TS/JS generator whose returned object is the request message
   // (ts-request-body-plan §T1). See BodyLanguage.
   BodyLanguage              body_language     = 8;
+  // draft_metadata_script is the request's metadata authored as a TypeScript
+  // module (`export default (): Metadata => ({ ... })`) whose returned
+  // {[key: string]: string[]} object is evaluated on invoke to build the
+  // outgoing metadata. It replaces the key/value grid that persisted through
+  // draft_metadata (kept above only for reading requests saved before this
+  // field). Mirrors draft_body — a plain UTF-8 string.
+  string                    draft_metadata_script = 9;
 }
 
 // Item is a single element in the treeview

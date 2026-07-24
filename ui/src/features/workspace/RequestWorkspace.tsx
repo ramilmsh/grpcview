@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { JsonObject } from "@bufbuild/protobuf";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { BodyLanguage, ScriptKind } from "@grpcview/v1/workspace_pb";
 import type { History } from "@grpcview/v1/workspace_pb";
@@ -13,21 +12,13 @@ import {
   WORKSPACE_NAME,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import {
-  findByKey,
-  keyOf,
-  methodKind,
-  objectToRows,
-  prettyBody,
-  resolveMethod,
-  rowsToObject,
-  type MetadataRow,
-} from "@/lib/format";
+import { findByKey, keyOf, methodKind, prettyBody, resolveMethod } from "@/lib/format";
 import { Centered } from "@/components/ui/Centered";
 import { MethodHeader } from "./MethodHeader";
 import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
 import { migrateBodyToTs } from "./body-wrapper";
+import { migrateMetadataToTs } from "./metadata-wrapper";
 
 const DEBOUNCE_MS = 400;
 
@@ -70,9 +61,14 @@ export function RequestWorkspace() {
       // first seed (idempotent; a canonical body passes through). Lazy: the migrated form is only
       // persisted once the user edits (onBodyChange), mirroring the old seed-on-toggle.
       const primary = migrateBodyToTs(request.draftBody || "{}");
+      // Metadata is authored as a canonical TS module now. Seed from the persisted
+      // draft_metadata_script if present; otherwise migrate the legacy draft_metadata Struct
+      // (grid data) to the canonical module. Idempotent + lazy — the migrated form is only
+      // persisted once the user edits (onMetadataChange), mirroring the body seed.
+      const metadata = request.draftMetadataScript || migrateMetadataToTs(request.draftMetadata);
       seedDraft(activeKey, {
         body: primary,
-        metadataRows: objectToRows(request.draftMetadata),
+        metadata,
         messages: [primary],
       });
     }
@@ -120,7 +116,10 @@ export function RequestWorkspace() {
   // Before the seed effect commits (first render), fall back to the migrated server body so the
   // editor's very first load is already canonical (its reload keys on currentKey, not on `body`).
   const body = draft?.body ?? migrateBodyToTs(request.draftBody || "{}");
-  const metadataRows = draft?.metadataRows ?? objectToRows(request.draftMetadata);
+  // Before the seed effect commits (first render), fall back to the persisted script or the
+  // migrated legacy Struct so the editor's very first load is already a canonical module.
+  const metadata =
+    draft?.metadata ?? (request.draftMetadataScript || migrateMetadataToTs(request.draftMetadata));
   // Compose list for cs/bd. The primary (index 0) is always the current body —
   // the single source of truth for the persisted message — with any ephemeral
   // extras appended, so the two can never drift.
@@ -130,7 +129,7 @@ export function RequestWorkspace() {
   // save don't cancel each other.
   const scheduleSave = (
     slot: "body" | "meta",
-    fields: { draftBody?: string; draftMetadata?: JsonObject }
+    fields: { draftBody?: string; draftMetadataScript?: string }
   ) => {
     const timerKey = `${key}:${slot}`;
     window.clearTimeout(timers.current[timerKey]);
@@ -144,9 +143,11 @@ export function RequestWorkspace() {
     scheduleSave("body", { draftBody: v });
   };
 
-  const onMetadataChange = (rows: MetadataRow[]) => {
-    setDraft(key, { metadataRows: rows });
-    scheduleSave("meta", { draftMetadata: rowsToObject(rows) });
+  // Metadata is a canonical TS module string now (like the body), persisted as
+  // draft_metadata_script — we no longer write the draft_metadata Struct.
+  const onMetadataChange = (v: string) => {
+    setDraft(key, { metadata: v });
+    scheduleSave("meta", { draftMetadataScript: v });
   };
 
   // Compose-list edits (cs/bd). Only the primary (index 0) persists — it mirrors
@@ -191,9 +192,10 @@ export function RequestWorkspace() {
   // runInvoke fires the call with explicit body/metadata/messages so a re-run
   // from history can pass historical values directly (the draft state update is
   // async, so the current-draft closure would be stale). onInvoke passes the live
-  // draft-derived values. Each completed run refreshes the workspace so the
-  // just-persisted entry appears on the Timeline (history rides along on Get).
-  const runInvoke = (b: string, rows: MetadataRow[], msgs: string[]) => {
+  // draft-derived values. `md` is the canonical metadata TS module (sent as
+  // metadataScript, evaluated backend-side). Each completed run refreshes the
+  // workspace so the just-persisted entry appears on the Timeline.
+  const runInvoke = (b: string, md: string, msgs: string[]) => {
     // Unary — mutation path.
     if (kind === "u") {
       setInvoke(key, { loading: true });
@@ -205,7 +207,10 @@ export function RequestWorkspace() {
           service: request.service,
           method: request.method,
           body: b,
-          metadata: rowsToObject(rows),
+          // Metadata is a canonical TS module too, sent as metadataScript for the server to
+          // eval into the outgoing metadata (superseding the old metadata Struct, which we no
+          // longer send for requests). Read off the wire, like body.
+          metadataScript: md,
           // The body is always TypeScript now (a canonical export-default module, migrated on
           // load) — tell the server to eval it. The invoke path reads this off the wire, not the
           // saved Request, so we send it unconditionally regardless of request.bodyLanguage.
@@ -241,7 +246,8 @@ export function RequestWorkspace() {
       service: request.service,
       method: request.method,
       messages: messagesToSend,
-      metadata: rowsToObject(rows),
+      // Metadata as a canonical TS module, sent as metadataScript (mirrors the unary path).
+      metadataScript: md,
       // Always TypeScript (mirrors the unary path): every message is a canonical export-default
       // module, so the server evals it. Read off the wire, not the saved Request.
       bodyLanguage: BodyLanguage.TYPESCRIPT,
@@ -280,13 +286,13 @@ export function RequestWorkspace() {
     })();
   };
 
-  const onInvoke = () => runInvoke(body, metadataRows, messages);
+  const onInvoke = () => runInvoke(body, metadata, messages);
 
   // Stop the active request's in-flight stream (no-op if none).
   const onStop = () => aborters.current[key]?.abort();
 
   // historyDraft derives the editor draft a past run should repopulate: its
-  // request body (bytes -> text) and metadata rows. Selecting a run loads it;
+  // request body (bytes -> text) and metadata. Selecting a run loads it;
   // re-running loads it AND fires the call with those exact values.
   const historyDraft = (entry: History) => {
     // History bodies are the bytes sent on that run (often legacy JSON). Migrate to canonical TS
@@ -296,17 +302,19 @@ export function RequestWorkspace() {
         ? new TextDecoder().decode(entry.request.body)
         : "{}";
     const b = migrateBodyToTs(raw);
-    const rows = objectToRows(entry.request?.metadata);
-    return { b, rows };
+    // History metadata is the resolved Struct that was sent; reconstruct a canonical metadata
+    // module from it (each value → a string[] literal) so re-running sends those exact values.
+    const md = migrateMetadataToTs(entry.request?.metadata);
+    return { b, md };
   };
   const onSelectHistory = (entry: History) => {
-    const { b, rows } = historyDraft(entry);
-    setDraft(key, { body: b, metadataRows: rows, messages: [b] });
+    const { b, md } = historyDraft(entry);
+    setDraft(key, { body: b, metadata: md, messages: [b] });
   };
   const onRerunHistory = (entry: History) => {
-    const { b, rows } = historyDraft(entry);
-    setDraft(key, { body: b, metadataRows: rows, messages: [b] });
-    runInvoke(b, rows, [b]);
+    const { b, md } = historyDraft(entry);
+    setDraft(key, { body: b, metadata: md, messages: [b] });
+    runInvoke(b, md, [b]);
   };
 
   return (
@@ -328,7 +336,7 @@ export function RequestWorkspace() {
           onBodyChange={onBodyChange}
           messages={messages}
           onMessagesChange={onMessagesChange}
-          metadataRows={metadataRows}
+          metadata={metadata}
           onMetadataChange={onMetadataChange}
           middleware={request.middleware}
           onMiddlewareChange={onMiddlewareChange}

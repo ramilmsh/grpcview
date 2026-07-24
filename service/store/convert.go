@@ -19,26 +19,28 @@ import (
 // diskToWireRequest builds a wire Request from a disk Request.
 func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Request {
 	return &grpcviewv1.Request{
-		Name:          name,
-		Service:       dr.GetService(),
-		Method:        dr.GetMethod(),
-		DraftBody:     dr.GetDraftBody(),
-		DraftMetadata: dr.GetDraftMetadata(), // Struct: identical on both sides
-		Middleware:    dr.GetMiddleware(),
-		BodyLanguage:  diskToWireBodyLanguage(dr.GetBodyLanguage()),
+		Name:                name,
+		Service:             dr.GetService(),
+		Method:              dr.GetMethod(),
+		DraftBody:           dr.GetDraftBody(),
+		DraftMetadata:       dr.GetDraftMetadata(), // Struct: identical on both sides
+		DraftMetadataScript: dr.GetDraftMetadataScript(),
+		Middleware:          dr.GetMiddleware(),
+		BodyLanguage:        diskToWireBodyLanguage(dr.GetBodyLanguage()),
 	}
 }
 
 // wireToDiskRequest builds a disk Request from a wire Request.
 func wireToDiskRequest(name string, wr *grpcviewv1.Request) *grpcviewstorev1.Request {
 	return &grpcviewstorev1.Request{
-		Meta:          &grpcviewstorev1.ItemMeta{Name: name},
-		Service:       wr.GetService(),
-		Method:        wr.GetMethod(),
-		DraftBody:     wr.GetDraftBody(),
-		DraftMetadata: wr.GetDraftMetadata(),
-		Middleware:    wr.GetMiddleware(),
-		BodyLanguage:  wireToDiskBodyLanguage(wr.GetBodyLanguage()),
+		Meta:                &grpcviewstorev1.ItemMeta{Name: name},
+		Service:             wr.GetService(),
+		Method:              wr.GetMethod(),
+		DraftBody:           wr.GetDraftBody(),
+		DraftMetadata:       wr.GetDraftMetadata(),
+		DraftMetadataScript: wr.GetDraftMetadataScript(),
+		Middleware:          wr.GetMiddleware(),
+		BodyLanguage:        wireToDiskBodyLanguage(wr.GetBodyLanguage()),
 	}
 }
 

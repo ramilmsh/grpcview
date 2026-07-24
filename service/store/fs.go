@@ -202,7 +202,7 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	itemDir := filepath.Join(parentDir, ch.slug)
 
-	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && !patch.SetMiddleware && patch.BodyLanguage == nil {
+	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadata == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware && patch.BodyLanguage == nil {
 		return nil
 	}
 	// Reuse the request.json readChildren already decoded (ch.request) rather
@@ -238,6 +238,9 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	if patch.DraftMetadata != nil {
 		dr.DraftMetadata = patch.DraftMetadata // Struct: identical on both sides
+	}
+	if patch.DraftMetadataScript != nil {
+		dr.DraftMetadataScript = *patch.DraftMetadataScript // plain string, like DraftBody
 	}
 	// SetMiddleware gates the repeated middleware list (it has no nil "unset"):
 	// replace it (nil/empty clears; protojson then omits it).

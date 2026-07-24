@@ -3,7 +3,7 @@
 // data never lives here — that is the react-query cache (workspace-query.ts).
 import { create } from "zustand";
 import type { Request_Response } from "@grpcview/v1/workspace_pb";
-import type { ItemWithPath, MetadataRow } from "./format";
+import type { ItemWithPath } from "./format";
 import { itemKey } from "./format";
 
 export type ActiveView = "workspace" | "sources" | "scripts";
@@ -20,7 +20,10 @@ export interface OpenTab {
 // server Request on first open, then authoritative until the tab closes.
 export interface Draft {
   body: string;
-  metadataRows: MetadataRow[];
+  // The request metadata as a canonical hidden-wrapper TS module string (the
+  // metadata editor's model text / persisted draft_metadata_script / invoke
+  // payload — all the same string), mirroring `body`.
+  metadata: string;
   // Compose list for client-streaming / bidi requests. messages[0] mirrors `body`
   // (the persisted primary — see RequestWorkspace); messages[1..] are ephemeral
   // extras the user adds before sending. Unused by unary / server-streaming.
@@ -195,7 +198,10 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setDraft: (key, patch) =>
     set((s) => {
-      const prev = s.drafts[key] ?? { body: "{}", metadataRows: [] };
+      // Fallback for the pathological "setDraft before seedDraft" case; seedDraft always runs
+      // first in practice. An empty metadata string is the "unset" sentinel (backend treats a
+      // blank metadata_script as "no script").
+      const prev = s.drafts[key] ?? { body: "{}", metadata: "" };
       return { drafts: { ...s.drafts, [key]: { ...prev, ...patch } } };
     }),
 

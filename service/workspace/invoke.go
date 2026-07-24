@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -71,10 +72,19 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	if err != nil {
 		return nil, err
 	}
+	// Compute the outgoing metadata Struct: when metadata_script is set it is a TypeScript
+	// module evaluated exactly like the TS body (generators composable as ambient globals);
+	// otherwise the request's metadata Struct is used as-is (today's path). The same shared
+	// pre-send step streamInvoke runs.
+	outgoingMD, err := w.resolveInvokeMetadata(ctx, msg.GetWorkspaceName(), msg.GetMetadataScript(), msg.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
 	// Resolve {{ generator() }} tokens in the body + metadata before the call (§S2), the
-	// shared pre-send step streamInvoke also runs. A token-free request is untouched; a
-	// resolution failure is a Connect error grpcview can't get past, like a bad body.
-	resolvedBodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), evaluatedBodies, msg.GetMetadata())
+	// shared pre-send step streamInvoke also runs. A token-free request is untouched (an
+	// eval'd metadata Struct has no tokens, so this is a no-op for it); a resolution failure
+	// is a Connect error grpcview can't get past, like a bad body.
+	resolvedBodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), evaluatedBodies, outgoingMD)
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +199,17 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	if err != nil {
 		return err
 	}
+	// Compute the outgoing metadata Struct (metadata_script evaluated like the TS body, else
+	// the request's metadata Struct as-is), the same shared pre-send step unary Invoke runs.
+	// A failure is a pre-flight Connect error that sends no frames.
+	outgoingMD, err := w.resolveInvokeMetadata(ctx, msg.GetWorkspaceName(), msg.GetMetadataScript(), msg.GetMetadata())
+	if err != nil {
+		return err
+	}
 	// Resolve {{ generator() }} tokens across every request body + the metadata before the
 	// call (§S2), the same pre-send step unary Invoke runs. A resolution failure is a
 	// pre-flight Connect error that sends no frames, like the other pre-flight errors here.
-	bodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), bodies, msg.GetMetadata())
+	bodies, resolvedMD, err := w.resolveInvokeTokens(ctx, msg.GetWorkspaceName(), bodies, outgoingMD)
 	if err != nil {
 		return err
 	}
@@ -484,6 +501,103 @@ func isJSONObject(raw []byte) bool {
 func bodyError(index int, detail string) error {
 	return connect.NewError(connect.CodeFailedPrecondition,
 		fmt.Errorf("cannot evaluate TypeScript request body [%d]: %s", index, detail))
+}
+
+// resolveInvokeMetadata computes the outgoing metadata Struct for an invoke. When
+// metadataScript is non-empty it is a TypeScript module (the metadata-wrapper's
+// `export default (): Metadata => ({ ... })`) evaluated exactly like the TS request body
+// — through the SAME engine path (RunRequestBody), uncached and fully sandboxed, with the
+// workspace's saved generators composable as ambient globals — so a user can write
+// `{ authorization: ["Bearer " + apiToken()], "x-request-id": [uuid()] }`. Its returned
+// {[key]: string[]} object becomes a google.protobuf.Struct of {[key]: ListValue<string>},
+// which then flows through the existing metadata pipeline (resolveInvokeTokens — a no-op on
+// an eval'd Struct — then structToMetadata, which expands string[] to repeated headers)
+// unchanged.
+//
+// When metadataScript is empty this is a pure no-op: the fallback Struct (the request's
+// metadata field, i.e. today's path) is returned verbatim, so a request carrying a plain
+// Struct behaves exactly as before. A throw/timeout or a non-object return is a Connect
+// FailedPrecondition (mirroring the body's bodyError); a value that is not a string or
+// string[] is a Connect InvalidArgument (mirroring the body's UnmarshalJSON type mismatch).
+func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName, metadataScript string, fallback *structpb.Struct) (*structpb.Struct, error) {
+	if strings.TrimSpace(metadataScript) == "" {
+		return fallback, nil // no script: use the Struct metadata as-is (today's path)
+	}
+	if w.engine == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("a TypeScript metadata script requires the scripting engine, which is not available"))
+	}
+	// Load the workspace's saved generators ONCE so the metadata module can call them as
+	// ambient globals, exactly like a composing body; referencedGenerators narrows the set to
+	// what the module names (failure isolation), and an empty subset takes the plain path.
+	allGens, err := w.loadGenerators(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+	res, err := w.engine.RunRequestBody(ctx, metadataScript, referencedGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{})
+	if err != nil {
+		return nil, metadataError(connect.CodeFailedPrecondition, err.Error())
+	}
+	if !isJSONObject(res.Value) {
+		return nil, metadataError(connect.CodeFailedPrecondition, "expected the metadata to return an object")
+	}
+	return metadataStructFromJSON(res.Value)
+}
+
+// metadataStructFromJSON converts the metadata module's evaluated JSON object into a
+// google.protobuf.Struct whose every value is a ListValue<string> — the multi-valued shape
+// structToMetadata expands into repeated headers. Each value must be a JSON string (→ a
+// single-element list) or a JSON array of strings (→ a list); any other shape is a clear
+// InvalidArgument naming the offending key.
+func metadataStructFromJSON(raw []byte) (*structpb.Struct, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, metadataError(connect.CodeFailedPrecondition, "metadata is not a JSON object: "+err.Error())
+	}
+	fields := make(map[string]*structpb.Value, len(obj))
+	for key, rawVal := range obj {
+		values, err := metadataValueList(key, rawVal)
+		if err != nil {
+			return nil, err
+		}
+		fields[key] = structpb.NewListValue(&structpb.ListValue{Values: values})
+	}
+	return &structpb.Struct{Fields: fields}, nil
+}
+
+// metadataValueList renders one metadata value as the list of string Values it stands for:
+// a JSON string is a single-element list; a JSON array must hold only strings and becomes a
+// list of them. Numbers/booleans/objects/null (or a non-string array element) are rejected —
+// gRPC metadata is string-valued and the editor types the module against
+// `{ [key: string]: string[] }`, so a runtime violation is a clear InvalidArgument.
+func metadataValueList(key string, raw json.RawMessage) ([]*structpb.Value, error) {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return []*structpb.Value{structpb.NewStringValue(s)}, nil
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil, metadataError(connect.CodeInvalidArgument,
+			fmt.Sprintf("metadata value for %q must be a string or string[]", key))
+	}
+	out := make([]*structpb.Value, len(arr))
+	for i, el := range arr {
+		var es string
+		if err := json.Unmarshal(el, &es); err != nil {
+			return nil, metadataError(connect.CodeInvalidArgument,
+				fmt.Sprintf("metadata value for %q must be a string or string[]; element %d is not a string", key, i))
+		}
+		out[i] = structpb.NewStringValue(es)
+	}
+	return out, nil
+}
+
+// metadataError renders a metadata-evaluation failure as a Connect error, mirroring the
+// body's error policy: an eval failure grpcview can't get past (throw/timeout/non-object
+// return) is FailedPrecondition like bodyError, while a value whose shape is not
+// string|string[] is InvalidArgument like the body's UnmarshalJSON type mismatch.
+func metadataError(code connect.Code, detail string) error {
+	return connect.NewError(code, fmt.Errorf("cannot evaluate the request metadata: %s", detail))
 }
 
 // recordHistory persists one completed invoke to the target request's run

@@ -83,6 +83,13 @@ message Request {
   // body_language selects how draft_body is interpreted on invoke (JSON vs
   // TYPESCRIPT). Mirrors the wire grpcview.v1.Request.body_language.
   BodyLanguage body_language = 7;
+  // draft_metadata_script is the request's metadata authored as a TypeScript
+  // module whose returned {[key: string]: string[]} object is evaluated on
+  // invoke to build the outgoing metadata. Mirrors the wire
+  // grpcview.v1.Request.draft_metadata_script and, like draft_body, is an inline
+  // UTF-8 string so request.json stays human-readable. The legacy draft_metadata
+  // Struct above is kept only for reading requests written before this field.
+  string draft_metadata_script = 8;
 }
 
 // ItemMeta is the identity block embedded in every managed tree file. The

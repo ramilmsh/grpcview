@@ -2,7 +2,6 @@ import { ArrowsSplit, BracketsCurly } from "@/components/ui/icons";
 import { Subtab } from "@/components/ui/Subtab";
 import { Tag, type MethodKind } from "@/components/ui/Tag";
 import { useUIStore } from "@/lib/ui-store";
-import type { MetadataRow } from "@/lib/format";
 import { MessageTab } from "./MessageTab";
 import { MessagesTab } from "./MessagesTab";
 import { MetadataTab } from "./MetadataTab";
@@ -19,7 +18,7 @@ export function RequestPane({
   onBodyChange,
   messages,
   onMessagesChange,
-  metadataRows,
+  metadata,
   onMetadataChange,
   middleware,
   onMiddlewareChange,
@@ -35,8 +34,8 @@ export function RequestPane({
   onBodyChange: (v: string) => void;
   messages: string[];
   onMessagesChange: (next: string[]) => void;
-  metadataRows: MetadataRow[];
-  onMetadataChange: (rows: MetadataRow[]) => void;
+  metadata: string;
+  onMetadataChange: (v: string) => void;
   middleware: string[];
   onMiddlewareChange: (next: string[]) => void;
   currentKey: string;
@@ -50,7 +49,6 @@ export function RequestPane({
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
   const setSubtab = useUIStore((s) => s.setRequestSubtab);
-  const enabledCount = metadataRows.filter((r) => r.enabled && r.key.trim()).length;
   const multi = kind === "cs" || kind === "bd";
 
   return (
@@ -79,11 +77,6 @@ export function RequestPane({
         </Subtab>
         <Subtab active={subtab === "metadata"} onClick={() => setSubtab("metadata")}>
           Metadata
-          {enabledCount > 0 && (
-            <Tag variant="neutral" className="ml-[2px]" >
-              {enabledCount}
-            </Tag>
-          )}
         </Subtab>
         <Subtab active={subtab === "middleware"} onClick={() => setSubtab("middleware")}>
           <ArrowsSplit size={14} />
@@ -116,7 +109,12 @@ export function RequestPane({
           />
         )
       ) : subtab === "metadata" ? (
-        <MetadataTab rows={metadataRows} onChange={onMetadataChange} />
+        <MetadataTab
+          metadata={metadata}
+          onChange={onMetadataChange}
+          currentKey={currentKey}
+          generators={generators}
+        />
       ) : (
         <MiddlewareTab middleware={middleware} onChange={onMiddlewareChange} />
       )}
