@@ -39,6 +39,11 @@ const METADATA_TYPE_DTS = "type Metadata = { [key: string]: string[] };";
 // through this narrow interface + optional-call so a future monaco bump degrades gracefully.
 type HasHiddenAreas = { setHiddenAreas?(ranges: Monaco.IRange[], source?: unknown): void };
 
+// The source tag under which we register our hidden areas (distinct from the body editor's). monaco
+// merges hidden areas across sources, so a stable private tag lets the force path clear/replace
+// ONLY ours.
+const HIDDEN_SOURCE = "grpcview-metadata-wrapper";
+
 // The visible object line span [first, last] + total, derived from line COUNT only. Robust to an
 // empty object: `last` is clamped to be >= `first`.
 function metaBounds(model: Monaco.editor.ITextModel) {
@@ -59,11 +64,21 @@ function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
 // Hide the wrapper lines (idempotent; re-call after setValue, after any object line-count change,
 // and on relayout — hidden areas live on the editor, not the model, so a visibility/size
 // transition drops them). Also nudges the cursor off a hidden prefix line if it landed there.
-function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor) {
+//
+// `force` re-applies the hiding even when the ranges are UNCHANGED. A full-buffer replace (setValue
+// on a request switch, or the Layer-3 restore below) resets the editor's VIEW line-projections to
+// all-visible but leaves monaco's internal HiddenAreasModel cache intact — so a following
+// setHiddenAreas with the SAME geometry (switching between two objects of equal line count → the
+// byte-identical [prefix, suffix] ranges) is judged "unchanged" and skipped, leaving the wrapper
+// visible. force clears OUR source's ranges first so the re-set is always a real re-projection.
+// Layout / incremental-content callers stay UNFORCED so the idempotent short-circuit still
+// suppresses needless re-projection (mirrors Editor.tsx).
+function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor, force = false) {
   const model = editor.getModel();
   const ha = editor as unknown as HasHiddenAreas;
   if (!model || typeof ha.setHiddenAreas !== "function") return;
-  ha.setHiddenAreas(hiddenRanges(model), "grpcview-metadata-wrapper");
+  if (force) ha.setHiddenAreas([], HIDDEN_SOURCE);
+  ha.setHiddenAreas(hiddenRanges(model), HIDDEN_SOURCE);
   const pos = editor.getPosition();
   if (pos && pos.lineNumber <= META_PREFIX_LINES) {
     editor.setPosition({ lineNumber: META_PREFIX_LINES + 1, column: 1 });
@@ -108,11 +123,14 @@ export function MetadataEditor({
       // Hidden areas do NOT survive setValue — reset the backstop snapshot.
       lastGood.current = data;
     }
-    // Re-hide UNCONDITIONALLY. On a view/subtab REMOUNT the model is cached by path so
-    // getValue() already equals data (the setValue branch is skipped), yet the fresh editor
-    // instance starts with NO hidden areas — re-hiding here (idempotent) covers that remount
-    // case as well as the post-setValue reload.
-    applyHidden(ed);
+    // Re-hide, FORCED. On a view/subtab REMOUNT the model is cached by path so getValue() already
+    // equals data (the setValue branch is skipped), yet the fresh editor instance starts with NO
+    // hidden areas — re-hiding here covers that remount case. The setValue branch above needs the
+    // force: replacing the buffer resets the VIEW to all-visible but not monaco's HiddenAreasModel
+    // cache, so switching between two SAME-line-count objects would otherwise short-circuit the
+    // re-hide and leave the wrapper visible (see applyHidden). force is a harmless no-op on the
+    // fresh-remount path.
+    applyHidden(ed, /* force */ true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey]);
 
@@ -285,7 +303,9 @@ export function MetadataEditor({
       ]);
       if (sel) editor.setSelection(sel);
       suppressChange.current = false;
-      applyHidden(editor);
+      // FORCED: the full-range replace above is the same "reset the view, keep the cache" desync
+      // as setValue, so restoring identical-geometry last-good must force the re-hide.
+      applyHidden(editor, /* force */ true);
     });
   };
 
