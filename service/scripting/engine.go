@@ -447,6 +447,55 @@ func grantFromContext(ctx context.Context) Grant {
 	return Grant{} // default deny: no sub-grants
 }
 
+// Invoker is the ctx-carried bridge gv.invoke calls into: req is the JSON {path, params}
+// envelope the guest gvInvokeShim (marshal.go) marshalled; the returned bytes are the
+// InvokeResult envelope JSON the shim JSON.parses and resolves with. service/scripting is
+// a leaf package that cannot import service/workspace (that would be an import cycle), so
+// the actual re-entrant Invoke pipeline is supplied as this closure, riding the context the
+// same way Grant and the console sink already do (WithGrant/withSink) rather than as a
+// direct dependency. An error becomes a rejected gv.invoke promise (invoke.go's hostInvoke
+// tagThrows the error's message); a successful result is bytes the caller (service/workspace)
+// has already shaped as InvokeResult JSON — this package never inspects either shape.
+type Invoker func(ctx context.Context, req []byte) ([]byte, error)
+
+// invokerCtxKey carries the running script's Invoker on the context, the same way the
+// grant rides on ctx — shared host functions, per-run state on ctx.
+type invokerCtxKey struct{}
+
+// WithInvoker returns a context carrying inv for hostInvoke (invoke.go) to call. A context
+// with no Invoker (the zero value of this ctx key) is the default for any run that does not
+// explicitly thread one in — e.g. the cached RunGenerator path must never see one, per the
+// cache-soundness invariant in docs/design/gv-features-plan.md — and gv.invoke rejects with
+// a fixed "invoke is not available in this context" message in that case.
+func WithInvoker(ctx context.Context, inv Invoker) context.Context {
+	return context.WithValue(ctx, invokerCtxKey{}, inv)
+}
+
+// invokerFromContext returns the ctx-carried Invoker, or nil if none rides this context.
+func invokerFromContext(ctx context.Context) Invoker {
+	inv, _ := ctx.Value(invokerCtxKey{}).(Invoker)
+	return inv
+}
+
+// invokeDepthCtxKey carries the current gv.invoke nesting depth on the context.
+type invokeDepthCtxKey struct{}
+
+// WithInvokeDepth returns a context carrying depth as the current gv.invoke nesting count.
+// The fixed cap (D5 in the plan: 8) is a re-entry POLICY enforced by the workspace-side
+// Invoker implementation (which increments and checks this before recursing into another
+// invokeUnary) — this leaf package only carries the counter, the same way it carries Grant
+// without itself deciding what a capability may do.
+func WithInvokeDepth(ctx context.Context, depth int) context.Context {
+	return context.WithValue(ctx, invokeDepthCtxKey{}, depth)
+}
+
+// invokeDepthFromContext returns the current gv.invoke nesting depth, defaulting to 0 when
+// absent — the top-level request, which has not yet recursed through gv.invoke at all.
+func invokeDepthFromContext(ctx context.Context) int {
+	d, _ := ctx.Value(invokeDepthCtxKey{}).(int)
+	return d
+}
+
 // sinkCtxKey carries the running script's console sink on the context, the same way
 // the grant rides on ctx — shared host functions, per-run state on ctx.
 type sinkCtxKey struct{}
@@ -474,6 +523,9 @@ func registerHostModule(ctx context.Context, rt wazero.Runtime) error {
 		NewFunctionBuilder().
 		WithGoModuleFunction(api.GoModuleFunc(hostNetFetch), reqParams, ptrResult).
 		Export("host_net_fetch").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(hostInvoke), reqParams, ptrResult).
+		Export("host_invoke").
 		NewFunctionBuilder().
 		WithGoModuleFunction(api.GoModuleFunc(hostConsole),
 			[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32}, // level, msgPtr, msgLen

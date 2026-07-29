@@ -36,6 +36,7 @@
  * Capability imports (guest -> host); the ONLY things that cross to real I/O:
  *   uint8_t* host_fs_read(const uint8_t* req, int req_len)   -> result ptr
  *   uint8_t* host_net_fetch(const uint8_t* req, int req_len) -> result ptr
+ *   uint8_t* host_invoke(const uint8_t* req, int req_len)    -> result ptr
  *   void     host_console(int level, const uint8_t* msg, int len) - fire-and-forget sink
  *
  * Enforcement (grant + scope + syscall) lives entirely in the Go host functions,
@@ -66,6 +67,13 @@ extern uint8_t *host_fs_read(const uint8_t *req, int req_len);
 
 __attribute__((import_module("env"), import_name("host_net_fetch")))
 extern uint8_t *host_net_fetch(const uint8_t *req, int req_len);
+
+/* gv.invoke's bridge: req is the JSON {path, params} envelope the JS gv IIFE
+ * (marshal.go's gvInvokeShim) marshalled; the resolved side of the pipeline lives in
+ * service/workspace, reached via a ctx-carried Invoker (service/scripting/engine.go), not
+ * this file — this shim only marshals/unmarshals, same as fs and fetch. */
+__attribute__((import_module("env"), import_name("host_invoke")))
+extern uint8_t *host_invoke(const uint8_t *req, int req_len);
 
 /* Fire-and-forget log sink: no result envelope. console output cannot meaningfully
  * fail in a way a script should catch, so it returns void and the Go host buffers it. */
@@ -138,6 +146,21 @@ static JSValue js_host_net_fetch(JSContext *ctx, JSValueConst this_val, int argc
     return unpack_host_result(ctx, res);
 }
 
+/* gv.invoke(path, params) Layer-B shim — identical shape to fetch/fs. The JS-side gv IIFE
+ * (marshal.go's gvInvokeShim) has already JSON-encoded {path, params} into one string;
+ * this shim passes it straight through to the host import unchanged, and does no I/O
+ * itself. */
+static JSValue js_host_invoke(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    if (argc < 1) return JS_ThrowTypeError(ctx, "invoke: request required");
+    size_t len;
+    const char *req = JS_ToCStringLen(ctx, &len, argv[0]);
+    if (!req) return JS_EXCEPTION; /* ToString already threw */
+    uint8_t *res = host_invoke((const uint8_t *)req, (int)len);
+    JS_FreeCString(ctx, req);
+    return unpack_host_result(ctx, res);
+}
+
 /* console sink Layer-B shim: __grpcview_console(level:int, message:string). The JS
  * `console` object (level mapping + argument formatting) is assembled in the Go-side
  * prelude; this shim only forwards the already-formatted line to the host import. */
@@ -174,6 +197,8 @@ static void register_globals(JSContext *ctx) {
                       JS_NewCFunction(ctx, js_host_fs_read, "__grpcview_fs_read", 1));
     JS_SetPropertyStr(ctx, g, "__grpcview_net_fetch",
                       JS_NewCFunction(ctx, js_host_net_fetch, "__grpcview_net_fetch", 1));
+    JS_SetPropertyStr(ctx, g, "__grpcview_invoke",
+                      JS_NewCFunction(ctx, js_host_invoke, "__grpcview_invoke", 1));
     JS_SetPropertyStr(ctx, g, "__grpcview_console",
                       JS_NewCFunction(ctx, js_console, "__grpcview_console", 2));
     JS_FreeValue(ctx, g);

@@ -20,6 +20,17 @@ type Input struct {
 	// with. Ignored by middleware and scenario/scratchpad runs, which take no
 	// positional args.
 	Args []any
+	// Params backs gv.request.params — the kwargs a gv.invoke('path', {...params}) caller
+	// passed to this run. nil normalizes to {} so gv.request.params is always present.
+	// Deliberately excluded from configDigest (profiles.go): only the uncached
+	// RunRequestBody/RunMiddleware paths may ever populate it — see the cache-soundness
+	// invariant in docs/design/gv-features-plan.md.
+	Params map[string]any
+	// InheritedMetadata backs gv.metadata.inherit() — the already-evaluated, merged
+	// metadata of this node's ancestor folder chain (a pre-computed Go-side fold, not a
+	// re-entrant JS call). nil normalizes to {} so inherit() always returns an object.
+	// Also excluded from configDigest, for the same reason as Params.
+	InheritedMetadata map[string][]string
 }
 
 // RequestInput mirrors the gRPC request a middleware/generator script operates on.
@@ -104,27 +115,97 @@ func buildInputPrelude(in Input) string {
 	writeGlobal(&b, "vars", orEmptyMap(in.Vars))
 	writeGlobal(&b, "secrets", orEmptyMap(in.Secrets))
 	writeGlobal(&b, "env", orEmptyMap(in.Env))
+	b.WriteString(buildGvPrelude(in)) // the frozen `gv` global — see the gv section below
 	return b.String()
 }
 
-// writeGlobal emits `globalThis.<name> = __ff(JSON.parse(<literal>));`. The value is
-// JSON-encoded, then that JSON is itself JSON-encoded to a string literal — a JSON
-// string is also a valid JS string literal, so JSON.parse reconstructs the value with
-// no risk of the payload breaking out of the literal.
-func writeGlobal(b *strings.Builder, name string, v any) {
+// jsonLit JSON-encodes v, then JSON-encodes THAT JSON to a string literal — a JSON string
+// is also a valid JS string literal, so JSON.parse(<this literal>) reconstructs v with no
+// risk of the payload breaking out of the literal. Falls back to the literal null if v
+// cannot be marshalled.
+func jsonLit(v any) string {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
 		jsonBytes = []byte("null")
 	}
 	lit, _ := json.Marshal(string(jsonBytes))
-	fmt.Fprintf(b, "globalThis.%s = __ff(JSON.parse(%s));\n", name, lit)
+	return string(lit)
 }
 
-func orEmptyMap(m map[string]any) any {
+// writeGlobal emits `globalThis.<name> = __ff(JSON.parse(<literal>));` (see jsonLit).
+func writeGlobal(b *strings.Builder, name string, v any) {
+	fmt.Fprintf(b, "globalThis.%s = __ff(JSON.parse(%s));\n", name, jsonLit(v))
+}
+
+func orEmptyMap(m map[string]any) map[string]any {
 	if m == nil {
 		return map[string]any{}
 	}
 	return m
+}
+
+// orEmptyMetadata normalizes a nil InheritedMetadata to {} — see orEmptyMap.
+func orEmptyMetadata(m map[string][]string) map[string][]string {
+	if m == nil {
+		return map[string][]string{}
+	}
+	return m
+}
+
+// ---- gv: the shared scripting global ----------------------------------------------
+//
+// gv is installed UNCONDITIONALLY in every run — request body, request metadata, folder
+// metadata, middleware, scenario, and generators — so its members are always present,
+// degrading gracefully rather than being absent: params is {} on a top-level invoke,
+// inherit() is {} with no inheritance context, and invoke rejects with a fixed message
+// when no Invoker rides the context (e.g. the cached RunGenerator path — see profiles.go's
+// configDigest, which deliberately never reads Input.Params/InheritedMetadata, so those
+// fields can never perturb the generator cache key).
+//
+// gv must be assembled and frozen EXACTLY ONCE: Object.freeze blocks any later member
+// addition, and a second `globalThis.gv = …` would clobber the first.
+
+// gvInvokeShim is the function expression installed as gv.invoke. It mirrors
+// netFetchPrelude's fetch() in net.go: marshal the {path, params} envelope to one string,
+// make the single synchronous __grpcview_invoke host call, and hand back a resolved
+// Promise. Any failure — including the C shim's synchronous throw when no Invoker rides
+// the context (invoke.go's errNoInvoker) — is caught and turned into a REJECTED promise,
+// never a synchronous throw, so gv.invoke uniformly satisfies its Promise<InvokeResult>
+// signature and a call site can .then/.catch/await it exactly like fetch.
+const gvInvokeShim = `function (path, params) {
+  try {
+    var req = JSON.stringify({ path: String(path), params: (params == null ? {} : params) });
+    return Promise.resolve(JSON.parse(globalThis.__grpcview_invoke(req)));
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}`
+
+// buildGvPrelude assembles and freezes the single shared `gv` global (plan §"The unifying
+// idea: one shared gv global") in ONE statement. The data leaves (request.params, the
+// pre-computed inherited-metadata map) ride the same JSON round trip as writeGlobal; the
+// two callables (metadata.inherit, invoke) are hung off the resulting containers BEFORE
+// the single outer __ff() freeze pass. __ff recurses only on typeof === "object", so it
+// deep-freezes gv/gv.request/gv.request.params/gv.metadata (blocking member addition or
+// reassignment on each) while leaving the two functions themselves callable. The inherited
+// map is frozen SEPARATELY (its own __ff) because it is reachable only through the
+// inherit() closure, not through gv's own property graph, so the outer freeze pass can
+// never walk into it.
+//
+// Written with `var` + a globalThis assignment (never const/let), so it is safe to
+// re-evaluate in the reused middleware warm-pool context (pool.go).
+func buildGvPrelude(in Input) string {
+	data := map[string]any{
+		"request": map[string]any{"params": orEmptyMap(in.Params)},
+	}
+	return fmt.Sprintf(`globalThis.gv = __ff((function () {
+  var d = JSON.parse(%s);
+  var m = __ff(JSON.parse(%s));
+  d.metadata = { inherit: function () { return m; } };
+  d.invoke = %s;
+  return d;
+})());
+`, jsonLit(data), jsonLit(orEmptyMetadata(in.InheritedMetadata)), gvInvokeShim)
 }
 
 // decodeResult turns a raw result envelope (from qjs_result in JSON mode) into a value
