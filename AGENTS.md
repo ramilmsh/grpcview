@@ -74,6 +74,55 @@ This is the core of the product; understand it before touching `ui/` or
 - **Scripts** (generators / middleware / scenarios) are authored in the Scripts
   view, bundled with esbuild, and run in the same sandbox under a grant.
 
+### The `gv` global
+
+Every script run — body, request metadata, folder metadata, middleware, scenario,
+generators — sees one deep-frozen `gv` global, declared for the editors by a single
+ambient `gv.d.ts` registered once at `file:///grpcview/gv.d.ts`
+(`monaco-scripts.ts`) and assembled backend-side by `buildGvPrelude`
+(`service/scripting/marshal.go`):
+
+```ts
+declare const gv: {
+  metadata: { inherit(): { [key: string]: string[] } };
+  request:  { params: Readonly<Record<string, unknown>> };
+  invoke(path: string, params?: Record<string, unknown>): Promise<InvokeResult>;
+};
+```
+
+`gv` is assembled and frozen **exactly once** (`Object.freeze` blocks later member
+addition, and a second `globalThis.gv =` would clobber the first). The two
+callables are hung off the containers before the single `__ff` freeze pass, which
+recurses only on `typeof === "object"` and so leaves them callable. Members degrade
+gracefully rather than being absent: `inherit()` is `{}` with no inheritance
+context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
+`Invoker` rides the ctx.
+
+- **`gv.metadata.inherit()`** returns the already-evaluated, merged metadata of the
+  node's ancestor **folder** chain. Folders carry their own metadata script
+  (`Folder.draft_metadata_script`, edited via the folder-row gear); `invoke.go`'s
+  `foldAncestorMetadata` walks them root→parent as an iterative Go fold, gated on
+  the request's script textually mentioning `inherit(` and capped at
+  `MaxFolderMetadataDepth`. Transitivity is **userland spread**: a folder that
+  writes `{ ...gv.metadata.inherit(), … }` carries ancestors forward, an empty
+  folder is transparent, and a non-empty folder that omits the spread is a
+  deliberate barrier. Ancestor scripts are read from the **store**, so folder edits
+  only take effect after saving.
+- **`gv.invoke(path, params)`** runs another saved request through the same
+  pipeline and resolves an `InvokeResult` (`{ok, status, body, metadata,
+  requestMetadata, latencyMs}`); the target reads `params` as `gv.request.params`.
+  `path` splits on `/` into display-name segments. A gRPC-status failure **resolves**
+  with `ok:false` (fetch-style); it rejects only for unknown path, a streaming
+  target, un-evaluable body/metadata, or the depth cap. Nested invokes do **not**
+  record history. Bounded by a ctx depth counter (`gvinvoke.go`) — a depth cap only,
+  with no cycle set, so self-recursive pagination still works.
+
+**Cache-soundness invariant:** the invoker and any non-empty `params`/inherited
+metadata ride only the **uncached** `RunRequestBody`/`RunMiddleware` path. The
+`RunGenerator` path is cached by `configDigest` (`profiles.go`, which reads only
+`{Vars, Secrets, Env, Args}`) and must keep seeing `params === {}`, `inherit() ===
+{}`, and a throwing `invoke`. Never route folder metadata through `RunGenerator`.
+
 ## Views (no router)
 
 The SPA has **no URL router**. `App.tsx` renders a single `AppShell` and switches
