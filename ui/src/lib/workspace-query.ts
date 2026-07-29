@@ -18,6 +18,7 @@ import {
   createRequest,
   deleteRequest,
   updateRequest,
+  updateFolder,
   addDescriptorSource,
   removeDescriptorSource,
   invoke,
@@ -113,6 +114,11 @@ export function useWorkspaceMutations() {
     createRequest: useMutation(createRequest, opts),
     deleteRequest: useMutation(deleteRequest, opts),
     updateRequest: useMutation(updateRequest, opts),
+    // updateFolder patches a folder's draft_metadata_script (the new folder-metadata editor,
+    // gv-features-plan.md Feature 1). Mirrors updateRequest: it seeds the Get cache with the fresh
+    // Workspace it returns, so the tree (and any inherit()-dependent request) reflects the save
+    // without a refetch round-trip.
+    updateFolder: useMutation(updateFolder, opts),
     addDescriptorSource: useMutation(addDescriptorSource, opts),
     removeDescriptorSource: useMutation(removeDescriptorSource, opts),
   };

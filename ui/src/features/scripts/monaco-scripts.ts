@@ -157,3 +157,66 @@ interface Response {
 declare function fetch(input: string, init?: RequestInit): Promise<Response>;
 `;
 ts.typescriptDefaults.addExtraLib(ENV_DTS, "file:///grpcview-scripts-env.d.ts");
+
+// --- The shared `gv` scripting global (gv-features-plan.md §"Phase 0 — shared gv foundation") ---
+// A SCRIPT (no import/export), exactly like ENV_DTS above, so `gv`/`InvokeResult` are GLOBAL —
+// ambient across every editor that (transitively) imports this module: the request body editor
+// (Editor.tsx), the request AND folder metadata editor (MetadataEditor.tsx, both the request tab
+// and the new folder-metadata dialog), and the Scripts scratchpad. The backend installs `gv`
+// unconditionally in every run (service/scripting/marshal.go buildGvPrelude) and freezes it once,
+// so this declares the FULL merged surface across all three features — feature 1's
+// `metadata.inherit()`, feature 3's `request.params` + `invoke()` + `InvokeResult` — even though
+// this frontend pass only lights up feature 1's editor affordances. Members degrade gracefully
+// rather than being absent (inherit() -> {}, params -> {} with no invoke context), so one static
+// declaration is correct in every context; nothing here needs to vary per editor.
+//
+// Registered EXACTLY ONCE, at MODULE-EVALUATION time (this top-level call, not inside a React
+// effect) at the single constant URI below. This file is a plain ES module singleton — every
+// importer (Editor.tsx, MetadataEditor.tsx, ScriptsView.tsx) triggers the SAME one-time evaluation
+// of this top level, never a re-run — so, unlike the per-request/per-generator libs above (which
+// dispose-and-re-add on change via a component effect), `gv.d.ts` is static and gets no dispose
+// path at all. Do not move this registration into a component/effect and do not add a second
+// `addExtraLib` at this URI anywhere else: typescriptDefaults throws "Duplicate definition" on a
+// second registration at the same path, and there is nothing here that ever needs to change.
+const GV_DTS = `
+/**
+ * grpcview's shared scripting global (gv-features-plan.md). Installed in every script run —
+ * request body, request metadata, folder metadata, middleware, scenario, and inline-composed
+ * generators — so its members are always present; they degrade gracefully where there is no
+ * relevant context rather than being absent.
+ */
+declare const gv: {
+  /** Folder-metadata inheritance (Feature 1). */
+  metadata: {
+    /**
+     * This node's already-evaluated, merged ancestor-folder metadata (root through immediate
+     * parent) — precomputed, not a re-entrant call. \`{}\` where there is no inheritance context.
+     */
+    inherit(): { [key: string]: string[] };
+  };
+  /** Kwargs passed by a \`gv.invoke()\` caller; \`{}\` on a top-level user invoke (Feature 3). */
+  request: { params: Readonly<Record<string, unknown>> };
+  /**
+   * Invoke a saved request by its slash-separated display-name path (e.g.
+   * "UserService/GetUser"), optionally passing kwargs the target reads as \`gv.request.params\`
+   * (Feature 3). A gRPC-status failure still RESOLVES (\`ok: false\`, fetch-style); invoke() only
+   * REJECTS for an unknown path, a streaming target, a body/metadata that won't evaluate, or the
+   * invoke-depth cap.
+   */
+  invoke(path: string, params?: Record<string, unknown>): Promise<InvokeResult>;
+};
+/** The decoded result of \`gv.invoke()\` — a fetch-style POJO, never a proto Struct/Duration/Any. */
+type InvokeResult = {
+  /** \`true\` iff \`status.code === 0\`. */
+  ok: boolean;
+  status: { code: number; message: string };
+  /** Decoded response JSON, or \`null\` on failure. */
+  body: unknown | null;
+  /** Merged response header + trailer metadata. */
+  metadata: Record<string, string[]>;
+  /** The metadata actually sent with the nested request. */
+  requestMetadata: Record<string, string[]>;
+  latencyMs: number;
+};
+`;
+ts.typescriptDefaults.addExtraLib(GV_DTS, "file:///grpcview/gv.d.ts");

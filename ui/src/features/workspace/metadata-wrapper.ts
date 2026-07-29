@@ -40,6 +40,20 @@ export const isCanonical = (text: string): boolean =>
 // serializes to `=> ()`, a JS syntax error).
 const EMPTY_METADATA = "{\n  \n}";
 
+// The transparent-by-default seed body (gv-features-plan.md Feature 1, D2 "explicit over
+// implicit — but on by default"): a bare spread of the merged ancestor-folder metadata, so a
+// brand-new request or folder inherits everything above it out of the box rather than opening on
+// nothing. `gv` is ambient in every script editor (monaco-scripts.ts's gv.d.ts).
+const DEFAULT_METADATA = "{ ...gv.metadata.inherit() }";
+
+// defaultMetadataModule seeds a NEW/empty metadata editor with the transparent-by-default
+// canonical module `export default async (): Promise<Metadata> => ({ ...gv.metadata.inherit() })`
+// — the same hidden-wrapper shape `wrap`/`migrateMetadataToTs` produce, but pre-populated with the
+// inherit() spread instead of an empty object. Used for both new requests and folders (a folder is
+// transparent-by-default the same way); sent as-is even before the first save so inheritance is
+// live from the very first invoke, not merely after persisting.
+export const defaultMetadataModule = (): string => wrap(DEFAULT_METADATA);
+
 // A metadata key is emitted bare when it is a plain JS identifier, else as a quoted string
 // literal (gRPC header keys routinely contain `-`, e.g. `x-request-id`, which is not an ident).
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;

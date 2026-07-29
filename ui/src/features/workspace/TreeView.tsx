@@ -4,6 +4,7 @@ import {
   CaretDown,
   CaretRight,
   Folder,
+  Gear,
   PencilSimple,
   Plus,
   Trash,
@@ -24,6 +25,8 @@ interface TreeViewProps {
   onNewRequestUnder: (folder: ItemWithPath) => void;
   onRename: (item: ItemWithPath, newName: string) => void;
   onDelete: (item: ItemWithPath) => void;
+  // Opens the folder-metadata dialog for this folder row (gv-features-plan.md Feature 1).
+  onEditMetadata: (folder: ItemWithPath) => void;
 }
 
 // TreeView renders one collection node (folder or request) and, for folders, its
@@ -37,6 +40,7 @@ export function TreeView({
   onNewRequestUnder,
   onRename,
   onDelete,
+  onEditMetadata,
 }: TreeViewProps) {
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -65,6 +69,16 @@ export function TreeView({
           <span className="rowbtns">
             <button
               className="rowbtn"
+              title="Folder metadata"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditMetadata(item);
+              }}
+            >
+              <Gear size={13} />
+            </button>
+            <button
+              className="rowbtn"
               title="Add request"
               onClick={(e) => {
                 e.stopPropagation();
@@ -90,6 +104,7 @@ export function TreeView({
                 onNewRequestUnder={onNewRequestUnder}
                 onRename={onRename}
                 onDelete={onDelete}
+                onEditMetadata={onEditMetadata}
               />
             ))}
           </div>

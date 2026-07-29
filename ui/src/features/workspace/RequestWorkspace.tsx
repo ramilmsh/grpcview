@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { ScriptKind } from "@grpcview/v1/workspace_pb";
 import type { History, Server } from "@grpcview/v1/workspace_pb";
@@ -18,8 +18,9 @@ import { Centered } from "@/components/ui/Centered";
 import { MethodHeader } from "./MethodHeader";
 import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
+import { TypesModal } from "./TypesModal";
 import { migrateBodyToTs } from "./body-wrapper";
-import { migrateMetadataToTs } from "./metadata-wrapper";
+import { defaultMetadataModule, migrateMetadataToTs } from "./metadata-wrapper";
 import type { GeneratorDef } from "./generator-libs";
 
 const DEBOUNCE_MS = 400;
@@ -48,6 +49,9 @@ export function RequestWorkspace() {
   const stopStream = useUIStore((s) => s.stopStream);
   const failStream = useUIStore((s) => s.failStream);
   const renameItem = useUIStore((s) => s.renameItem);
+  // message-shape-visibility plan §Feature 2: local open/close state for the read-only
+  // request/response TS types viewer (TypesModal) — no server/draft state involved.
+  const [typesOpen, setTypesOpen] = useState(false);
 
   const activeItem = useMemo(() => findByKey(rootItems, activeKey), [rootItems, activeKey]);
   const request =
@@ -74,8 +78,11 @@ export function RequestWorkspace() {
       // persisted once the user edits (onBodyChange), mirroring the old seed-on-toggle.
       const primary = migrateBodyToTs(request.draftBody || "{}");
       // Metadata is authored as a canonical TS module now. Seed from the persisted
-      // draft_metadata_script if present; otherwise seed an empty canonical module.
-      const metadata = request.draftMetadataScript || migrateMetadataToTs();
+      // draft_metadata_script if present; otherwise seed the transparent-by-default
+      // `{ ...gv.metadata.inherit() }` module (gv-features-plan.md Feature 1 D2) so a brand-new
+      // request inherits its ancestor folders' metadata from the very first invoke, not only
+      // after a save.
+      const metadata = request.draftMetadataScript || defaultMetadataModule();
       seedDraft(activeKey, {
         body: primary,
         metadata,
@@ -130,10 +137,10 @@ export function RequestWorkspace() {
   // Before the seed effect commits (first render), fall back to the migrated server body so the
   // editor's very first load is already canonical (its reload keys on currentKey, not on `body`).
   const body = draft?.body ?? migrateBodyToTs(request.draftBody || "{}");
-  // Before the seed effect commits (first render), fall back to the persisted script or an
-  // empty canonical module so the editor's very first load is already canonical.
+  // Before the seed effect commits (first render), fall back to the persisted script or the
+  // default inherit-everything module so the editor's very first load is already canonical.
   const metadata =
-    draft?.metadata ?? (request.draftMetadataScript || migrateMetadataToTs());
+    draft?.metadata ?? (request.draftMetadataScript || defaultMetadataModule());
   // Compose list for cs/bd. The primary (index 0) is always the current body —
   // the single source of truth for the persisted message — with any ephemeral
   // extras appended, so the two can never drift.
@@ -361,6 +368,14 @@ export function RequestWorkspace() {
         onRename={onRename}
         onInvoke={onInvoke}
         onTargetChange={onTargetChange}
+        onShowTypes={() => setTypesOpen(true)}
+      />
+      <TypesModal
+        open={typesOpen}
+        onClose={() => setTypesOpen(false)}
+        descriptorSet={workspace?.descriptorSet}
+        input={activeMethod?.input}
+        output={activeMethod?.output}
       />
       <div className="flex" style={{ flex: 1, minHeight: 0 }}>
         <RequestPane

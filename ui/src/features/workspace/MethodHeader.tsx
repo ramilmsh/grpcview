@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { CaretDown, Play, PlugsConnected } from "@/components/ui/icons";
+import { CaretDown, Code, Play, PlugsConnected } from "@/components/ui/icons";
 import type { Service, Method, Server, Request } from "@grpcview/v1/workspace_pb";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
 import { serviceName } from "@/lib/format";
@@ -24,6 +24,7 @@ export function MethodHeader({
   onRename,
   onInvoke,
   onTargetChange,
+  onShowTypes,
 }: {
   request: Request;
   services: Service[];
@@ -37,12 +38,18 @@ export function MethodHeader({
   onRename: (name: string) => void;
   onInvoke: () => void;
   onTargetChange: (t: Server) => void;
+  // message-shape-visibility plan §Feature 2: opens the read-only request/response types
+  // modal (TypesModal). Gated below on a selected service + method.
+  onShowTypes: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   // An explicit per-request target lets you invoke even without a saved source
   // (the schema still reflects off that target — resolveMethod handles it).
   const canInvoke = !!(targetOverride ?? reflection);
+  // message-shape-visibility plan §Feature 2: the types viewer needs a resolved method
+  // (service + method name) to look up input/output coordinates from.
+  const hasMethod = !!(request.service && request.method);
 
   const onPick = (service: Service, method: Method) => {
     onChangeMethod(serviceName(service), method.name);
@@ -125,6 +132,15 @@ export function MethodHeader({
         </div>
 
         <div className="ml-auto flex items-center gap-[9px]">
+          {/* message-shape-visibility: request/response TS shape viewer (TypesModal) */}
+          <IconButton
+            onClick={onShowTypes}
+            disabled={!hasMethod}
+            style={{ opacity: hasMethod ? 1 : 0.35 }}
+            title={hasMethod ? "View request/response message types" : "Select a method first"}
+          >
+            <Code size={15} />
+          </IconButton>
           {/* source resolution chip (read-only in Phase 1) */}
           <Button
             variant="secondary"

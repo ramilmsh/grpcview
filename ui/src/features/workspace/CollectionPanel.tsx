@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { MagnifyingGlass, FolderPlus, Plus } from "@/components/ui/icons";
-import type { Service, Method } from "@grpcview/v1/workspace_pb";
+import { ScriptKind, type Service, type Method } from "@grpcview/v1/workspace_pb";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -9,6 +9,8 @@ import { useUIStore } from "@/lib/ui-store";
 import { childPathOf, itemKey, keyOf, serviceName, type ItemWithPath } from "@/lib/format";
 import { TreeView } from "./TreeView";
 import { MethodPickerModal } from "./MethodPickerModal";
+import { FolderMetadataDialog } from "./FolderMetadataDialog";
+import type { GeneratorDef } from "./generator-libs";
 
 // Count requests in a subtree (for the header + folder counts already handled in
 // TreeView).
@@ -56,9 +58,21 @@ export function CollectionPanel() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [pickerParent, setPickerParent] = useState<ItemWithPath | null | undefined>(undefined);
   const [confirm, setConfirm] = useState<ItemWithPath | null>(null);
+  // The folder row whose metadata dialog is open (gv-features-plan.md Feature 1); null = closed.
+  const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
 
   const filtered = useMemo(() => filterTree(rootItems, filter), [rootItems, filter]);
   const total = useMemo(() => countRequests(rootItems), [rootItems]);
+
+  // The workspace's saved GENERATORS, forwarded to the folder-metadata dialog's MetadataEditor for
+  // the same ambient autocomplete the request metadata editor gets (mirrors RequestWorkspace.tsx).
+  const generators = useMemo<GeneratorDef[]>(
+    () =>
+      workspace?.scripts
+        .filter((s) => s.kind === ScriptKind.GENERATOR)
+        .map((s) => ({ name: s.name, source: s.source })) ?? [],
+    [workspace?.scripts]
+  );
 
   const submitFolder = () => {
     const name = folderName.trim();
@@ -178,6 +192,7 @@ export function CollectionPanel() {
               onNewRequestUnder={(folder) => setPickerParent(folder)}
               onRename={doRename}
               onDelete={setConfirm}
+              onEditMetadata={setMetadataFolder}
             />
           ))
         )}
@@ -213,6 +228,15 @@ export function CollectionPanel() {
         services={services}
         onClose={() => setPickerParent(undefined)}
         onSelect={onPick}
+      />
+
+      {/* folder metadata editor. Keyed by the open folder's identity (or "none" while closed) so
+          a fresh instance mounts per open — see FolderMetadataDialog's own seeding comment. */}
+      <FolderMetadataDialog
+        key={metadataFolder ? itemKey(metadataFolder) : "none"}
+        folder={metadataFolder}
+        onClose={() => setMetadataFolder(null)}
+        generators={generators}
       />
 
       {/* delete confirm */}
