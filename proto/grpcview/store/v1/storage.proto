@@ -50,6 +50,13 @@ message Script {
 message Folder {
   ItemMeta meta = 1;
   repeated string items = 2;  // ordered child slugs
+  // draft_metadata_script is the folder's metadata authored as a TypeScript
+  // module, evaluated as part of the ancestor-folder metadata chain
+  // (gv.metadata.inherit()). Mirrors the wire
+  // grpcview.v1.Folder.draft_metadata_script and, like a request's
+  // draft_metadata_script, is an inline UTF-8 string so folder.json stays
+  // human-readable rather than a base64 blob.
+  string draft_metadata_script = 3;
 }
 
 // Request is request.json inside a request directory.

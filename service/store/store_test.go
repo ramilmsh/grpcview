@@ -575,3 +575,151 @@ func TestUpdateRequestTarget(t *testing.T) {
 		t.Fatalf("target after clear = %+v, want nil", got)
 	}
 }
+
+// TestFolderDraftMetadataScriptRoundTrip covers gv-features-plan.md Feature 1
+// Phase 1: a folder's draft_metadata_script round-trips through UpdateFolder ->
+// disk (folder.json) -> Load, FolderMetadataChain returns the ordered ancestor
+// scripts (root->leaf) for a node nested under those folders, a root-level node
+// gets an empty chain, and a missing/non-folder path segment propagates
+// ErrItemNotFound/ErrNotAFolder — the store does not swallow either (matching
+// RequestMiddleware's own contract, whose ErrItemNotFound is tolerated by its
+// *caller*, not by the store).
+func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "a"); err != nil {
+		t.Fatalf("CreateFolder a: %v", err)
+	}
+	if err := coll.CreateFolder(ctx, []string{"a"}, "b"); err != nil {
+		t.Fatalf("CreateFolder a/b: %v", err)
+	}
+
+	scriptA := "export default () => ({ ...gv.metadata.inherit(), fromA: ['1'] })"
+	scriptB := "export default () => ({ ...gv.metadata.inherit(), fromB: ['2'] })"
+	if err := coll.UpdateFolder(ctx, nil, "a", FolderPatch{DraftMetadataScript: &scriptA}); err != nil {
+		t.Fatalf("UpdateFolder a: %v", err)
+	}
+	if err := coll.UpdateFolder(ctx, []string{"a"}, "b", FolderPatch{DraftMetadataScript: &scriptB}); err != nil {
+		t.Fatalf("UpdateFolder a/b: %v", err)
+	}
+
+	// In-memory tree (Load) carries the script on both folders.
+	root := rootItems(t, coll, ctx)
+	aItem := childByName(root, "a")
+	if aItem == nil || aItem.GetFolder() == nil {
+		t.Fatalf("expected folder a, got %v", names(root))
+	}
+	if got := aItem.GetFolder().GetDraftMetadataScript(); got != scriptA {
+		t.Errorf("folder a script = %q, want %q", got, scriptA)
+	}
+	bItem := childByName(aItem.GetFolder().GetItems(), "b")
+	if bItem == nil || bItem.GetFolder() == nil {
+		t.Fatalf("expected folder a/b, got %v", names(aItem.GetFolder().GetItems()))
+	}
+	if got := bItem.GetFolder().GetDraftMetadataScript(); got != scriptB {
+		t.Errorf("folder a/b script = %q, want %q", got, scriptB)
+	}
+
+	// On-disk shape: folder.json carries draftMetadataScript, like a request's.
+	tree := filepath.Join(coll.Root(), treeDir)
+	ff := &grpcviewstorev1.Folder{}
+	mustRead(t, filepath.Join(tree, "a", folderFileName), ff)
+	if ff.GetDraftMetadataScript() != scriptA {
+		t.Errorf("a/folder.json draftMetadataScript = %q, want %q", ff.GetDraftMetadataScript(), scriptA)
+	}
+	mustRead(t, filepath.Join(tree, "a", "b", folderFileName), ff)
+	if ff.GetDraftMetadataScript() != scriptB {
+		t.Errorf("a/b/folder.json draftMetadataScript = %q, want %q", ff.GetDraftMetadataScript(), scriptB)
+	}
+
+	// FolderMetadataChain(['a','b']) is the ancestor chain for a request that
+	// LIVES inside a/b (parent path ['a','b']): both folders' scripts, root->leaf.
+	chain, err := coll.FolderMetadataChain(ctx, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("FolderMetadataChain: %v", err)
+	}
+	if len(chain) != 2 || chain[0] != scriptA || chain[1] != scriptB {
+		t.Fatalf("FolderMetadataChain(a,b) = %v, want [%q %q]", chain, scriptA, scriptB)
+	}
+
+	// A root-level node (no ancestor folders) gets an empty chain, no error.
+	rootChain, err := coll.FolderMetadataChain(ctx, nil)
+	if err != nil || len(rootChain) != 0 {
+		t.Fatalf("FolderMetadataChain(root) = %v (err %v), want empty", rootChain, err)
+	}
+
+	// A missing path segment propagates ErrItemNotFound: FolderMetadataChain
+	// itself does not tolerate it (a future workspace-layer caller decides to).
+	if _, err := coll.FolderMetadataChain(ctx, []string{"a", "ghost"}); !errors.Is(err, ErrItemNotFound) {
+		t.Fatalf("FolderMetadataChain missing path = %v, want ErrItemNotFound", err)
+	}
+
+	// A path segment that resolves to a request (not a folder) is ErrNotAFolder.
+	if err := coll.CreateRequest(ctx, []string{"a", "b"}, "Leaf", "s", "m"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	if _, err := coll.FolderMetadataChain(ctx, []string{"a", "b", "Leaf"}); !errors.Is(err, ErrNotAFolder) {
+		t.Fatalf("FolderMetadataChain through a request = %v, want ErrNotAFolder", err)
+	}
+
+	// Clearing (empty-but-present) removes the script.
+	empty := ""
+	if err := coll.UpdateFolder(ctx, nil, "a", FolderPatch{DraftMetadataScript: &empty}); err != nil {
+		t.Fatalf("UpdateFolder clear: %v", err)
+	}
+	root = rootItems(t, coll, ctx)
+	if got := childByName(root, "a").GetFolder().GetDraftMetadataScript(); got != "" {
+		t.Errorf("folder a script after clear = %q, want empty", got)
+	}
+
+	// An unset (nil) patch leaves the script unchanged.
+	if err := coll.UpdateFolder(ctx, []string{"a"}, "b", FolderPatch{}); err != nil {
+		t.Fatalf("UpdateFolder no-op: %v", err)
+	}
+	root = rootItems(t, coll, ctx)
+	bItem = childByName(childByName(root, "a").GetFolder().GetItems(), "b")
+	if got := bItem.GetFolder().GetDraftMetadataScript(); got != scriptB {
+		t.Errorf("folder a/b script after no-op patch = %q, want unchanged %q", got, scriptB)
+	}
+
+	// UpdateFolder surfaces the same sentinels as FolderMetadataChain/UpdateRequest
+	// for a missing folder / an item that isn't a folder.
+	if err := coll.UpdateFolder(ctx, nil, "ghost", FolderPatch{DraftMetadataScript: &scriptA}); !errors.Is(err, ErrItemNotFound) {
+		t.Fatalf("UpdateFolder missing = %v, want ErrItemNotFound", err)
+	}
+	if err := coll.UpdateFolder(ctx, []string{"a", "b"}, "Leaf", FolderPatch{DraftMetadataScript: &scriptA}); !errors.Is(err, ErrNotAFolder) {
+		t.Fatalf("UpdateFolder on a request = %v, want ErrNotAFolder", err)
+	}
+}
+
+// TestResolveRequest covers the store.ResolveRequest refactor (gv-features-plan.md
+// Feature 3's ResolveRequest bullet): resolving a saved request by display-name
+// path to its wire shape, and propagating ErrItemNotFound / ErrNotARequest
+// exactly like RequestMiddleware does for a missing item / a folder.
+func TestResolveRequest(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Users"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get User", "acme.v1.UserService", "GetUser"); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"id":"42"}`
+	if err := coll.UpdateRequest(ctx, []string{"Users"}, "Get User", RequestPatch{DraftBody: &body}); err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := coll.ResolveRequest(ctx, []string{"Users"}, "Get User")
+	if err != nil {
+		t.Fatalf("ResolveRequest: %v", err)
+	}
+	if req.GetName() != "Get User" || req.GetService() != "acme.v1.UserService" || req.GetMethod() != "GetUser" || req.GetDraftBody() != body {
+		t.Errorf("ResolveRequest = %+v, want name/service/method/draftBody to match", req)
+	}
+
+	if _, err := coll.ResolveRequest(ctx, nil, "Ghost"); !errors.Is(err, ErrItemNotFound) {
+		t.Errorf("ResolveRequest missing = %v, want ErrItemNotFound", err)
+	}
+	if _, err := coll.ResolveRequest(ctx, nil, "Users"); !errors.Is(err, ErrNotARequest) {
+		t.Errorf("ResolveRequest on a folder = %v, want ErrNotARequest", err)
+	}
+}

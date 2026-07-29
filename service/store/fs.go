@@ -260,43 +260,11 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	return writeMessage(p, dr)
 }
 
-// RequestMiddleware returns the ordered attached-middleware display names for the
-// request named name inside parent — the cheap read the invoke path's middleware
-// step needs, without loading the whole tree (mirroring Sources/Scripts). It
-// returns ErrItemNotFound when there is no such request (an ad-hoc or just-deleted
-// target), which the invoke path treats as "no middleware".
-func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name string) ([]string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureExists(); err != nil {
-		return nil, err
-	}
-	parentDir, err := c.resolveFolder(parent)
-	if err != nil {
-		return nil, err
-	}
-	present, err := c.readChildren(parentDir)
-	if err != nil {
-		return nil, err
-	}
-	ch, ok := findByName(present, name)
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrItemNotFound, name)
-	}
-	if ch.kind != kindRequest {
-		return nil, fmt.Errorf("%w: %q", ErrNotARequest, name)
-	}
-	return ch.request.GetMiddleware(), nil
-}
-
-// AppendHistory records one completed invoke in the run history of the request
-// named name inside parent, retaining the newest max entries (max <= 0 keeps all)
-// and logging when older entries are dropped. Run history is gitignored local
-// state (storage.md §4): it lives under .grpcview/history/ keyed by the request's
-// stable slug path — so it survives a rename and never hits git — and is loaded
-// back into Request.history on Load. A missing target request returns
-// ErrItemNotFound; Invoke persists history best-effort and does not fail on it.
-func (c *Collection) AppendHistory(_ context.Context, parent []string, name string, entry *grpcviewv1.History, max int) error {
+// UpdateFolder applies a partial update to the folder named name inside parent.
+// Mirrors UpdateRequest: only the files a patch actually touches are rewritten,
+// and the folder.json readChildren already decoded (ch.folder) is reused so the
+// child ordering (Items) it also carries is preserved untouched.
+func (c *Collection) UpdateFolder(_ context.Context, parent []string, name string, patch FolderPatch) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err := c.ensureExists(); err != nil {
@@ -314,8 +282,157 @@ func (c *Collection) AppendHistory(_ context.Context, parent []string, name stri
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrItemNotFound, name)
 	}
+	if ch.kind != kindFolder {
+		return fmt.Errorf("%w: %q", ErrNotAFolder, name)
+	}
+
+	if patch.DraftMetadataScript == nil {
+		return nil
+	}
+	// Reuse the folder.json readChildren already decoded (ch.folder) rather than
+	// re-opening and re-decoding the same file.
+	p := filepath.Join(parentDir, ch.slug, folderFileName)
+	ff := ch.folder
+	ff.DraftMetadataScript = *patch.DraftMetadataScript // plain string, like Request.DraftMetadataScript
+	return writeMessage(p, ff)
+}
+
+// FolderMetadataChain returns the ordered ancestor folder metadata scripts
+// (draft_metadata_script, root→leaf) for a node whose PARENT-folder path is path
+// — the folders gv.metadata.inherit() folds over. path is a request's (or a
+// folder's) parent path, the same display-name path CreateRequest/CreateFolder
+// take, NOT including the node's own name: FolderMetadataChain(["a","b"]) walks
+// folder "a" then folder "a/b" and returns their two scripts in that order. A
+// root-level node (empty path) has no ancestor folders and returns an empty,
+// non-nil slice — the v1 "folder-only" root (D3): the collection root is not
+// itself a Folder message and carries no metadata script of its own.
+//
+// It propagates ErrItemNotFound/ErrNotAFolder exactly like resolveFolder (a path
+// segment that no longer resolves, e.g. after a rename/delete of a folder a stale
+// caller still references) rather than swallowing them — mirroring
+// RequestMiddleware's contract, whose own ErrItemNotFound is tolerated by its
+// caller (applyRequestMiddleware), not by the store. A future caller here should
+// do the same: treat the error as "no inheritance", not a hard failure.
+func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return nil, err
+	}
+	scripts := make([]string, 0, len(path))
+	dir := c.treeRoot()
+	for _, name := range path {
+		children, err := c.readChildren(dir)
+		if err != nil {
+			return nil, err
+		}
+		ch, ok := findByName(children, name)
+		if !ok {
+			return nil, fmt.Errorf("%w: folder %q", ErrItemNotFound, name)
+		}
+		if ch.kind != kindFolder {
+			return nil, fmt.Errorf("%w: %q", ErrNotAFolder, name)
+		}
+		scripts = append(scripts, ch.folder.GetDraftMetadataScript())
+		dir = filepath.Join(dir, ch.slug)
+	}
+	return scripts, nil
+}
+
+// resolveChild resolves name inside the folder addressed by parent (a
+// display-name path), returning that folder's directory, its full child listing
+// (for a caller that needs to rewrite the sibling order, e.g. Delete), and the
+// matched child (ok false when there is no such child — not an error). It is the
+// shared "resolveFolder + readChildren + findByName" preamble behind Delete,
+// ResolveRequest, RequestMiddleware, and AppendHistory. Callers must hold c.mu
+// and have already called c.ensureExists.
+func (c *Collection) resolveChild(parent []string, name string) (parentDir string, present []childEntry, ch childEntry, ok bool, err error) {
+	parentDir, err = c.resolveFolder(parent)
+	if err != nil {
+		return "", nil, childEntry{}, false, err
+	}
+	present, err = c.readChildren(parentDir)
+	if err != nil {
+		return "", nil, childEntry{}, false, err
+	}
+	ch, ok = findByName(present, name)
+	return parentDir, present, ch, ok, nil
+}
+
+// resolveRequestChild layers the kind-check + not-found handling shared by
+// ResolveRequest, RequestMiddleware, and AppendHistory on top of resolveChild:
+// unlike Delete (which addresses an item of either kind and treats a missing name
+// as a no-op), these three all need "this path names an existing request" before
+// doing their own thing with it. It returns ErrItemNotFound if there is no such
+// item and ErrNotARequest if name resolves to a folder. Callers must hold c.mu
+// and have already called c.ensureExists.
+func (c *Collection) resolveRequestChild(parent []string, name string) (parentDir string, ch childEntry, err error) {
+	parentDir, _, ch, ok, err := c.resolveChild(parent, name)
+	if err != nil {
+		return "", childEntry{}, err
+	}
+	if !ok {
+		return "", childEntry{}, fmt.Errorf("%w: %q", ErrItemNotFound, name)
+	}
 	if ch.kind != kindRequest {
-		return fmt.Errorf("%w: %q", ErrNotARequest, name)
+		return "", childEntry{}, fmt.Errorf("%w: %q", ErrNotARequest, name)
+	}
+	return parentDir, ch, nil
+}
+
+// ResolveRequest resolves name inside parent to the request it names, converted
+// to its wire shape (service/method/draft body/draft metadata
+// script/middleware/target) — the lookup a caller addressing a saved request by
+// display-name path needs (e.g. gv.invoke()'s path resolution) without loading
+// the whole workspace. It returns ErrItemNotFound if there is no such item and
+// ErrNotARequest if name resolves to a folder.
+func (c *Collection) ResolveRequest(_ context.Context, parent []string, name string) (*grpcviewv1.Request, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return nil, err
+	}
+	_, ch, err := c.resolveRequestChild(parent, name)
+	if err != nil {
+		return nil, err
+	}
+	return diskToWireRequest(ch.name, ch.request), nil
+}
+
+// RequestMiddleware returns the ordered attached-middleware display names for the
+// request named name inside parent — the cheap read the invoke path's middleware
+// step needs, without loading the whole tree (mirroring Sources/Scripts). It
+// returns ErrItemNotFound when there is no such request (an ad-hoc or just-deleted
+// target), which the invoke path treats as "no middleware".
+func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name string) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return nil, err
+	}
+	_, ch, err := c.resolveRequestChild(parent, name)
+	if err != nil {
+		return nil, err
+	}
+	return ch.request.GetMiddleware(), nil
+}
+
+// AppendHistory records one completed invoke in the run history of the request
+// named name inside parent, retaining the newest max entries (max <= 0 keeps all)
+// and logging when older entries are dropped. Run history is gitignored local
+// state (storage.md §4): it lives under .grpcview/history/ keyed by the request's
+// stable slug path — so it survives a rename and never hits git — and is loaded
+// back into Request.history on Load. A missing target request returns
+// ErrItemNotFound; Invoke persists history best-effort and does not fail on it.
+func (c *Collection) AppendHistory(_ context.Context, parent []string, name string, entry *grpcviewv1.History, max int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return err
+	}
+	parentDir, ch, err := c.resolveRequestChild(parent, name)
+	if err != nil {
+		return err
 	}
 	histPath, err := c.historyFilePath(filepath.Join(parentDir, ch.slug))
 	if err != nil {
@@ -343,15 +460,10 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
-	parentDir, err := c.resolveFolder(parent)
+	parentDir, present, ch, ok, err := c.resolveChild(parent, name)
 	if err != nil {
 		return err
 	}
-	present, err := c.readChildren(parentDir)
-	if err != nil {
-		return err
-	}
-	ch, ok := findByName(present, name)
 	if !ok {
 		return nil
 	}
@@ -490,8 +602,11 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 			return nil, err
 		}
 		return &grpcviewv1.Item{
-			Name:    ch.name,
-			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: children}},
+			Name: ch.name,
+			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{
+				Items:               children,
+				DraftMetadataScript: ch.folder.GetDraftMetadataScript(),
+			}},
 		}, nil
 	case kindRequest:
 		req := diskToWireRequest(ch.name, ch.request)

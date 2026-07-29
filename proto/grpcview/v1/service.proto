@@ -99,6 +99,26 @@ message UpdateRequestResponse {
   Workspace workspace = 1;
 }
 
+// UpdateFolderRequest patches a folder's metadata script. Mirrors
+// UpdateRequestRequest's plumbing but only carries the one folder-specific
+// field: folders have no service/method/body/middleware/target of their own.
+message UpdateFolderRequest {
+  string workspace_name = 1;
+  repeated string path = 2;
+  string item_name = 3;
+  // draft_metadata_script patches the folder's metadata source: a TypeScript
+  // module (`export default (): Metadata => ({ ... })`) whose returned
+  // {[key: string]: string[]} object contributes to the ancestor-folder
+  // metadata chain gv.metadata.inherit() folds over. Mirrors
+  // UpdateRequestRequest.draft_metadata_script: unset leaves it unchanged, an
+  // empty-but-present value clears it.
+  optional string draft_metadata_script = 4;
+}
+
+message UpdateFolderResponse {
+  Workspace workspace = 1;
+}
+
 message GetRequest {
   string workspace_name = 1;
 }
@@ -273,6 +293,8 @@ service WorkspaceService {
   rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);
   // UpdateRequest updates a request in the workspace
   rpc UpdateRequest(UpdateRequestRequest) returns (UpdateRequestResponse);
+  // UpdateFolder updates a folder's metadata script in the workspace
+  rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
   // Invoke executes a unary RPC against a target server and returns the result
   // (status, response body, request/response metadata, latency).
   rpc Invoke(InvokeRequest) returns (InvokeResponse);

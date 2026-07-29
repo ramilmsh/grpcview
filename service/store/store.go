@@ -83,6 +83,16 @@ type ScriptPatch struct {
 	Source *string
 }
 
+// FolderPatch is a partial update to a folder. Like RequestPatch, a nil field is
+// left unchanged and a non-nil field is applied, so an empty-but-present
+// DraftMetadataScript ("") clears the script.
+type FolderPatch struct {
+	// DraftMetadataScript patches the folder's metadata source (the TypeScript
+	// module folded into gv.metadata.inherit()'s ancestor chain). nil leaves it
+	// unchanged; a non-nil value (including "") replaces it.
+	DraftMetadataScript *string
+}
+
 // Store manages filesystem-backed collections rooted under a common base
 // directory. Phase 1 uses name-based addressing: a workspace name maps to
 // <base>/<name>. It hands out per-name Collection handles that serialize their

@@ -346,6 +346,64 @@ export declare type UpdateRequestResponse = Message<"grpcview.v1.UpdateRequestRe
 export declare const UpdateRequestResponseSchema: GenMessage<UpdateRequestResponse>;
 
 /**
+ * UpdateFolderRequest patches a folder's metadata script. Mirrors
+ * UpdateRequestRequest's plumbing but only carries the one folder-specific
+ * field: folders have no service/method/body/middleware/target of their own.
+ *
+ * @generated from message grpcview.v1.UpdateFolderRequest
+ */
+export declare type UpdateFolderRequest = Message<"grpcview.v1.UpdateFolderRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * @generated from field: repeated string path = 2;
+   */
+  path: string[];
+
+  /**
+   * @generated from field: string item_name = 3;
+   */
+  itemName: string;
+
+  /**
+   * draft_metadata_script patches the folder's metadata source: a TypeScript
+   * module (`export default (): Metadata => ({ ... })`) whose returned
+   * {[key: string]: string[]} object contributes to the ancestor-folder
+   * metadata chain gv.metadata.inherit() folds over. Mirrors
+   * UpdateRequestRequest.draft_metadata_script: unset leaves it unchanged, an
+   * empty-but-present value clears it.
+   *
+   * @generated from field: optional string draft_metadata_script = 4;
+   */
+  draftMetadataScript?: string | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.UpdateFolderRequest.
+ * Use `create(UpdateFolderRequestSchema)` to create a new message.
+ */
+export declare const UpdateFolderRequestSchema: GenMessage<UpdateFolderRequest>;
+
+/**
+ * @generated from message grpcview.v1.UpdateFolderResponse
+ */
+export declare type UpdateFolderResponse = Message<"grpcview.v1.UpdateFolderResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.UpdateFolderResponse.
+ * Use `create(UpdateFolderResponseSchema)` to create a new message.
+ */
+export declare const UpdateFolderResponseSchema: GenMessage<UpdateFolderResponse>;
+
+/**
  * @generated from message grpcview.v1.GetRequest
  */
 export declare type GetRequest = Message<"grpcview.v1.GetRequest"> & {
@@ -912,6 +970,16 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof UpdateRequestRequestSchema;
     output: typeof UpdateRequestResponseSchema;
+  },
+  /**
+   * UpdateFolder updates a folder's metadata script in the workspace
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.UpdateFolder
+   */
+  updateFolder: {
+    methodKind: "unary";
+    input: typeof UpdateFolderRequestSchema;
+    output: typeof UpdateFolderResponseSchema;
   },
   /**
    * Invoke executes a unary RPC against a target server and returns the result

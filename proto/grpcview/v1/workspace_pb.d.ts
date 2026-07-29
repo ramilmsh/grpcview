@@ -221,6 +221,19 @@ export declare type Folder = Message$1<"grpcview.v1.Folder"> & {
    * @generated from field: repeated grpcview.v1.Item items = 1;
    */
   items: Item[];
+
+  /**
+   * draft_metadata_script is the folder's metadata authored as a TypeScript
+   * module (`export default (): Metadata => ({ ... })`), mirroring
+   * Request.draft_metadata_script. It feeds the ancestor-folder metadata chain
+   * gv.metadata.inherit() folds over (gv-features-plan.md Feature 1): a request
+   * (or a descendant folder) that spreads `{ ...gv.metadata.inherit() }` picks up
+   * every non-empty ancestor folder script root-to-leaf. Empty means this folder
+   * contributes nothing of its own (a transparent passthrough in the fold).
+   *
+   * @generated from field: string draft_metadata_script = 2;
+   */
+  draftMetadataScript: string;
 };
 
 /**

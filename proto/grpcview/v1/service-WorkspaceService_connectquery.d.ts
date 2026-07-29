@@ -48,6 +48,12 @@ export const deleteRequest: typeof WorkspaceService["method"]["deleteRequest"];
  */
 export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
 /**
+ * UpdateFolder updates a folder's metadata script in the workspace
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.UpdateFolder
+ */
+export const updateFolder: typeof WorkspaceService["method"]["updateFolder"];
+/**
  * Invoke executes a unary RPC against a target server and returns the result
  * (status, response body, request/response metadata, latency).
  *
