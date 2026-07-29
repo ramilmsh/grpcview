@@ -47,16 +47,56 @@ const historyLimit = 50
 // "{}" JSON, which is not a module that returns an object.
 const emptyTSBody = "export default () => ({})"
 
-// Invoke executes a single unary RPC against the target server and returns the
-// result. A gRPC-level failure of the *invoked* call (e.g. the target returns
-// NotFound) is not an error of this RPC: it is reported in the response's
-// Status so the UI can render it. Only failures grpcview itself can't get past
-// — no target, unreachable schema, a body that doesn't fit the request type —
-// surface as Connect errors.
-func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
-	msg := request.Msg
+// MaxFolderMetadataDepth bounds the ancestor-folder-metadata chain foldAncestorMetadata walks
+// (gv-features-plan.md Feature 1, D5's folder-chain cap): a path deeper than this is rejected as
+// a Connect FailedPrecondition rather than paying for an unbounded number of fresh QuickJS
+// instantiations. It is independent of gv.invoke's own recursion-depth cap (Feature 3).
+const MaxFolderMetadataDepth = 16
 
-	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, msg.GetTarget(), msg.GetWorkspaceName(), msg.GetService(), msg.GetMethod())
+// invokeSpec carries everything invokeUnary needs to run one unary RPC — the union of what its
+// two callers build: the public Invoke RPC (below; params=nil, recordHistory=true) and
+// gv.invoke's re-entry (scriptInvoker, gvinvoke.go; params=the caller's kwargs,
+// recordHistory=false — gv-features-plan.md Feature 3 D6). Field names mirror InvokeRequest's;
+// workspaceName/path/itemName/service/method/target address WHERE and WHAT to call and (via
+// path+itemName) where to attach history/middleware; body/metadataScript/metadata are the
+// (possibly unsaved) editor-shaped inputs resolveInvokeBody/resolveInvokeMetadata evaluate;
+// params backs gv.request.params for this run's own body/metadata/middleware — and, via
+// foldAncestorMetadata, its ancestor folders' too (D4) — and is nil outside a gv.invoke
+// re-entry; recordHistory gates whether this run appends to its target's history.
+type invokeSpec struct {
+	workspaceName  string
+	path           []string // parent-folder display-name path (NOT including itemName)
+	itemName       string   // the saved request's display name; "" for an ad-hoc invoke
+	service        string
+	method         string
+	target         *grpcviewv1.Server
+	body           string // raw TS body source; "" defaults to emptyTSBody
+	metadataScript string
+	metadata       *structpb.Struct // fallback metadata Struct used when metadataScript is empty
+	params         map[string]any   // gv.invoke(path, params)'s kwargs
+	recordHistory  bool
+}
+
+// invokeUnary runs one unary RPC end to end — resolve target → evaluate body → evaluate
+// metadata → run middleware → dial → send → decode — the block factored out of the public
+// Invoke RPC (gv-features-plan.md Feature 3 §"Approach") so it is shared with gv.invoke's
+// re-entry (scriptInvoker, gvinvoke.go). Both callers therefore reject a streaming target with
+// the SAME check (it lives here), and a nested gv.invoke from EITHER caller's
+// body/metadata/middleware evaluation re-enters through this exact function: ctx is augmented
+// with this workspace's gv.invoke Invoker AT THE TOP, before any script runs, so every
+// downstream RunRequestBody/RunMiddleware call (body, metadata, ancestor folder metadata,
+// middleware) carries it.
+//
+// A gRPC-level failure of the *invoked* call is not a Go error here — it comes back as (out,
+// nil) with the failure recorded in out.Status, so the public Invoke can render it in the
+// response and gv.invoke can resolve its promise with ok:false (fetch-style, plan §"Return
+// shape"). Only a failure grpcview itself can't get past — no target, unreachable schema, a
+// streaming target, a body/metadata that won't evaluate — is a non-nil error, which the public
+// Invoke surfaces as a Connect error and scriptInvoker turns into a rejected gv.invoke promise.
+func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv1.Request_Response, error) {
+	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))
+
+	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, spec.target, spec.workspaceName, spec.service, spec.method)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +106,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("streaming methods are not supported yet: %s", methodDesc.GetFullyQualifiedName()))
 	}
 
-	body := strings.TrimSpace(msg.GetBody())
+	body := strings.TrimSpace(spec.body)
 	if body == "" {
 		body = emptyTSBody
 	}
@@ -74,15 +114,16 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	// canonical TS module (the frontend migrates any legacy body before sending), so it is run
 	// through the engine and its returned object becomes the JSON message. The same shared
 	// pre-send step streamInvoke runs.
-	evaluatedBodies, err := w.resolveInvokeBody(ctx, msg.GetWorkspaceName(), []string{body})
+	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, []string{body}, spec.params)
 	if err != nil {
 		return nil, err
 	}
 	// Compute the outgoing metadata Struct: when metadata_script is set it is a TypeScript
 	// module evaluated exactly like the TS body (generators composable as ambient globals);
 	// otherwise the request's metadata Struct is used as-is (today's path). The same shared
-	// pre-send step streamInvoke runs.
-	outgoingMD, err := w.resolveInvokeMetadata(ctx, msg.GetWorkspaceName(), msg.GetMetadataScript(), msg.GetMetadata())
+	// pre-send step streamInvoke runs. spec.params backs gv.request.params for this eval (and,
+	// when the script mentions inherit(), every ancestor folder script's eval too — D4).
+	outgoingMD, err := w.resolveInvokeMetadata(ctx, spec.workspaceName, spec.path, spec.metadataScript, spec.metadata, spec.params)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +131,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	// request — middleware rewrites the body/metadata in order. The same shared pre-send step
 	// streamInvoke runs; a no-op when nothing is attached, and a per-middleware failure is a
 	// Connect error grpcview can't get past, like a bad body.
-	resolvedBodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetTarget(), evaluatedBodies, outgoingMD)
+	resolvedBodies, resolvedMD, err := w.applyRequestMiddleware(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.target, evaluatedBodies, outgoingMD, spec.params)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +166,10 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 			Message: st.Message(),
 			Details: st.Proto().GetDetails(),
 		}
-		w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), msg.GetBody(), out)
-		return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
+		if spec.recordHistory {
+			w.recordHistory(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.method, spec.body, out)
+		}
+		return out, nil
 	}
 
 	out.Status = &grpcviewv1.Status{Code: int32(codeOK)}
@@ -140,7 +183,37 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	}
 	out.Response = jsonBytes
 
-	w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), msg.GetBody(), out)
+	if spec.recordHistory {
+		w.recordHistory(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.method, spec.body, out)
+	}
+	return out, nil
+}
+
+// Invoke executes a single unary RPC against the target server and returns the
+// result. A gRPC-level failure of the *invoked* call (e.g. the target returns
+// NotFound) is not an error of this RPC: it is reported in the response's
+// Status so the UI can render it. Only failures grpcview itself can't get past
+// — no target, unreachable schema, a body that doesn't fit the request type —
+// surface as Connect errors. All the actual work is invokeUnary; Invoke only builds its spec
+// from the wire request (params=nil — gv.invoke is the only caller that ever sets it —
+// recordHistory=true) and wraps the result.
+func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
+	msg := request.Msg
+	out, err := w.invokeUnary(ctx, invokeSpec{
+		workspaceName:  msg.GetWorkspaceName(),
+		path:           msg.GetPath(),
+		itemName:       msg.GetItemName(),
+		service:        msg.GetService(),
+		method:         msg.GetMethod(),
+		target:         msg.GetTarget(),
+		body:           msg.GetBody(),
+		metadataScript: msg.GetMetadataScript(),
+		metadata:       msg.GetMetadata(),
+		recordHistory:  true,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
 }
 
@@ -194,21 +267,22 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	// (the frontend migrates before sending), so each is run through the engine and its
 	// returned object becomes the JSON message. The same shared pre-send step unary Invoke
 	// runs; a failure is a pre-flight Connect error that sends no frames.
-	bodies, err = w.resolveInvokeBody(ctx, msg.GetWorkspaceName(), bodies)
+	bodies, err = w.resolveInvokeBody(ctx, msg.GetWorkspaceName(), bodies, nil)
 	if err != nil {
 		return err
 	}
 	// Compute the outgoing metadata Struct (metadata_script evaluated like the TS body, else
 	// the request's metadata Struct as-is), the same shared pre-send step unary Invoke runs.
-	// A failure is a pre-flight Connect error that sends no frames.
-	outgoingMD, err := w.resolveInvokeMetadata(ctx, msg.GetWorkspaceName(), msg.GetMetadataScript(), msg.GetMetadata())
+	// A failure is a pre-flight Connect error that sends no frames. params is nil for now —
+	// gv.invoke() (Feature 3) is the only planned caller that will ever pass non-nil params here.
+	outgoingMD, err := w.resolveInvokeMetadata(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetMetadataScript(), msg.GetMetadata(), nil)
 	if err != nil {
 		return err
 	}
 	// Run the saved request's attached middleware chain (§S3) on the evaluated outgoing
 	// request, the same shared pre-send step unary Invoke runs. A per-middleware failure is a
 	// pre-flight Connect error that sends no frames.
-	bodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetTarget(), bodies, outgoingMD)
+	bodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetTarget(), bodies, outgoingMD, nil)
 	if err != nil {
 		return err
 	}
@@ -396,9 +470,12 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 // middleware/UnmarshalJSON pipeline unchanged. A body may also COMPOSE the
 // workspace's saved generators by calling them as ambient globals; the workspace generators are
 // loaded once and each body folds in the ones it transitively reaches (see transitiveGenerators /
-// engine.RunRequestBody). A throw, timeout, or a non-object return is a Connect
-// FailedPrecondition, mirroring the middleware error policy (middlewareError).
-func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string) ([]string, error) {
+// engine.RunRequestBody). params backs gv.request.params for every body's eval (gv-features-plan.md
+// Feature 3) — nil outside a gv.invoke re-entry (the public Invoke's own top-level body, and every
+// streamInvoke call, always pass nil: streaming is not a gv.invoke target in v1). A throw,
+// timeout, or a non-object return is a Connect FailedPrecondition, mirroring the middleware error
+// policy (middlewareError).
+func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string, params map[string]any) ([]string, error) {
 	if w.engine == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("a TypeScript request body requires the scripting engine, which is not available"))
@@ -421,7 +498,7 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 		// that does not (transitively) call it; an empty subset makes RunRequestBody take the
 		// plain generator path. Result.Value is the returned object as raw JSON — the
 		// replacement body.
-		res, err := w.engine.RunRequestBody(ctx, body, transitiveGenerators(body, allGens), scripting.Grant{}, scripting.Input{})
+		res, err := w.engine.RunRequestBody(ctx, body, transitiveGenerators(body, allGens), scripting.Grant{}, scripting.Input{Params: params})
 		if err != nil {
 			return nil, bodyError(i, err.Error())
 		}
@@ -555,12 +632,23 @@ func (w Workspace) loadGenerators(ctx context.Context, workspaceName string) (ma
 // {[key]: string[]} object becomes a google.protobuf.Struct of {[key]: ListValue<string>},
 // which then flows through structToMetadata (expanding string[] to repeated headers) unchanged.
 //
+// path is the invoked node's PARENT-folder display-name path (msg.GetPath(), NOT including its
+// own item name) — gv-features-plan.md Feature 1's ancestor-folder-metadata seam. When
+// metadataScript textually mentions an inherit(...) call (mentionsInherit), foldAncestorMetadata
+// walks path's ancestor folder scripts and the result becomes gv.metadata.inherit()'s data for
+// THIS script's own eval; otherwise the fold is skipped entirely and inherit() just returns {}
+// (the efficiency gate — the fold cost is O(depth) fresh QuickJS instantiations). params backs
+// gv.request.params for both the fold and this eval; every caller passes nil today — Feature 1
+// only plumbs the parameter, a later gv.invoke() wiring (Feature 3) fills it in (see the plan's
+// "Cross-feature interactions": "cleanly absorb Feature 1's already-present
+// resolveInvokeMetadata(path, params) fold").
+//
 // When metadataScript is empty this is a pure no-op: the fallback Struct (the request's
 // metadata field, i.e. today's path) is returned verbatim, so a request carrying a plain
 // Struct behaves exactly as before. A throw/timeout or a non-object return is a Connect
 // FailedPrecondition (mirroring the body's bodyError); a value that is not a string or
 // string[] is a Connect InvalidArgument (mirroring the body's UnmarshalJSON type mismatch).
-func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName, metadataScript string, fallback *structpb.Struct) (*structpb.Struct, error) {
+func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName string, path []string, metadataScript string, fallback *structpb.Struct, params map[string]any) (*structpb.Struct, error) {
 	if strings.TrimSpace(metadataScript) == "" {
 		return fallback, nil // no script: use the Struct metadata as-is (today's path)
 	}
@@ -572,70 +660,199 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName, met
 	// ambient globals, exactly like a composing body; transitiveGenerators narrows the set to
 	// what the module reaches — the generators it calls plus, to a fixpoint, the generators
 	// those call (failure isolation at the transitive frontier) — and an empty subset takes the
-	// plain path.
+	// plain path. The same allGens set is reused below for the ancestor-folder fold, so the
+	// scripts collection is only read once per invoke.
 	allGens, err := w.loadGenerators(ctx, workspaceName)
 	if err != nil {
 		return nil, err
 	}
-	res, err := w.engine.RunRequestBody(ctx, metadataScript, transitiveGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{})
+	// The fold runs ONLY when this script could actually observe its result — otherwise
+	// InheritedMetadata stays nil and gv.metadata.inherit() just returns {} (buildGvPrelude /
+	// orEmptyMetadata), so a request/folder that never inherits never pays for it.
+	var inherited map[string][]string
+	if mentionsInherit(metadataScript) {
+		inherited, err = w.foldAncestorMetadata(ctx, workspaceName, path, params, allGens)
+		if err != nil {
+			return nil, err
+		}
+	}
+	res, err := w.engine.RunRequestBody(ctx, metadataScript, transitiveGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{
+		Params:            params,
+		InheritedMetadata: inherited,
+	})
 	if err != nil {
 		return nil, metadataError(connect.CodeFailedPrecondition, err.Error())
 	}
 	if !isJSONObject(res.Value) {
 		return nil, metadataError(connect.CodeFailedPrecondition, "expected the metadata to return an object")
 	}
-	return metadataStructFromJSON(res.Value)
+	lists, err := metadataListsFromJSON(res.Value)
+	if err != nil {
+		return nil, err
+	}
+	return structFromMetadataLists(lists), nil
 }
 
-// metadataStructFromJSON converts the metadata module's evaluated JSON object into a
-// google.protobuf.Struct whose every value is a ListValue<string> — the multi-valued shape
-// structToMetadata expands into repeated headers. Each value must be a JSON string (→ a
-// single-element list) or a JSON array of strings (→ a list); any other shape is a clear
-// InvalidArgument naming the offending key.
-func metadataStructFromJSON(raw []byte) (*structpb.Struct, error) {
+// inheritCallRe matches an `inherit(` call site — mentionsInherit's efficiency gate. It is
+// intentionally loose (it does not require the `gv.metadata.` receiver): a false positive (e.g.
+// a local function that happens to be named inherit) only costs one unnecessary — but still
+// correct — fold, whereas a false negative would silently skip real inheritance, which the gate
+// must never risk.
+var inheritCallRe = regexp.MustCompile(`\binherit\s*\(`)
+
+// mentionsInherit reports whether src textually references an inherit(...) call — the
+// efficiency gate guarding foldAncestorMetadata (gv-features-plan.md Feature 1's "Efficiency
+// gate"): the fold costs O(depth) fresh QuickJS instantiations, so resolveInvokeMetadata runs it
+// only when the script could actually observe gv.metadata.inherit()'s result.
+func mentionsInherit(src string) bool {
+	return inheritCallRe.MatchString(src)
+}
+
+// foldAncestorMetadata computes gv.metadata.inherit()'s data for a node whose parent-folder
+// display-name path is path: an ITERATIVE GO FOLD (no JS recursion, no async, no re-entrancy)
+// over path's ancestor folder metadata scripts, root -> immediate-parent
+// (store.FolderMetadataChain). Each non-empty script is evaluated through the UNCACHED
+// RunRequestBody path — NEVER the cached RunGenerator path, per the cache-soundness invariant in
+// gv-features-plan.md — with the running accumulator injected as that eval's
+// Input.InheritedMetadata and params as its Input.Params; the accumulator is then REPLACED with
+// the folder's evaluated result.
+//
+// Semantics are D2 — spread-driven replace: transitivity is userland
+// `{ ...gv.metadata.inherit(), ... }`, so an EMPTY folder script is a transparent passthrough
+// (accumulator unchanged) while a NON-EMPTY script that omits the spread is a deliberate barrier
+// that whole-replaces (drops ancestor keys it does not re-emit); a redefined key whole-replaces
+// its array, like any JS spread.
+//
+// A path deeper than MaxFolderMetadataDepth is rejected up front (bounds a pathological tree
+// before paying for any of the O(depth) QuickJS instantiations — a Connect error, not a hang). A
+// stale path segment (a folder renamed/deleted out from under an open tab) degrades to "no
+// inheritance" — an empty accumulator, nil error — mirroring how applyRequestMiddleware /
+// loadAttachedMiddleware tolerate a missing target request, because FolderMetadataChain itself
+// PROPAGATES ErrItemNotFound/ErrNotAFolder rather than swallowing them (store/fs.go). Any other
+// per-folder failure (a script that throws, or returns a non-object / wrongly shaped value) is
+// wrapped to name the offending folder's path.
+func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName string, path []string, params map[string]any, allGens map[string]string) (map[string][]string, error) {
+	if len(path) > MaxFolderMetadataDepth {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("folder metadata chain depth %d exceeds the max of %d", len(path), MaxFolderMetadataDepth))
+	}
+	coll, err := w.store.Open(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+	scripts, err := coll.FolderMetadataChain(ctx, path)
+	if errors.Is(err, store.ErrItemNotFound) || errors.Is(err, store.ErrNotAFolder) {
+		return map[string][]string{}, nil // stale/renamed folder path: no inheritance, not a failure
+	}
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+
+	accum := map[string][]string{}
+	for i, script := range scripts {
+		script = strings.TrimSpace(script)
+		if script == "" {
+			continue // empty folder script: transparent passthrough (D2) — accumulator unchanged
+		}
+		folderPath := path[:i+1]
+		res, rerr := w.engine.RunRequestBody(ctx, script, transitiveGenerators(script, allGens), scripting.Grant{}, scripting.Input{
+			Params:            params,
+			InheritedMetadata: accum,
+		})
+		if rerr != nil {
+			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, rerr.Error()))
+		}
+		if !isJSONObject(res.Value) {
+			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, "expected the folder metadata to return an object"))
+		}
+		lists, lerr := metadataListsFromJSON(res.Value)
+		if lerr != nil {
+			return nil, wrapFolderError(folderPath, lerr)
+		}
+		accum = lists // D2: whole-replace, never merge — transitivity is the script's own spread
+	}
+	return accum, nil
+}
+
+// wrapFolderError re-renders a per-folder metadata evaluation/shape error (already a
+// *connect.Error produced by metadataError/metadataListsFromJSON, so connect.CodeOf(err) is
+// preserved) to additionally name the offending ancestor folder's display-name path — the "wrap
+// any per-folder error so it names the offending folder path" requirement (gv-features-plan.md
+// Feature 1 Phase 3).
+func wrapFolderError(folderPath []string, err error) error {
+	return connect.NewError(connect.CodeOf(err),
+		fmt.Errorf("folder %q metadata: %w", strings.Join(folderPath, "/"), err))
+}
+
+// metadataListsFromJSON converts a metadata module's evaluated JSON object (a request's own
+// script, or one ancestor folder's script) into the map[string][]string form — the shape
+// gv.metadata.inherit()'s accumulator uses (foldAncestorMetadata) and structFromMetadataLists
+// renders into the final Struct, so the fold and the outgoing request share this one normalizer.
+// Each value must be a JSON string (a single-element list) or a JSON array of strings (a list);
+// any other shape is a clear InvalidArgument naming the offending key (metadataValueList).
+func metadataListsFromJSON(raw []byte) (map[string][]string, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, metadataError(connect.CodeFailedPrecondition, "metadata is not a JSON object: "+err.Error())
 	}
-	fields := make(map[string]*structpb.Value, len(obj))
+	lists := make(map[string][]string, len(obj))
 	for key, rawVal := range obj {
 		values, err := metadataValueList(key, rawVal)
 		if err != nil {
 			return nil, err
 		}
-		fields[key] = structpb.NewListValue(&structpb.ListValue{Values: values})
+		lists[key] = values
 	}
-	return &structpb.Struct{Fields: fields}, nil
+	return lists, nil
 }
 
-// metadataValueList renders one metadata value as the list of string Values it stands for:
-// a JSON string is a single-element list; a JSON array must hold only strings and becomes a
-// list of them. Numbers/booleans/objects/null (or a non-string array element) are rejected —
-// gRPC metadata is string-valued and the editor types the module against
+// structFromMetadataLists renders the map[string][]string form (metadataListsFromJSON) as the
+// google.protobuf.Struct of ListValue<string> that structToMetadata expands into repeated
+// headers — the shape the final resolved outgoing metadata needs. A purely mechanical rebuild:
+// it does not itself apply any "-bin" base64 handling (encodeMetadataValue does that later, at
+// the point structToMetadata builds the real gRPC metadata.MD), so it must never be asked to
+// duplicate that behavior.
+func structFromMetadataLists(lists map[string][]string) *structpb.Struct {
+	fields := make(map[string]*structpb.Value, len(lists))
+	for key, values := range lists {
+		vals := make([]*structpb.Value, len(values))
+		for i, v := range values {
+			vals[i] = structpb.NewStringValue(v)
+		}
+		fields[key] = structpb.NewListValue(&structpb.ListValue{Values: vals})
+	}
+	return &structpb.Struct{Fields: fields}
+}
+
+// metadataValueList renders one metadata value as the list of strings it stands for: a JSON
+// string is a single-element list; a JSON array must hold only strings and becomes a list of
+// them. Numbers/booleans/objects/null (or a non-string array element) are rejected — gRPC
+// metadata is string-valued and the editor types the module against
 // `{ [key: string]: string[] }`, so a runtime violation is a clear InvalidArgument.
-func metadataValueList(key string, raw json.RawMessage) ([]*structpb.Value, error) {
+func metadataValueList(key string, raw json.RawMessage) ([]string, error) {
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
-		return []*structpb.Value{structpb.NewStringValue(s)}, nil
+		return []string{s}, nil
 	}
 	var arr []json.RawMessage
 	if err := json.Unmarshal(raw, &arr); err != nil {
 		return nil, metadataError(connect.CodeInvalidArgument,
 			fmt.Sprintf("metadata value for %q must be a string or string[]", key))
 	}
-	out := make([]*structpb.Value, len(arr))
+	out := make([]string, len(arr))
 	for i, el := range arr {
 		var es string
 		if err := json.Unmarshal(el, &es); err != nil {
 			return nil, metadataError(connect.CodeInvalidArgument,
 				fmt.Sprintf("metadata value for %q must be a string or string[]; element %d is not a string", key, i))
 		}
-		out[i] = structpb.NewStringValue(es)
+		out[i] = es
 	}
 	return out, nil
 }
 
-// metadataError renders a metadata-evaluation failure as a Connect error, mirroring the
+// metadataError renders a metadata-evaluation failure (of a request's own script, or — wrapped
+// further by wrapFolderError — one ancestor folder's script) as a Connect error, mirroring the
 // body's error policy: an eval failure grpcview can't get past (throw/timeout/non-object
 // return) is FailedPrecondition like bodyError, while a value whose shape is not
 // string|string[] is InvalidArgument like the body's UnmarshalJSON type mismatch.

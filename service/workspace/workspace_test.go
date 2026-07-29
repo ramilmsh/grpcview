@@ -324,3 +324,106 @@ func TestRemoveDescriptorSourceOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+// folderNamed returns the named top-level folder from a Workspace snapshot,
+// failing the test if it is missing or not a folder — the lookup
+// TestUpdateFolderRPC needs to inspect the RPC's response/reload shape.
+func folderNamed(t *testing.T, ws *grpcviewv1.Workspace, name string) *grpcviewv1.Folder {
+	t.Helper()
+	for _, it := range ws.GetItem().GetFolder().GetItems() {
+		if it.GetName() == name {
+			if it.GetFolder() == nil {
+				t.Fatalf("item %q is not a folder", name)
+			}
+			return it.GetFolder()
+		}
+	}
+	t.Fatalf("folder %q not found", name)
+	return nil
+}
+
+// TestUpdateFolderRPC covers gv-features-plan.md Feature 1 Phase 4: the
+// UpdateFolder RPC patches a folder's draft_metadata_script, the change is
+// visible on a fresh Get (persisted, not just echoed in the mutate response), an
+// empty-but-present value clears it (mirroring UpdateRequest's
+// DraftMetadataScript semantics), and an unknown item name/a non-folder item
+// surface the same Connect codes UpdateRequest's mirror checks do.
+func TestUpdateFolderRPC(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
+		WorkspaceName: testWorkspace,
+		ItemName:      "Users",
+	})); err != nil {
+		t.Fatalf("CreateFolder: %v", err)
+	}
+	if _, err := w.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
+		WorkspaceName: testWorkspace,
+		ItemName:      "Leaf",
+		Service:       "s",
+		Method:        "m",
+	})); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	script := "export default () => ({ ...gv.metadata.inherit(), team: ['users'] })"
+	updResp, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
+		WorkspaceName:       testWorkspace,
+		ItemName:            "Users",
+		DraftMetadataScript: &script,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateFolder: %v", err)
+	}
+	if got := folderNamed(t, updResp.Msg.GetWorkspace(), "Users").GetDraftMetadataScript(); got != script {
+		t.Fatalf("folder script in mutate response = %q, want %q", got, script)
+	}
+
+	// The change is visible on a fresh Get (persisted, not just the mutate response).
+	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got := folderNamed(t, getResp.Msg.GetWorkspace(), "Users").GetDraftMetadataScript(); got != script {
+		t.Fatalf("folder script after Get = %q, want %q", got, script)
+	}
+
+	// An empty-but-present value clears it.
+	empty := ""
+	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
+		WorkspaceName:       testWorkspace,
+		ItemName:            "Users",
+		DraftMetadataScript: &empty,
+	})); err != nil {
+		t.Fatalf("UpdateFolder clear: %v", err)
+	}
+	cleared, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get after clear: %v", err)
+	}
+	if got := folderNamed(t, cleared.Msg.GetWorkspace(), "Users").GetDraftMetadataScript(); got != "" {
+		t.Fatalf("folder script after clear = %q, want empty", got)
+	}
+
+	// An unknown item name surfaces NotFound (store.ErrItemNotFound mapped by
+	// toConnectError).
+	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
+		WorkspaceName:       testWorkspace,
+		ItemName:            "Ghost",
+		DraftMetadataScript: &script,
+	})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("UpdateFolder missing item = %v, want NotFound", err)
+	}
+
+	// An item that isn't a folder (a request) surfaces FailedPrecondition
+	// (store.ErrNotAFolder mapped by toConnectError).
+	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
+		WorkspaceName:       testWorkspace,
+		ItemName:            "Leaf",
+		DraftMetadataScript: &script,
+	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("UpdateFolder on a request = %v, want FailedPrecondition", err)
+	}
+}

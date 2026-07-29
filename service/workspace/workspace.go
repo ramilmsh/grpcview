@@ -488,6 +488,20 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Workspace: ws}), nil
 }
 
+// UpdateFolder implements [grpcviewv1.WorkspaceServiceHandler].
+func (w Workspace) UpdateFolder(ctx context.Context, request *connect.Request[grpcviewv1.UpdateFolderRequest]) (*connect.Response[grpcviewv1.UpdateFolderResponse], error) {
+	patch := store.FolderPatch{
+		DraftMetadataScript: request.Msg.DraftMetadataScript,
+	}
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.UpdateFolder(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.UpdateFolderResponse{Workspace: ws}), nil
+}
+
 // CreateScript implements [grpcviewv1.WorkspaceServiceHandler].
 func (w Workspace) CreateScript(ctx context.Context, request *connect.Request[grpcviewv1.CreateScriptRequest]) (*connect.Response[grpcviewv1.CreateScriptResponse], error) {
 	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {

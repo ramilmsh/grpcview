@@ -22,9 +22,9 @@ func TestResolveInvokeMetadata(t *testing.T) {
 
 	t.Run("evaluates a metadata module to a multi-valued Struct", func(t *testing.T) {
 		// A computed value proves real evaluation; an array value proves multi-valued headers.
-		md, err := w.resolveInvokeMetadata(ctx, testWorkspace,
+		md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil,
 			`export default () => ({ authorization: ["Bearer " + (1 + 1)], "x-multi": ["a", "b"] })`,
-			nil)
+			nil, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeMetadata: %v", err)
 		}
@@ -39,7 +39,7 @@ func TestResolveInvokeMetadata(t *testing.T) {
 
 	t.Run("empty script returns the fallback Struct verbatim", func(t *testing.T) {
 		fallback, _ := structpb.NewStruct(map[string]any{"x-plain": "kept"})
-		md, err := w.resolveInvokeMetadata(ctx, testWorkspace, "   ", fallback)
+		md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil, "   ", fallback, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeMetadata: %v", err)
 		}
@@ -59,7 +59,7 @@ func TestResolveInvokeMetadata(t *testing.T) {
 		{"non-string array element", `export default () => ({ "x-n": ["ok", 7] })`, connect.CodeInvalidArgument},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if _, err := w.resolveInvokeMetadata(ctx, testWorkspace, c.script, nil); connect.CodeOf(err) != c.code {
+			if _, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil, c.script, nil, nil); connect.CodeOf(err) != c.code {
 				t.Fatalf("code = %v, want %v (err=%v)", connect.CodeOf(err), c.code, err)
 			}
 		})
@@ -76,8 +76,8 @@ func TestResolveInvokeMetadataComposition(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	createGenerator(t, w, ctx, "apiToken", `export default () => "tok-42"`)
 
-	md, err := w.resolveInvokeMetadata(ctx, testWorkspace,
-		`export default () => ({ authorization: ["Bearer " + apiToken()] })`, nil)
+	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil,
+		`export default () => ({ authorization: ["Bearer " + apiToken()] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}

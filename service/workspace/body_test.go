@@ -23,7 +23,7 @@ func TestResolveInvokeBody(t *testing.T) {
 		// `export default` fires the entry-point convention; the returned object literal
 		// (with a computed field, to prove real evaluation) becomes the JSON body.
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`})
+			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -34,7 +34,7 @@ func TestResolveInvokeBody(t *testing.T) {
 
 	t.Run("typescript evaluates every body (streaming shape)", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ n: 1 })`, `export default () => ({ n: 2 })`})
+			[]string{`export default () => ({ n: 1 })`, `export default () => ({ n: 2 })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -52,7 +52,7 @@ func TestResolveInvokeBody(t *testing.T) {
 	} {
 		t.Run(c.name+" errors FailedPrecondition", func(t *testing.T) {
 			if _, err := w.resolveInvokeBody(ctx, testWorkspace,
-				[]string{c.body}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				[]string{c.body}, nil); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 			}
 		})
@@ -72,7 +72,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 
 	t.Run("typescript body composes a saved generator", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid(), n: 7 })`})
+			[]string{`export default () => ({ id: mkid(), n: 7 })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -86,7 +86,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		// names it — so transitiveGenerators excludes it and the body still bundles and runs.
 		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid() })`})
+			[]string{`export default () => ({ id: mkid() })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (unreferenced broken generator): %v", err)
 		}
@@ -104,7 +104,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		createGenerator(t, w, ctx, "id", `export default () => "unterminated`)
 		createGenerator(t, w, ctx, "toString", `export default () => "also broken`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid(), label: (7).toString() })`})
+			[]string{`export default () => ({ id: mkid(), label: (7).toString() })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (name-collision isolation): %v", err)
 		}
@@ -128,7 +128,7 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 
 	t.Run("body calling only outer folds in inner transitively", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ v: outer() })`})
+			[]string{`export default () => ({ v: outer() })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -140,7 +140,7 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 	t.Run("an unrelated broken generator not reachable does not break the body", func(t *testing.T) {
 		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ v: outer() })`})
+			[]string{`export default () => ({ v: outer() })`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (unreachable broken generator): %v", err)
 		}
