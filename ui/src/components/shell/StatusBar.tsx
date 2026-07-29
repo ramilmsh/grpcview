@@ -23,12 +23,25 @@ export function StatusBar() {
         color: "var(--color-neutral-500)",
       }}
     >
-      <span className="inline-flex items-center gap-[5px]" style={{ color: reflection ? "var(--ok)" : undefined }}>
+      {/* Connectivity, which is not the same as having definitions: a workspace of
+          uploaded descriptor sets has schemas but no server to reflect from, so
+          "no source" next to a source count would contradict itself. */}
+      <span
+        className="inline-flex items-center gap-[5px]"
+        style={{ color: reflection ? "var(--ok)" : undefined }}
+        title={
+          reflection
+            ? `Reflection source: ${reflection.address}`
+            : sources.length > 0
+              ? "Definitions come from uploaded descriptor sets — no server to reflect from"
+              : "No definition source added yet"
+        }
+      >
         <span
           className="dot"
           style={{ background: reflection ? "var(--ok)" : "var(--color-neutral-600)" }}
         />
-        {reflection ? "Local" : "No source"}
+        {reflection ? "Local" : sources.length > 0 ? "No server" : "No source"}
       </span>
       <span>
         {sources.length} {sources.length === 1 ? "source" : "sources"}

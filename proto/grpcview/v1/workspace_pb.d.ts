@@ -168,10 +168,13 @@ export declare type Service = Message$1<"grpcview.v1.Service"> & {
   methods: Method[];
 
   /**
-   * source is the reflection server this service's schema was resolved from — the
-   * natural default invoke target for a request against it (see resolveTarget in
-   * invoke.go, and sourceForService in the UI). Unset for services from a
-   * descriptor-set upload (no dial target) or an older cache; such requests fall
+   * source is the dial target for this service: the FIRST reflection source (in
+   * priority order) that serves it — the natural default invoke target for a
+   * request against it (see resolveTarget in invoke.go, and sourceForService in
+   * the UI). It is deliberately independent of which source won the service's
+   * DESCRIPTORS: an upload placed first for its doc comments still dials the
+   * reflection source that actually serves the method. Unset only when no
+   * reflection source serves the service at all (upload-only); such requests fall
    * back to the workspace's first reflection source.
    *
    * @generated from field: optional grpcview.v1.Server source = 4;
@@ -186,18 +189,41 @@ export declare type Service = Message$1<"grpcview.v1.Service"> & {
 export declare const ServiceSchema: GenMessage<Service>;
 
 /**
+ * DescriptorSource is one configured origin of schema definitions.
+ *
+ * Sources are PRIORITY-ORDERED: walking Workspace.sources front to back, the
+ * first source to define a proto file (by file name) or to serve a service (by
+ * full name) wins, and later sources only fill the gaps. The displayed order IS
+ * the precedence — reordering the list (ReorderDescriptorSources) is how you
+ * switch which source's definitions take effect when two sources describe the
+ * same protos. That matters because the two kinds are not interchangeable: gRPC
+ * reflection strips source_code_info, so a buf-built upload of the same files
+ * carries doc comments the live server cannot, and whichever wins decides
+ * whether the editor shows them.
+ *
  * @generated from message grpcview.v1.DescriptorSource
  */
 export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource"> & {
+  /**
+   * id is this source's stable identity within the workspace, derived from its
+   * config: "reflection:<address>" (plus a "+tls" suffix under TLS) or
+   * "upload:<file name>". Adding a source whose id already exists REFRESHES it
+   * in place rather than appending a duplicate, so re-uploading a rebuilt
+   * descriptor set replaces the old one instead of accumulating rows.
+   *
+   * @generated from field: string id = 3;
+   */
+  id: string;
+
   /**
    * @generated from oneof grpcview.v1.DescriptorSource.source
    */
   source: {
     /**
-     * @generated from field: bytes descriptor_set = 1;
+     * @generated from field: grpcview.v1.Upload upload = 1;
      */
-    value: Uint8Array;
-    case: "descriptorSet";
+    value: Upload;
+    case: "upload";
   } | {
     /**
      * @generated from field: grpcview.v1.Server reflection = 2;
@@ -205,6 +231,14 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
     value: Server;
     case: "reflection";
   } | { case: undefined; value?: undefined };
+
+  /**
+   * resolved summarizes what this source contributed on its last resolve, so the
+   * sources list can show which definitions actually come from where.
+   *
+   * @generated from field: grpcview.v1.Resolved resolved = 4;
+   */
+  resolved?: Resolved | undefined;
 };
 
 /**
@@ -212,6 +246,68 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
  * Use `create(DescriptorSourceSchema)` to create a new message.
  */
 export declare const DescriptorSourceSchema: GenMessage<DescriptorSource>;
+
+/**
+ * Upload names an uploaded FileDescriptorSet source. The descriptor bytes
+ * themselves are never sent to the client — they are large and the client needs
+ * only the merged Workspace.descriptor_set — so this carries just the identifying
+ * file name.
+ *
+ * @generated from message grpcview.v1.Upload
+ */
+export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
+  /**
+   * @generated from field: string file_name = 1;
+   */
+  fileName: string;
+};
+
+/**
+ * Describes the message grpcview.v1.Upload.
+ * Use `create(UploadSchema)` to create a new message.
+ */
+export declare const UploadSchema: GenMessage<Upload>;
+
+/**
+ * Resolved is a source's last-resolve summary. service_names is everything the
+ * source provides; won_service_names is the subset whose descriptors the
+ * workspace actually takes from it, so a source fully shadowed by a
+ * higher-priority one is visible as such instead of silently doing nothing.
+ *
+ * @generated from message grpcview.v1.Resolved
+ */
+export declare type Resolved = Message$1<"grpcview.v1.Resolved"> & {
+  /**
+   * @generated from field: int32 file_count = 1;
+   */
+  fileCount: number;
+
+  /**
+   * @generated from field: repeated string service_names = 2;
+   */
+  serviceNames: string[];
+
+  /**
+   * @generated from field: repeated string won_service_names = 3;
+   */
+  wonServiceNames: string[];
+
+  /**
+   * error is why the last resolve failed, empty when it succeeded. A reflection
+   * target that has gone away contributes nothing but is NOT dropped and never
+   * blocks a mutation on its siblings — it stays listed with the reason showing,
+   * so it can be refreshed once it is back.
+   *
+   * @generated from field: string error = 4;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message grpcview.v1.Resolved.
+ * Use `create(ResolvedSchema)` to create a new message.
+ */
+export declare const ResolvedSchema: GenMessage<Resolved>;
 
 /**
  * @generated from message grpcview.v1.Folder
@@ -519,11 +615,17 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
   item?: Item | undefined;
 
   /**
+   * sources is the priority-ordered descriptor-source list; see DescriptorSource.
+   *
    * @generated from field: repeated grpcview.v1.DescriptorSource sources = 3;
    */
   sources: DescriptorSource[];
 
   /**
+   * services is the flat service list DERIVED by merging the sources in priority
+   * order — one entry per fully-qualified service, resolved from the winning
+   * source's descriptors.
+   *
    * @generated from field: repeated grpcview.v1.Service services = 4;
    */
   services: Service[];
@@ -536,9 +638,9 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
   /**
    * descriptor_set is the merged, deduped FileDescriptorSet (transitive deps
    * incl. WKTs, topo-sorted) that protoc-gen-es needs to type request bodies
-   * client-side (ts-request-body-plan §T2/§4.4). It is DERIVED from the resolved
-   * descriptors and cached alongside services (gitignored services.json), never
-   * committed to grpcview.json and not part of grpcview.store.v1.
+   * client-side (ts-request-body-plan §T2/§4.4). Like services it is DERIVED by
+   * the priority merge and cached alongside them (gitignored services.json),
+   * never committed to grpcview.json and not part of grpcview.store.v1.
    *
    * @generated from field: bytes descriptor_set = 6;
    */

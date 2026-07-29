@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CaretDown, Code, Play, PlugsConnected } from "@/components/ui/icons";
+import { CaretDown, Code, FileArchive, Play, PlugsConnected } from "@/components/ui/icons";
 import type { Service, Method, Server, Request } from "@grpcview/v1/workspace_pb";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EditableName } from "@/components/ui/EditableName";
@@ -10,14 +10,16 @@ import { TargetBar } from "./TargetBar";
 
 // MethodHeader: request name (click to rename inline; persists via UpdateRequest),
 // the service/method selector (opens the picker; persists via UpdateRequest), the
-// resolving-source chip (read-only), and Invoke. `reflection` is the source backing
+// schema-source chip (read-only), and Invoke. `reflection` is the source backing
 // THIS request (its service's origin, else the first reflection source) — it is both
 // the default invoke target (when there is no override) and the enable/disable signal.
+// `schemaSource` is a separate question — see schemaSourceFor.
 export function MethodHeader({
   request,
   services,
   kind,
   reflection,
+  schemaSource,
   targetOverride,
   invoking,
   onChangeMethod,
@@ -32,6 +34,10 @@ export function MethodHeader({
   // reflection is the source backing THIS request (its service's origin, else the
   // first reflection source), the live default target when there's no override.
   reflection: Server | null;
+  // schemaSource is the definition source the method's schema was resolved from
+  // (id + whether it is a dialable reflection source), or null when no source
+  // defines the service. Independent of the target: see schemaSourceFor.
+  schemaSource: { id: string; live: boolean } | null;
   targetOverride?: Server;
   invoking: boolean;
   onChangeMethod: (service: string, method: string) => void;
@@ -141,19 +147,31 @@ export function MethodHeader({
           >
             <Code size={15} />
           </IconButton>
-          {/* source resolution chip (read-only in Phase 1) */}
+          {/* schema-source chip (read-only in Phase 1) — which definition source this
+              method's schema was resolved from, NOT where the request is sent: an
+              upload can win the protos while the target bar below points at a server. */}
           <Button
             variant="secondary"
             className="font-mono"
             style={{ padding: "4px 9px", fontSize: 11, gap: 6, cursor: "default" }}
-            title="Schema/target resolved from this definition source"
+            title={
+              schemaSource
+                ? schemaSource.live
+                  ? "Schema resolved from this reflection source"
+                  : "Schema resolved from this uploaded descriptor set — the target below is where requests go"
+                : "No definition source defines this service"
+            }
             disabled
           >
-            <PlugsConnected
-              size={14}
-              style={{ color: reflection ? "var(--ok)" : "var(--color-neutral-600)" }}
-            />
-            {reflection ? `reflection:${reflection.address}` : "no source"}
+            {schemaSource?.live === false ? (
+              <FileArchive size={14} style={{ color: "var(--color-neutral-400)" }} />
+            ) : (
+              <PlugsConnected
+                size={14}
+                style={{ color: schemaSource ? "var(--ok)" : "var(--color-neutral-600)" }}
+              />
+            )}
+            {schemaSource ? schemaSource.id : "no source"}
           </Button>
           <Button
             variant="primary"

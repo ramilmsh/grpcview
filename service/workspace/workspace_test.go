@@ -97,14 +97,19 @@ func reflectionAddReq(port int) *grpcviewv1.AddDescriptorSourceRequest {
 	}
 }
 
-func removeReq(index int32) *grpcviewv1.RemoveDescriptorSourceRequest {
-	return &grpcviewv1.RemoveDescriptorSourceRequest{WorkspaceName: testWorkspace, Index: index}
+func removeReq(id string) *grpcviewv1.RemoveDescriptorSourceRequest {
+	return &grpcviewv1.RemoveDescriptorSourceRequest{WorkspaceName: testWorkspace, Id: id}
 }
+
+// testUploadName is the descriptor-set upload's file name in tests, which is also
+// its source identity ("upload:<file name>").
+const testUploadName = "test.binpb"
 
 func descriptorSetAddReq(set []byte) *grpcviewv1.AddDescriptorSourceRequest {
 	return &grpcviewv1.AddDescriptorSourceRequest{
 		WorkspaceName: testWorkspace,
 		Source:        &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: set},
+		FileName:      testUploadName,
 	}
 }
 
@@ -171,10 +176,10 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 		t.Fatalf("Health service missing after adding source A")
 	}
 
-	// Remove source A (index 0). Services must re-resolve from B alone, so
-	// Health (which only A exposed) disappears while B's reflection services
-	// remain.
-	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(0)))
+	// Remove source A. The merged view must be re-derived from B alone, so Health
+	// (which only A exposed) disappears while B's reflection services remain.
+	idA := ws.GetSources()[0].GetId()
+	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(idA)))
 	if err != nil {
 		t.Fatalf("RemoveDescriptorSource: %v", err)
 	}
@@ -200,7 +205,8 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	}
 
 	// Removing the last source clears services entirely.
-	if _, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(0))); err != nil {
+	idB := ws.GetSources()[0].GetId()
+	if _, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(idB))); err != nil {
 		t.Fatalf("RemoveDescriptorSource (last): %v", err)
 	}
 	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
@@ -213,9 +219,10 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	}
 }
 
-// TestAddDescriptorSetSource uploads a descriptor set, asserting its services
-// load and that both the descriptor-set bytes (round-tripped through the store's
-// typed FileDescriptorSet) and the resolved services survive a reload.
+// TestAddDescriptorSetSource uploads a descriptor set, asserting its services load
+// and that both the source (identified by its file name) and the resolved services
+// survive a reload. The descriptor bytes stay on disk — the wire form carries only
+// the file name — so the assertion is on the upload's identity, not its bytes.
 func TestAddDescriptorSetSource(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -230,8 +237,8 @@ func TestAddDescriptorSetSource(t *testing.T) {
 	if len(ws.GetSources()) != 1 {
 		t.Fatalf("want 1 source, got %d", len(ws.GetSources()))
 	}
-	if ws.GetSources()[0].GetDescriptorSet() == nil {
-		t.Fatalf("stored source is not a descriptor set: %+v", ws.GetSources()[0])
+	if got := ws.GetSources()[0].GetUpload().GetFileName(); got != testUploadName {
+		t.Fatalf("stored source is not the upload: %+v", ws.GetSources()[0])
 	}
 	if !hasService(ws.GetServices(), "Health") {
 		t.Fatalf("Health service missing after adding descriptor-set source")
@@ -242,7 +249,7 @@ func TestAddDescriptorSetSource(t *testing.T) {
 		t.Fatalf("Get after add: %v", err)
 	}
 	got := reloaded.Msg.GetWorkspace()
-	if len(got.GetSources()) != 1 || got.GetSources()[0].GetDescriptorSet() == nil {
+	if len(got.GetSources()) != 1 || got.GetSources()[0].GetUpload().GetFileName() != testUploadName {
 		t.Fatalf("descriptor-set source not persisted: %+v", got.GetSources())
 	}
 	if !hasService(got.GetServices(), "Health") {
@@ -251,10 +258,9 @@ func TestAddDescriptorSetSource(t *testing.T) {
 }
 
 // TestRemoveReResolvesDescriptorSetSource combines a reflection source with a
-// descriptor-set source, then removes the reflection source. Re-resolution must
-// walk the remaining descriptor-set source (the N2c branch of
-// resolveServicesFromSources) so its services survive while the removed
-// reflection source's services disappear.
+// descriptor-set source, then removes the reflection source. The merged view must
+// be re-derived from the remaining upload's cached resolve, so its services survive
+// while the removed reflection source's services disappear.
 func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -279,14 +285,14 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 		t.Fatalf("want both Health (descriptor set) and ServerReflection (reflection): %v", ws.GetServices())
 	}
 
-	// Remove the reflection source (index 0). The remaining descriptor-set
-	// source must re-resolve, so Health survives while ServerReflection is gone.
-	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(0)))
+	// Remove the reflection source. The remaining upload's cached resolve must
+	// carry the merge, so Health survives while ServerReflection is gone.
+	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(ws.GetSources()[0].GetId())))
 	if err != nil {
 		t.Fatalf("RemoveDescriptorSource: %v", err)
 	}
 	ws = remResp.Msg.GetWorkspace()
-	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetDescriptorSet() == nil {
+	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetUpload().GetFileName() != testUploadName {
 		t.Fatalf("want 1 descriptor-set source after remove, got %+v", ws.GetSources())
 	}
 	if !hasService(ws.GetServices(), "Health") {
@@ -307,20 +313,20 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 	}
 }
 
-// TestRemoveDescriptorSourceOutOfRange asserts an index outside [0,len) is
-// rejected with InvalidArgument rather than panicking or mutating state.
-func TestRemoveDescriptorSourceOutOfRange(t *testing.T) {
+// TestRemoveDescriptorSourceUnknownID asserts an id that names no configured
+// source is rejected with NotFound rather than mutating state.
+func TestRemoveDescriptorSourceUnknownID(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	for _, index := range []int32{-1, 0, 5} {
-		_, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(index)))
+	for _, id := range []string{"", "reflection:nope:1", "upload:missing.binpb"} {
+		_, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(id)))
 		if err == nil {
-			t.Fatalf("index %d: want error, got nil", index)
+			t.Fatalf("id %q: want error, got nil", id)
 		}
-		if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-			t.Fatalf("index %d: want InvalidArgument, got %v (%v)", index, got, err)
+		if got := connect.CodeOf(err); got != connect.CodeNotFound {
+			t.Fatalf("id %q: want NotFound, got %v (%v)", id, got, err)
 		}
 	}
 }

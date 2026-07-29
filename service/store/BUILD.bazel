@@ -8,6 +8,7 @@ go_library(
         "fs.go",
         "layout.go",
         "scripts.go",
+        "sources.go",
         "store.go",
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/store",
@@ -25,6 +26,7 @@ go_test(
     name = "store_test",
     srcs = [
         "scripts_test.go",
+        "sources_test.go",
         "store_test.go",
     ],
     embed = [":store"],
@@ -32,5 +34,6 @@ go_test(
         "//proto/grpcview/store/v1:store",
         "//proto/grpcview/v1:grpcview",
         "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
     ],
 )

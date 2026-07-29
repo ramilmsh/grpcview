@@ -1,9 +1,11 @@
 package store
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
@@ -66,51 +68,45 @@ func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
 	}
 }
 
-// diskToWireSources converts the committed descriptor sources for the wire.
+// diskToWireSources converts the committed descriptor sources for the wire,
+// preserving priority order. An upload's descriptors stay on disk — the wire form
+// carries only its file name (see grpcview.v1.Upload) — and its Resolved summary
+// is overlaid separately from the derived cache.
 func diskToWireSources(in []*grpcviewstorev1.DescriptorSource) ([]*grpcviewv1.DescriptorSource, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
 	out := make([]*grpcviewv1.DescriptorSource, 0, len(in))
 	for _, ds := range in {
-		w, err := diskToWireSource(ds)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, w)
+		out = append(out, diskToWireSource(ds))
 	}
 	return out, nil
 }
 
-func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) (*grpcviewv1.DescriptorSource, error) {
+func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) *grpcviewv1.DescriptorSource {
+	out := &grpcviewv1.DescriptorSource{Id: ds.GetId()}
 	switch src := ds.GetSource().(type) {
 	case *grpcviewstorev1.DescriptorSource_Reflection:
-		return &grpcviewv1.DescriptorSource{
-			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: reflectionToServer(src.Reflection)},
-		}, nil
-	case *grpcviewstorev1.DescriptorSource_DescriptorSet:
-		// The wire carries the descriptor set as opaque bytes; re-serialize the
-		// typed on-disk FileDescriptorSet back into them.
-		raw, err := proto.Marshal(src.DescriptorSet)
-		if err != nil {
-			return nil, fmt.Errorf("marshal descriptor set: %w", err)
+		out.Source = &grpcviewv1.DescriptorSource_Reflection{Reflection: reflectionToServer(src.Reflection)}
+	case *grpcviewstorev1.DescriptorSource_Upload:
+		out.Source = &grpcviewv1.DescriptorSource_Upload{
+			Upload: &grpcviewv1.Upload{FileName: src.Upload.GetFileName()},
 		}
-		return &grpcviewv1.DescriptorSource{
-			Source: &grpcviewv1.DescriptorSource_DescriptorSet{DescriptorSet: raw},
-		}, nil
-	default:
-		return &grpcviewv1.DescriptorSource{}, nil
 	}
+	return out
 }
 
-// wireToDiskSources converts wire descriptor sources for on-disk storage.
-func wireToDiskSources(in []*grpcviewv1.DescriptorSource) ([]*grpcviewstorev1.DescriptorSource, error) {
+// wireToDiskSources converts wire descriptor sources for on-disk storage,
+// preserving priority order. Since the wire form omits an upload's descriptors,
+// uploadFor supplies them per source id — either freshly uploaded bytes or the
+// copy already committed (see DescriptorState.Uploads).
+func wireToDiskSources(in []*grpcviewv1.DescriptorSource, uploadFor func(id string) *descriptorpb.FileDescriptorSet) ([]*grpcviewstorev1.DescriptorSource, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
 	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(in))
 	for _, ws := range in {
-		d, err := wireToDiskSource(ws)
+		d, err := wireToDiskSource(ws, uploadFor)
 		if err != nil {
 			return nil, err
 		}
@@ -119,25 +115,47 @@ func wireToDiskSources(in []*grpcviewv1.DescriptorSource) ([]*grpcviewstorev1.De
 	return out, nil
 }
 
-func wireToDiskSource(ws *grpcviewv1.DescriptorSource) (*grpcviewstorev1.DescriptorSource, error) {
+func wireToDiskSource(ws *grpcviewv1.DescriptorSource, uploadFor func(id string) *descriptorpb.FileDescriptorSet) (*grpcviewstorev1.DescriptorSource, error) {
+	out := &grpcviewstorev1.DescriptorSource{Id: ws.GetId()}
 	switch src := ws.GetSource().(type) {
 	case *grpcviewv1.DescriptorSource_Reflection:
-		return &grpcviewstorev1.DescriptorSource{
-			Source: &grpcviewstorev1.DescriptorSource_Reflection{Reflection: serverToReflection(src.Reflection)},
-		}, nil
-	case *grpcviewv1.DescriptorSource_DescriptorSet:
+		out.Source = &grpcviewstorev1.DescriptorSource_Reflection{Reflection: serverToReflection(src.Reflection)}
+	case *grpcviewv1.DescriptorSource_Upload:
 		// Store the descriptor set typed so it round-trips as readable protojson
 		// rather than a base64 blob.
-		fds := &descriptorpb.FileDescriptorSet{}
-		if err := proto.Unmarshal(src.DescriptorSet, fds); err != nil {
-			return nil, fmt.Errorf("unmarshal descriptor set: %w", err)
+		fds := uploadFor(ws.GetId())
+		if fds == nil {
+			return nil, fmt.Errorf("upload source %q has no descriptors to store", ws.GetId())
 		}
-		return &grpcviewstorev1.DescriptorSource{
-			Source: &grpcviewstorev1.DescriptorSource_DescriptorSet{DescriptorSet: fds},
-		}, nil
-	default:
-		return &grpcviewstorev1.DescriptorSource{}, nil
+		out.Source = &grpcviewstorev1.DescriptorSource_Upload{
+			Upload: &grpcviewstorev1.Upload{
+				FileName:      src.Upload.GetFileName(),
+				DescriptorSet: fds,
+			},
+		}
 	}
+	return out, nil
+}
+
+// UploadDescriptors returns an upload source's committed FileDescriptorSet, or
+// nil when the id is not an upload. It is how the merge re-parses an upload's
+// definitions (they live in the manifest, not the resolve cache).
+func (c *Collection) UploadDescriptors(_ context.Context, id string) (*descriptorpb.FileDescriptorSet, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	col, err := c.readCollection()
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, ds := range col.GetSources() {
+		if ds.GetId() == id {
+			return ds.GetUpload().GetDescriptorSet(), nil
+		}
+	}
+	return nil, nil
 }
 
 // serverFromAddressTLS builds a wire Server from the address/tls pair every

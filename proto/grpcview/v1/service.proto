@@ -10,9 +10,16 @@ option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1
 message AddDescriptorSourceRequest {
   string workspace_name = 1;
   oneof source {
+    // descriptor_set is an uploaded FileDescriptorSet's raw bytes; file_name
+    // names it and gives the source its identity.
     bytes  descriptor_set = 2;
     Server reflection     = 3;
   }
+  // file_name identifies a descriptor_set upload (e.g. "buf_image.binpb"). It is
+  // the upload's identity, so re-uploading a rebuilt file of the same name
+  // REFRESHES that source in place instead of adding a second, indistinguishable
+  // row. Ignored for the reflection case, which is identified by its address.
+  string file_name = 4;
 }
 
 message AddDescriptorSourceResponse {
@@ -21,13 +28,34 @@ message AddDescriptorSourceResponse {
 
 message RemoveDescriptorSourceRequest {
   string workspace_name = 1;
-  // index selects the source to remove by its position in Workspace.sources,
-  // which matches the order the UI displays. Sources have no id yet (Phase 2),
-  // so the index is the stable handle until then.
-  int32  index = 2;
+  // id selects the source to remove (DescriptorSource.id).
+  string id = 2;
 }
 
 message RemoveDescriptorSourceResponse {
+  Workspace workspace = 1;
+}
+
+message RefreshDescriptorSourceRequest {
+  string workspace_name = 1;
+  // id selects the source to re-resolve (DescriptorSource.id).
+  string id = 2;
+}
+
+message RefreshDescriptorSourceResponse {
+  Workspace workspace = 1;
+}
+
+message ReorderDescriptorSourcesRequest {
+  string workspace_name = 1;
+  // ids is the full set of DescriptorSource.id values in the desired priority
+  // order — earlier wins. It must be a permutation of the workspace's current
+  // source ids; a missing or unknown id is an error rather than a partial
+  // reorder, so a stale client can never silently drop a source.
+  repeated string ids = 2;
+}
+
+message ReorderDescriptorSourcesResponse {
   Workspace workspace = 1;
 }
 
@@ -278,11 +306,24 @@ message RunScriptResponse {
 
 // WorkspaceService is a gRPC service that provides access to the workspace
 service WorkspaceService {
-  // AddDescriptorSource adds a descriptor source to the workspace, it is used to obtain workspace defitions
+  // AddDescriptorSource adds a descriptor source to the workspace — where its
+  // definitions come from. A source whose id already exists is refreshed in place
+  // (see AddDescriptorSourceRequest.file_name); a new one is appended at LOWEST
+  // priority, so adding never changes which source an existing service resolves
+  // from. Only the added/refreshed source is resolved (one network round-trip for
+  // reflection); the merged view is rebuilt from every source's cached resolve.
   rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
-  // RemoveDescriptorSource drops the source at the given index and re-resolves
-  // the workspace's services from the sources that remain.
+  // RemoveDescriptorSource drops the source with the given id and rebuilds the
+  // merged view from the cached resolves of those that remain — no network, so
+  // an unreachable sibling source can never block a removal.
   rpc RemoveDescriptorSource(RemoveDescriptorSourceRequest) returns (RemoveDescriptorSourceResponse);
+  // RefreshDescriptorSource re-resolves exactly one source (re-dialing a
+  // reflection target, re-parsing an upload) and rebuilds the merged view.
+  rpc RefreshDescriptorSource(RefreshDescriptorSourceRequest) returns (RefreshDescriptorSourceResponse);
+  // ReorderDescriptorSources sets the source priority order and rebuilds the
+  // merged view from the cached resolves — no network. This is how you switch
+  // which source's definitions win when several describe the same protos.
+  rpc ReorderDescriptorSources(ReorderDescriptorSourcesRequest) returns (ReorderDescriptorSourcesResponse);
   // Get returns the workspace snapshot
   rpc Get(GetRequest) returns (GetResponse);
   // CreateFolder creates a new folder in the workspace

@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/Button";
 // (host:port + optional TLS) or an uploaded protobuf FileDescriptorSet. Both are
 // wired to the backend (the reflection and descriptor-set branches of
 // AddDescriptorSource). A descriptor set is what `protoc --include_imports
-// --descriptor_set_out` emits; uploading one reads the file to bytes and sends
-// them as the descriptorSet oneof case.
+// --descriptor_set_out` or `buf build -o` emits; uploading one reads the file to
+// bytes and sends them with the file's name, which becomes the source's identity —
+// so re-uploading a rebuilt file refreshes that source instead of adding another.
 export function AddSourceModal({
   open,
   onClose,
@@ -19,7 +20,7 @@ export function AddSourceModal({
   open: boolean;
   onClose: () => void;
   onAddReflection: (address: string, tls: boolean) => void;
-  onAddDescriptorSet: (bytes: Uint8Array) => void;
+  onAddDescriptorSet: (bytes: Uint8Array, fileName: string) => void;
   pending?: boolean;
 }) {
   // The address starts empty (a placeholder hints the host:port form) rather than
@@ -42,7 +43,7 @@ export function AddSourceModal({
     const file = e.target.files?.[0];
     e.target.value = ""; // reset so re-selecting the same file fires onChange
     if (!file) return;
-    onAddDescriptorSet(new Uint8Array(await file.arrayBuffer()));
+    onAddDescriptorSet(new Uint8Array(await file.arrayBuffer()), file.name);
   };
 
   return (

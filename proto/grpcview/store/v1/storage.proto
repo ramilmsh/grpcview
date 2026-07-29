@@ -23,7 +23,7 @@ message Collection {
   int32 schema_version = 1;
   string name = 2;
   repeated string items = 3;              // ordered root-level slugs
-  repeated DescriptorSource sources = 4;  // committed descriptor sources
+  repeated DescriptorSource sources = 4;  // committed sources, highest priority first
   repeated string scripts = 5;            // ordered script slugs (scripts/<slug>/)
 }
 
@@ -93,17 +93,63 @@ message ItemMeta {
   string name = 1;
 }
 
-// DescriptorSource is where schemas come from.
+// DescriptorSource is where schemas come from. The list order in Collection is
+// the PRIORITY order the merge respects (earlier wins) — see the wire
+// grpcview.v1.DescriptorSource.
 //
-// Unlike the wire message (which carries a serialized FileDescriptorSet as
-// opaque bytes), the on-disk form stores it as a typed FileDescriptorSet, so a
-// committed schema is readable, diffable protojson instead of a base64 blob —
-// descriptors are proto definitions too, so we encode them the same way.
+// Unlike the wire message (which never carries descriptor bytes to the client),
+// the on-disk form stores an upload as a typed FileDescriptorSet, so a committed
+// schema is readable, diffable protojson instead of a base64 blob — descriptors
+// are proto definitions too, so we encode them the same way. An upload's
+// descriptors live HERE and nowhere else: unlike a reflection target they cannot
+// be re-fetched, so they are committed rather than cached. protojson drops the
+// buf-specific image extensions a `buf build` output carries; nothing here reads
+// them, and source_code_info (the doc comments) round-trips intact.
 message DescriptorSource {
+  // id is the source's stable identity, mirroring the wire field: "upload:<file
+  // name>" or "reflection:<address>[+tls]". It keys the per-source resolve cache
+  // and makes re-adding the same source a refresh instead of a duplicate.
+  string id = 3;
   oneof source {
-    google.protobuf.FileDescriptorSet descriptor_set = 1;
+    Upload upload = 1;
     Reflection reflection = 2;
   }
+  // legacy_descriptor_set is READ-ONLY MIGRATION: manifests written before
+  // uploads had a name and an identity stored the bytes directly on the source,
+  // as `{"descriptorSet": {...}}`. Its json_name is pinned to that old key so
+  // such a manifest still parses (the loader discards unknown fields, so without
+  // this the descriptors — the only committed copy — would vanish on upgrade).
+  // The loader folds it into Upload; nothing ever writes it. See
+  // store.normalizeSources.
+  google.protobuf.FileDescriptorSet legacy_descriptor_set = 4 [json_name = "descriptorSet"];
+}
+
+// Upload is an uploaded FileDescriptorSet: the descriptors plus the file name
+// they came from, which is the source's identity.
+message Upload {
+  string file_name = 1;
+  google.protobuf.FileDescriptorSet descriptor_set = 2;
+}
+
+// ResolvedSource is the gitignored per-source resolve cache
+// (.grpcview/cache/sources/<slug>.binpb): what one descriptor source last
+// resolved to, stored as binary proto since it is disposable cache rather than
+// something to read or diff.
+//
+// It exists so the merged view can be rebuilt for ANY mutation — remove,
+// reorder, or adding an unrelated source — without re-dialing every reflection
+// target. Reflection sources are re-dialed only on an explicit add/refresh, so
+// between refreshes this is the workspace's only copy of their schema. Uploads are
+// cached the same way to keep one re-derivation path, but for them it is pure
+// cache: losing it just costs a re-parse of the committed manifest.
+message ResolvedSource {
+  string id = 1;
+  google.protobuf.FileDescriptorSet descriptor_set = 2;
+  // service_names are the fully-qualified services this source SERVES, which is
+  // narrower than "every service defined in descriptor_set": a reflection
+  // server's ListServices is authoritative, and a dependency file pulled in for
+  // its messages may define services the server does not expose.
+  repeated string service_names = 3;
 }
 
 // Reflection addresses a server to reflect schemas from. Disk-local (not the

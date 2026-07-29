@@ -25,6 +25,9 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
    */
   source: {
     /**
+     * descriptor_set is an uploaded FileDescriptorSet's raw bytes; file_name
+     * names it and gives the source its identity.
+     *
      * @generated from field: bytes descriptor_set = 2;
      */
     value: Uint8Array;
@@ -36,6 +39,16 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
     value: Server;
     case: "reflection";
   } | { case: undefined; value?: undefined };
+
+  /**
+   * file_name identifies a descriptor_set upload (e.g. "buf_image.binpb"). It is
+   * the upload's identity, so re-uploading a rebuilt file of the same name
+   * REFRESHES that source in place instead of adding a second, indistinguishable
+   * row. Ignored for the reflection case, which is identified by its address.
+   *
+   * @generated from field: string file_name = 4;
+   */
+  fileName: string;
 };
 
 /**
@@ -70,13 +83,11 @@ export declare type RemoveDescriptorSourceRequest = Message<"grpcview.v1.RemoveD
   workspaceName: string;
 
   /**
-   * index selects the source to remove by its position in Workspace.sources,
-   * which matches the order the UI displays. Sources have no id yet (Phase 2),
-   * so the index is the stable handle until then.
+   * id selects the source to remove (DescriptorSource.id).
    *
-   * @generated from field: int32 index = 2;
+   * @generated from field: string id = 2;
    */
-  index: number;
+  id: string;
 };
 
 /**
@@ -100,6 +111,87 @@ export declare type RemoveDescriptorSourceResponse = Message<"grpcview.v1.Remove
  * Use `create(RemoveDescriptorSourceResponseSchema)` to create a new message.
  */
 export declare const RemoveDescriptorSourceResponseSchema: GenMessage<RemoveDescriptorSourceResponse>;
+
+/**
+ * @generated from message grpcview.v1.RefreshDescriptorSourceRequest
+ */
+export declare type RefreshDescriptorSourceRequest = Message<"grpcview.v1.RefreshDescriptorSourceRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * id selects the source to re-resolve (DescriptorSource.id).
+   *
+   * @generated from field: string id = 2;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message grpcview.v1.RefreshDescriptorSourceRequest.
+ * Use `create(RefreshDescriptorSourceRequestSchema)` to create a new message.
+ */
+export declare const RefreshDescriptorSourceRequestSchema: GenMessage<RefreshDescriptorSourceRequest>;
+
+/**
+ * @generated from message grpcview.v1.RefreshDescriptorSourceResponse
+ */
+export declare type RefreshDescriptorSourceResponse = Message<"grpcview.v1.RefreshDescriptorSourceResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.RefreshDescriptorSourceResponse.
+ * Use `create(RefreshDescriptorSourceResponseSchema)` to create a new message.
+ */
+export declare const RefreshDescriptorSourceResponseSchema: GenMessage<RefreshDescriptorSourceResponse>;
+
+/**
+ * @generated from message grpcview.v1.ReorderDescriptorSourcesRequest
+ */
+export declare type ReorderDescriptorSourcesRequest = Message<"grpcview.v1.ReorderDescriptorSourcesRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * ids is the full set of DescriptorSource.id values in the desired priority
+   * order — earlier wins. It must be a permutation of the workspace's current
+   * source ids; a missing or unknown id is an error rather than a partial
+   * reorder, so a stale client can never silently drop a source.
+   *
+   * @generated from field: repeated string ids = 2;
+   */
+  ids: string[];
+};
+
+/**
+ * Describes the message grpcview.v1.ReorderDescriptorSourcesRequest.
+ * Use `create(ReorderDescriptorSourcesRequestSchema)` to create a new message.
+ */
+export declare const ReorderDescriptorSourcesRequestSchema: GenMessage<ReorderDescriptorSourcesRequest>;
+
+/**
+ * @generated from message grpcview.v1.ReorderDescriptorSourcesResponse
+ */
+export declare type ReorderDescriptorSourcesResponse = Message<"grpcview.v1.ReorderDescriptorSourcesResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.ReorderDescriptorSourcesResponse.
+ * Use `create(ReorderDescriptorSourcesResponseSchema)` to create a new message.
+ */
+export declare const ReorderDescriptorSourcesResponseSchema: GenMessage<ReorderDescriptorSourcesResponse>;
 
 /**
  * @generated from message grpcview.v1.CreateFolderRequest
@@ -901,7 +993,12 @@ export declare const RunScriptResponseSchema: GenMessage<RunScriptResponse>;
  */
 export declare const WorkspaceService: GenService<{
   /**
-   * AddDescriptorSource adds a descriptor source to the workspace, it is used to obtain workspace defitions
+   * AddDescriptorSource adds a descriptor source to the workspace — where its
+   * definitions come from. A source whose id already exists is refreshed in place
+   * (see AddDescriptorSourceRequest.file_name); a new one is appended at LOWEST
+   * priority, so adding never changes which source an existing service resolves
+   * from. Only the added/refreshed source is resolved (one network round-trip for
+   * reflection); the merged view is rebuilt from every source's cached resolve.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.AddDescriptorSource
    */
@@ -911,8 +1008,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof AddDescriptorSourceResponseSchema;
   },
   /**
-   * RemoveDescriptorSource drops the source at the given index and re-resolves
-   * the workspace's services from the sources that remain.
+   * RemoveDescriptorSource drops the source with the given id and rebuilds the
+   * merged view from the cached resolves of those that remain — no network, so
+   * an unreachable sibling source can never block a removal.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
    */
@@ -920,6 +1018,29 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof RemoveDescriptorSourceRequestSchema;
     output: typeof RemoveDescriptorSourceResponseSchema;
+  },
+  /**
+   * RefreshDescriptorSource re-resolves exactly one source (re-dialing a
+   * reflection target, re-parsing an upload) and rebuilds the merged view.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.RefreshDescriptorSource
+   */
+  refreshDescriptorSource: {
+    methodKind: "unary";
+    input: typeof RefreshDescriptorSourceRequestSchema;
+    output: typeof RefreshDescriptorSourceResponseSchema;
+  },
+  /**
+   * ReorderDescriptorSources sets the source priority order and rebuilds the
+   * merged view from the cached resolves — no network. This is how you switch
+   * which source's definitions win when several describe the same protos.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.ReorderDescriptorSources
+   */
+  reorderDescriptorSources: {
+    methodKind: "unary";
+    input: typeof ReorderDescriptorSourcesRequestSchema;
+    output: typeof ReorderDescriptorSourcesResponseSchema;
   },
   /**
    * Get returns the workspace snapshot

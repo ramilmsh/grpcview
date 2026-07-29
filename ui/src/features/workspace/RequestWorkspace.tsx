@@ -10,6 +10,7 @@ import {
   useStreamingClient,
   useRefreshWorkspace,
   sourceForService,
+  schemaSourceFor,
   WORKSPACE_NAME,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
@@ -64,6 +65,15 @@ export function RequestWorkspace() {
   // source no longer mis-defaults to the first (mirrors resolveTarget's server-side default).
   const requestSource = useMemo(
     () => (request ? sourceForService(workspace, request.service) : null),
+    [workspace, request]
+  );
+
+  // Where this request's SCHEMA came from — the source that won its service's protos
+  // in the priority merge, which is a different question from where the request is
+  // sent (an uploaded descriptor set can define the method for a live target). The
+  // header chip shows this; the target bar shows requestSource/the override.
+  const schemaSource = useMemo(
+    () => (request ? schemaSourceFor(workspace, request.service) : null),
     [workspace, request]
   );
 
@@ -362,6 +372,7 @@ export function RequestWorkspace() {
         services={services}
         kind={kind}
         reflection={requestSource}
+        schemaSource={schemaSource}
         targetOverride={targetOverride}
         invoking={!!invokeState?.loading || !!invokeState?.streaming}
         onChangeMethod={onChangeMethod}

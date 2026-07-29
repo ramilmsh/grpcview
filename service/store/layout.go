@@ -25,6 +25,8 @@ const (
 	cacheSubdir           = "cache"     // resolved-schema cache under stateDir
 	historyDir            = "history"   // run history under stateDir, keyed by request slug path
 	servicesCacheFileName = "services.json"
+	sourcesCacheSubdir    = "sources" // per-source resolve cache under cacheSubdir
+	sourceCacheFileExt    = ".binpb"  // per-source resolve cache files (binary proto)
 )
 
 // itemKind distinguishes the two kinds of tree items.

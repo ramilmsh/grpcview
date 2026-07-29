@@ -7,8 +7,12 @@ import { useWorkspace, hostLabel, WORKSPACE_NAME } from "@/lib/workspace-query";
 // indicator sourced from the first reflection source. Search/gear are rendered
 // disabled — they need backend that doesn't exist in Phase 1 (plan §8/§11).
 export function TopBar() {
-  const { reflection } = useWorkspace();
+  const { reflection, sources } = useWorkspace();
   const connected = !!reflection;
+  // A workspace can have definition sources and still nothing to connect to (every
+  // source an uploaded descriptor set), so "no source" would be a lie — count them
+  // instead and leave the dot grey, since there is still no live server.
+  const sourceCount = `${sources.length} source${sources.length === 1 ? "" : "s"}`;
 
   return (
     <div
@@ -68,14 +72,16 @@ export function TopBar() {
           title={
             connected
               ? `Reflection source: ${hostLabel(reflection)}`
-              : "No definition source added yet"
+              : sources.length > 0
+                ? `${sourceCount}, none reflective — requests need a target of their own`
+                : "No definition source added yet"
           }
         >
           <span
             className="dot"
             style={{ background: connected ? "var(--ok)" : "var(--color-neutral-600)" }}
           />
-          {connected ? hostLabel(reflection) : "no source"}
+          {connected ? hostLabel(reflection) : sources.length > 0 ? sourceCount : "no source"}
         </span>
         <IconButton title="Settings — not available in Phase 1" disabled>
           <Gear />

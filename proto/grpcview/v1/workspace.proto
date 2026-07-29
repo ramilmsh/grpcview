@@ -52,19 +52,67 @@ message Service {
   string          package = 1;
   string          name    = 2;
   repeated Method methods = 3;
-  // source is the reflection server this service's schema was resolved from — the
-  // natural default invoke target for a request against it (see resolveTarget in
-  // invoke.go, and sourceForService in the UI). Unset for services from a
-  // descriptor-set upload (no dial target) or an older cache; such requests fall
+  // source is the dial target for this service: the FIRST reflection source (in
+  // priority order) that serves it — the natural default invoke target for a
+  // request against it (see resolveTarget in invoke.go, and sourceForService in
+  // the UI). It is deliberately independent of which source won the service's
+  // DESCRIPTORS: an upload placed first for its doc comments still dials the
+  // reflection source that actually serves the method. Unset only when no
+  // reflection source serves the service at all (upload-only); such requests fall
   // back to the workspace's first reflection source.
   optional Server source  = 4;
 }
 
+// DescriptorSource is one configured origin of schema definitions.
+//
+// Sources are PRIORITY-ORDERED: walking Workspace.sources front to back, the
+// first source to define a proto file (by file name) or to serve a service (by
+// full name) wins, and later sources only fill the gaps. The displayed order IS
+// the precedence — reordering the list (ReorderDescriptorSources) is how you
+// switch which source's definitions take effect when two sources describe the
+// same protos. That matters because the two kinds are not interchangeable: gRPC
+// reflection strips source_code_info, so a buf-built upload of the same files
+// carries doc comments the live server cannot, and whichever wins decides
+// whether the editor shows them.
 message DescriptorSource {
+  // id is this source's stable identity within the workspace, derived from its
+  // config: "reflection:<address>" (plus a "+tls" suffix under TLS) or
+  // "upload:<file name>". Adding a source whose id already exists REFRESHES it
+  // in place rather than appending a duplicate, so re-uploading a rebuilt
+  // descriptor set replaces the old one instead of accumulating rows.
+  string id = 3;
+
   oneof source {
-    bytes  descriptor_set = 1;
-    Server reflection     = 2;
+    Upload upload     = 1;
+    Server reflection = 2;
   }
+
+  // resolved summarizes what this source contributed on its last resolve, so the
+  // sources list can show which definitions actually come from where.
+  Resolved resolved = 4;
+}
+
+// Upload names an uploaded FileDescriptorSet source. The descriptor bytes
+// themselves are never sent to the client — they are large and the client needs
+// only the merged Workspace.descriptor_set — so this carries just the identifying
+// file name.
+message Upload {
+  string file_name = 1;
+}
+
+// Resolved is a source's last-resolve summary. service_names is everything the
+// source provides; won_service_names is the subset whose descriptors the
+// workspace actually takes from it, so a source fully shadowed by a
+// higher-priority one is visible as such instead of silently doing nothing.
+message Resolved {
+  int32           file_count        = 1;
+  repeated string service_names     = 2;
+  repeated string won_service_names = 3;
+  // error is why the last resolve failed, empty when it succeeded. A reflection
+  // target that has gone away contributes nothing but is NOT dropped and never
+  // blocks a mutation on its siblings — it stays listed with the reason showing,
+  // so it can be refreshed once it is back.
+  string          error             = 4;
 }
 
 message Folder {
@@ -159,13 +207,17 @@ message Script {
 message Workspace {
   string                    name     = 1;
   Item                      item     = 2;
+  // sources is the priority-ordered descriptor-source list; see DescriptorSource.
   repeated DescriptorSource sources  = 3;
+  // services is the flat service list DERIVED by merging the sources in priority
+  // order — one entry per fully-qualified service, resolved from the winning
+  // source's descriptors.
   repeated Service          services = 4;
   repeated Script           scripts  = 5;
   // descriptor_set is the merged, deduped FileDescriptorSet (transitive deps
   // incl. WKTs, topo-sorted) that protoc-gen-es needs to type request bodies
-  // client-side (ts-request-body-plan §T2/§4.4). It is DERIVED from the resolved
-  // descriptors and cached alongside services (gitignored services.json), never
-  // committed to grpcview.json and not part of grpcview.store.v1.
+  // client-side (ts-request-body-plan §T2/§4.4). Like services it is DERIVED by
+  // the priority merge and cached alongside them (gitignored services.json),
+  // never committed to grpcview.json and not part of grpcview.store.v1.
   bytes                     descriptor_set = 6;
 }

@@ -293,13 +293,23 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
 	sources := []*grpcviewv1.DescriptorSource{
-		{Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "localhost:50051"}}},
+		{
+			Id:     "reflection:localhost:50051",
+			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "localhost:50051"}},
+		},
 	}
 	services := []*grpcviewv1.Service{
 		{Package: "acme.v1", Name: "UserService", Methods: []*grpcviewv1.Method{{Name: "GetUser"}}},
 	}
 	descriptorSet := []byte{0x01, 0x02, 0x03}
-	if err := coll.PutDescriptorState(ctx, sources, services, descriptorSet); err != nil {
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources:       sources,
+		Services:      services,
+		DescriptorSet: descriptorSet,
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			"reflection:localhost:50051": {Id: "reflection:localhost:50051", ServiceNames: []string{"acme.v1.UserService"}},
+		},
+	}); err != nil {
 		t.Fatalf("PutDescriptorState: %v", err)
 	}
 
@@ -317,9 +327,21 @@ func TestDescriptorStatePersistence(t *testing.T) {
 		t.Errorf("descriptor set not round-tripped: got %v want %v", ws.GetDescriptorSet(), descriptorSet)
 	}
 
-	// The resolved-schema cache lives under the gitignored state dir.
+	// The derived merged cache and the per-source resolve cache both live under the
+	// gitignored state dir — never in the committed manifest.
 	if _, err := os.Stat(coll.servicesCachePath()); err != nil {
 		t.Errorf("services cache missing: %v", err)
+	}
+	if _, err := os.Stat(coll.sourceCachePath("reflection:localhost:50051")); err != nil {
+		t.Errorf("per-source resolve cache missing: %v", err)
+	}
+	// A source that is no longer configured loses its cache entry, so a removed
+	// source's descriptors can't come back.
+	if err := coll.PutDescriptorState(ctx, DescriptorState{}); err != nil {
+		t.Fatalf("PutDescriptorState (empty): %v", err)
+	}
+	if _, err := os.Stat(coll.sourceCachePath("reflection:localhost:50051")); !os.IsNotExist(err) {
+		t.Errorf("per-source resolve cache not pruned: %v", err)
 	}
 	gi, err := os.ReadFile(filepath.Join(coll.Root(), gitignoreFileName))
 	if err != nil || string(gi) == "" {

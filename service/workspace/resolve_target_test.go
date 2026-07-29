@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
 // TestResolveTargetServiceAware covers resolveTarget's service-aware default — the
@@ -15,9 +16,9 @@ import (
 // fall back to the first reflection source; and an explicit target overrides all.
 //
 // The sources + services are seeded through the store (PutDescriptorState) exactly
-// as resolveReflectionServices persists them — sources to the manifest, services
-// (carrying Source) to the resolved-schema cache — so resolveTarget reads them back
-// via coll.Services / coll.Sources without a live reflection round-trip.
+// as the source merge persists them — sources to the manifest, services (carrying
+// Source) to the derived cache — so resolveTarget reads them back via
+// coll.Services / coll.Sources without a live reflection round-trip.
 func TestResolveTargetServiceAware(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -29,8 +30,8 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	// Two reflection sources (A first, B second) and two services: OrderService
 	// attributed to the second source B, LegacyService with no attributed source.
 	sources := []*grpcviewv1.DescriptorSource{
-		{Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverA}},
-		{Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverB}},
+		{Id: "reflection:" + serverA.GetAddress(), Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverA}},
+		{Id: "reflection:" + serverB.GetAddress(), Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverB}},
 	}
 	services := []*grpcviewv1.Service{
 		{Package: "acme.v1", Name: "OrderService", Source: serverB},
@@ -40,7 +41,7 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.PutDescriptorState(ctx, sources, services, nil); err != nil {
+	if err := coll.PutDescriptorState(ctx, store.DescriptorState{Sources: sources, Services: services}); err != nil {
 		t.Fatalf("PutDescriptorState: %v", err)
 	}
 

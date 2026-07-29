@@ -13,7 +13,8 @@
 //	    <slug>/              a request
 //	      request.json         {meta:{name}, service, method, draftBody?, draftMetadataScript?}
 //	  .grpcview/             gitignored local state
-//	    cache/services.json    resolved-schema cache
+//	    cache/services.json    merged resolved-schema cache (derived)
+//	    cache/sources/<f>.binpb  one descriptor source's last resolve
 //
 // A directory is named by a stable slug; the display name lives in the config's
 // meta.name. Ordering is an explicit items[] slug list in the parent's config,
@@ -23,7 +24,10 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"sync"
@@ -153,5 +157,21 @@ func (c *Collection) treeRoot() string           { return filepath.Join(c.root, 
 func (c *Collection) scriptsRoot() string        { return filepath.Join(c.root, scriptsDir) }
 func (c *Collection) servicesCachePath() string {
 	return filepath.Join(c.root, stateDir, cacheSubdir, servicesCacheFileName)
+}
+
+// sourcesCacheRoot holds one file per descriptor source's last resolve.
+func (c *Collection) sourcesCacheRoot() string {
+	return filepath.Join(c.root, stateDir, cacheSubdir, sourcesCacheSubdir)
+}
+
+// sourceCachePath is a source's resolve-cache file. Source ids are opaque
+// user-derived strings (a dial address, an upload's file name), so the file name
+// is the id's slug plus a hash of the full id — the slug keeps the directory
+// legible while the hash keeps two ids that slugify alike (localhost:8080 vs
+// localhost.8080) on distinct files.
+func (c *Collection) sourceCachePath(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	name := fmt.Sprintf("%s-%s%s", slugify(id), hex.EncodeToString(sum[:6]), sourceCacheFileExt)
+	return filepath.Join(c.sourcesCacheRoot(), name)
 }
 func (c *Collection) historyRoot() string { return filepath.Join(c.root, stateDir, historyDir) }

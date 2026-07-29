@@ -21,6 +21,8 @@ import {
   updateFolder,
   addDescriptorSource,
   removeDescriptorSource,
+  refreshDescriptorSource,
+  reorderDescriptorSources,
   invoke,
   runScript,
   createScript,
@@ -44,17 +46,36 @@ export const firstReflectionSource = (ws?: Workspace): Server | null => {
   return null;
 };
 
-// sourceForService returns the reflection Server a service's schema was resolved
-// from (Service.source), so a request defaults its invoke target to the source
-// that actually provides it — not merely the workspace's first reflection source.
-// Falls back to the first reflection source when the service has no attributed
-// source (descriptor-set upload, or a cache written before this field existed).
+// sourceForService returns the Server a service is dialed at (Service.source: the
+// first reflection source in priority order that serves it), so a request defaults
+// its invoke target to a source that actually serves it — not merely the
+// workspace's first reflection source. Falls back to the first reflection source
+// when no reflection source serves the service at all (upload-only).
 export const sourceForService = (
   ws: Workspace | undefined,
   service: string
 ): Server | null => {
   const svc = ws?.services.find((s) => `${s.package}.${s.name}` === service);
   return svc?.source ?? firstReflectionSource(ws);
+};
+
+// schemaSourceFor describes WHERE A SERVICE'S SCHEMA CAME FROM, which is not the
+// same question as where its requests go: the definition source that won its
+// protos in the priority merge (Resolved.wonServiceNames) may well be an upload,
+// while the traffic goes to a reflection source further down the list. `live` is
+// true only for a reflection source — an upload has no address to connect to.
+//
+// The dial fallback covers a workspace whose sources have not been re-resolved
+// since per-source contributions started being recorded (nothing has won
+// anything yet): showing the source it dials beats showing nothing.
+export const schemaSourceFor = (
+  ws: Workspace | undefined,
+  service: string
+): { id: string; live: boolean } | null => {
+  const winner = ws?.sources.find((s) => s.resolved?.wonServiceNames.includes(service));
+  if (winner) return { id: winner.id, live: winner.source.case === "reflection" };
+  const dial = sourceForService(ws, service);
+  return dial ? { id: `reflection:${dial.address}`, live: true } : null;
 };
 
 export const hostLabel = (s: Server | null): string => s?.address ?? "";
@@ -119,8 +140,14 @@ export function useWorkspaceMutations() {
     // Workspace it returns, so the tree (and any inherit()-dependent request) reflects the save
     // without a refetch round-trip.
     updateFolder: useMutation(updateFolder, opts),
+    // The four descriptor-source mutations. Each returns the whole re-derived
+    // Workspace (sources, merged services, merged descriptor_set), so seeding the
+    // Get cache with it is what makes a reorder or refresh take effect everywhere —
+    // the method picker, the editor's generated types — without a refetch.
     addDescriptorSource: useMutation(addDescriptorSource, opts),
     removeDescriptorSource: useMutation(removeDescriptorSource, opts),
+    refreshDescriptorSource: useMutation(refreshDescriptorSource, opts),
+    reorderDescriptorSources: useMutation(reorderDescriptorSources, opts),
   };
 }
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
@@ -43,10 +45,16 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	services, descriptorSet, err := c.readServicesCache()
+	merged, err := c.readMergedCache()
 	if err != nil {
 		return nil, err
 	}
+	// The committed manifest is authoritative for the source list, its identities
+	// and its priority order; the cache only supplies each source's derived
+	// contribution summary. Overlaying by id (rather than trusting the cache's own
+	// list) keeps a hand-edited or git-pulled manifest correct — an unknown source
+	// simply shows no summary until it is resolved.
+	overlayResolved(sources, merged.GetSources())
 	scripts, err := c.loadScripts(col.GetScripts())
 	if err != nil {
 		return nil, err
@@ -60,10 +68,24 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: rootItems}},
 		},
 		Sources:       sources,
-		Services:      services,
+		Services:      merged.GetServices(),
 		Scripts:       scripts,
-		DescriptorSet: descriptorSet,
+		DescriptorSet: merged.GetDescriptorSet(),
 	}, nil
+}
+
+// overlayResolved copies each cached source's derived contribution summary onto
+// the matching committed source, by id.
+func overlayResolved(sources, cached []*grpcviewv1.DescriptorSource) {
+	byID := make(map[string]*grpcviewv1.DescriptorSource, len(cached))
+	for _, s := range cached {
+		byID[s.GetId()] = s
+	}
+	for _, s := range sources {
+		if c, ok := byID[s.GetId()]; ok {
+			s.Resolved = c.GetResolved()
+		}
+	}
 }
 
 // Sources returns just the committed descriptor sources from the manifest,
@@ -92,8 +114,8 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 func (c *Collection) Services(_ context.Context) ([]*grpcviewv1.Service, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	services, _, err := c.readServicesCache()
-	return services, err
+	merged, err := c.readMergedCache()
+	return merged.GetServices(), err
 }
 
 // Scripts returns just the collection's ordered scripts (manifest order + the
@@ -477,29 +499,77 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	return c.writeOrder(parentDir, slices.DeleteFunc(base, func(s string) bool { return s == ch.slug }))
 }
 
-// PutDescriptorState persists the committed descriptor sources (grpcview.json)
-// and the resolved-schema cache (gitignored .grpcview/cache/services.json). The
-// derived, merged descriptorSet is cached alongside the services (same wire
-// Workspace carrier), never committed.
-func (c *Collection) PutDescriptorState(_ context.Context, sources []*grpcviewv1.DescriptorSource, services []*grpcviewv1.Service, descriptorSet []byte) error {
+// DescriptorState is the whole descriptor configuration of a collection, written
+// in one shot by PutDescriptorState.
+type DescriptorState struct {
+	// Sources is the committed source list in PRIORITY order (earlier wins).
+	Sources []*grpcviewv1.DescriptorSource
+	// Uploads holds the descriptors of the upload-kind sources, keyed by source id.
+	// An upload's descriptors are its only copy (they cannot be re-fetched), so they
+	// are committed with the manifest rather than cached; an id absent here keeps
+	// whatever the manifest already stores, which is how a mutation that does not
+	// touch an upload (a reorder, removing something else) avoids resending
+	// megabytes of descriptors.
+	Uploads map[string]*descriptorpb.FileDescriptorSet
+	// Resolves is the per-source resolve cache to write, keyed by source id. As with
+	// Uploads, an absent id leaves the existing cache entry alone.
+	Resolves map[string]*grpcviewstorev1.ResolvedSource
+	// Services and DescriptorSet are the DERIVED merged view.
+	Services      []*grpcviewv1.Service
+	DescriptorSet []byte
+}
+
+// PutDescriptorState persists a collection's whole descriptor state under one
+// lock: the committed, priority-ordered source list (grpcview.json), each
+// source's resolve cache, and the derived merged view (gitignored
+// .grpcview/cache/). Cache entries for sources no longer listed are pruned, so a
+// removed source leaves nothing behind. Writing it all together means a reader
+// never observes a source list and a merged view that disagree.
+func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
-	if err := c.writeServicesCache(services, descriptorSet); err != nil {
-		return err
-	}
+
 	col, err := c.readCollection()
 	if err != nil {
 		return err
 	}
-	diskSources, err := wireToDiskSources(sources)
+	// Carry forward the descriptors of any upload the caller didn't resend.
+	existing := make(map[string]*descriptorpb.FileDescriptorSet, len(col.GetSources()))
+	for _, ds := range col.GetSources() {
+		if up := ds.GetUpload(); up != nil {
+			existing[ds.GetId()] = up.GetDescriptorSet()
+		}
+	}
+	diskSources, err := wireToDiskSources(state.Sources, func(id string) *descriptorpb.FileDescriptorSet {
+		if fds, ok := state.Uploads[id]; ok {
+			return fds
+		}
+		return existing[id]
+	})
 	if err != nil {
 		return err
 	}
 	col.Sources = diskSources
-	return c.writeCollection(col)
+	if err := c.writeCollection(col); err != nil {
+		return err
+	}
+
+	for _, r := range state.Resolves {
+		if err := c.writeSourceResolve(r); err != nil {
+			return err
+		}
+	}
+	ids := make([]string, 0, len(state.Sources))
+	for _, s := range state.Sources {
+		ids = append(ids, s.GetId())
+	}
+	if err := c.pruneSourceResolves(ids); err != nil {
+		return err
+	}
+	return c.writeMergedCache(state.Sources, state.Services, state.DescriptorSet)
 }
 
 // resolveFolder walks the display-name path from the tree root and returns the
@@ -688,6 +758,10 @@ func (c *Collection) readCollection() (*grpcviewstorev1.Collection, error) {
 	if err := readMessage(c.collectionFilePath(), col); err != nil {
 		return nil, err
 	}
+	// Every read goes through here, so this is where a manifest older than source
+	// identities (or a hand-edited one) is brought up to schema — no caller has to
+	// wonder whether the sources it got have usable ids. See normalizeSources.
+	col.Sources = normalizeSources(col.GetSources(), c.logger)
 	return col, nil
 }
 
@@ -710,15 +784,18 @@ func (c *Collection) ensureGitignore() error {
 	return writeFileAtomic(p, []byte(content), 0o644)
 }
 
-// writeServicesCache persists the resolved schema to the gitignored state dir.
-// The cache is a snapshot of the wire services (a genuine 1:1), so it reuses the
-// wire message rather than a disk-specific one; being gitignored and regenerable,
-// it is not part of the committed on-disk schema.
-func (c *Collection) writeServicesCache(services []*grpcviewv1.Service, descriptorSet []byte) error {
+// writeMergedCache persists the DERIVED merged schema view to the gitignored
+// state dir: the flat services list, the merged FileDescriptorSet, and each
+// source's contribution summary (which of its services it won). The cache is a
+// snapshot of wire messages (a genuine 1:1), so it reuses the wire Workspace as
+// its carrier rather than a disk-specific one; being gitignored and fully
+// regenerable from the per-source resolves, it is not part of the committed
+// on-disk schema.
+func (c *Collection) writeMergedCache(sources []*grpcviewv1.DescriptorSource, services []*grpcviewv1.Service, descriptorSet []byte) error {
 	if err := os.MkdirAll(filepath.Dir(c.servicesCachePath()), 0o755); err != nil {
 		return err
 	}
-	wrapper := &grpcviewv1.Workspace{Services: services, DescriptorSet: descriptorSet}
+	wrapper := &grpcviewv1.Workspace{Sources: sources, Services: services, DescriptorSet: descriptorSet}
 	data, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(wrapper)
 	if err != nil {
 		return fmt.Errorf("marshal services cache: %w", err)
@@ -726,19 +803,98 @@ func (c *Collection) writeServicesCache(services []*grpcviewv1.Service, descript
 	return writeFileAtomic(c.servicesCachePath(), append(data, '\n'), 0o644)
 }
 
-func (c *Collection) readServicesCache() ([]*grpcviewv1.Service, []byte, error) {
+// readMergedCache reads the derived merged view. An absent cache is not an error
+// (no source resolved yet), just an empty snapshot.
+func (c *Collection) readMergedCache() (*grpcviewv1.Workspace, error) {
+	wrapper := &grpcviewv1.Workspace{}
 	data, err := os.ReadFile(c.servicesCachePath())
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil, nil
+		return wrapper, nil
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	wrapper := &grpcviewv1.Workspace{}
 	if err := protojson.Unmarshal(data, wrapper); err != nil {
-		return nil, nil, fmt.Errorf("unmarshal services cache: %w", err)
+		return nil, fmt.Errorf("unmarshal services cache: %w", err)
 	}
-	return wrapper.GetServices(), wrapper.GetDescriptorSet(), nil
+	return wrapper, nil
+}
+
+// SourceResolves reads every cached per-source resolve, keyed by source id. A
+// source with no cache entry is simply absent from the map — the caller resolves
+// it (for reflection, by dialing) or, for an upload, re-parses the committed
+// descriptors. Cache files for ids no longer configured are ignored here and
+// pruned by the next PutDescriptorState.
+func (c *Collection) SourceResolves(_ context.Context) (map[string]*grpcviewstorev1.ResolvedSource, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entries, err := os.ReadDir(c.sourcesCacheRoot())
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]*grpcviewstorev1.ResolvedSource{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]*grpcviewstorev1.ResolvedSource, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), sourceCacheFileExt) {
+			continue
+		}
+		path := filepath.Join(c.sourcesCacheRoot(), e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		r := &grpcviewstorev1.ResolvedSource{}
+		if err := proto.Unmarshal(data, r); err != nil {
+			// A corrupt cache entry is disposable: drop it and let the source be
+			// re-resolved rather than failing every read of the workspace.
+			c.logger.Warn("dropping unreadable source cache entry", "file", e.Name(), "error", err)
+			_ = os.Remove(path)
+			continue
+		}
+		out[r.GetId()] = r
+	}
+	return out, nil
+}
+
+// writeSourceResolve caches one source's resolve as binary proto (disposable
+// cache — nothing reads or diffs it, and a FileDescriptorSet is far cheaper this
+// way than as protojson).
+func (c *Collection) writeSourceResolve(r *grpcviewstorev1.ResolvedSource) error {
+	if err := os.MkdirAll(c.sourcesCacheRoot(), 0o755); err != nil {
+		return err
+	}
+	data, err := proto.Marshal(r)
+	if err != nil {
+		return fmt.Errorf("marshal source resolve %s: %w", r.GetId(), err)
+	}
+	return writeFileAtomic(c.sourceCachePath(r.GetId()), data, 0o644)
+}
+
+// pruneSourceResolves deletes cache files for sources no longer configured, so a
+// removed source's descriptors don't linger and reappear if it is re-added.
+func (c *Collection) pruneSourceResolves(keep []string) error {
+	wanted := make(map[string]bool, len(keep))
+	for _, id := range keep {
+		wanted[filepath.Base(c.sourceCachePath(id))] = true
+	}
+	entries, err := os.ReadDir(c.sourcesCacheRoot())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || wanted[e.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(c.sourcesCacheRoot(), e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // historyFilePath returns the run-history file for the request whose on-disk

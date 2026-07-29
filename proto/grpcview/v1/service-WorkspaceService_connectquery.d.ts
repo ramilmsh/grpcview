@@ -5,18 +5,39 @@
 import { WorkspaceService } from "./service_pb";
 
 /**
- * AddDescriptorSource adds a descriptor source to the workspace, it is used to obtain workspace defitions
+ * AddDescriptorSource adds a descriptor source to the workspace — where its
+ * definitions come from. A source whose id already exists is refreshed in place
+ * (see AddDescriptorSourceRequest.file_name); a new one is appended at LOWEST
+ * priority, so adding never changes which source an existing service resolves
+ * from. Only the added/refreshed source is resolved (one network round-trip for
+ * reflection); the merged view is rebuilt from every source's cached resolve.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.AddDescriptorSource
  */
 export const addDescriptorSource: typeof WorkspaceService["method"]["addDescriptorSource"];
 /**
- * RemoveDescriptorSource drops the source at the given index and re-resolves
- * the workspace's services from the sources that remain.
+ * RemoveDescriptorSource drops the source with the given id and rebuilds the
+ * merged view from the cached resolves of those that remain — no network, so
+ * an unreachable sibling source can never block a removal.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
  */
 export const removeDescriptorSource: typeof WorkspaceService["method"]["removeDescriptorSource"];
+/**
+ * RefreshDescriptorSource re-resolves exactly one source (re-dialing a
+ * reflection target, re-parsing an upload) and rebuilds the merged view.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.RefreshDescriptorSource
+ */
+export const refreshDescriptorSource: typeof WorkspaceService["method"]["refreshDescriptorSource"];
+/**
+ * ReorderDescriptorSources sets the source priority order and rebuilds the
+ * merged view from the cached resolves — no network. This is how you switch
+ * which source's definitions win when several describe the same protos.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.ReorderDescriptorSources
+ */
+export const reorderDescriptorSources: typeof WorkspaceService["method"]["reorderDescriptorSources"];
 /**
  * Get returns the workspace snapshot
  *
