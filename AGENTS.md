@@ -123,6 +123,64 @@ metadata ride only the **uncached** `RunRequestBody`/`RunMiddleware` path. The
 `{Vars, Secrets, Env, Args}`) and must keep seeing `params === {}`, `inherit() ===
 {}`, and a throwing `invoke`. Never route folder metadata through `RunGenerator`.
 
+## Definition sources (where schemas come from)
+
+A workspace's services and `descriptor_set` are **derived**, never authored. They
+come from a **priority-ordered list of descriptor sources** — reflection targets
+and uploaded `FileDescriptorSet`s — merged by `service/workspace/sources.go`.
+
+The layering is the whole point, so don't collapse it:
+
+1. **Each source resolves independently** to its own `FileDescriptorSet` plus the
+   list of services it serves. A reflection source resolves by dialing; an upload
+   resolves by linking its committed bytes. Each resolve is cached per source
+   (`.grpcview/cache/sources/<slug>.binpb`, binary, gitignored).
+2. **The merged view is re-derived from those caches on every mutation** —
+   `mergeSources`, walking the list front to back: the first source to define a
+   proto **file** (by name) wins it, the first to serve a **service** (by full
+   name) wins its list entry, later sources fill the gaps. Then the whole claimed
+   set is *link-checked*, so sources that disagree about shared protos fail loudly
+   instead of producing a subtly broken workspace.
+
+Consequences worth preserving, each of which was a bug before:
+
+- **Order is precedence, and only order.** The outcome is a pure function of the
+  source list, never of which source was added or refreshed last. That is what
+  makes two sources describing the *same* protos usable: gRPC reflection strips
+  `source_code_info`, so a `buf build` upload of those files carries doc comments
+  the live server cannot, and whoever wins decides whether hovers show them.
+  `ReorderDescriptorSources` is the user-facing switch.
+- **Only the added/refreshed source touches the network.** Remove and reorder are
+  pure cache re-derivations, so an unreachable target can't block them. A source
+  that fails to resolve stays listed with the reason in `Resolved.error` and
+  contributes nothing, rather than being dropped or failing the mutation.
+- **Identity is config-derived** (`store.SourceID`, the one definition of the
+  format): `reflection:<address>[+tls]` or `upload:<file name>`. Re-adding the same
+  id **refreshes in place at its existing priority**; a genuinely new source appends
+  at lowest priority. Keying an upload by file name (not by a content hash) is
+  deliberate — rebuilding the image must refresh the source it came from, not spawn
+  a second one.
+- **Every source has a unique, non-empty id, guaranteed at load**
+  (`store.normalizeSources`, run from `readCollection`). Refresh, remove and
+  reorder all address a source *by id*, so two rows sharing one id — as a manifest
+  written before ids existed produces — silently retarget those operations at the
+  first of them. Manifests older than identities get their ids derived, their
+  legacy inline upload (`legacy_descriptor_set`) folded into `Upload`, and
+  duplicate or contentless entries dropped.
+- **A service's dial target is independent of who won its descriptors**:
+  `Service.source` is the first *reflection* source that serves it. An upload has
+  no address, so without that split, placing one first for its comments would
+  strand every request it claimed with no target. The UI keeps the two questions
+  visually separate too: the request header's chip names the source the **schema**
+  came from (`schemaSourceFor`, off `Resolved.won_service_names`), while the target
+  bar under it shows where the request is **sent**. Neither is "no source" merely
+  because the other is absent.
+
+An upload's descriptors are committed to `grpcview.json` (typed protojson) because
+unlike a reflection target they cannot be re-fetched; the resolve caches are
+disposable. protojson drops `buf`'s image extensions, which nothing reads —
+`source_code_info` round-trips intact.
+
 ## Views (no router)
 
 The SPA has **no URL router**. `App.tsx` renders a single `AppShell` and switches
@@ -131,8 +189,9 @@ between three feature views:
 
 - **Workspace** (`features/workspace/`) — the collection tree + request editor +
   response pane; the default view.
-- **Sources** (`features/sources/`) — configuring the gRPC reflection sources /
-  descriptor state for the collection.
+- **Sources** (`features/sources/`) — the priority-ordered definition-source list
+  (see above): add / refresh / reorder / remove, with each source's contribution
+  shown so a shadowed one is visible as such.
 - **Scripts** (`features/scripts/`) — authoring the generator/middleware/scenario
   scripts.
 
