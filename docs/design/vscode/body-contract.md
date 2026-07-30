@@ -4,9 +4,17 @@ Cross-cutting: layer 4 ships with [phase 2](./phase-2-body-files.md); layers 2 a
 depend on `DiskSink` and land in [phase 5](./phase-5-extension.md) or
 [6](./phase-6-optional.md).
 
+> **Scope.** This doc is about *editor enforcement of the module form*, which is one of
+> the two accepted body forms. The authoritative cross-surface contract is
+> [`../request-body-contract.md`](../request-body-contract.md): a body is protojson, and
+> a bare expression — which includes plain protojson, since valid JSON is valid TS — is
+> equally valid and reaches the wire without any of the layers below. Nothing here may
+> be read as "TypeScript is required."
+
 ## The problem
 
-A body must default-export a callable returning the selected method's input shape:
+When a body *is* authored as a module, it must default-export a callable returning the
+selected method's input shape:
 
 ```ts
 export default async (): Promise<RequestMessage> => (
@@ -66,6 +74,34 @@ Two rows are non-obvious and worth internalizing:
   its own existence.
 
 So they are complementary, not redundant.
+
+## Which layers apply to which body form
+
+The matrix above assumes the module form. The expression form opts out of two layers —
+it does not weaken enforcement, because layer 4 is where enforcement lives:
+
+| Body form | 1. Annotation | 2. Check file | 3. AST lint | 4. Runtime |
+|---|---|---|---|---|
+| module (`export default …`) | ✓ | ✓ | ✓ | ✓ |
+| expression (incl. plain protojson) | ✓ *when hosted in the hidden wrapper* | ✗ — no default export to import | n/a | **✓** |
+
+The nuance in row 2 is where the value is: an expression **in an editor** still gets
+layer 1, because the hidden wrapper supplies the return annotation that makes the
+literal excess-property-checked. The same expression **in a file opened cold**, or piped
+from a shell, gets layer 4 only. So the form does not determine the checking — the
+authoring context does.
+
+What deliberately does *not* happen is generating a JSON Schema per method to drive the
+editor's JSON language service for `body.json`. That is the layer AGENTS.md records as
+removed entirely, and reintroducing it to serve the "I don't want to speak TypeScript"
+escape hatch would trade the reason the escape hatch exists for a validation tier we
+already decided against. A user who wants checking opens the body in an editor that
+supplies the wrapper; a user who pastes an object gets a clean runtime error naming the
+file and field.
+
+This is also why the file extension must not gate anything (see
+[phase 2](./phase-2-body-files.md)): `body.json` and `body.ts` differ in what VS Code
+does *for the author*, never in what the backend accepts.
 
 ## The conclusion that matters
 

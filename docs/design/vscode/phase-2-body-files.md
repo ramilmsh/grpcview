@@ -7,12 +7,16 @@ track overview.
 ## Goal
 
 Move `draft_body` and `draft_metadata_script` out of `request.json` into sibling
-`body.ts` and `metadata.ts` files.
+`body.{ts,json}` and `metadata.{ts,json}` files.
 
-This is the highest-value phase and it is nearly free, because
-`isCanonical`/`migrateBodyToTs` (`body-wrapper.ts`) already guarantee every persisted
-body is a complete canonical module. The split is close to
-`writeFile(dir/body.ts, draftBody)`.
+This is the highest-value phase and it is close to `writeFile(dir/body.ts, draftBody)`.
+It is no longer *quite* free, though, and the reason matters: this phase was originally
+scoped on the assumption that `isCanonical`/`migrateBodyToTs` (`body-wrapper.ts`)
+guarantee every persisted body is a complete canonical module. Under
+[the body contract](../request-body-contract.md) that guarantee is gone by design — a
+persisted body may be a module or a bare expression (which includes plain protojson,
+since valid JSON is valid TS), and this phase is exactly what makes a hand-written one
+easy to produce. So the split must carry the form along rather than assume it.
 
 ## Why
 
@@ -32,24 +36,41 @@ body is a complete canonical module. The split is close to
   stage). The **wire** `grpcview.v1.Request.draft_body` stays a `string` — this whole
   phase lives below the wire API, so `ui/` is untouched.
 - **`service/store/layout.go:17`** — add `bodyFileName = "body.ts"` and
-  `metadataFileName = "metadata.ts"` next to `requestFileName`. Add both to
-  `reservedSlugs` so no child item can collide with them.
+  `metadataFileName = "metadata.ts"` next to `requestFileName`, **plus their `.json`
+  counterparts**. Add all four to `reservedSlugs` so no child item can collide with them.
+- **The extension is an editor hint; it does not decide behavior.** Write `.json` when the
+  body is valid JSON and `.ts` otherwise, so the file opens with the right language
+  service and diffs as what it is. On read, whichever of the pair exists wins (`.ts` if
+  both somehow exist, and log it) — the bytes then go through the same backend wrap as
+  every other surface. Never branch invoke behavior on the extension: a `.ts` holding
+  plain protojson and a `.json` holding a module must both work.
+- **Switch extension only on a form change.** A body that stops being valid JSON becomes
+  `body.ts`; that is a rename plus a write, and the old file must be removed or the pair
+  goes stale. This is the one genuinely new piece of work the contract adds to this phase
+  — and it is worth confirming it is wanted at all, since the alternative is *always*
+  `body.ts` (valid JSON is valid TS, so it is never the wrong extension, only a less
+  informative one).
 - **`service/store/fs.go:265-269`** — patch application writes the two files instead
   of setting proto fields.
 - **`service/store/convert.go:25`** — store→wire reads them back into the wire
   `Request`.
 - **Always write both files on request creation**, seeded with the canonical
   `EMPTY_BODY` shape (`body-wrapper.ts`), so "file absent" is never a state anyone has
-  to interpret.
+  to interpret. (An absent body is nonetheless *legal* now — the contract reads it as
+  `{}` — so this is a diff-hygiene choice, not a correctness one.)
 - **Keep `WRAP_PREFIX`/`WRAP_SUFFIX`/`PREFIX_LINES` unchanged.** The per-method
   `declare global { type RequestMessage = … }` alias keeps working because only one
   method is active per editor. The generated `import type … as RequestMessage` line is
   a `DiskSink` concern ([phase 5](./phase-5-extension.md)), *not* a split concern —
   introducing it here would be premature.
-- **Tighten the runtime contract** — see [`body-contract.md`](./body-contract.md).
-  Layer 4 (callable default export → await → `protojson` unmarshal, with an error that
-  names `body.ts` and the field) is the only real enforcement and should land with this
-  phase, since bodies are now hand-editable by anything.
+- **Tighten the runtime contract** — see [`body-contract.md`](./body-contract.md) for the
+  editor layers and [`../request-body-contract.md`](../request-body-contract.md) for what
+  is accepted. Layer 4 (wrap unless it already default-exports → evaluate → `protojson`
+  unmarshal, with an error that names the file and the field) is the only real enforcement
+  and should land with this phase, since bodies are now hand-editable by anything.
+- **Do not normalize on read.** A `body.json` the user never edited must round-trip
+  byte-identical; rewriting it as a wrapped TS module on load is a spurious git diff on a
+  file the user never touched, and it discards the form they deliberately authored.
 
 ## Watch out
 

@@ -4,12 +4,19 @@
 services. It reflects a server's schema, lets you author requests, and invokes
 them, all from a single self-contained binary.
 
-The defining design decision: **requests are authored as TypeScript, not JSON.**
-A request body is a typed TS object literal, checked in-browser against the
-selected method's input message; request metadata is authored the same way; and
-both are *evaluated* (in a sandboxed JS engine) at invoke time, so they can call
-into user-defined scripts. There is no JSON-schema layer — an earlier design that
+The defining design decision: **requests are authored as TypeScript.** A request
+body is a typed TS object literal, checked in-browser against the selected
+method's input message; request metadata is authored the same way; and both are
+*evaluated* (in a sandboxed JS engine) at invoke time, so they can call into
+user-defined scripts. There is no JSON-schema layer — an earlier design that
 converted proto descriptors to JSON schemas has been removed entirely.
+
+**But TypeScript is the authoring affordance, not the contract: a body is
+protojson.** Plain protojson is accepted everywhere a body is — the backend supplies
+the wrapper, so nobody is required to speak TypeScript to send a request they already
+have. See
+[`docs/design/request-body-contract.md`](docs/design/request-body-contract.md) for
+the two accepted forms and the one seam that normalizes them.
 
 ## Project Stage
 
@@ -58,6 +65,16 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
 This is the core of the product; understand it before touching `ui/` or
 `service/scripting/`.
 
+**Why TypeScript:** it replaced `{{ }}` templating. Postman-class tools need a token
+syntax because their bodies are *data* — text you interpolate into — which buys escaping
+rules, no autocomplete, no type-checking, and no composition. grpcview's bodies are
+*expressions*, so a computed value is just a call written where the value goes
+(`{ userId: uuid() }`), and IntelliSense comes free from the host language. The static
+and dynamic cases are therefore one gradient, not two modes: `{"userId":"u_1"}` becomes
+`{"userId": uuid()}` by editing it, with no conversion step. Preserving that is why
+plain protojson must run the *same* evaluation path rather than a separate one — a
+protojson body that could not call a generator would be `{{ }}` all over again.
+
 - A request **body** is authored as a bare TypeScript object literal in a Monaco
   editor. What the user edits is wrapped in a hidden canonical module —
   `export default (): RequestMessage => ( <body> )` — whose prefix/suffix lines
@@ -71,6 +88,15 @@ This is the core of the product; understand it before touching `ui/` or
 - Both body and metadata strings are **evaluated on the backend in QuickJS** at
   invoke time (same machinery as scripts), so they can call generator helpers
   (e.g. `uuid()`) and reference user scripts.
+- **Plain protojson is equally valid** for both, because **valid JSON is valid
+  TypeScript** — a JSON object is a TS object literal in expression position, so it is
+  not a second case and gets no second code path. There are two forms: a **module**
+  (has `export default`) or an **expression** (anything else, wrapped in
+  `export default async () => ( … )` and run on the same path). The Monaco
+  hidden-wrapper form above is what the browser authors; it is not what the backend
+  requires. `resolveInvokeBody` (`service/workspace/invoke.go`) is the single seam that
+  applies the wrap, so every surface — UI, VS Code, CLI, MCP — inherits one behavior.
+  Full contract: [`docs/design/request-body-contract.md`](docs/design/request-body-contract.md).
 - **Scripts** (generators / middleware / scenarios) are authored in the Scripts
   view, bundled with esbuild, and run in the same sandbox under a grant.
 
