@@ -187,9 +187,11 @@ Module layout, one concern each:
 | `useTreeState.ts` | controlled/uncontrolled expansion, selection, focus, anchor |
 | `selection.ts` | range/toggle/select-all semantics against the flat array |
 | `keymap.ts` | key event → intent, one table, no DOM |
+| `platform.ts` | `IS_MAC`, resolved once (added T1 — see below) |
+| `navigate.ts` | a move intent → a row index; parent / first-child lookup (added T1) |
 | `typeahead.ts` | keystroke buffer, 1s debounce, wrap-around match |
 | `dnd.ts` | pointer position → `into`/`before`/`after`, validity, autoscroll |
-| `Tree.tsx` | the component: roving tabindex, aria, event wiring |
+| `Tree.tsx` | the component: focus container, aria, event wiring |
 | `TreeRow.tsx` | indent, indent guides, twistie, drop indicator; content = render prop |
 
 ## Second consumer: the descriptor explorer (and VS Code alignment)
@@ -348,6 +350,47 @@ the viewport edges; reject drops into a dragged node's own descendant.
    (which segment of a compressed row is the target?). Implemented as a flag so it can be
    flipped after seeing it on real data.
 
+## What T1 settled (implemented 2026-07-31)
+
+The key table above is implemented as specified, including the platform split. Four things
+the T1 line didn't spell out, recorded here so they aren't re-derived or "fixed" later:
+
+1. **One focus container, not a roving tabindex.** T1's line says "roving tabindex"; what
+   shipped is a single `tabIndex={0}` on `.tree` plus `aria-activedescendant` naming the
+   focused row, with `.treerow.foc` as the visible logical-focus marker. This is what VS
+   Code's list widget actually does, and what T0's committed CSS already assumed — so it is
+   the *less* deviant option despite contradicting the phrase. One `Tab` reaches the tree, a
+   second leaves it; DOM focus never moves between rows.
+2. **`aria-posinset` / `aria-setsize` on every row**, beyond T1's enumerated
+   `tree`/`treeitem`/`aria-expanded`/`aria-level`. Our rows are a *flat* list of siblings
+   with no `role="group"` per folder, so `aria-level` alone leaves sibling position
+   unstated — and a browser synthesising it from flat DOM order would count across the whole
+   visible tree ("5 of 8") instead of within the parent ("3 of 5"). VS Code sets both on
+   every row (`list/listView.js:592-593`) with the semantics `flatten.ts` now reproduces:
+   set size = the parent's visible-child count, position = 1-based index among visible
+   siblings (`tree/abstractTree.js:137-146`). Computed in `flatten.ts` during the existing
+   walk, which also makes it unit-testable with no DOM.
+3. **A third T0-bridge prop: `onRenamingChange`.** `renamingId` (T0) let the host say which
+   row is mid-rename; this lets the tree *request* one, so `F2`/macOS-`Enter` reach the
+   existing pencil affordance. Like `renamingId` it folds into internal state at T4b. The
+   host is what decides a row is unrenamable: `CollectionPanel` refuses folder ids, because
+   `UpdateFolderRequest` has no `name` field until T4a — and a `renamingId` pointing at a
+   folder would silently swallow that row's clicks forever, since the tree has no notion of
+   "folder" to guard on.
+4. **Paging measures the scroll ancestor, not `.tree`.** `.tree` has no bounded height, so
+   its `clientHeight` is its full *content* height; measuring it would make `PageDown`
+   identical to `End` for any collection that overflows. `Tree.tsx` walks up to the nearest
+   ancestor whose computed `overflow-y` is `auto`/`scroll`. Also: a `move` intent with
+   nothing focused starts from a virtual position just outside the array, which the plan
+   only specified for `up`/`down` — `pageUp`/`pageDown` inherit the same rule, so they land
+   one stride in from an end rather than collapsing to the first/last row.
+
+**For T2:** the intent → action dispatch is a `switch` inside `Tree.tsx`'s `handleKeyDown`.
+`keyToIntent`, the `navigate.ts` lookups, and the editable-target guard are each unit-tested,
+but that glue is not — it needs component state, and this suite has no DOM. T2 has to edit
+that same switch (`shift`+arrow, `cmd+A`, `Escape`); extract it into a pure
+`applyIntent(intent, ctx) → actions` then, rather than now and again immediately after.
+
 ## Backend gaps (block T4 and T6)
 
 Verified in `proto/grpcview/v1/service.proto`:
@@ -390,8 +433,10 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
   works — open a request, folder counts, gear/pencil/plus/trash, filter box, empty states —
   expansion survives a re-render, and a throwaway declarative provider renders a readable
   tree with no `renderRow` at all (proves the portable tier before anything depends on it).
-- **T1 — Keyboard + a11y.** The full key table above, roving tabindex, `role="tree"` /
-  `treeitem` / `aria-expanded` / `aria-level`, focus ring distinct from selection.
+- **T1 — Keyboard + a11y.** *(Landed 2026-07-31 — see §"What T1 settled" for the four calls
+  it forced, including a focus container in place of a roving tabindex.)* The full key table
+  above, `role="tree"` / `treeitem` / `aria-expanded` / `aria-level` (plus
+  `aria-posinset`/`aria-setsize`), focus ring distinct from selection.
   *Verify:* tab into the tree, drive it entirely by keyboard.
 - **T2 — Multi-select.** Anchor semantics, `shift`/`cmd` click and `shift+arrow`,
   `cmd+A`, `Escape`. Make delete multi-aware (confirm dialog pluralizes).
@@ -499,13 +544,29 @@ them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` d
 
 ```
 cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
-bazel test //ui:test                                          # vitest, 60 tests
+bazel test //ui:test --nocache_test_results                   # vitest; 135 tests as of T1
 bazel build //ui:ui                                           # the real release bundle
 ```
 
 Run all three. The first one is not optional — it is the gate that catches an unused import or
 a wrong generic, and this rewrite hit both. `AGENTS.md`'s claim that the build "catches TS
-errors" is true only for syntax and unresolved imports.
+errors" is true only for syntax and unresolved imports. Pass `--nocache_test_results` when
+checking someone else's claimed pass: a cached `PASSED` proves only that the inputs hash-match
+an earlier run.
+
+**What the three gates cannot reach.** `vitest.config.ts` runs `environment: "node"` with no
+jsdom, deliberately — so nothing here dispatches a real event, computes layout, or reads
+`getComputedStyle`. Pure modules (`keymap`, `navigate`, `flatten`, `selection`, the
+editable-target guard) are covered directly; row markup is covered structurally via
+`renderToStaticMarkup`. Three T1 behaviors are therefore verified by code reasoning only and
+are owed a browser pass:
+
+- **`PageUp`/`PageDown` page by one real screen**, not the whole tree (needs a collection tall
+  enough to overflow the 278px panel).
+- **A rename box keeps its own keystrokes** — `F2`, type a two-word name (the space is the
+  tell), reposition with `Home`/arrows, then `Delete`/`cmd+Backspace` mid-edit must edit text
+  rather than pop the delete dialog, and commit must not immediately re-enter rename on macOS.
+- **`scrollIntoView` keeps the focused row visible** when arrowing past either viewport edge.
 
 Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
 convention used by the request-body and definition-sources tracks.

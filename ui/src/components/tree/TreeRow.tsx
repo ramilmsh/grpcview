@@ -17,6 +17,14 @@ const TWISTIE_WIDTH = 14;
 
 interface TreeRowProps<T> {
   row: TreeRowModel<T>;
+  // T1: a DOM id safe to use as the container's aria-activedescendant target
+  // (Tree.tsx's domIdFor — row.id itself is user-authored text that can
+  // contain whitespace or worse, unsafe to use as a raw DOM id/IDREF), and the
+  // callback ref that lets a keyboard move scrollIntoView the row it just
+  // focused. Both are computed and keyed by Tree.tsx (the only place that
+  // knows this row's id in the CURRENT flat pass), not here.
+  domId: string;
+  rowRef: (el: HTMLDivElement | null) => void;
   adapter: TreeAdapter<T>;
   renderRow?: TreeProps<T>["renderRow"];
   selected: boolean;
@@ -35,6 +43,8 @@ interface TreeRowProps<T> {
 
 export function TreeRow<T>({
   row,
+  domId,
+  rowRef,
   adapter,
   renderRow,
   selected,
@@ -95,6 +105,12 @@ export function TreeRow<T>({
   return (
     <div
       className={clsx("treerow", selected && "sel", focused && "foc", active && "on")}
+      // id/ref come right after className (not before) so the rendered markup's
+      // FIRST attribute stays `class="..."` — Tree.portable.test.tsx and
+      // request-tree.test.tsx both scrape rows via a `<div class="treerow...`
+      // prefix match; reordering these would silently break that scrape.
+      id={domId}
+      ref={rowRef}
       // --tree-indent is set here (not left to app-tokens.css's :root default) so
       // the `indent` PROP, not just the CSS token, actually drives the guides'
       // pitch — see the guide-DOM contract in app-tokens.css's components/tree/
@@ -102,9 +118,18 @@ export function TreeRow<T>({
       style={{ height: rowHeight, "--tree-indent": `${indent}px` } as CSSProperties}
       role="treeitem"
       aria-level={row.depth + 1}
+      // See TreeRowModel.posInSet/setSize (types.ts) for the full citation of
+      // the monaco getPosInSet/getSetSize semantics these mirror exactly.
+      aria-posinset={row.posInSet}
+      aria-setsize={row.setSize}
       // Present only for expandable rows — a leaf has no expansion state to report,
       // matching how a real accessibility tree omits it for files, not just folders.
       aria-expanded={row.expandable ? row.expanded : undefined}
+      // Reflects SELECTION, not focus — the tree's logical focus (aria-
+      // activedescendant on the container, T1) and selection are deliberately
+      // independent (plan §"Focus ≠ selection"), so this must read `selected`
+      // even on a row that also happens to be focused right now.
+      aria-selected={selected}
       title={tooltip}
       onClick={onRowClick}
       onContextMenu={onContextMenu}

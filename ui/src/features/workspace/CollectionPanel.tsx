@@ -8,7 +8,7 @@ import { Tree } from "@/components/tree/Tree";
 import type { TreeRowState } from "@/components/tree/types";
 import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import { childPathOf, itemKey, keyOf, serviceName, type ItemWithPath } from "@/lib/format";
+import { childPathOf, findByKey, itemKey, keyOf, serviceName, type ItemWithPath } from "@/lib/format";
 import { renderRequestRow, useRequestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
@@ -141,6 +141,39 @@ export function CollectionPanel() {
     setConfirm(null);
   };
 
+  // Tree's own onDelete (keyboard Delete / mac cmd+Backspace on the focused
+  // row, tree-rewrite-plan.md's T1 key table) reaches the SAME confirm dialog
+  // as each row's own trash button (RequestRowCallbacks.onDelete below) — just
+  // a second entry point into the identical `confirm` state. Single-row at
+  // T1: Tree.tsx only ever calls this with exactly the focused node, so
+  // nodes[0] is always what's wanted. T2 makes this selection-wide, which is
+  // when this dialog needs to pluralize ("Delete N items?") instead of naming
+  // one — out of scope here.
+  const onTreeDelete = (nodes: ItemWithPath[]): void => setConfirm(nodes[0] ?? null);
+
+  // Tree's own onRenamingChange (F2, or Enter on macOS, on the focused row) is
+  // a second way to set the SAME renamingKey the pencil button already drives
+  // (RequestRowCallbacks.onRenamingChange below) — one piece of state, two
+  // triggers. A rename intent on a FOLDER row is a deliberate no-op: per
+  // proto/grpcview/v1/service.proto, UpdateFolderRequest carries only
+  // workspace_name/path/item_name/draft_metadata_script — no `name` field,
+  // unlike UpdateRequestRequest, which has one — so there is nowhere on the
+  // wire for a folder rename to go until T4a adds it. Letting renamingKey
+  // become a folder's key anyway would silently start swallowing THAT row's
+  // own clicks forever (Tree.tsx's handleRowClick guard is keyed on
+  // renamingId alone, with no folder/request distinction of its own — the
+  // tree doesn't know what a "folder" is), which is a worse, more confusing
+  // failure than simply not entering rename mode.
+  const onTreeRenamingChange = (id: string | null): void => {
+    if (id === null) {
+      setRenamingKey(null);
+      return;
+    }
+    const target = findByKey(filtered, id);
+    if (target?.item.content.case === "folder") return;
+    setRenamingKey(id);
+  };
+
   // Callbacks renderRequestRow needs beyond ItemWithPath itself — see
   // request-tree.tsx's RequestRowCallbacks for why these can't be derived from the
   // node alone.
@@ -237,7 +270,9 @@ export function CollectionPanel() {
             onFocusedChange={setTreeFocused}
             activeId={activeKey}
             renamingId={renamingKey}
+            onRenamingChange={onTreeRenamingChange}
             onOpen={openTab}
+            onDelete={onTreeDelete}
             aria-label="Collection"
           />
         )}

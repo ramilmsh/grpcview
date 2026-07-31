@@ -54,7 +54,18 @@ export function flatten<T>(
       );
     }
 
-    for (const node of children) {
+    // posInSet/setSize (TreeRowModel, ./types) are computed HERE, during this
+    // existing walk, rather than as a second pass grouping `rows` by parentId
+    // afterwards: `children` at this point already IS this row's full visible
+    // sibling set — every element of it unconditionally becomes a row below,
+    // whether or not it happens to be a folder or is itself expanded — so a
+    // plain loop index plus `children.length` are already exactly VS Code's
+    // `node.visibleChildIndex + 1` / `parentNode.visibleChildrenCount`, with no
+    // extra bookkeeping and no risk of drifting out of sync with what actually
+    // got pushed. See TreeRowModel's own comment (types.ts) for the full
+    // citation of those monaco semantics.
+    for (let i = 0; i < children.length; i++) {
+      const node = children[i];
       const id = adapter.getId(node);
       const seenAt = indexById.get(id);
       if (seenAt !== undefined) {
@@ -81,7 +92,16 @@ export function flatten<T>(
       }
 
       indexById.set(id, rows.length);
-      rows.push({ node, id, depth, parentId, expandable, expanded: isExpanded });
+      rows.push({
+        node,
+        id,
+        depth,
+        parentId,
+        expandable,
+        expanded: isExpanded,
+        posInSet: i + 1,
+        setSize: children.length,
+      });
 
       if (isExpanded) {
         visit(node, id, depth + 1);

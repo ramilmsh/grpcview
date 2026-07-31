@@ -121,6 +121,18 @@ export interface TreeProps<T> {
   // into internal state.
   renamingId?: string | null;
 
+  // T1's half of the renamingId bridge: how a rename gets REQUESTED in the first
+  // place from the keyboard (F2, or Enter on macOS — keymap.ts's "rename"
+  // intent), now that there's no per-row useState/onClick for Tree.tsx's
+  // handleKeyDown to reach into. Same shape as renamingId itself (plain input
+  // there, plain output here — no round trip through internal state), and the
+  // same T0/T4b bridge: the HOST still owns "which row, if any" and decides
+  // whether a given id is even renamable (e.g. CollectionPanel says no for a
+  // folder row today, since UpdateFolderRequest has no name field yet — T4a).
+  // Once T4b lands and the component owns the edit UI outright, this and
+  // renamingId both fold into internal state and disappear together.
+  onRenamingChange?(id: string | null): void;
+
   onOpen?(node: T): void;                       // Enter / click on a leaf
   onRenameCommit?(node: T, next: string): void;  // component owns the edit UI
   onDelete?(nodes: T[]): void;                   // Delete key; host confirms
@@ -145,4 +157,24 @@ export interface TreeRowModel<T> {
   parentId: string | null;
   expandable: boolean;   // collapsibleState !== "none"
   expanded: boolean;     // expandable && id in the expanded set
+
+  // ARIA position/size within this row's SET — mirrors monaco's own tree widget
+  // exactly (verified in the vendored sources, ui/node_modules/monaco-editor):
+  //   - listView.js:592-593 sets BOTH aria-setsize/aria-posinset on every row.
+  //   - abstractTree.js:137-146 defines the semantics this implements:
+  //       getSetSize(node)  => parentNode.visibleChildrenCount
+  //       getPosInSet(node) => node.visibleChildIndex + 1
+  //     (abstractTree.js:1173-1176 is where they get written onto the element).
+  // "Set" means this row's VISIBLE siblings — the other rows sharing its
+  // parentId below, in THIS flattened array — never every child
+  // adapter.getChildren() could in principle return: a collapsed folder's
+  // children are not part of anyone's set because they are not rows at all.
+  // Our rows are a flat list of role="treeitem" divs, all siblings directly
+  // under one role="tree" container, with no role="group" wrapper per expanded
+  // folder — these two attributes are the flat-DOM substitute for that
+  // nesting: without them, a browser synthesizing a position from flat DOM
+  // order would count across the WHOLE visible tree ("5 of 8") instead of
+  // within the parent's actual children ("3 of 5").
+  posInSet: number;  // 1-based index among this row's visible siblings
+  setSize: number;   // count of this row's visible siblings (itself included)
 }

@@ -403,3 +403,116 @@ describe("request tree rows: renaming", () => {
     expect(titles).toEqual(["Rename request", "Delete request"]);
   });
 });
+
+// T1 (keyboard + a11y) has no browser available in this environment, so this is
+// the only regression cover it gets: what react-dom/server's OWN markup proves
+// about the container/row attributes handleKeyDown depends on, not anything
+// about a real keydown actually firing (there is no DOM event dispatch under
+// SSR). See the file header above for why the same technique already carries
+// T0's own cover.
+describe("request tree rows: keyboard + a11y (T1)", () => {
+  // The container div (Tree.tsx's outer `.tree`) — found the same way `rowsOf`
+  // finds row divs, but by the literal class "tree" rather than "treerow": the
+  // two never collide, since `hasClass` checks exact membership in the class
+  // LIST, and "tree" is never one of a row's own classes.
+  const treeContainer = (markup: string): PNode =>
+    findAll(parseFragment(markup), (n) => n.tag === "div" && hasClass(n, "tree"))[0];
+
+  it("the container is the one tabbable element, and names the focused row via aria-activedescendant", () => {
+    const markup = renderToStaticMarkup(
+      <Tree
+        adapter={adapter}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={FULLY_EXPANDED}
+        focused="Calls/SayHello"
+        aria-label="Test tree"
+      />
+    );
+    const container = treeContainer(markup);
+    // Roving TABINDEX here means one focusable container, not one-tabIndex-
+    // per-row (Tree.tsx's own "FOCUS MODEL" comment) — react-dom/server lowers
+    // the JSX `tabIndex` prop to the HTML `tabindex` attribute.
+    expect(container.attrs.tabindex).toBe("0");
+
+    const [, , rowSayHello] = rowsOf(markup);
+    // aria-activedescendant must equal the focused row's OWN dom id — which
+    // must NOT be the raw itemKey ("Calls/SayHello"): that string is exactly
+    // what Tree.tsx's domIdFor exists to avoid embedding verbatim (an ARIA
+    // IDREF may not contain whitespace, and a request/folder name with a
+    // space would put one right into a bare-itemKey id).
+    expect(rowSayHello.attrs.id).toBeTruthy();
+    expect(rowSayHello.attrs.id).not.toBe("Calls/SayHello");
+    expect(container.attrs["aria-activedescendant"]).toBe(rowSayHello.attrs.id);
+  });
+
+  it("omits aria-activedescendant entirely when nothing is focused", () => {
+    const markup = renderToStaticMarkup(
+      <Tree
+        adapter={adapter}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={FULLY_EXPANDED}
+        aria-label="Test tree"
+      />
+    );
+    expect(treeContainer(markup).attrs["aria-activedescendant"]).toBeUndefined();
+  });
+
+  it("each row's dom id is stable across two renders of the same tree", () => {
+    // domIdFor is a pure function of (this Tree instance's useId, row.id) —
+    // rendering the identical tree twice (two unrelated component instances,
+    // as two separate renderToStaticMarkup calls are) must still line up
+    // row-for-row, or reveal() / focus-driven scrollIntoView lookups (Tree.tsx's
+    // rowEls map) would be keyed off ids that silently drift between renders.
+    const markupA = renderToStaticMarkup(
+      <Tree adapter={adapter} renderRow={rowRendererWith(noopCallbacks)} expanded={FULLY_EXPANDED} aria-label="t" />
+    );
+    const markupB = renderToStaticMarkup(
+      <Tree adapter={adapter} renderRow={rowRendererWith(noopCallbacks)} expanded={FULLY_EXPANDED} aria-label="t" />
+    );
+    expect(rowsOf(markupA).map((r) => r.attrs.id)).toEqual(rowsOf(markupB).map((r) => r.attrs.id));
+  });
+
+  it("aria-selected reflects SELECTION, independent of which row is focused", () => {
+    const markup = renderToStaticMarkup(
+      <Tree
+        adapter={adapter}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={FULLY_EXPANDED}
+        selection={["Calls/SendHellos"]}
+        focused="Calls/Chat"
+        aria-label="Test tree"
+      />
+    );
+    // Same 8-row fixture/order as the "active/selected/focused" describe block
+    // above: Ping, Calls, Calls/SayHello, Calls/ListHellos, Calls/SendHellos
+    // (selected), Calls/Chat (focused — but NOT selected), Calls/Admin, Purge.
+    // Only the SELECTED row reads "true"; the focused-but-unselected row reads
+    // "false" exactly like every other row — proving aria-selected tracks
+    // selection, not focus, even on the one row where the two could be
+    // confused for each other.
+    const ariaSelected = rowsOf(markup).map((r) => r.attrs["aria-selected"]);
+    expect(ariaSelected).toEqual(["false", "false", "false", "false", "true", "false", "false", "false"]);
+  });
+});
+
+describe("request tree rows: aria-posinset / aria-setsize (T1)", () => {
+  it("carries the right 1-based position and sibling count for a realistic folder+request tree", () => {
+    const markup = renderToStaticMarkup(
+      <Tree
+        adapter={adapter}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={FULLY_EXPANDED}
+        aria-label="Test tree"
+      />
+    );
+    const rows = rowsOf(markup);
+    // Same 8-row fixture/order as "indent guides" above: Ping, Calls — the two
+    // ROOTS, so both carry setSize "2" — then Calls's 5 direct children
+    // (SayHello, ListHellos, SendHellos, Chat, Admin — setSize "5", posInset
+    // "1".."5"), then Admin's own 1 child Purge, which restarts at posInset
+    // "1" with setSize "1" rather than continuing Admin's own posInset ("5")
+    // or Calls's.
+    expect(rows.map((r) => r.attrs["aria-posinset"])).toEqual(["1", "2", "1", "2", "3", "4", "5", "1"]);
+    expect(rows.map((r) => r.attrs["aria-setsize"])).toEqual(["2", "2", "5", "5", "5", "5", "5", "1"]);
+  });
+});

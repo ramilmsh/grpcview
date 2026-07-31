@@ -4,7 +4,9 @@ import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./
 
 // selection.ts never looks past `.id`, so a bare string node keeps these fixtures
 // down to what the functions under test actually read (same reasoning as
-// format.test.ts's structural fixtures, one door over).
+// format.test.ts's structural fixtures, one door over). posInSet/setSize are
+// likewise never read here — 1/1 is a placeholder, not a claim about any real
+// sibling set (flatten.test.ts is what actually pins their values).
 const row = (id: string): TreeRowModel<string> => ({
   node: id,
   id,
@@ -12,6 +14,8 @@ const row = (id: string): TreeRowModel<string> => ({
   parentId: null,
   expandable: false,
   expanded: false,
+  posInSet: 1,
+  setSize: 1,
 });
 
 const rows = ["A", "B", "C", "D", "E"].map(row);

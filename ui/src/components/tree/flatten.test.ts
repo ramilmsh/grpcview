@@ -140,6 +140,79 @@ describe("flatten: indexById", () => {
   });
 });
 
+describe("flatten: posInSet/setSize", () => {
+  it("gives every root a 1-based posInSet and the same setSize == root count", () => {
+    const roots = [leaf("a"), leaf("b"), leaf("c"), leaf("d")];
+    const { rows } = flatten(adapterFor(roots), new Set());
+
+    expect(rows.map((r) => r.posInSet)).toEqual([1, 2, 3, 4]);
+    expect(rows.every((r) => r.setSize === 4)).toBe(true);
+  });
+
+  it("a nested folder's children get posInSet ascending 1..n, and setSize == the folder's visible child count", () => {
+    const tree = [folder("F", [leaf("C1"), leaf("C2"), leaf("C3")], "expanded")];
+    const { rows } = flatten(adapterFor(tree), new Set(["F"]));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    expect(byId.get("F")).toMatchObject({ posInSet: 1, setSize: 1 }); // F is the sole root
+    expect(byId.get("C1")).toMatchObject({ posInSet: 1, setSize: 3 });
+    expect(byId.get("C2")).toMatchObject({ posInSet: 2, setSize: 3 });
+    expect(byId.get("C3")).toMatchObject({ posInSet: 3, setSize: 3 });
+  });
+
+  it("a collapsed folder's children contribute nothing — they are not rows, so they cannot inflate anyone's setSize", () => {
+    const roots = [folder("A", [leaf("A1"), leaf("A2"), leaf("A3")]), leaf("B")]; // A collapsed (default)
+    const { rows } = flatten(adapterFor(roots), new Set());
+
+    expect(rows.map((r) => r.id)).toEqual(["A", "B"]);
+    expect(rows.map((r) => r.posInSet)).toEqual([1, 2]);
+    // Both A and B see setSize 2 (the two ROOTS), never 5 — A's three hidden
+    // children never became rows at all, so they were never candidates to be
+    // counted into anyone's set to begin with.
+    expect(rows.every((r) => r.setSize === 2)).toBe(true);
+  });
+
+  it("a deeper level restarts numbering at 1 rather than continuing the parent's own posInSet", () => {
+    // D is the SECOND root (posInSet 2), so an implementation that ran one
+    // running counter across the whole flattened array (instead of scoping it
+    // to each parent's own children) would give D1 posInSet 3, continuing on
+    // from D's own 2. The correct behavior restarts D's children at 1.
+    const tree = [leaf("R0"), folder("D", [leaf("D1"), leaf("D2")], "expanded")];
+    const { rows } = flatten(adapterFor(tree), new Set(["D"]));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    expect(byId.get("R0")).toMatchObject({ posInSet: 1, setSize: 2 });
+    expect(byId.get("D")).toMatchObject({ posInSet: 2, setSize: 2 });
+    expect(byId.get("D1")).toMatchObject({ posInSet: 1, setSize: 2 }); // restarts, not 3
+    expect(byId.get("D2")).toMatchObject({ posInSet: 2, setSize: 2 });
+  });
+
+  it("setSize counts only same-parent siblings, even when another parent's rows of the same depth sit nearby in the flat array", () => {
+    // F1's two children and F2's three children are both at depth 1, and F2's
+    // own row sits immediately after F1's last child in the flat array — as
+    // close as two different parents' children can get without literally
+    // interleaving. A setSize computed by grouping on DEPTH (or on raw array
+    // adjacency) instead of on parentId would conflate the two groups (e.g.
+    // reporting 5 for everyone, or carrying C1/C2's numbering into F2's
+    // children); grouping on parentId keeps them fully independent.
+    const tree = [
+      folder("F1", [leaf("C1"), leaf("C2")], "expanded"),
+      folder("F2", [leaf("D1"), leaf("D2"), leaf("D3")], "expanded"),
+    ];
+    const { rows } = flatten(adapterFor(tree), new Set(["F1", "F2"]));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    expect(rows.map((r) => r.id)).toEqual(["F1", "C1", "C2", "F2", "D1", "D2", "D3"]);
+    expect(byId.get("C1")).toMatchObject({ posInSet: 1, setSize: 2 });
+    expect(byId.get("C2")).toMatchObject({ posInSet: 2, setSize: 2 });
+    // D1 restarts at 1 with setSize 3, wholly independent of F1's children
+    // immediately preceding it in the array.
+    expect(byId.get("D1")).toMatchObject({ posInSet: 1, setSize: 3 });
+    expect(byId.get("D2")).toMatchObject({ posInSet: 2, setSize: 3 });
+    expect(byId.get("D3")).toMatchObject({ posInSet: 3, setSize: 3 });
+  });
+});
+
 describe("flatten: guards", () => {
   it("throws when getChildren returns a real Promise, naming the T8 async path", () => {
     const adapter: TreeAdapter<Node> = {
