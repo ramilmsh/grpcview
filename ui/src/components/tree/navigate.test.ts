@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { TreeRowModel } from "./types";
 import type { FlatTree } from "./flatten";
-import { targetIndex, parentIndex, firstChildIndex, type MoveTarget } from "./navigate";
+import {
+  targetIndex,
+  parentIndex,
+  firstChildIndex,
+  descendantIds,
+  type MoveTarget,
+} from "./navigate";
 
 // navigate.ts only ever reads a row's `.id`, `.parentId`, and its position in the
 // array — never `.depth`/`.expandable`/`.expanded`/`.posInSet`/`.setSize` — so
@@ -195,5 +201,68 @@ describe("firstChildIndex", () => {
       row("decoy", "root-a", 2),
     ]);
     expect(firstChildIndex(flat, "folder-b")).toBeNull();
+  });
+});
+
+// descendantIds — "which rows would disappear if this folder collapsed", the
+// pure half of dispatch.ts's twistie rebase. Unlike every other function in
+// this file, it reads `depth` (see its own comment for why the asymmetry with
+// firstChildIndex is deliberate), so these fixtures set depth explicitly.
+describe("descendantIds", () => {
+  it("returns the contiguous run of deeper rows beneath a folder", () => {
+    const flat = flatOf([
+      row("folder-a", null, 0),
+      row("a1", "folder-a", 1),
+      row("a2", "folder-a", 1),
+      row("next-root", null, 0),
+    ]);
+    expect(descendantIds(flat, "folder-a")).toEqual(["a1", "a2"]);
+  });
+
+  it("reaches nested descendants, not just direct children, and stops at the first row back out at the folder's own depth", () => {
+    const flat = flatOf([
+      row("root", null, 0),
+      row("mid", "root", 1),
+      row("deep", "mid", 2),
+      row("deeper", "deep", 3),
+      row("sibling-of-root", null, 0),
+      row("its-child", "sibling-of-root", 1),
+    ]);
+    expect(descendantIds(flat, "root")).toEqual(["mid", "deep", "deeper"]);
+    expect(descendantIds(flat, "mid")).toEqual(["deep", "deeper"]);
+    expect(descendantIds(flat, "deeper")).toEqual([]);
+  });
+
+  it("returns [] for a folder with no children of its own (collapsed, or genuinely empty)", () => {
+    const flat = flatOf([row("folder-a", null, 0), row("folder-b", null, 0), row("leaf-c", null, 0)]);
+    expect(descendantIds(flat, "folder-b")).toEqual([]);
+  });
+
+  it("returns [] when the folder is the LAST row — there is nothing after it to scan", () => {
+    const flat = flatOf([row("root", null, 0), row("child", "root", 1)]);
+    expect(descendantIds(flat, "child")).toEqual([]);
+  });
+
+  it("returns [] for an id that isn't a current row at all", () => {
+    const flat = flatOf([row("root", null, 0), row("child", "root", 1)]);
+    expect(descendantIds(flat, "ghost")).toEqual([]);
+  });
+
+  it("is STRICT — the folder itself is never in its own descendant list", () => {
+    const flat = flatOf([row("root", null, 0), row("child", "root", 1)]);
+    expect(descendantIds(flat, "root")).not.toContain("root");
+  });
+
+  it("stops at an ancestor-depth row too, not only at an equal-depth sibling", () => {
+    // `back-at-root` is SHALLOWER than `mid`, the folder being asked about —
+    // the loop's `<=` (not `===`) is what makes that end the run rather than
+    // scanning past it.
+    const flat = flatOf([
+      row("root", null, 0),
+      row("mid", "root", 1),
+      row("mid-child", "mid", 2),
+      row("back-at-root", null, 0),
+    ]);
+    expect(descendantIds(flat, "mid")).toEqual(["mid-child"]);
   });
 });

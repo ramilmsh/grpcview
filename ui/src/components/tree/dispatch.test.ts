@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TreeRowModel } from "./types";
 import type { FlatTree } from "./flatten";
-import { applyIntent, applyRowClick, type ApplyIntentCtx } from "./dispatch";
+import { applyIntent, applyRowClick, applyTwistieClick, type ApplyIntentCtx } from "./dispatch";
 
 // dispatch.ts only ever reads a row's `.id`/`.parentId`/`.expandable`/
 // `.expanded` plus its position in the array (never `.depth`/`.posInSet`/
@@ -88,7 +88,7 @@ describe("applyIntent: move", () => {
       ctx({ focused: "folder-a", selection: ["leaf-c"] })
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "a1" },
+      { kind: "focus", id: "a1", scroll: true },
       { kind: "setAnchor", id: "a1" },
     ]);
   });
@@ -108,7 +108,7 @@ describe("applyIntent: move", () => {
 
   it("with nothing focused, a down move lands on the first row (navigate.ts's null-fromId contract)", () => {
     expect(applyIntent({ kind: "move", to: "down" }, ctx({ focused: null }))).toEqual([
-      { kind: "focus", id: "folder-a" },
+      { kind: "focus", id: "folder-a", scroll: true },
       { kind: "setAnchor", id: "folder-a" },
     ]);
   });
@@ -116,7 +116,7 @@ describe("applyIntent: move", () => {
   it("pageDown threads rowsPerPage through to targetIndex, not some hardcoded stride", () => {
     // folder-a(0) + 3 -> folder-b(3).
     expect(applyIntent({ kind: "move", to: "pageDown" }, ctx({ focused: "folder-a", rowsPerPage: 3 }))).toEqual([
-      { kind: "focus", id: "folder-b" },
+      { kind: "focus", id: "folder-b", scroll: true },
       { kind: "setAnchor", id: "folder-b" },
     ]);
   });
@@ -132,7 +132,7 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
   it("extends downward from an existing anchor, growing the range by one row", () => {
     const actions = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a1", anchor: "folder-a" }));
     expect(actions).toEqual([
-      { kind: "focus", id: "a2" },
+      { kind: "focus", id: "a2", scroll: true },
       { kind: "setAnchor", id: "folder-a" }, // unchanged — same pivot
       { kind: "setSelection", ids: ["folder-a", "a1", "a2"] },
     ]);
@@ -145,7 +145,7 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
     // documents (selection.ts, selection.test.ts's reversed-pair test).
     const actions = applyIntent({ kind: "extend", to: "up" }, ctx({ focused: "folder-b", anchor: "leaf-c" }));
     expect(actions).toEqual([
-      { kind: "focus", id: "a2" },
+      { kind: "focus", id: "a2", scroll: true },
       { kind: "setAnchor", id: "leaf-c" },
       { kind: "setSelection", ids: ["a2", "folder-b", "leaf-c"] },
     ]);
@@ -154,7 +154,7 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
   it("bootstraps the anchor from the CURRENT focused row when there is no anchor yet", () => {
     const actions = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a1", anchor: null }));
     expect(actions).toEqual([
-      { kind: "focus", id: "a2" },
+      { kind: "focus", id: "a2", scroll: true },
       { kind: "setAnchor", id: "a1" }, // bootstrapped from the row focus is LEAVING
       { kind: "setSelection", ids: ["a1", "a2"] },
     ]);
@@ -167,7 +167,7 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
     // i.e. the interpreter has applied them before this second call runs.
     const second = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a2", anchor: "a1" }));
     expect(second).toEqual([
-      { kind: "focus", id: "folder-b" },
+      { kind: "focus", id: "folder-b", scroll: true },
       { kind: "setAnchor", id: "a1" }, // NOT reset to a2 — still the original pivot
       { kind: "setSelection", ids: ["a1", "a2", "folder-b"] },
     ]);
@@ -176,7 +176,7 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
   it("with neither anchor nor focus yet, the first shift+arrow just focuses one row with a single-row selection", () => {
     const actions = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: null, anchor: null }));
     expect(actions).toEqual([
-      { kind: "focus", id: "folder-a" },
+      { kind: "focus", id: "folder-a", scroll: true },
       { kind: "setAnchor", id: null },
       { kind: "setSelection", ids: ["folder-a"] },
     ]);
@@ -196,7 +196,7 @@ describe("applyIntent: collapseOrParent (ArrowLeft)", () => {
 
   it("focuses the parent of a nested leaf rather than collapsing anything", () => {
     expect(applyIntent({ kind: "collapseOrParent" }, ctx({ focused: "a1" }))).toEqual([
-      { kind: "focus", id: "folder-a" },
+      { kind: "focus", id: "folder-a", scroll: true },
     ]);
   });
 
@@ -209,7 +209,7 @@ describe("applyIntent: collapseOrParent (ArrowLeft)", () => {
       row("child-folder", { parentId: "root", depth: 1, expandable: true, expanded: false }),
     ]);
     expect(applyIntent({ kind: "collapseOrParent" }, ctx({ flat: nested, focused: "child-folder" }))).toEqual([
-      { kind: "focus", id: "root" },
+      { kind: "focus", id: "root", scroll: true },
     ]);
   });
 
@@ -237,7 +237,7 @@ describe("applyIntent: expandOrFirstChild (ArrowRight)", () => {
 
   it("focuses the first child of an already-expanded folder rather than expanding anything", () => {
     expect(applyIntent({ kind: "expandOrFirstChild" }, ctx({ focused: "folder-a" }))).toEqual([
-      { kind: "focus", id: "a1" },
+      { kind: "focus", id: "a1", scroll: true },
     ]);
   });
 
@@ -358,12 +358,25 @@ describe("applyIntent: delete (Delete / cmd+Backspace)", () => {
     expect(actions).toEqual([{ kind: "delete", ids: ["folder-b"] }]);
   });
 
-  it("is a no-op with nothing focused, even when a selection exists", () => {
-    expect(applyIntent({ kind: "delete" }, ctx({ focused: null, selection: ["a1", "a2"] }))).toEqual([]);
+  it("acts on the SELECTION when nothing is focused — reachable via Tab-in then cmd/ctrl+A, which never sets focus", () => {
+    // ui-store.ts starts treeFocused at null and selectAll deliberately never
+    // sets focus (listWidget.js:317-323's onCtrlA has no view.setFocus call),
+    // so "a full selection with no focus" is an ordinary state, not a corrupt
+    // one. The plan's key table binds Delete to "delete selection".
+    expect(applyIntent({ kind: "delete" }, ctx({ focused: null, selection: ["a1", "a2"] }))).toEqual([
+      { kind: "delete", ids: ["a1", "a2"] },
+    ]);
   });
 
-  it("treats a stale focused id (no longer a visible row) exactly like nothing focused", () => {
-    expect(applyIntent({ kind: "delete" }, ctx({ focused: "ghost", selection: ["a1"] }))).toEqual([]);
+  it("is a no-op only when there is NEITHER focus NOR selection", () => {
+    expect(applyIntent({ kind: "delete" }, ctx({ focused: null, selection: [] }))).toEqual([]);
+  });
+
+  it("treats a stale focused id (no longer a visible row) exactly like nothing focused — falling back to the selection", () => {
+    expect(applyIntent({ kind: "delete" }, ctx({ focused: "ghost", selection: ["a1"] }))).toEqual([
+      { kind: "delete", ids: ["a1"] },
+    ]);
+    expect(applyIntent({ kind: "delete" }, ctx({ focused: "ghost", selection: [] }))).toEqual([]);
   });
 });
 
@@ -439,22 +452,28 @@ describe("applyIntent: every intent against a null focused id (nonempty tree)", 
   const nullFocusCtx = (overrides: Partial<ApplyIntentCtx<string>> = {}): ApplyIntentCtx<string> =>
     ctx({ focused: null, ...overrides });
 
-  it("collapseOrParent/expandOrFirstChild/toggle/open/rename/delete all return no actions — there is no focused row to act on", () => {
+  it("collapseOrParent/expandOrFirstChild/toggle/open/rename all return no actions — there is no focused row to act on", () => {
     expect(applyIntent({ kind: "collapseOrParent" }, nullFocusCtx())).toEqual([]);
     expect(applyIntent({ kind: "expandOrFirstChild" }, nullFocusCtx())).toEqual([]);
     expect(applyIntent({ kind: "toggle" }, nullFocusCtx())).toEqual([]);
     expect(applyIntent({ kind: "open" }, nullFocusCtx())).toEqual([]);
     expect(applyIntent({ kind: "rename" }, nullFocusCtx())).toEqual([]);
-    expect(applyIntent({ kind: "delete" }, nullFocusCtx({ selection: ["a1", "a2"] }))).toEqual([]);
+    expect(applyIntent({ kind: "delete" }, nullFocusCtx())).toEqual([]);
+  });
+
+  it("delete is the ONE exception: with no focus it falls back to the selection rather than doing nothing", () => {
+    expect(applyIntent({ kind: "delete" }, nullFocusCtx({ selection: ["a1", "a2"] }))).toEqual([
+      { kind: "delete", ids: ["a1", "a2"] },
+    ]);
   });
 
   it("move and extend instead fall back to the first/last row — navigate.ts's null-fromId contract, not a no-op", () => {
     expect(applyIntent({ kind: "move", to: "down" }, nullFocusCtx())).toEqual([
-      { kind: "focus", id: "folder-a" },
+      { kind: "focus", id: "folder-a", scroll: true },
       { kind: "setAnchor", id: "folder-a" },
     ]);
     expect(applyIntent({ kind: "move", to: "up" }, nullFocusCtx())).toEqual([
-      { kind: "focus", id: "folder-empty" },
+      { kind: "focus", id: "folder-empty", scroll: true },
       { kind: "setAnchor", id: "folder-empty" },
     ]);
   });
@@ -479,7 +498,7 @@ describe("applyRowClick: plain click", () => {
   it("on a leaf: selects it, focuses it, sets the anchor, and opens it", () => {
     expect(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false }, ctx())).toEqual([
       { kind: "setSelection", ids: ["leaf-c"] },
-      { kind: "focus", id: "leaf-c" },
+      { kind: "focus", id: "leaf-c", scroll: false },
       { kind: "setAnchor", id: "leaf-c" },
       { kind: "open", id: "leaf-c" },
     ]);
@@ -488,7 +507,7 @@ describe("applyRowClick: plain click", () => {
   it("on an EXPANDED folder: selects, focuses, anchors, and COLLAPSES instead of opening", () => {
     expect(applyRowClick(rowIn("folder-a"), { shiftKey: false, modKey: false }, ctx())).toEqual([
       { kind: "setSelection", ids: ["folder-a"] },
-      { kind: "focus", id: "folder-a" },
+      { kind: "focus", id: "folder-a", scroll: false },
       { kind: "setAnchor", id: "folder-a" },
       { kind: "setExpanded", id: "folder-a", expanded: false },
     ]);
@@ -497,7 +516,7 @@ describe("applyRowClick: plain click", () => {
   it("on a COLLAPSED folder: selects, focuses, anchors, and expands — the opposite fork", () => {
     expect(applyRowClick(rowIn("folder-b"), { shiftKey: false, modKey: false }, ctx())).toEqual([
       { kind: "setSelection", ids: ["folder-b"] },
-      { kind: "focus", id: "folder-b" },
+      { kind: "focus", id: "folder-b", scroll: false },
       { kind: "setAnchor", id: "folder-b" },
       { kind: "setExpanded", id: "folder-b", expanded: true },
     ]);
@@ -521,7 +540,7 @@ describe("applyRowClick: cmd/ctrl+click (modKey)", () => {
       ctx({ selection: ["a1"], anchor: "a1", focused: "a1" })
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "a2" },
+      { kind: "focus", id: "a2", scroll: false },
       { kind: "setAnchor", id: "a2" },
       { kind: "setSelection", ids: ["a1", "a2"] },
     ]);
@@ -534,7 +553,7 @@ describe("applyRowClick: cmd/ctrl+click (modKey)", () => {
       ctx({ selection: ["folder-a", "a1", "a2"] })
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "a1" },
+      { kind: "focus", id: "a1", scroll: false },
       { kind: "setAnchor", id: "a1" },
       { kind: "setSelection", ids: ["folder-a", "a2"] },
     ]);
@@ -557,7 +576,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
       ctx({ anchor: "a1", focused: "folder-empty" }) // focused is irrelevant once anchor is set
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "folder-b" },
+      { kind: "focus", id: "folder-b", scroll: false },
       { kind: "setAnchor", id: "a1" },
       { kind: "setSelection", ids: ["a1", "a2", "folder-b"] },
     ]);
@@ -570,7 +589,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
       ctx({ anchor: null, focused: "folder-a" })
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "a2" },
+      { kind: "focus", id: "a2", scroll: false },
       { kind: "setAnchor", id: "folder-a" },
       { kind: "setSelection", ids: ["folder-a", "a1", "a2"] },
     ]);
@@ -583,7 +602,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
       ctx({ anchor: "stale-pre-rename-key", focused: "a1" })
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "folder-b" },
+      { kind: "focus", id: "folder-b", scroll: false },
       { kind: "setAnchor", id: "stale-pre-rename-key" }, // passed through untouched...
       { kind: "setSelection", ids: ["folder-b"] }, // ...but rangeSelection degrades it to just the clicked row
     ]);
@@ -607,9 +626,127 @@ describe("applyRowClick: modifier precedence", () => {
       ctx({ anchor: "a1", focused: "a1" })
     );
     expect(actions).toEqual([
-      { kind: "focus", id: "folder-b" },
+      { kind: "focus", id: "folder-b", scroll: false },
       { kind: "setAnchor", id: "a1" },
       { kind: "setSelection", ids: ["a1", "a2", "folder-b"] },
+    ]);
+  });
+});
+
+// The "focus" action's scroll flag — asserted PER PRODUCER rather than only
+// inside the individual behavioral tests above, because the rule is a property
+// of which input modality produced the action, not of any one intent: a
+// keyboard move can name an off-screen row and must scroll to it, while a
+// click names the row the pointer is already on and must NOT scroll (a
+// partially clipped row would otherwise slide out from under the cursor —
+// TreeAction's own comment in dispatch.ts records the measurement). A new
+// producer added later should have to add a line here.
+describe("the focus action's scroll flag, by producer", () => {
+  const focusFlags = (actions: ReturnType<typeof applyIntent>): boolean[] =>
+    actions.flatMap((a) => (a.kind === "focus" ? [a.scroll] : []));
+
+  it("every KEYBOARD focus scrolls (move, extend, ArrowLeft-to-parent, ArrowRight-to-child)", () => {
+    expect(focusFlags(applyIntent({ kind: "move", to: "last" }, ctx()))).toEqual([true]);
+    expect(focusFlags(applyIntent({ kind: "move", to: "pageDown" }, ctx({ focused: "folder-a" })))).toEqual([true]);
+    expect(focusFlags(applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a1" })))).toEqual([true]);
+    expect(focusFlags(applyIntent({ kind: "collapseOrParent" }, ctx({ focused: "a1" })))).toEqual([true]);
+    expect(focusFlags(applyIntent({ kind: "expandOrFirstChild" }, ctx({ focused: "folder-a" })))).toEqual([true]);
+  });
+
+  it("every MOUSE focus does not (plain click, cmd/ctrl+click, shift+click, twistie collapse)", () => {
+    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false }, ctx()))).toEqual([false]);
+    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: true }, ctx()))).toEqual([false]);
+    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: true, modKey: false }, ctx({ anchor: "a1" })))).toEqual([false]);
+    expect(focusFlags(applyTwistieClick(rowIn("folder-a"), ctx({ focused: "a1" })))).toEqual([false]);
+  });
+});
+
+// applyTwistieClick — the collapse rebase. A twistie collapse is the one
+// interaction that can hide the rows focus and selection are pointing at
+// WITHOUT acting on them (the keyboard's ArrowLeft/Space collapse the row that
+// already holds the cursor), so it is the one that has to rebase them onto the
+// folder doing the hiding.
+describe("applyTwistieClick: expanding", () => {
+  it("just expands — nothing is hidden, so focus and selection are never touched", () => {
+    expect(applyTwistieClick(rowIn("folder-b"), ctx({ focused: "leaf-c", selection: ["leaf-c"] }))).toEqual([
+      { kind: "setExpanded", id: "folder-b", expanded: true },
+    ]);
+  });
+});
+
+describe("applyTwistieClick: collapsing", () => {
+  it("collapses and rebases a focus that was on a hidden child onto the folder", () => {
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ focused: "a2" }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+      { kind: "focus", id: "folder-a", scroll: false },
+    ]);
+  });
+
+  it("leaves a focus that is ELSEWHERE in the tree exactly where it is", () => {
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ focused: "leaf-c" }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+    ]);
+  });
+
+  it("leaves a focus already ON the folder alone — the descendant test is STRICT, so no redundant focus action", () => {
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ focused: "folder-a" }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+    ]);
+  });
+
+  it("replaces hidden SELECTION entries with the folder, so what is painted is what Delete acts on", () => {
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ selection: ["a1", "leaf-c"] }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+      { kind: "setSelection", ids: ["folder-a", "leaf-c"] },
+    ]);
+  });
+
+  it("collapses several hidden siblings onto ONE folder entry, and never duplicates a folder already selected", () => {
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ selection: ["folder-a", "a1", "a2"] }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+      { kind: "setSelection", ids: ["folder-a"] },
+    ]);
+  });
+
+  it("preserves the order of the entries it does not touch", () => {
+    // leaf-c precedes the hidden a1 in this (deliberately not row-ordered)
+    // selection; the folder takes the position of the first entry it replaces.
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ selection: ["leaf-c", "a1", "folder-b"] }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+      { kind: "setSelection", ids: ["leaf-c", "folder-a", "folder-b"] },
+    ]);
+  });
+
+  it("emits no setSelection at all when nothing selected was hidden — an ordinary collapse stays a one-action list", () => {
+    expect(applyTwistieClick(rowIn("folder-a"), ctx({ selection: ["leaf-c", "folder-b"] }))).toEqual([
+      { kind: "setExpanded", id: "folder-a", expanded: false },
+    ]);
+  });
+
+  it("rebases both halves at once, and reaches DEEPLY nested descendants, not just direct children", () => {
+    // root > mid > deep, all expanded: collapsing `root` hides mid AND deep.
+    const nested = flatOf([
+      row("root", { expandable: true, expanded: true }),
+      row("mid", { parentId: "root", depth: 1, expandable: true, expanded: true }),
+      row("deep", { parentId: "mid", depth: 2 }),
+      row("after", {}),
+    ]);
+    const actions = applyTwistieClick(nested.rows[0], {
+      flat: nested,
+      focused: "deep",
+      selection: ["deep", "mid", "after"],
+      anchor: null,
+    });
+    expect(actions).toEqual([
+      { kind: "setExpanded", id: "root", expanded: false },
+      { kind: "focus", id: "root", scroll: false },
+      { kind: "setSelection", ids: ["root", "after"] },
+    ]);
+  });
+
+  it("collapsing an EMPTY expanded folder hides nothing, so it emits only the setExpanded", () => {
+    expect(applyTwistieClick(rowIn("folder-empty"), ctx({ focused: "a1", selection: ["a1"] }))).toEqual([
+      { kind: "setExpanded", id: "folder-empty", expanded: false },
     ]);
   });
 });

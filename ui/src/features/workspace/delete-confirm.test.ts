@@ -80,11 +80,16 @@ describe("deleteConfirmCopy: N > 1, mixed folder + request selection", () => {
 });
 
 describe("deleteConfirmCopy: defensive n===0 (never actually shown — confirm.length > 0 gates the dialog)", () => {
-  it("does not throw — folderCount===items.length===0 makes 'allFolders' vacuously true, an arbitrary but harmless tie-break for output nobody ever sees", () => {
+  it("says nothing it cannot back up: no count, no folder/request kind, no 'everything inside' claim", () => {
+    // The previous behavior here was "Delete 0 folders … and everything inside
+    // them?", which fell out of the plural branch treating an empty list as
+    // vacuously all-folders. Unreachable either way, but this asserts the empty
+    // case is now an explicit, honest branch rather than an accident of
+    // 0 === 0.
     expect(deleteConfirmCopy([])).toEqual({
-      title: "Delete 0 folders",
-      emphasis: "0 folders",
-      suffix: " and everything inside them?",
+      title: "Delete",
+      emphasis: "nothing",
+      suffix: "?",
     });
   });
 });

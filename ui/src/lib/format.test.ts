@@ -129,6 +129,37 @@ describe("pruneNestedSelections", () => {
     expect(pruneNestedSelections([ban])).toEqual([ban]);
   });
 
+  it("collapses EXACT duplicates to one, keeping the first occurrence", () => {
+    // Ancestry alone never catches these: isStrictPrefix requires the prefix to
+    // be strictly shorter, so an entry is not its own ancestor and two equal
+    // entries each leave the other standing. Reachable via ui-store's
+    // renameItem, which remaps treeSelection id-for-id — renaming one selected
+    // row onto a name another selected row already has puts the same id in the
+    // list twice, and both copies resolve to the one surviving row.
+    expect(pruneNestedSelections([getUser, getUser])).toEqual([getUser]);
+  });
+
+  it("de-duplicates two DISTINCT objects that name the same path (what a rename collision actually produces)", () => {
+    // Not the same object reference — the resolved-from-id path hands back
+    // whatever findByKey produced per lookup — so identity has to be decided on
+    // the path, not on ===.
+    expect(pruneNestedSelections([request("GetUser", ["Users"]), request("GetUser", ["Users"])])).toEqual([
+      request("GetUser", ["Users"]),
+    ]);
+  });
+
+  it("de-duplicates and prunes in ONE pass: a duplicated descendant of a selected folder leaves just the folder", () => {
+    expect(pruneNestedSelections([users, ban, ban])).toEqual([users]);
+  });
+
+  it("still distinguishes sibling names where one is a prefix STRING of the other", () => {
+    // Guards the segment-array comparison against a future 'join the path and
+    // compare strings' shortcut: "Users/Admin" is not an ancestor of
+    // "Users/AdminTools", and neither is a duplicate of the other.
+    const adminTools = folder("AdminTools", ["Users"], []);
+    expect(pruneNestedSelections([admin, adminTools])).toEqual([admin, adminTools]);
+  });
+
   it("is empty for an empty selection", () => {
     expect(pruneNestedSelections([])).toEqual([]);
   });

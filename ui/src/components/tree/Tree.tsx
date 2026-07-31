@@ -5,7 +5,13 @@ import { replaceSelection } from "./selection";
 import { TreeRow } from "./TreeRow";
 import { IS_MAC } from "./platform";
 import { keyToIntent, type KeyStroke } from "./keymap";
-import { applyIntent, applyRowClick, type ClickMods, type TreeAction } from "./dispatch";
+import {
+  applyIntent,
+  applyRowClick,
+  applyTwistieClick,
+  type ClickMods,
+  type TreeAction,
+} from "./dispatch";
 
 // The component itself: keyboard + aria (T1), multi-select (T2), event wiring
 // (docs/design/tree-rewrite-plan.md's module table). T0 covered mouse-only
@@ -249,30 +255,26 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     },
   }));
 
-  const toggleExpanded = (id: string, currentlyExpanded: boolean): void => {
-    const next = new Set(expanded);
-    if (currentlyExpanded) next.delete(id);
-    else next.add(id);
-    setExpanded(next);
-  };
-
-  // Moves the roving cursor to `id` and keeps it on-screen. Every keyboard
-  // move in handleKeyDown below funnels through this — never a bare
-  // setFocused — so a keyboard walk can never leave the cursor scrolled out
-  // of view. As of T2, handleRowClick's own "focus" actions (applyRowClick,
-  // dispatch.ts) ALSO funnel through this same helper, via the shared
-  // applyActions below — not because a mouse click needs the scroll (a row
-  // the user just clicked was, by definition, already visible, exactly as
-  // this comment used to say outright), but because `scrollIntoView({block:
-  // "nearest"})` is a documented no-op whenever its target is already fully
-  // within its scrolling ancestor's view — the spec's own definition of
-  // "nearest" — so calling it unconditionally from ONE shared interpreter for
-  // both input modalities costs nothing observable and is simpler than
-  // keeping two separate "how does a focus action get applied" code paths in
-  // sync by hand.
-  const focusRow = (id: string): void => {
+  // Moves the roving cursor to `id`, scrolling it into view only when the
+  // action that asked for the move says to. Every focus change in this
+  // component — keyboard or mouse — funnels through this ONE helper via
+  // applyActions below; `scroll` is carried as data on the "focus" TreeAction
+  // (dispatch.ts) rather than by having two focus code paths.
+  //
+  // Why it isn't unconditional (it was, briefly, and that was a real bug):
+  // `scrollIntoView({block: "nearest"})` is only a no-op for a target ENTIRELY
+  // inside its scrolling ancestor. A row clipped at the viewport edge is not —
+  // "nearest" is precisely the mode that scrolls just enough to un-clip it —
+  // so routing MOUSE clicks through an unconditional scroll made clicking a
+  // partially visible row's sliver yank the list under the cursor (measured:
+  // scrollTop 111 -> 99 on a 12px-clipped row, which is enough to land the
+  // pointer on a different row than the one that was clicked). Keyboard moves
+  // want exactly the opposite — an arrow/page/Home/End move routinely names a
+  // row that is off-screen, and a cursor you can't see is useless — so the two
+  // producers differ, not the two helpers.
+  const focusRow = (id: string, scroll: boolean): void => {
     setFocused(id);
-    rowEls.current.get(id)?.scrollIntoView({ block: "nearest" });
+    if (scroll) rowEls.current.get(id)?.scrollIntoView({ block: "nearest" });
   };
 
   // Resolves a row id back to its real node, via the same flat.indexById
@@ -296,25 +298,37 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   // and hand the result here, rather than each maintaining its own copy of
   // this switch. Before this phase, this loop lived inline at the end of
   // handleKeyDown alone (T1/T2's own extraction history); pulling it out is
-  // what lets handleRowClick reuse it verbatim for the mouse path this phase
-  // adds, instead of duplicating every case a second time.
+  // what lets handleRowClick and handleTwistieClick reuse it verbatim for the
+  // mouse paths this phase adds, instead of duplicating every case a second
+  // time.
   const applyActions = (actions: readonly TreeAction[]): void => {
+    // Expansion changes are FOLDED across the whole list and written once, at
+    // the end, rather than one setExpanded call per action. Each call would
+    // otherwise derive `new Set(expanded)` from this render's closure, so two
+    // setExpanded actions in one list would silently lose the first — the
+    // second would be built from the same stale `expanded` and overwrite it.
+    // No producer emits two today, but this is the shared sink for every
+    // producer there is (and T5's context menu / T6's drag-drop are the
+    // obvious future emitters of "collapse the source, expand the target" in
+    // one list), so the sink should not have a one-action-per-kind ceiling
+    // hiding in it. Folding, rather than a functional setState update, because
+    // setExpanded is useTreeState's controlled/uncontrolled seam and takes a
+    // VALUE, not an updater — and folding keeps a controlled host seeing one
+    // onExpandedChange per interaction either way.
+    let nextExpanded: Set<string> | null = null;
+
     for (const action of actions) {
       switch (action.kind) {
         case "focus":
-          focusRow(action.id);
+          focusRow(action.id, action.scroll);
           break;
         case "setExpanded": {
           // A DESIRED final state, not a toggle — see TreeAction's own
-          // comment (dispatch.ts) for why this doesn't just call the
-          // existing toggleExpanded(id, currentlyExpanded) helper above
-          // (which flips FROM a given current state, the shape
-          // handleTwistieClick's own MOUSE handler needs, not the shape this
-          // action carries).
-          const next = new Set(expanded);
-          if (action.expanded) next.add(action.id);
-          else next.delete(action.id);
-          setExpanded(next);
+          // comment (dispatch.ts). Applied against the running fold, so a
+          // later action in the same list sees the earlier one's effect.
+          nextExpanded = new Set(nextExpanded ?? expanded);
+          if (action.expanded) nextExpanded.add(action.id);
+          else nextExpanded.delete(action.id);
           break;
         }
         case "setSelection":
@@ -338,6 +352,12 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
         }
       }
     }
+
+    // The single write the fold above earned. `null` means no action in this
+    // list touched expansion at all, which is not the same as "expand nothing"
+    // — writing an unchanged set here would still hand a controlled host a new
+    // Set identity on every keystroke.
+    if (nextExpanded !== null) setExpanded(nextExpanded);
   };
 
   // Click, now MODIFIER-AWARE (T2 — docs/design/tree-rewrite-plan.md's "Mouse"
@@ -384,20 +404,18 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   };
 
   // The twistie is a separate hit target specifically so it can toggle WITHOUT
-  // selecting — stopPropagation is what keeps handleRowClick (which DOES select)
-  // from also firing for the same click. UNCHANGED by this phase, deliberately:
-  // toggleExpanded(id, currentlyExpanded) directly, ignoring modifiers entirely,
-  // never touching selection/focus/anchor — this phase's own brief states that
-  // invariant explicitly ("The twistie must keep toggling without changing
-  // selection"), and the plan's "Mouse" list has exactly one, unconditional
-  // twistie row with no modifier variant. See dispatch.ts's applyRowClick, at
-  // its very end, for a real VS Code nuance this deliberately does NOT
-  // replicate (a modified click landing on the twistie skips the toggle branch
-  // entirely there) — found while reading abstractTree.js, recorded as a
-  // citation, not silently copied.
+  // selecting — stopPropagation is what keeps handleRowClick (which DOES
+  // select) from also firing for the same click. Still ignorant of modifiers
+  // (the plan's "Mouse" list has exactly one, unconditional twistie row; see
+  // dispatch.ts's twistie section for the richer VS Code behavior deliberately
+  // not replicated), but no longer a bare toggle: a COLLAPSE can hide the very
+  // rows focus and selection point at, so what happens to them is a decision,
+  // and every decision in this component belongs in dispatch.ts. Interpreting
+  // its actions goes through the same applyActions as the keyboard and the row
+  // click — this handler stays as thin as the other two.
   const handleTwistieClick = (row: TreeRowModel<T>, ev: React.MouseEvent): void => {
     ev.stopPropagation();
-    toggleExpanded(row.id, row.expanded);
+    applyActions(applyTwistieClick(row, { flat, focused, selection, anchor }));
   };
 
   // Right-click: select the row first if it isn't already selected, then hand off
@@ -527,6 +545,14 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
       className="tree"
       role="tree"
       aria-label={ariaLabel}
+      // Without this, ARIA defines a `tree` as SINGLE-select, so assistive
+      // tech announces each newly selected row as having REPLACED whatever was
+      // selected before — silently misreporting the whole multi-select feature
+      // (T2) to exactly the users who have no other way to perceive it. Hard-
+      // coded true rather than derived from a prop: there is no single-select
+      // mode in this component (shift+click, shift+arrow and cmd/ctrl+A are
+      // unconditional), so a prop would only be able to lie.
+      aria-multiselectable="true"
       // The single focusable element (FOCUS MODEL, above) — every row is
       // inert to Tab on purpose, so one Tab reaches the whole tree and a
       // second Tab leaves it, exactly like any other VS Code list widget.

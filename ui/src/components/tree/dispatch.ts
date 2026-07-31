@@ -44,7 +44,10 @@
 // and the host — mouse modifiers"): applyRowClick, at the bottom of this file,
 // is the SECOND pure decision surface alongside applyIntent above, producing
 // the identical TreeAction currency from a clicked row + its modifier keys
-// instead of from a keyboard intent. It lives here rather than in a new
+// instead of from a keyboard intent — with applyTwistieClick, at the very
+// bottom, as the third and smallest (a twistie collapse has to decide what
+// becomes of a focus/selection it is about to hide; see its own comment). It
+// lives here rather than in a new
 // sibling file for the same reason dispatch.ts itself exists at all — one
 // file that owns "how does an interaction decide what happens to
 // focus/selection/anchor/expansion", trivially unit-testable, with Tree.tsx
@@ -54,7 +57,7 @@
 import type { FlatTree } from "./flatten";
 import type { TreeIntent } from "./keymap";
 import type { TreeRowModel } from "./types";
-import { targetIndex, parentIndex, firstChildIndex } from "./navigate";
+import { targetIndex, parentIndex, firstChildIndex, descendantIds } from "./navigate";
 import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./selection";
 
 // What an intent RESOLVES to, once it has real rows/focus/selection/anchor to
@@ -67,25 +70,41 @@ import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./
 // doesn't need a generic parameter of its own (contrast applyIntent below,
 // which DOES need one, purely to type `ctx.flat: FlatTree<T>`).
 export type TreeAction =
-  // Move the roving cursor to `id`. Tree.tsx's existing `focusRow` helper is
-  // what actually applies this (setFocused + scrollIntoView) — dispatch
-  // itself has no notion of scrolling, or of the DOM at all; see this file's
-  // header.
-  | { kind: "focus"; id: string }
+  // Move the roving cursor to `id`. Tree.tsx's `focusRow` helper is what
+  // actually applies this (setFocused, plus scrollIntoView when `scroll` is
+  // set) — dispatch itself has no notion of scrolling, or of the DOM at all;
+  // see this file's header.
+  //
+  // `scroll` says whether the newly focused row should be brought into view,
+  // and it is per-PRODUCER, not per-row: every applyIntent (KEYBOARD) focus
+  // carries `scroll: true`, because an arrow/page/Home/End move can name a row
+  // that is nowhere near the viewport and a keyboard walk that leaves the
+  // cursor off-screen is useless; every applyRowClick / applyTwistieClick
+  // (MOUSE) focus carries `scroll: false`, because the user is pointing at the
+  // row — it is on screen by construction, and the pointer is the one thing in
+  // the UI that must not move out from under itself.
+  //
+  // This flag exists because "already visible" and "fully visible" are not the
+  // same predicate. `scrollIntoView({block: "nearest"})` is a no-op only for a
+  // target that is ENTIRELY within its scrolling ancestor; a row clipped by a
+  // few pixels at the viewport edge is precisely the case it does act on, and
+  // clicking such a row's visible sliver scrolled the list out from under the
+  // cursor (measured: scrollTop 111 -> 99 on a 12px-clipped row). T1's mouse
+  // path called a bare setFocused for exactly this reason; carrying the
+  // difference as DATA on the action restores that behavior without giving
+  // Tree.tsx a second focus code path to keep in sync.
+  | { kind: "focus"; id: string; scroll: boolean }
   // Expand or collapse exactly `id`, to exactly `expanded` — a DESIRED final
   // state, not a "toggle from whatever it currently is" instruction, so the
   // interpreter never has to reason about what `id` was expanded to a moment
-  // ago. Contrast Tree.tsx's own pre-existing `toggleExpanded(id,
-  // currentlyExpanded)` helper (kept, and still used by handleTwistieClick,
-  // which stays OUT of this phase's applyRowClick per its own comment at the
-  // bottom of this file — the twistie never emits a TreeAction at all): two
-  // different shapes for two different callers, on purpose, not one
-  // interface awkwardly serving both. handleRowClick, as of this phase, is
-  // the SAME shape applyIntent's "open"/toggle-a-folder fork already uses
-  // below (`expanded: !focusedRow.expanded`) — see applyRowClick's own
-  // plain-click branch for why reusing this action, not toggleExpanded, is
-  // what let handleRowClick fold into the same applied-by-Tree.tsx currency
-  // as the keyboard path.
+  // ago. This is now the ONLY way expansion changes in this component: every
+  // producer here (applyIntent's toggle/open/arrow forks, applyRowClick's
+  // plain click, applyTwistieClick at the bottom of this file) emits this
+  // action and Tree.tsx applies it in one place. Tree.tsx's old
+  // `toggleExpanded(id, currentlyExpanded)` helper — a second, flip-from-a-
+  // given-state shape that existed solely for handleTwistieClick — is gone
+  // with the twistie's move into applyTwistieClick; there is no longer a
+  // caller that wants the toggle shape rather than the desired-state one.
   | { kind: "setExpanded"; id: string; expanded: boolean }
   | { kind: "setSelection"; ids: readonly string[] }
   // `id: null` clears the anchor. selectAll and clearSelection both do this —
@@ -151,10 +170,20 @@ function rowFor<T>(flat: FlatTree<T>, id: string | null): TreeRowModel<T> | null
 // familiarity with the app's actual behavior, not a citation this repo can
 // back with a file:line the way onEscape/onCtrlA below are backed.
 //
-// The rule:
-//   - no focused row at all -> nothing to act on ([]). Mirrors T1 exactly:
-//     the `if (focusedRow)` gate there is the same "no focus, no delete" idea,
-//     just moved from an `if` around a callback to an early return here.
+// The rule (three branches, in evaluation order):
+//   - no focused row at all -> the SELECTION, if there is one; [] otherwise.
+//     Not "always []": the plan's key table (§"VS Code UX spec") binds
+//     Delete/cmd+Backspace to "delete SELECTION", and a selection with no
+//     focus is a state this component reaches on its own — ui-store.ts starts
+//     `treeFocused: null`, and cmd/ctrl+A deliberately never sets focus
+//     (selectAll's own citation below: listWidget.js:317-323's onCtrlA has no
+//     view.setFocus call at all). So Tab into the tree, cmd+A, Delete is a
+//     perfectly ordinary sequence that used to be a silent no-op with every
+//     row visibly selected — the user's intent is unambiguous there, and
+//     nothing was acting on it. T1's `if (focusedRow)` gate (which this branch
+//     descends from) predates multi-select entirely: when the focused row WAS
+//     the whole notion of "what's selected", "no focus" and "nothing selected"
+//     were the same state, and they no longer are.
 //   - a focused row that IS part of the current selection -> the WHOLE
 //     selection. This is the actual multi-select case this phase exists to
 //     add.
@@ -173,7 +202,7 @@ function rowFor<T>(flat: FlatTree<T>, id: string | null): TreeRowModel<T> | null
 //     row the user is actually looking at right now, not silently discard
 //     three rows they have, in effect, already navigated away from.
 function resolveDeleteIds(focused: string | null, selection: readonly string[]): string[] {
-  if (focused === null) return [];
+  if (focused === null) return [...selection]; // [] when the selection is empty too
   return selection.includes(focused) ? [...selection] : [focused];
 }
 
@@ -218,7 +247,7 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       // simpler and more predictable reading, and nothing in the plan's key
       // table asks Home/End to leave the anchor alone.
       return [
-        { kind: "focus", id },
+        { kind: "focus", id, scroll: true },
         { kind: "setAnchor", id },
       ];
     }
@@ -263,7 +292,7 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       const effectiveAnchor = anchor ?? focused;
 
       return [
-        { kind: "focus", id },
+        { kind: "focus", id, scroll: true },
         { kind: "setAnchor", id: effectiveAnchor },
         { kind: "setSelection", ids: rangeSelection(flat.rows, effectiveAnchor, id) },
       ];
@@ -295,7 +324,7 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       }
       const idx = parentIndex(flat, focusedRow.id);
       if (idx === null) return []; // a root, or already not a visible row
-      return [{ kind: "focus", id: flat.rows[idx].id }];
+      return [{ kind: "focus", id: flat.rows[idx].id, scroll: true }];
     }
 
     case "expandOrFirstChild": {
@@ -308,7 +337,7 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       }
       const idx = firstChildIndex(flat, focusedRow.id);
       if (idx === null) return [];
-      return [{ kind: "focus", id: flat.rows[idx].id }];
+      return [{ kind: "focus", id: flat.rows[idx].id, scroll: true }];
     }
 
     case "toggle":
@@ -378,9 +407,14 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       // a focused id whose row has since been hidden by a collapse or a
       // filter is "nothing focused" as far as every sibling intent is
       // concerned (rename/toggle/collapseOrParent/expandOrFirstChild/open all
-      // early-return on `!focusedRow`), and delete should be no different —
-      // a stale focus id shouldn't let a delete fire against a selection the
-      // user can no longer even see the anchor row of.
+      // early-return on `!focusedRow`), and delete is no different. What
+      // "nothing focused" then RESOLVES to is resolveDeleteIds's first branch
+      // — the selection, or [] when there is none — so a stale focus id
+      // falls back to whatever is actually painted as selected rather than
+      // deleting the invisible row the id still names. (Tree.tsx's own
+      // interpreter drops any id that no longer resolves to a row before
+      // calling onDelete, so an equally stale SELECTION entry can't sneak
+      // through this path either.)
       const ids = resolveDeleteIds(focusedRow?.id ?? null, selection);
       if (ids.length === 0) return [];
       return [{ kind: "delete", ids }];
@@ -410,12 +444,25 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       // Escape (new this phase). Mirrors listWidget.js:324-332's onEscape,
       // INCLUDING its guard: that method only acts `if
       // (this.list.getSelection().length)`, leaving an Escape with nothing
-      // selected as a complete no-op (it never even calls preventDefault in
-      // that case, so the key keeps whatever default behavior the browser
-      // already gave it). keyToIntent's own comment already flags this exact
-      // conditionality as "the CONSUMER's job" — this is that consumer, and
-      // this `if` is where the guard actually gets applied, one layer below
-      // keyToIntent's unconditional `{ kind: "clearSelection" }`.
+      // selected as a no-op in terms of STATE. keyToIntent's own comment
+      // already flags this exact conditionality as "the CONSUMER's job" —
+      // this is that consumer, and this `if` is where the guard actually gets
+      // applied, one layer below keyToIntent's unconditional
+      // `{ kind: "clearSelection" }`.
+      //
+      // Where the parity stops, stated plainly rather than overclaimed: in
+      // real VS Code that guard also decides whether the keystroke is
+      // CONSUMED (StandardKeyboardEvent's preventDefault sits inside the same
+      // `if`). Here it does not. Tree.tsx's handleKeyDown calls
+      // ev.preventDefault() as soon as keyToIntent returns a non-null intent
+      // — strictly before applyIntent runs, and with no way to see that it
+      // came back with zero actions — so an Escape pressed with nothing
+      // selected is swallowed by this component either way. Left as is: the
+      // alternative is either a second "did this intent do anything" round
+      // trip through the interpreter or moving preventDefault after dispatch,
+      // and no key this table binds has a browser default worth preserving
+      // inside a tree (there is no <dialog>/IME/native-search chain reaching
+      // this container today). Worth revisiting if one ever does.
       //
       // Also mirrors onEscape's `this.list.setAnchor(undefined)` — clearing
       // the selection clears the pivot too, so a later shift+arrow starts a
@@ -533,7 +580,10 @@ export function applyRowClick<T>(
     // from THIS click's own "focus" action having been applied.
     const effectiveAnchor = anchor ?? focused;
     return [
-      { kind: "focus", id: row.id },
+      // scroll: false — every focus this function emits names the row the
+      // pointer is physically on. See TreeAction's `focus` comment for the
+      // clipped-row scroll jump this avoids.
+      { kind: "focus", id: row.id, scroll: false },
       { kind: "setAnchor", id: effectiveAnchor },
       { kind: "setSelection", ids: rangeSelection(flat.rows, effectiveAnchor, row.id) },
     ];
@@ -548,7 +598,7 @@ export function applyRowClick<T>(
     // a modified click is PURE selection, per this phase's own brief
     // ("WITHOUT opening it and without collapsing/expanding a folder").
     return [
-      { kind: "focus", id: row.id },
+      { kind: "focus", id: row.id, scroll: false },
       { kind: "setAnchor", id: row.id },
       { kind: "setSelection", ids: toggleSelection(selection, row.id) },
     ];
@@ -570,12 +620,12 @@ export function applyRowClick<T>(
   // widget too (this file's collapseOrParent/expandOrFirstChild cases above
   // make the identical point for the keyboard side). The `setExpanded`
   // action/`!row.expanded` shape reuses exactly what applyIntent's "open"
-  // case above already does for Enter-on-a-folder, not Tree.tsx's older
-  // `toggleExpanded(id, currentlyExpanded)` helper (which handleTwistieClick
-  // keeps using directly, per this file's TreeAction.setExpanded comment).
+  // case above already does for Enter-on-a-folder — the one desired-state
+  // shape every producer in this file now speaks (see TreeAction.setExpanded's
+  // own comment).
   const actions: TreeAction[] = [
     { kind: "setSelection", ids: replaceSelection(row.id) },
-    { kind: "focus", id: row.id },
+    { kind: "focus", id: row.id, scroll: false },
     { kind: "setAnchor", id: row.id },
   ];
   if (row.expandable) {
@@ -586,12 +636,43 @@ export function applyRowClick<T>(
   return actions;
 }
 
-// NOT covered here: a click on the TWISTIE itself. Tree.tsx's
-// handleTwistieClick stays exactly as T0 left it — stopPropagation, then the
-// existing toggleExpanded(id, currentlyExpanded) helper, unconditionally,
-// ignoring modifiers entirely — rather than routing through applyRowClick
-// with some third "onTwistie" mode. This was a deliberate call, not an
-// oversight: abstractTree.js's OWN tree-layer mouse controller
+// ── the twistie ─────────────────────────────────────────────────────────────
+// A click on the TWISTIE, rather than on the row surface applyRowClick above
+// covers. Still "toggle without changing selection" — the plan's own Mouse
+// list, and T2's stated invariant — but no longer literally a bare
+// toggleExpanded call in Tree.tsx, because a COLLAPSE can hide rows that
+// focus and selection are currently pointing at, and something has to decide
+// what happens to them. That decision is data, so it lives here with every
+// other one, and is unit-testable (dispatch.test.ts) the same way.
+//
+// THE BUG THIS FIXES (confirmed in a real browser, not speculative): expand
+// folder `beta`, click child `b-req-2` (focusing and selecting it), then click
+// beta's twistie. The child is now hidden, so aria-activedescendant resolves
+// to nothing and no cursor is painted anywhere; press ArrowDown and
+// targetIndex treats the unknown focused id exactly like null (navigate.ts's
+// documented null-fromId contract) and focus jumps to ROW 0 — the top of the
+// tree — rather than to anywhere near where the user was. VS Code moves focus
+// to the collapsing ancestor instead, which is what the rebase below does.
+//
+// SELECTION is rebased for a related but distinct reason: a selected row that
+// is hidden is invisible, but resolveDeleteIds (above) still counts it, so
+// Delete would act on rows the user cannot see and the confirm dialog would
+// name a count they cannot account for. Replacing hidden descendants with the
+// folder that swallowed them keeps "what is painted" and "what Delete acts on"
+// the same set. It also happens to agree with pruneNestedSelections
+// (lib/format.ts), which already collapses a folder+descendant batch down to
+// the folder at delete time — this just makes the visible selection say so
+// up front instead of at the confirm step.
+//
+// Both halves apply ONLY to a collapse (`row.expanded` was true). Expanding
+// never hides a row, so there is nothing to rebase on that branch — and the
+// keyboard collapse paths (ArrowLeft, Space) need none of this either: those
+// act on the FOCUSED row, which is the folder itself, so focus is already on
+// the survivor. Only the twistie can collapse a folder that isn't the one the
+// cursor is on.
+//
+// Modifiers are deliberately ignored, exactly as before: abstractTree.js's OWN
+// tree-layer mouse controller
 // (TreeNodeListMouseController, ~1566-1621) shows that real VS Code's twistie
 // click is MORE elaborate than "always toggle" — line 1579 (`if (this.
 // isSelectionRangeChangeEvent(e) || this.isSelectionSingleChangeEvent(e))
@@ -608,3 +689,53 @@ export function applyRowClick<T>(
 // modified click never reaches it any differently than an unmodified one.
 // Recorded here as a found-but-deliberately-not-replicated citation, not a
 // silent gap, in case a future phase wants VS Code's fuller nuance.
+//
+// The rebase itself is NOT traceable in the vendored bundle. abstractTree.js's
+// collapse path runs through the model's own splice/renderer machinery rather
+// than through anything that reads like "move focus to the ancestor", so what
+// follows is this file's implementation of the OBSERVED VS Code behavior (the
+// cursor lands on the collapsed folder), stated plainly here rather than
+// dressed up with a file:line — the same honesty this repo already applies to
+// Home/End (platform.ts) and shifted arrows (keymap.ts).
+export function applyTwistieClick<T>(
+  row: TreeRowModel<T>,
+  ctx: ApplyClickCtx<T>
+): TreeAction[] {
+  const { flat, focused, selection } = ctx;
+  const actions: TreeAction[] = [
+    { kind: "setExpanded", id: row.id, expanded: !row.expanded },
+  ];
+  if (!row.expanded) return actions; // expanding hides nothing
+
+  // Strict descendants only — `row.id` itself is never in this set, so a
+  // focus/selection already ON the folder is left completely alone (no
+  // redundant focus action, no selection churn).
+  const hidden = new Set(descendantIds(flat, row.id));
+  if (hidden.size === 0) return actions; // an empty folder hides nothing either
+
+  // scroll: false — the folder whose twistie was just clicked is, by
+  // definition, under the pointer. See TreeAction's `focus` comment.
+  if (focused !== null && hidden.has(focused)) {
+    actions.push({ kind: "focus", id: row.id, scroll: false });
+  }
+
+  // Map each hidden entry onto the folder, keep every other entry where it
+  // is, and dedup — several hidden siblings collapse onto ONE folder entry,
+  // and a selection that already contained the folder doesn't grow a second
+  // copy of it. Order is otherwise preserved (the folder takes the position of
+  // the first entry it replaces), which keeps rangeSelection's and
+  // pruneNestedSelections' inputs in the same row order they were built in.
+  // Emitted only when something actually changed, so an ordinary collapse of a
+  // folder with nothing selected inside it stays a single-action list.
+  const rebased: string[] = [];
+  let changed = false;
+  for (const id of selection) {
+    const mapped = hidden.has(id) ? row.id : id;
+    if (mapped !== id) changed = true;
+    if (!rebased.includes(mapped)) rebased.push(mapped);
+    else changed = true; // a dedup is a change too (the list got shorter)
+  }
+  if (changed) actions.push({ kind: "setSelection", ids: rebased });
+
+  return actions;
+}

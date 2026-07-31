@@ -430,19 +430,63 @@ that same switch (`shift`+arrow, `cmd+A`, `Escape`); extract it into a pure
    mode that would justify it is already ruled out by pruning, and `Collection.Delete` takes a
    per-call mutex server-side.
 
-**T2 did not finish.** The three implementation phases landed and all three gates are green
-(228 tests, up from T1's 135), but the adversarial review and fix phases were terminated
-without producing anything: no reviewer ever emitted its findings. So unlike T0 and T1, **no
-second pair of eyes has been over this diff** — for both of those phases, review caught real
-bugs that the implementer, the typecheck, and the test suite all missed (T1's rename-box key
-leak and its `PageDown`-is-`End` paging bug). Treat T2 as implemented-but-unreviewed. Before
-building on it, review `dispatch.ts`'s `applyIntent` against the T2 rows of the UX spec above,
-and `Tree.tsx`'s interpreter for equivalence with the switch it replaced (`git show
-8d14b02:ui/src/components/tree/Tree.tsx`).
+### The review T2 was owed (done 2026-08-01)
 
-One cosmetic loose end found while reading: `deleteConfirmCopy([])` returns "Delete 0 folders".
-Unreachable today — the dialog only opens when the list is non-empty — but it is an odd branch
-to leave for whoever touches that function next.
+T2 first shipped **unreviewed** — its adversarial pass was terminated without emitting
+findings. That pass has now run (two reviewers, split by file), every claim was checked in a
+real browser before being acted on, and six defects were fixed. Suite: **253 tests**, up from
+T2's 228.
+
+What review caught, all six reproduced in-browser first:
+
+1. **Escape cancelled the delete dialog *and* destroyed the selection it was about to
+   delete**, so cancel-then-retry was impossible. `Dialog` declared `aria-modal="true"` while
+   delivering none of it: DOM focus stayed on `.tree`, so one Escape hit two independent
+   listeners — the tree's `onKeyDown` (clear selection) and `Backdrop`'s *window* keydown
+   (close). The tree's `preventDefault` cannot stop a window listener. Fixed generically in
+   `Dialog`/`Backdrop` (focus into the card on open, restore to the opener on unmount), not by
+   special-casing the tree. Same fix stops a second `Delete` keypress re-firing the host handler
+   underneath an open dialog, and leaves the tree keyboard-drivable after any modal closes
+   (focus used to land on `<body>`).
+2. **A twistie collapse stranded the focused row.** Collapsing a folder whose descendant was
+   focused left `aria-activedescendant` pointing at nothing, and the next `↓` jumped to **row
+   0** — `targetIndex` reads an unknown `fromId` as -1. Now a collapse rebases focus *and* any
+   selected descendants onto the folder itself (VS Code's behavior). The selection half matters
+   because selection of hidden rows is invisible, and `resolveDeleteIds` would otherwise act on
+   rows the user cannot see. New pure helper `descendantIds` in `navigate.ts`.
+3. **A mouse click on a partially-clipped row scrolled the list out from under the cursor**
+   (measured: 12px clip → `scrollTop` 111→99). T2 had routed the mouse path through the
+   keyboard's `focusRow`, whose comment claimed `block:"nearest"` is a no-op for a visible
+   target — true, but *partially* visible is exactly the case it isn't. The `focus` action now
+   carries an explicit `scroll` flag: keyboard `true`, mouse `false`. Still one focus code path.
+4. **`role="tree"` had no `aria-multiselectable`**, so per ARIA the whole T2 feature was
+   single-select to assistive tech.
+5. **shift+click painted a native text selection over the row labels.** `.treerow` now sets
+   `user-select: none`, with the rename input exempted.
+6. **`Delete` was a silent no-op when a selection existed but nothing was focused** (Tab in →
+   `cmd+A`, which deliberately never sets focus → `Delete`). `resolveDeleteIds`' null-focus
+   branch now falls back to the selection.
+
+Two proposed findings were **rejected** — do not re-open them:
+
+- *"A plain `↑`/`↓` should collapse the selection to the focused row."* It should not. The key
+  table above says focus-only, and the vendored `listWidget.js:281-296` confirms it:
+  `onUpArrow`/`onDownArrow` call `focusPrevious`/`focusNext` + `setAnchor` and never
+  `setSelection`. This finding was an artifact of a review brief that added "(and select it,
+  single)" to the spec row on its own authority.
+- *"macOS ctrl+click falls into the plain-click branch and opens the row."* Not reproducible:
+  Chrome/macOS fires no `click` for ctrl+click. It is a real gap in Firefox, and VS Code's
+  `MouseController` does guard it (`isMouseRightClick` → skip `setSelection`) — add that guard
+  at **T5**, when there is a context menu for it to interact with.
+
+Two nits also fixed: `pruneNestedSelections` now de-duplicates exact-equal entries (a rename
+collision can produce two identical keys, which made the dialog count read 2 for one row), and
+`deleteConfirmCopy([])` no longer returns "Delete 0 folders" (unreachable — `Dialog` returns
+null when closed — but an odd branch to leave behind).
+
+Still open, deliberately: `Dialog` has **no Tab trap**, so `Tab`-then-`Escape` still reaches
+the tree. A naive trap would break `Tab`-to-indent inside the Monaco editors that two dialogs
+host.
 
 ## Backend gaps (block T4 and T6)
 
@@ -493,8 +537,8 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
   *Verify:* tab into the tree, drive it entirely by keyboard.
 - **T2 — Multi-select.** Anchor semantics, `shift`/`cmd` click and `shift+arrow`,
   `cmd+A`, `Escape`. Make delete multi-aware (confirm dialog pluralizes).
-  *(Implemented 2026-07-31, **not reviewed** — see §"What T2 settled" for the five calls it
-  forced and what was left undone.)*
+  *(Implemented 2026-07-31; reviewed, fixed and browser-verified 2026-08-01 — see
+  §"What T2 settled" for the five calls it forced and the six defects review caught.)*
 - **T3 — Typeahead.** 1s buffer, wrap-around, match highlight. *After this lands, delete
   the monaco spike's leftovers.* Verified 2026-07-31: the spike code was **never
   committed** (no `features/tree-spike/`, no `ActiveView` case, no Rail entry in git
@@ -599,7 +643,7 @@ them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` d
 
 ```
 cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
-bazel test //ui:test --nocache_test_results                   # vitest; 228 tests as of T2
+bazel test //ui:test --nocache_test_results                   # vitest; 253 tests as of T2
 bazel build //ui:ui                                           # the real release bundle
 ```
 
@@ -613,8 +657,9 @@ an earlier run.
 jsdom, deliberately — so nothing here dispatches a real event, computes layout, or reads
 `getComputedStyle`. Pure modules (`keymap`, `navigate`, `flatten`, `selection`, the
 editable-target guard) are covered directly; row markup is covered structurally via
-`renderToStaticMarkup`. These behaviors are therefore verified by code reasoning only and are
-owed a browser pass — the first three from T1, the rest from T2:
+`renderToStaticMarkup`. These behaviors are therefore not reachable by the suite and need a browser pass. **All of the
+below were discharged on 2026-08-01** against a throwaway `HOME` workspace (43 requests, nested
+folders) on the production binary; they are kept here as the recipe to re-run, not as debt:
 
 - **`PageUp`/`PageDown` page by one real screen**, not the whole tree (needs a collection tall
   enough to overflow the 278px panel).
@@ -631,6 +676,23 @@ owed a browser pass — the first three from T1, the rest from T2:
   request, `Delete`, and check the dialog counts 2 (not 5, if the folder has children) and that
   both are gone afterwards. This is the one owed check with a destructive failure mode, so do
   it against a throwaway `HOME` workspace.
+
+**Two traps in the browser harness itself**, both of which cost time on 2026-08-01 before being
+identified — neither is an app bug:
+
+- **The automated tab runs `visibilityState: "hidden"`, so `requestAnimationFrame` never
+  fires.** Anything deferred to rAF simply does not happen there. This is why the inline rename
+  box appears never to focus (`EditableName.tsx:41` focuses via rAF) and why `Dialog`'s initial
+  focus deliberately uses a plain effect instead. To test an rAF-focused input, focus it
+  yourself first and then drive the keystrokes. Check `document.visibilityState` before
+  concluding a focus bug is real. *(`EditableName`'s rAF is a genuine latent issue for anyone
+  running a hidden tab, left alone as T4b's territory — that phase moves the edit UI into the
+  component anyway.)*
+- **Synthetic keystrokes stop reaching the page** in some states (notably straight after a
+  reload, or when the tree was focused by a scripted `.focus()` rather than a real click or
+  `Tab`). Symptom: zero `keydown` events even at a `window` capture listener, so the tree looks
+  inert. Arm a `window` keydown listener and confirm events arrive before believing a keyboard
+  finding; a real mouse click somewhere in the page revives it.
 
 Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
 convention used by the request-body and definition-sources tracks.

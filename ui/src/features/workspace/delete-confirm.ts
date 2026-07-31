@@ -41,6 +41,27 @@ export interface DeleteConfirmCopy {
 }
 
 export function deleteConfirmCopy(items: readonly ItemWithPath[]): DeleteConfirmCopy {
+  if (items.length === 0) {
+    // Nothing to describe. Not reachable through the UI — the dialog is gated on
+    // `open={confirm.length > 0}` (CollectionPanel.tsx) and Dialog.tsx returns
+    // null when closed, so this copy is never rendered — but React still
+    // evaluates this call on every CollectionPanel render, including the ones
+    // where `confirm` is empty, so the function must return something rather
+    // than throw. It used to fall through into the plural branch below, where
+    // folderCount === items.length === 0 made `allFolders` vacuously true and
+    // produced "Delete 0 folders … and everything inside them?" — a sentence
+    // that asserts a count AND a kind AND a recursive consequence, none of which
+    // are true of an empty list. Anyone who later makes this branch reachable
+    // (or reads it while debugging) deserves copy that is merely useless rather
+    // than actively wrong, so the empty case says nothing it cannot back up.
+    // Kept as an early return rather than narrowing the parameter to a
+    // non-empty-tuple type: the only caller has a plain ItemWithPath[] in state
+    // and would need a cast plus a null-copy branch in its JSX to satisfy that
+    // signature, which pushes complexity into the caller to delete one branch
+    // here.
+    return { title: "Delete", emphasis: "nothing", suffix: "?" };
+  }
+
   if (items.length === 1) {
     // UNCHANGED wording from before this phase: names the one item, and only
     // a FOLDER gets the "and everything inside it" warning — a request has
@@ -54,21 +75,11 @@ export function deleteConfirmCopy(items: readonly ItemWithPath[]): DeleteConfirm
     };
   }
 
-  // N > 1 — this phase's actual new case. `items.length === 0` also falls
-  // through to here rather than getting a third branch: the dialog is closed
-  // whenever `confirm` is empty (`open={confirm.length > 0}`, CollectionPanel.tsx),
-  // so this copy is never actually shown for n===0 — but React evaluates a
-  // component's JSX children eagerly regardless of a CHILD component's own
-  // `if (!open) return null` (Dialog.tsx), so this function must still return
-  // something sane rather than throw when n is 0, and folding it into the
-  // "plural" branch ("Delete 0 ... ?") is simpler than a third case for
-  // output nobody ever sees.
+  // N > 1 — this phase's actual new case. Genuinely N > 1 by the time control
+  // reaches here: both n===0 and n===1 returned above, so `allFolders` and
+  // `noFolders` below are real statements about a real batch rather than the
+  // vacuous truths an empty list used to make them.
   const folderCount = items.filter((it) => it.item.content.case === "folder").length;
-  // For n===0, folderCount and items.length are BOTH 0, so allFolders AND
-  // noFolders are simultaneously (vacuously) true — checked in that order
-  // below, so `allFolders` wins the tie and n===0 reads as "0 folders", an
-  // arbitrary pick between two equally-vacuous options with no significance
-  // beyond "did not throw" (this copy is never actually rendered for n===0).
   const allFolders = folderCount === items.length;
   const noFolders = folderCount === 0;
   const noun = allFolders ? "folders" : noFolders ? "requests" : "items";

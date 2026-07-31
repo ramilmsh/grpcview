@@ -105,6 +105,48 @@ export function parentIndex<T>(flat: FlatTree<T>, id: string): number | null {
   return flat.indexById.get(parentId) ?? null;
 }
 
+// Every VISIBLE row strictly beneath `id`, in row order — the ids a collapse of
+// `id` is about to hide. Added for the twistie-collapse rebase (dispatch.ts's
+// applyTwistieClick): collapsing a folder from its twistie deliberately touches
+// neither focus nor selection, so without this the cursor and any selected rows
+// could end up naming rows that are no longer painted anywhere — an
+// aria-activedescendant pointing at nothing, and a Delete acting on rows the
+// user cannot see.
+//
+// "Strictly beneath" is read off the ARRAY, not by recursing the adapter:
+// flatten() emits a node's whole visible subtree as the contiguous run
+// immediately after it (flatten.ts's visit() pushes a row, then descends), and
+// every row in that run is drawn deeper than the folder itself — so the run
+// ends at the first row whose depth is back at or above the folder's own. One
+// forward scan, no set membership, no second pass.
+//
+// This is the one place in this file that DOES key off `depth` rather than
+// parentId, in deliberate contrast to firstChildIndex below (see its comment
+// for why it refuses to). The honest reason for the asymmetry: firstChildIndex
+// asks a question about ONE parent-child hop, which parentId answers exactly,
+// while this asks about a transitive closure, which parentId answers only by
+// accumulating a set as it walks. Depth is the cheaper and — for a contiguous
+// run — equivalent formulation TODAY. It stops being equivalent the moment
+// T7's compact-folders flag draws several logical hops at one depth; whoever
+// turns that flag on has to revisit this function (a parentId-closure walk over
+// the same contiguous run is the drop-in replacement), which is why the
+// dependency is spelled out here rather than left implicit.
+//
+// An `id` that names no current row returns [] — the same "not a visible row,
+// nothing to say about it" answer parentIndex/firstChildIndex already give.
+export function descendantIds<T>(flat: FlatTree<T>, id: string): string[] {
+  const rowIndex = flat.indexById.get(id);
+  if (rowIndex === undefined) return [];
+  const baseDepth = flat.rows[rowIndex].depth;
+
+  const out: string[] = [];
+  for (let i = rowIndex + 1; i < flat.rows.length; i++) {
+    if (flat.rows[i].depth <= baseDepth) break; // back out to a sibling/ancestor: run over
+    out.push(flat.rows[i].id);
+  }
+  return out;
+}
+
 // The row ArrowRight focuses when the current row is already an EXPANDED folder
 // (a collapsed folder just expands in place instead, another same-row change
 // Tree.tsx makes directly). Exactly "the row after it, iff that row is its

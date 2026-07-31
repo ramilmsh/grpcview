@@ -119,12 +119,37 @@ const isStrictPrefix = (prefix: string[], full: string[]): boolean =>
 // top-level folder's full path as a prefix, whether or not the MIDDLE folder
 // also happens to survive the same comparison.
 //
+// EXACT DUPLICATES are dropped in the same pass, keeping the first occurrence.
+// Ancestry alone does not cover them: isStrictPrefix requires the prefix to be
+// strictly SHORTER (an item is not its own ancestor), so two entries naming the
+// identical path each fail to prune the other and BOTH survive. That is
+// reachable, not theoretical — ui-store.ts's renameItem remaps `treeSelection`
+// by substituting one id for another (`s.treeSelection.map(...)`), so renaming
+// a selected row onto the name of a DIFFERENT selected sibling ("Calls/bar" ->
+// "Calls/foo" while "Calls/foo" is also selected) leaves the same id in the
+// list twice, and both copies resolve to the one surviving row. The resulting
+// double delete is harmless server-side (Collection.Delete is `os.RemoveAll`
+// and idempotent) — but a dialog reading "Delete 2 requests" over ONE row is
+// precisely the miscount this function exists to prevent, so it is pruning's
+// job, not the caller's.
+//
 // O(n²) (every item compared against every other) — fine at this app's scale
 // (plan: "dozens to low hundreds", the same reasoning flatten.ts/Tree.tsx's
 // own reveal() already lean on for their own full-tree walks).
 export const pruneNestedSelections = (items: readonly ItemWithPath[]): ItemWithPath[] => {
   const paths = items.map(fullPathOf);
-  return items.filter((_, i) => !paths.some((other, j) => i !== j && isStrictPrefix(other, paths[i])));
+  const kept = new Set<string>();
+  return items.filter((_, i) => {
+    if (paths.some((other, j) => i !== j && isStrictPrefix(other, paths[i]))) return false;
+    // Joined on NUL rather than "/" (keyOf's convention) so that a name
+    // containing a slash cannot make two genuinely different paths look equal —
+    // isStrictPrefix compares segment arrays for the same reason, and this
+    // second half of the pass has no business being laxer than the first.
+    const identity = paths[i].join("\u0000");
+    if (kept.has(identity)) return false;
+    kept.add(identity);
+    return true;
+  });
 };
 
 // ── services ─────────────────────────────────────────────────────────────────

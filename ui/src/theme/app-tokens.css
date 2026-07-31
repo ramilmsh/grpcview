@@ -55,6 +55,24 @@
 .treerow {
   display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px;
   cursor: pointer; font-size: 13px; color: var(--color-neutral-300); position: relative;
+  /* Rows are a SELECTION surface (components/tree/, T2), not prose: shift+click
+     range-selects, and the browser's own shift+click text selection would
+     otherwise paint a blue drag highlight across every label between the two
+     click points — two selection models fighting over one gesture, with the
+     native one persisting until the next plain click. -webkit- prefix spelled
+     out because Safari still requires it for this property (autoprefixer would
+     add it, but this file already writes ::-webkit-scrollbar rules by hand, so
+     the prefix is not new here). */
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* ...except the row's own inline rename box (EditableName.tsx), which IS a text
+   field: double-click-to-select-a-word, drag-select, and select-all inside it
+   must all keep working. `auto`, not `text`, so the input keeps whatever its UA
+   default is. */
+.treerow input {
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 .treerow:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
 .treerow.on { background: var(--color-accent-900); color: var(--color-text); }

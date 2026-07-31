@@ -77,6 +77,12 @@ describe("Tree: portable tier", () => {
     // per folder (folder-a is in `expanded`, folder-c is not).
     expect(markup).toContain('role="tree"');
     expect(markup).toContain('aria-label="Test tree"');
+    // Without this, ARIA reads a `tree` as single-select and assistive tech
+    // announces every newly selected row as having replaced the previous
+    // selection — which would misreport T2's multi-select entirely. Asserted
+    // on the container here because this is the one test in the suite that
+    // renders real Tree markup.
+    expect(markup).toContain('aria-multiselectable="true"');
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('aria-level="2"'); // folder-a's children, at depth 1
