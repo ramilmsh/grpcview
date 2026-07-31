@@ -1,19 +1,22 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { MagnifyingGlass, FolderPlus, Plus } from "@/components/ui/icons";
 import { ScriptKind, type Service, type Method } from "@grpcview/v1/workspace_pb";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
+import { Tree } from "@/components/tree/Tree";
+import type { TreeRowState } from "@/components/tree/types";
 import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { childPathOf, itemKey, keyOf, serviceName, type ItemWithPath } from "@/lib/format";
-import { TreeView } from "./TreeView";
+import { renderRequestRow, useRequestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import type { GeneratorDef } from "./generator-libs";
 
-// Count requests in a subtree (for the header + folder counts already handled in
-// TreeView).
+// Count requests in a subtree (for the header total; a folder row's own count is
+// its direct children — request-tree.tsx's getTreeItem — which is a different,
+// non-recursive number).
 const countRequests = (items: ItemWithPath[]): number =>
   items.reduce(
     (n, it) =>
@@ -52,6 +55,17 @@ export function CollectionPanel() {
   const openTab = useUIStore((s) => s.openTab);
   const activeKey = useUIStore((s) => s.activeKey);
   const renameItem = useUIStore((s) => s.renameItem);
+  // Tree expansion/selection/focus are CONTROLLED state owned by zustand, not the
+  // component (tree-rewrite-plan.md "Enduring decisions" #5) — pulled individually,
+  // not as one object selector, matching every other useUIStore read in this file
+  // (an object selector would build a fresh object every render and defeat
+  // zustand's reference-equality check).
+  const treeExpanded = useUIStore((s) => s.treeExpanded);
+  const setTreeExpanded = useUIStore((s) => s.setTreeExpanded);
+  const treeSelection = useUIStore((s) => s.treeSelection);
+  const setTreeSelection = useUIStore((s) => s.setTreeSelection);
+  const treeFocused = useUIStore((s) => s.treeFocused);
+  const setTreeFocused = useUIStore((s) => s.setTreeFocused);
 
   const [filter, setFilter] = useState("");
   const [folderName, setFolderName] = useState("");
@@ -60,9 +74,18 @@ export function CollectionPanel() {
   const [confirm, setConfirm] = useState<ItemWithPath | null>(null);
   // The folder row whose metadata dialog is open (gv-features-plan.md Feature 1); null = closed.
   const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
+  // Which row (if any) is mid-rename. One row at a time, so this lives here rather
+  // than per-row (today's pencil -> EditableName behavior; F2/keyboard rename is
+  // T4b, out of scope here) — request-tree.tsx's renderRequestRow reads it back via
+  // RequestRowCallbacks.
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
 
   const filtered = useMemo(() => filterTree(rootItems, filter), [rootItems, filter]);
   const total = useMemo(() => countRequests(rootItems), [rootItems]);
+  // Memoized over `filtered` (itself memoized above): a fresh adapter object every
+  // render would force useTreeState's flatten() to re-run on every unrelated
+  // CollectionPanel render, not just when the tree's own data actually changes.
+  const adapter = useRequestTreeAdapter(filtered);
 
   // The workspace's saved GENERATORS, forwarded to the folder-metadata dialog's MetadataEditor for
   // the same ambient autocomplete the request metadata editor gets (mirrors RequestWorkspace.tsx).
@@ -117,6 +140,27 @@ export function CollectionPanel() {
     }
     setConfirm(null);
   };
+
+  // Callbacks renderRequestRow needs beyond ItemWithPath itself — see
+  // request-tree.tsx's RequestRowCallbacks for why these can't be derived from the
+  // node alone.
+  const rowCallbacks: RequestRowCallbacks = {
+    services,
+    renamingKey,
+    onRenamingChange: setRenamingKey,
+    onRename: doRename,
+    onNewRequestUnder: (folder) => {
+      setPickerParent(folder);
+      // Mirrors today's setOpen(true) on the folder a new request is added into —
+      // expansion is controlled state now, so "open it" means adding its id to
+      // treeExpanded instead of flipping local component state.
+      setTreeExpanded(new Set([...treeExpanded, itemKey(folder)]));
+    },
+    onDelete: setConfirm,
+    onEditMetadata: setMetadataFolder,
+  };
+  const renderRow = (item: ItemWithPath, state: TreeRowState): ReactNode =>
+    renderRequestRow(item, state, rowCallbacks);
 
   return (
     <div
@@ -182,19 +226,20 @@ export function CollectionPanel() {
               : "No requests yet. Use + to create one."}
           </div>
         ) : (
-          filtered.map((item) => (
-            <TreeView
-              key={itemKey(item)}
-              item={item}
-              activeKey={activeKey}
-              services={services}
-              onSelectRequest={openTab}
-              onNewRequestUnder={(folder) => setPickerParent(folder)}
-              onRename={doRename}
-              onDelete={setConfirm}
-              onEditMetadata={setMetadataFolder}
-            />
-          ))
+          <Tree
+            adapter={adapter}
+            renderRow={renderRow}
+            expanded={treeExpanded}
+            onExpandedChange={setTreeExpanded}
+            selection={treeSelection}
+            onSelectionChange={setTreeSelection}
+            focused={treeFocused}
+            onFocusedChange={setTreeFocused}
+            activeId={activeKey}
+            renamingId={renamingKey}
+            onOpen={openTab}
+            aria-label="Collection"
+          />
         )}
       </div>
 

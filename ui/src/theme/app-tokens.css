@@ -16,6 +16,9 @@
   --panel: #1b1d2b;
   --panel-2: #1f2130;
   --line: var(--color-divider);
+  /* VS Code's workbench.tree.indent — the tree's row-indent AND indent-guide pitch
+     key off this one value, per components/tree/'s indent guides below. */
+  --tree-indent: 8px;
 }
 
 /* thin dark scrollbars to match the ground */
@@ -70,6 +73,72 @@
 }
 .rowbtn:hover { background: color-mix(in srgb, var(--color-text) 12%, transparent); color: var(--color-text); }
 .rowbtn.danger:hover { background: var(--err-bg); color: var(--err); }
+
+/* components/tree/ (T0) — selection, focus and indent guides for the rewritten
+   rows. .sel (selected) / .on (open tab, above) / .foc (focused) are three
+   independent flags that can combine on one row (plan §"Focus ≠ selection"; .on is
+   the pre-existing activeKey concept, equally distinct from both). Each owns a
+   different CSS property so two of them never fight over the cascade:
+     .sel → background (neutral wash)      .on → background (accent) + left bar
+     .foc → box-shadow (an inset ring, orthogonal to whatever painted the background) */
+
+/* selection: a neutral wash, never accent, so it reads as distinct from .on (which
+   is accent-tinted) at a glance. One step past hover's 6% since selection is the
+   "stickier" of the two — and, like .on today, deliberately has no dedicated
+   :hover blend: the persistent state wins over the transient one by cascade order
+   (.sel declared after :hover above), the same way .on already does. */
+.treerow.sel { background: color-mix(in srgb, var(--color-text) 10%, transparent); }
+/* both apply → keep the open tab's accent rather than letting source order decide:
+   .sel and .on have equal specificity, so without this the later-declared background
+   wins by accident. The open tab is the rarer, stronger signal; it should survive
+   being also-selected, not the other way round. */
+.treerow.on.sel { background: var(--color-accent-900); }
+
+/* focus ring: a LOGICAL focus (T1's roving tabindex puts real DOM focus on .tree
+   below, never a row), so this is a plain class, not :focus-visible. box-shadow is
+   what lets it compose with .sel for free — two different properties, so all four
+   combinations render correctly with no extra rules:
+     neither     → no ring, no wash   (plain row)
+     .sel only   → wash, no ring      (selected; focus elsewhere or nowhere)
+     .foc only   → ring, no wash      (roving cursor on an unselected row — real once
+                                        T2 multi-select lands)
+     .sel + .foc → wash AND ring      (the common single-select case: the selected
+                                        row also holds the keyboard cursor) */
+.treerow.foc { box-shadow: inset 0 0 0 1px var(--color-accent); }
+
+/* indent guides: one 1px rule per ancestor level, at --tree-indent's 8px pitch.
+   Drawn by the ROW itself rather than a shared overlay, because the tree is a flat
+   list of sibling rows (flatten.ts's flat visible-rows model): each guide spans
+   only its own row's height (top:0/bottom:0, so it stretches to match whatever
+   that row actually renders at, nominally 22px) and adjacent rows' guides at the
+   same offset touch with no vertical gap — which is what reads as one continuous
+   line down the tree. This only holds if rows stack with zero vertical margin
+   between them; don't add row spacing without revisiting this.
+
+   Expected DOM per row (TreeRow.tsx), one <span class="guide"> per ancestor level
+   (0-indexed), before the twistie/icon/label content — a root row (depth 0) renders
+   none:
+     <div class="treerow ...">
+       <span class="guide" style="--i:0"></span>
+       <span class="guide" style="--i:1"></span>   … one per ancestor level, 0..depth-1
+       <span class="twistie">…</span><TreeIcon .../><span class="label">…</span>…
+     </div>
+   .treerow is already `position: relative` (above), which is what .guide anchors
+   to. TreeRow.tsx must keep the content's own left offset (indent + icon column) a
+   multiple of --tree-indent too, so guides land under each ancestor's twistie
+   column rather than mid-label. */
+.guide {
+  position: absolute; top: 0; bottom: 0; left: calc(var(--i, 0) * var(--tree-indent));
+  width: 1px; background: var(--line); pointer-events: none;
+}
+
+/* roving-tabindex container (T1): the TREE takes real DOM focus, never a row, so
+   the browser's default ring must never show here — .foc above is what focus looks
+   like instead. The :focus-visible rule matches nocturne.css's global one in
+   specificity (one class, one pseudo-class — same weight), so this wins regardless
+   of stylesheet order. */
+.tree { outline: none; }
+.tree:focus-visible { outline: none; }
 
 /* source rows (definition sources view) */
 .srcrow { cursor: pointer; transition: background .12s; }

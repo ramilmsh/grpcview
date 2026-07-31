@@ -69,6 +69,17 @@ interface UIState {
   requestSubtab: RequestSubtab;
   responseSubtab: ResponseSubtab;
 
+  // components/tree/'s <Tree> requires expansion/selection/focus CONTROLLED
+  // (tree-rewrite-plan.md "Enduring decisions" #5), so they live here rather than
+  // inside the component — this is UI state same as the rest of this store.
+  // Deliberately separate from activeKey (the open TAB): the plan's whole point is
+  // that tree selection, tree focus, and the open tab are three independent
+  // concepts (plan §"Focus ≠ selection"); today's TreeView conflated the first two
+  // by using activeKey as if it were the tree's selection.
+  treeExpanded: ReadonlySet<string>;
+  treeSelection: readonly string[];
+  treeFocused: string | null;
+
   // Scripts view. Scripts themselves are server data (ride the Get snapshot); only
   // the selection, per-script editor buffers, and the active detail subtab are UI
   // state. scriptDrafts is keyed by the script's (unique) name and seeded from the
@@ -82,6 +93,14 @@ interface UIState {
   closeTab: (key: string) => void;
   setActiveKey: (key: string | null) => void;
   renameItem: (oldKey: string, newKey: string, newName: string) => void;
+
+  // Each setter REPLACES the field wholesale — treeExpanded in particular is a
+  // Set, and it must always be swapped for a new one, never mutated in place:
+  // zustand (like React) compares by reference, so mutating the existing Set
+  // would leave every selector seeing the "same" value and never re-render.
+  setTreeExpanded: (next: ReadonlySet<string>) => void;
+  setTreeSelection: (next: readonly string[]) => void;
+  setTreeFocused: (next: string | null) => void;
 
   seedDraft: (key: string, draft: Draft) => void; // only if absent
   setDraft: (key: string, patch: Partial<Draft>) => void;
@@ -124,6 +143,10 @@ export const useUIStore = create<UIState>()((set) => ({
   selectedScript: null,
   scriptDrafts: {},
   scriptSubtab: "code",
+
+  treeExpanded: new Set(),
+  treeSelection: [],
+  treeFocused: null,
 
   setView: (activeView) => set({ activeView }),
 
@@ -168,6 +191,17 @@ export const useUIStore = create<UIState>()((set) => ({
         const { [oldKey]: moved, ...rest } = m;
         return moved === undefined ? rest : { ...rest, [newKey]: moved };
       };
+      // treeExpanded holds bare ids in a Set, not an oldKey -> value map, so it
+      // gets its own one-id substitution rather than reusing `rekey` above — same
+      // "return the identical reference when there's nothing to do" habit, so an
+      // unrelated rename never forces every expansion-state consumer to re-render.
+      const rekeySet = (ids: ReadonlySet<string>): ReadonlySet<string> => {
+        if (!ids.has(oldKey)) return ids;
+        const next = new Set(ids);
+        next.delete(oldKey);
+        next.add(newKey);
+        return next;
+      };
       return {
         openTabs: s.openTabs.map((t) =>
           t.key === oldKey ? { key: newKey, name: newName } : t
@@ -175,8 +209,27 @@ export const useUIStore = create<UIState>()((set) => ({
         activeKey: s.activeKey === oldKey ? newKey : s.activeKey,
         drafts: rekey(s.drafts),
         invokes: rekey(s.invokes),
+        // treeSelection/treeFocused are name-derived keys too (components/tree/'s
+        // <Tree> requires them controlled — see the field comments above), so a
+        // renamed row that was selected/focused needs the same single-key remap
+        // activeKey gets, or its selection wash / focus ring silently detaches the
+        // moment the rename's refetch produces a row under the new key.
+        treeSelection: s.treeSelection.map((id) => (id === oldKey ? newKey : id)),
+        treeFocused: s.treeFocused === oldKey ? newKey : s.treeFocused,
+        // No UI path can exercise this today — doRename (CollectionPanel) bails
+        // unless the item is a request, and a request is never expandable, so
+        // oldKey can never be a treeExpanded member yet (the plan's "identity
+        // hazard": folders can't be renamed until T4a). Handled anyway, ahead of
+        // T4b wiring folder rename through this same function — it's a one-id
+        // substitution, not the prefix remap (moveSubtree) the plan reserves for
+        // T6b, which a folder's DESCENDANTS will still need later.
+        treeExpanded: rekeySet(s.treeExpanded),
       };
     }),
+
+  setTreeExpanded: (treeExpanded) => set({ treeExpanded }),
+  setTreeSelection: (treeSelection) => set({ treeSelection }),
+  setTreeFocused: (treeFocused) => set({ treeFocused }),
 
   seedDraft: (key, draft) =>
     set((s) => (s.drafts[key] ? {} : { drafts: { ...s.drafts, [key]: draft } })),

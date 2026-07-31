@@ -159,6 +159,25 @@ interface TreeProps<T> {
 }
 ```
 
+**Two props T0 added that the block above did not anticipate.** Both exist because the
+component owns the row element's `className`, so a host can no longer decorate a row itself
+the way `TreeView.tsx` did:
+
+- `activeId?: string | null` → `TreeRowState.active`, painted with the existing
+  `.treerow.on`. This is the **open tab**, the third thing that is neither focus nor
+  selection (decision 4 named it and then gave the host no way to express it). Not a
+  grpcview-ism: VS Code's Explorer highlights the row of the active editor the same way.
+- `renamingId?: string | null` → makes `TreeRowState.renaming` honest. It exists because the
+  old tree disabled a row's whole click handler while that row was being renamed
+  (`onClick={editing ? undefined : …}`), and losing that guard meant a click on a renaming
+  row committed the rename *and* opened the request. This one is a **T0 bridge**: at T4b the
+  component owns the edit UI, and it becomes internal state rather than a prop.
+
+Anything further has to clear the bar in §Risks ("Over-fitting"): name the consumer that
+wants it. A third addition (`liveAdapter`, an unfiltered adapter for expansion bookkeeping)
+was built during T0 and **reverted** for failing exactly that test — see the note under
+"Known limitations" below.
+
 Module layout, one concern each:
 
 | file | responsibility |
@@ -415,6 +434,23 @@ respect rather than "helpfully" fix:
   until T4a adds `UpdateFolderRequest.name`. The keymap still *produces* the intent, so
   T4b is a wiring change, not a keyboard change.
 
+## Known limitations (accepted, not oversights)
+
+- **A folder deleted and recreated with the same name at the same path is born collapsed.**
+  `useTreeState` remembers which ids it has already force-expanded (`seenDefaults`) so that a
+  user's manual collapse is never sprung back open; it never prunes that memory, and `itemKey`
+  is path+name derived, so a recreated folder is the *literal same id* as the dead one. One
+  click fixes it. A reconciliation pass was implemented and reverted: it needed the **whole**
+  tree while a caller may legitimately narrow what it passes (this app's filter box does), so
+  it required a second "unfiltered" adapter as a contract prop the descriptor explorer would
+  inherit. Reconciling against the *narrowed* adapter instead is actively worse — it reads
+  "hidden by the filter" as "deleted", so filtering forgets a collapse and clearing the filter
+  springs the folder open. Adversarial review caught precisely that in the implementation. The
+  clean fix is server-assigned stable ids (see §"The identity hazard"), which stays out of scope.
+- **Clicking a non-input part of the row that is *currently* being renamed still commits.**
+  The blur fires before the click handler, so `renamingId` is already cleared by then. Verified
+  that the pre-rewrite tree had the identical characteristic — this is parity, not a new gap.
+
 ## Risks
 
 - **Prefix remap correctness** (above) — the highest-consequence risk in the plan, since
@@ -453,9 +489,23 @@ bazel run //ui:dev              # vite on :5173
 ```
 
 Add `env HOME=<tmpdir>` to the backend for a throwaway workspace. Browser-verify each
-phase per `AGENTS.md` § "Browser verification hook"; `bazel build //ui:ui` is the build
-gate (it runs the real vite release build and catches TS errors) and `bazel test //ui:test`
-runs the vitest suite over the pure modules.
+phase per `AGENTS.md` § "Browser verification hook".
+
+**Three gates, and the trap in the obvious one.** `bazel build //ui:ui` does **NOT** typecheck
+— proven twice during T0 by injecting a hard type error into `Tree.tsx` and watching the build
+pass. `vite build` transpiles with esbuild, which strips types per-file without ever checking
+them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` doesn't either
+(vitest's `typecheck` option is off). So:
+
+```
+cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
+bazel test //ui:test                                          # vitest, 60 tests
+bazel build //ui:ui                                           # the real release bundle
+```
+
+Run all three. The first one is not optional — it is the gate that catches an unused import or
+a wrong generic, and this rewrite hit both. `AGENTS.md`'s claim that the build "catches TS
+errors" is true only for syntax and unresolved imports.
 
 Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
 convention used by the request-body and definition-sources tracks.
