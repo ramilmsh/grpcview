@@ -1,16 +1,15 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { MagnifyingGlass, FolderPlus, Plus } from "@/components/ui/icons";
 import { ScriptKind, type Service, type Method } from "@grpcview/v1/workspace_pb";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Tree } from "@/components/tree/Tree";
-import type { TreeRowState } from "@/components/tree/types";
+import type { TreeHandle, TreeRowState } from "@/components/tree/types";
 import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import {
   childPathOf,
-  findByKey,
   itemKey,
   keyOf,
   pruneNestedSelections,
@@ -60,10 +59,11 @@ const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => {
 export function CollectionPanel() {
   const { workspace, services } = useWorkspace();
   const rootItems = useRootItems(workspace);
-  const { createFolder, createRequest, deleteRequest, updateRequest } = useWorkspaceMutations();
+  const { createFolder, createRequest, deleteRequest, updateRequest, updateFolder } =
+    useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
   const activeKey = useUIStore((s) => s.activeKey);
-  const renameItem = useUIStore((s) => s.renameItem);
+  const moveSubtree = useUIStore((s) => s.moveSubtree);
   // Tree expansion/selection/focus are CONTROLLED state owned by zustand, not the
   // component (tree-rewrite-plan.md "Enduring decisions" #5) — pulled individually,
   // not as one object selector, matching every other useUIStore read in this file
@@ -90,11 +90,12 @@ export function CollectionPanel() {
   const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
   // The folder row whose metadata dialog is open (gv-features-plan.md Feature 1); null = closed.
   const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
-  // Which row (if any) is mid-rename. One row at a time, so this lives here rather
-  // than per-row (today's pencil -> EditableName behavior; F2/keyboard rename is
-  // T4b, out of scope here) — request-tree.tsx's renderRequestRow reads it back via
-  // RequestRowCallbacks.
-  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  // "Which row is mid-rename" is the TREE's own internal state as of T4b (it
+  // renders the box, validates the name, and commits), so this file no longer
+  // holds it. All that is left here is the imperative handle a row's pencil
+  // button needs to START one — TreeHandle.startRename, the home the contract
+  // gives to actions rather than values (components/tree/types.ts).
+  const treeRef = useRef<TreeHandle<ItemWithPath>>(null);
 
   const filtered = useMemo(() => filterTree(rootItems, filter), [rootItems, filter]);
   const total = useMemo(() => countRequests(rootItems), [rootItems]);
@@ -134,16 +135,37 @@ export function CollectionPanel() {
     setPickerParent(undefined);
   };
 
-  // Rename a request (folders are not renamable yet — N2a scope). Persists via
-  // UpdateRequest, then remaps client-side keyed state old key -> new key so the
-  // open tab/draft/response follow the rename (itemKey is name-derived).
+  // Rename an item — REQUESTS AND FOLDERS BOTH, as of T4a (UpdateFolderRequest
+  // carries `name` now; the comment that used to live here explaining why a folder
+  // rename was impossible is gone with the limitation). The two differ only in
+  // which RPC persists it: UpdateRequest vs UpdateFolder, addressed identically by
+  // path + itemName with `name` as the new display name, both rejecting a sibling
+  // collision with FailedPrecondition server-side. Neither moves anything on disk
+  // — a folder keeps its directory and its descendants keep their files (T4a's
+  // slug-identity model) — but the CLIENT's keys are name-derived, so the
+  // subtree remap still has to happen.
+  //
+  // Fire-and-forget .mutate with an onSuccess, like every other mutation in this
+  // app (nothing here awaits one — see doDelete's comment for the full reasoning):
+  // moveSubtree runs only if the server accepted, so a rejected rename leaves every
+  // open tab, draft and response exactly where it was.
   const doRename = (item: ItemWithPath, newName: string) => {
     const next = newName.trim();
-    if (!next || next === item.item.name || item.item.content.case !== "request") return;
-    updateRequest.mutate(
-      { workspaceName: WORKSPACE_NAME, path: item.path, itemName: item.item.name, name: next },
-      { onSuccess: () => renameItem(itemKey(item), keyOf(item.path, next), next) }
-    );
+    if (!next || next === item.item.name) return;
+    const args = {
+      workspaceName: WORKSPACE_NAME,
+      path: item.path,
+      itemName: item.item.name,
+      name: next,
+    };
+    // moveSubtree, not a single-key remap: renaming a FOLDER changes the key of
+    // every descendant at once (the plan's "identity hazard"), and its own
+    // treeExpanded membership besides.
+    const opts = {
+      onSuccess: () => moveSubtree(itemKey(item), keyOf(item.path, next), next),
+    };
+    if (item.item.content.case === "folder") updateFolder.mutate(args, opts);
+    else updateRequest.mutate(args, opts);
   };
 
   // Fires ONE deleteRequest mutation per confirmed item — T2 makes this
@@ -205,37 +227,16 @@ export function CollectionPanel() {
   // its own.
   const onTreeDelete = (nodes: ItemWithPath[]): void => setConfirm(pruneNestedSelections(nodes));
 
-  // Tree's own onRenamingChange (F2, or Enter on macOS, on the focused row) is
-  // a second way to set the SAME renamingKey the pencil button already drives
-  // (RequestRowCallbacks.onRenamingChange below) — one piece of state, two
-  // triggers. A rename intent on a FOLDER row is a deliberate no-op: per
-  // proto/grpcview/v1/service.proto, UpdateFolderRequest carries only
-  // workspace_name/path/item_name/draft_metadata_script — no `name` field,
-  // unlike UpdateRequestRequest, which has one — so there is nowhere on the
-  // wire for a folder rename to go until T4a adds it. Letting renamingKey
-  // become a folder's key anyway would silently start swallowing THAT row's
-  // own clicks forever (Tree.tsx's handleRowClick guard is keyed on
-  // renamingId alone, with no folder/request distinction of its own — the
-  // tree doesn't know what a "folder" is), which is a worse, more confusing
-  // failure than simply not entering rename mode.
-  const onTreeRenamingChange = (id: string | null): void => {
-    if (id === null) {
-      setRenamingKey(null);
-      return;
-    }
-    const target = findByKey(filtered, id);
-    if (target?.item.content.case === "folder") return;
-    setRenamingKey(id);
-  };
-
   // Callbacks renderRequestRow needs beyond ItemWithPath itself — see
   // request-tree.tsx's RequestRowCallbacks for why these can't be derived from the
   // node alone.
   const rowCallbacks: RequestRowCallbacks = {
     services,
-    renamingKey,
-    onRenamingChange: setRenamingKey,
-    onRename: doRename,
+    // A row's pencil is now just a second trigger for the tree's OWN rename, the
+    // same way F2/macOS-Enter is (both land in Tree.tsx's renamingId state) —
+    // there is no host-side rename UI left for it to open. Folder rows get one
+    // too, since T4a made folders renamable.
+    onStartRename: (item) => treeRef.current?.startRename(itemKey(item)),
     onNewRequestUnder: (folder) => {
       setPickerParent(folder);
       // Mirrors today's setOpen(true) on the folder a new request is added into —
@@ -336,6 +337,7 @@ export function CollectionPanel() {
         ) : (
           <Tree
             adapter={adapter}
+            handle={treeRef}
             renderRow={renderRow}
             expanded={treeExpanded}
             onExpandedChange={setTreeExpanded}
@@ -344,9 +346,8 @@ export function CollectionPanel() {
             focused={treeFocused}
             onFocusedChange={setTreeFocused}
             activeId={activeKey}
-            renamingId={renamingKey}
-            onRenamingChange={onTreeRenamingChange}
             onOpen={openTab}
+            onRenameCommit={doRename}
             onDelete={onTreeDelete}
             aria-label="Collection"
           />

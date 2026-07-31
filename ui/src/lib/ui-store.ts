@@ -9,7 +9,7 @@ import { itemKey } from "./format";
 export type ActiveView = "workspace" | "sources" | "scripts";
 
 // A client-side open request tab. Keyed by itemKey; name is a display copy kept
-// in sync by renameItem on a successful rename. The live Request is resolved from
+// in sync by moveSubtree on a successful rename. The live Request is resolved from
 // the workspace tree by key so edits/updates stay in sync.
 export interface OpenTab {
   key: string;
@@ -92,7 +92,10 @@ interface UIState {
   openTab: (item: ItemWithPath) => void;
   closeTab: (key: string) => void;
   setActiveKey: (key: string | null) => void;
-  renameItem: (oldKey: string, newKey: string, newName: string) => void;
+  // Remaps every name-derived key from oldKey to newKey, AND every descendant key
+  // under it (T4b — see the implementation for the prefix rule). Replaced T4b's
+  // `renameItem`, which handled the exact key alone.
+  moveSubtree: (oldKey: string, newKey: string, newName: string) => void;
 
   // Each setter REPLACES the field wholesale — treeExpanded in particular is a
   // Set, and it must always be swapped for a new one, never mutated in place:
@@ -178,51 +181,110 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setActiveKey: (activeKey) => set({ activeKey }),
 
-  // renameItem remaps all name-derived keyed state from oldKey to newKey after a
-  // successful rename, so the open tab, its draft, and its last response follow
-  // the new name instead of detaching (itemKey is name-derived — see format.ts).
-  renameItem: (oldKey, newKey, newName) =>
+  // moveSubtree remaps ALL name-derived keyed state — the item's own key and every
+  // key beneath it — from oldKey to newKey after a successful rename (T4b), so the
+  // open tab, its draft, its last response, and the tree's own
+  // selection/focus/expansion follow the new name instead of detaching (itemKey is
+  // name-derived, see format.ts). It REPLACED `renameItem`, which handled the exact
+  // key alone: with folder rename shipped (T4a), a single-key remap is never the
+  // right answer — renaming a folder changes the key of every descendant at once —
+  // and keeping two functions where the wider one subsumes the narrower would just
+  // be an invitation to call the wrong one. This is the plan's "identity hazard"
+  // (docs/design/tree-rewrite-plan.md), whose failure mode is silent: a detached
+  // tab quietly forgets its draft and last response, which reads as lost work
+  // rather than as a bug.
+  //
+  // The PREFIX is `oldKey + "/"`, never bare oldKey. "/" is keyOf's join character
+  // (lib/format.ts), so requiring it is what stops a sibling named "Foo2" from
+  // being swept up by a rename of "Foo" — a bare startsWith would rewrite
+  // "Foo2/Bar" into "Bar2/Bar" and detach an unrelated request's state.
+  moveSubtree: (oldKey, newKey, newName) =>
     set((s) => {
       if (oldKey === newKey) return {};
+      const prefix = `${oldKey}/`;
+      // The one place the remap rule lives: the moved key itself, a descendant
+      // (prefix swapped, its own tail kept verbatim), or `null` for "not ours,
+      // leave it alone". Every collection below is rewritten through this, so none
+      // of them can disagree about what counts as a descendant.
+      const remap = (key: string): string | null => {
+        if (key === oldKey) return newKey;
+        // key.slice(oldKey.length) keeps the leading "/" plus the whole tail, so
+        // nesting depth is irrelevant — a two-level descendant needs no extra case.
+        if (key.startsWith(prefix)) return newKey + key.slice(oldKey.length);
+        return null;
+      };
+      // Each helper preserves the "return the identical reference when nothing
+      // changed" habit, per collection: zustand (like React) compares by
+      // reference, so rebuilding an equivalent-looking container would re-render
+      // every consumer of state the rename never touched.
       const rekey = <T,>(
         m: Record<string, T | undefined>
       ): Record<string, T | undefined> => {
-        if (!(oldKey in m)) return m;
-        const { [oldKey]: moved, ...rest } = m;
-        return moved === undefined ? rest : { ...rest, [newKey]: moved };
+        let changed = false;
+        const out: Record<string, T | undefined> = {};
+        for (const [key, value] of Object.entries(m)) {
+          const to = remap(key);
+          if (to === null) out[key] = value;
+          else {
+            changed = true;
+            out[to] = value;
+          }
+        }
+        return changed ? out : m;
       };
-      // treeExpanded holds bare ids in a Set, not an oldKey -> value map, so it
-      // gets its own one-id substitution rather than reusing `rekey` above — same
-      // "return the identical reference when there's nothing to do" habit, so an
-      // unrelated rename never forces every expansion-state consumer to re-render.
+      // treeExpanded holds bare ids in a Set, not a key -> value map, so it gets
+      // its own pass rather than reusing `rekey`.
       const rekeySet = (ids: ReadonlySet<string>): ReadonlySet<string> => {
-        if (!ids.has(oldKey)) return ids;
-        const next = new Set(ids);
-        next.delete(oldKey);
-        next.add(newKey);
-        return next;
+        let changed = false;
+        const next = new Set<string>();
+        for (const id of ids) {
+          const to = remap(id);
+          if (to === null) next.add(id);
+          else {
+            changed = true;
+            next.add(to);
+          }
+        }
+        return changed ? next : ids;
       };
+      const rekeyOne = (key: string | null): string | null =>
+        key === null ? null : remap(key) ?? key;
+
+      let tabsChanged = false;
+      const openTabs = s.openTabs.map((t) => {
+        const to = remap(t.key);
+        if (to === null) return t;
+        tabsChanged = true;
+        // Only the EXACT match's display NAME changes. A descendant's tab shows
+        // only its own last path segment, which renaming an ancestor folder does
+        // not touch — rewriting it to newName would relabel every open tab under a
+        // renamed folder with the FOLDER's new name.
+        return t.key === oldKey ? { key: to, name: newName } : { ...t, key: to };
+      });
+
+      let selectionChanged = false;
+      const treeSelection = s.treeSelection.map((id) => {
+        const to = remap(id);
+        if (to === null) return id;
+        selectionChanged = true;
+        return to;
+      });
+
       return {
-        openTabs: s.openTabs.map((t) =>
-          t.key === oldKey ? { key: newKey, name: newName } : t
-        ),
-        activeKey: s.activeKey === oldKey ? newKey : s.activeKey,
+        openTabs: tabsChanged ? openTabs : s.openTabs,
+        activeKey: rekeyOne(s.activeKey),
         drafts: rekey(s.drafts),
         invokes: rekey(s.invokes),
-        // treeSelection/treeFocused are name-derived keys too (components/tree/'s
-        // <Tree> requires them controlled — see the field comments above), so a
-        // renamed row that was selected/focused needs the same single-key remap
-        // activeKey gets, or its selection wash / focus ring silently detaches the
-        // moment the rename's refetch produces a row under the new key.
-        treeSelection: s.treeSelection.map((id) => (id === oldKey ? newKey : id)),
-        treeFocused: s.treeFocused === oldKey ? newKey : s.treeFocused,
-        // No UI path can exercise this today — doRename (CollectionPanel) bails
-        // unless the item is a request, and a request is never expandable, so
-        // oldKey can never be a treeExpanded member yet (the plan's "identity
-        // hazard": folders can't be renamed until T4a). Handled anyway, ahead of
-        // T4b wiring folder rename through this same function — it's a one-id
-        // substitution, not the prefix remap (moveSubtree) the plan reserves for
-        // T6b, which a folder's DESCENDANTS will still need later.
+        // treeSelection/treeFocused/treeExpanded are name-derived keys too
+        // (components/tree/'s <Tree> requires them controlled — see the field
+        // comments above), so rows that were selected/focused/expanded need the
+        // same remap activeKey gets, or their selection wash / focus ring /
+        // open-ness silently detaches the moment the rename's refetch produces
+        // rows under the new keys. treeExpanded is the one that only became
+        // REACHABLE at T4a: a request is never expandable, so before folder rename
+        // existed no renamable item could be a member.
+        treeSelection: selectionChanged ? treeSelection : s.treeSelection,
+        treeFocused: rekeyOne(s.treeFocused),
         treeExpanded: rekeySet(s.treeExpanded),
       };
     }),

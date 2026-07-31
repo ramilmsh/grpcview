@@ -1,4 +1,4 @@
-import { useId, useImperativeHandle, useRef, type ReactNode } from "react";
+import { useId, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import type { TreeAdapter, TreeHandle, TreeProps, TreeRowModel } from "./types";
 import { useTreeState } from "./useTreeState";
 import { replaceSelection } from "./selection";
@@ -55,6 +55,12 @@ import {
 // cyclic adapter.getParent — see the comment at its call site.
 const MAX_REVEAL_DEPTH = 1000;
 
+// Handed to every row that is NOT renaming, so those rows get a stable array
+// identity instead of a fresh `[]` per render (TreeRow is a plain function
+// component today, but handing out throwaway arrays is exactly what makes it
+// unmemoizable later). Never mutated — siblingLabelsFor builds a new array.
+const NO_SIBLINGS: readonly string[] = [];
+
 // Structural thenable check, duplicated from flatten.ts rather than imported: that
 // file exports no such helper (it's a private implementation detail there), and
 // this task's scope is Tree.tsx/TreeRow.tsx only — not editing an already-shipped,
@@ -94,17 +100,17 @@ function findNode<T>(adapter: TreeAdapter<T>, id: string): T | undefined {
 }
 
 // Whether a keydown's real DOM target is a live text-editing control — today
-// that means a row's inline rename <input> (EditableName.tsx), the only
+// that means a row's inline rename <input> (RenameInput.tsx), the only
 // in-row focusable text control that exists yet — rather than the row/
 // container surface itself. handleKeyDown below bails out on this rather than
-// on `renamingId`: EditableName's own onKeyDown calls preventDefault() for
+// on `renamingId`: RenameInput's own onKeyDown calls preventDefault() for
 // Enter/Escape but never stopPropagation(), so every OTHER key typed while
 // renaming (Space, Delete, arrows, Home/End, F2, a non-mac Enter, …) bubbles
 // straight up through TreeRow's div (which has no onKeyDown of its own) to
 // this container's listener and gets reinterpreted by keyToIntent — exactly
 // the collision handleRowClick's `row.id === renamingId` guard prevents for
 // clicks. A target check catches it more robustly than mirroring that same
-// renamingId check would: React batches the state updates EditableName's own
+// renamingId check would: React batches the state updates RenameInput's own
 // handler queues (committing the rename, clearing renaming state) until after
 // this whole synchronous dispatch finishes, so `renamingId` here would often
 // still read as the OLD value anyway — but relying on that timing to be right
@@ -152,9 +158,8 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     onOpen,
     onDelete,
     onContextMenu,
-    onRenamingChange,
+    onRenameCommit,
     activeId = null,
-    renamingId = null,
     indent = 8,
     rowHeight = 22,
   } = props;
@@ -174,6 +179,20 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     anchor,
     setAnchor,
   } = useTreeState(props);
+
+  // Which row, if any, is mid-rename — INTERNAL state as of T4b. Through T0/T1
+  // this was a pair of bridge props (`renamingId` / `onRenamingChange`, both
+  // deleted from TreeProps), because the HOST rendered the edit box and so had to
+  // own "which row". The component renders it now (TreeRow -> RenameInput), so
+  // there is nothing left for a host to track: it hears about a rename exactly
+  // once, as onRenameCommit. Deliberately NOT routed through useTreeState's
+  // controlled/uncontrolled seam like expanded/selection/focused — those three
+  // are controlled because grpcview persists them in zustand across renders and
+  // the plan requires it (enduring decision 5); a half-finished rename is
+  // ephemeral by nature, and no consumer has asked to drive or read it (plan
+  // §Risks, "Over-fitting": name the consumer that wants it). The host's own
+  // pencil reaches it through TreeHandle.startRename instead.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
 
   // Container ref: the starting point for finding the real scrollport that
   // measures PageUp/PageDown's rowsPerPage (no hardcoded viewport assumption —
@@ -253,6 +272,18 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
       // adds one, for the promise-returning getChildren path). A real, callable
       // method now means call sites don't need to change when T8 wires it up.
     },
+    startRename(id) {
+      // Gated on `flat`, not on reveal()'s findNode walk: the requirement is "an
+      // id that names a CURRENT ROW", and flat.indexById is literally that.
+      // reveal() has to walk the whole adapter instead because its whole job is
+      // reaching a node hidden behind a collapsed ancestor — the opposite of this
+      // method's, which has nowhere to render an input unless a row already
+      // exists. Refusing here is what keeps a stale id (e.g. one the filter box
+      // has since hidden) from leaving the tree in a rename with no visible box
+      // to commit or escape from.
+      if (!flat.indexById.has(id)) return;
+      setRenamingId(id);
+    },
   }));
 
   // Moves the roving cursor to `id`, scrolling it into view only when the
@@ -288,6 +319,20 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   // `flat` — which every call site already has to filter out; that defensive
   // filter is unchanged by this extraction, only de-duplicated.
   const nodeFor = (id: string): T | undefined => flat.rows[flat.indexById.get(id) ?? -1]?.node;
+
+  // The collision set the rename box validates against (T4b): the labels of this
+  // row's other VISIBLE siblings — the same "set" aria-posinset/aria-setsize
+  // already mean (TreeRowModel, types.ts), i.e. the rows sharing its parentId in
+  // THIS flat pass, never every child getChildren() could return. Read through
+  // adapter.getTreeItem(...).label for both tiers; see TreeRow.tsx's own comment
+  // for why reading only `.label` off a rich adapter is a deliberate exception.
+  // Computed only for the row actually renaming (below) — one filter+map over the
+  // flat array per keystroke of the whole tree would be waste, and the box needs
+  // this list exactly once, when it mounts.
+  const siblingLabelsFor = (row: TreeRowModel<T>): string[] =>
+    flat.rows
+      .filter((r) => r.parentId === row.parentId && r.id !== row.id)
+      .map((r) => adapter.getTreeItem(r.node).label);
 
   // Applies a list of TreeAction (dispatch.ts's shared currency for BOTH
   // applyIntent, the keyboard decision, and applyRowClick, the mouse decision
@@ -343,7 +388,12 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           break;
         }
         case "requestRename":
-          onRenamingChange?.(action.id);
+          // T4b: lands in this component's own state instead of being forwarded
+          // to a host callback. dispatch.ts already guarantees the id names a row
+          // in the CURRENT flat pass (applyIntent re-validates ctx.focused
+          // against `flat` before emitting), so there is no equivalent of
+          // startRename's own membership check to repeat here.
+          setRenamingId(action.id);
           break;
         case "delete": {
           const nodes = action.ids.map(nodeFor).filter((n): n is T => n !== undefined);
@@ -382,9 +432,11 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     // simply being swallowed, since the row isn't an ordinary selectable item
     // again until the rename resolves. Mirrors the pre-rewrite TreeView.tsx's
     // per-row `editing ? undefined : ...` guard, which this component has to
-    // reproduce explicitly now that rename state isn't a per-row useState the
-    // row's own onClick prop could just close over (see renamingId's contract
-    // comment in types.ts). Checked BEFORE building an intent or calling into
+    // reproduce explicitly because rename state is not a per-row useState the
+    // row's own onClick prop could close over. Strictly MORE reliable as of T4b
+    // than it was through T0/T1: `renamingId` is this component's own state now,
+    // not a value round-tripped through a host that could hand back a stale one.
+    // Checked BEFORE building an intent or calling into
     // dispatch.ts at all — the same "bail before doing anything else" shape
     // handleKeyDown's own isEditableTarget guard uses, and a hard constraint
     // of this phase (preserve T1's guards) that this one predates but must
@@ -491,7 +543,7 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   // exactly one switch in this file translating a TreeAction into a real
   // state change, not one per input modality.
   const handleKeyDown = (ev: React.KeyboardEvent<HTMLDivElement>): void => {
-    // A live text control inside a row (today: EditableName's rename <input>)
+    // A live text control inside a row (today: RenameInput's <input>)
     // must handle its own keystrokes untouched — see isEditableTarget's
     // comment above for why this, not a renamingId check, is the guard.
     if (isEditableTarget(ev.target as HTMLElement)) return;
@@ -575,6 +627,18 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           focused={focused === row.id}
           active={row.id === activeId}
           renaming={row.id === renamingId}
+          renameSiblings={row.id === renamingId ? siblingLabelsFor(row) : NO_SIBLINGS}
+          // Leaving rename mode is THIS component's job in both directions —
+          // RenameInput never assumes its caller did (see its own comment) — so
+          // both callbacks clear the state and only the commit path continues on
+          // to the host. Clearing FIRST also means a host that synchronously
+          // re-renders us from inside onRenameCommit (a mutation's optimistic
+          // cache write, say) can't find the row still in rename mode.
+          onRenameCommit={(next) => {
+            setRenamingId(null);
+            onRenameCommit?.(row.node, next);
+          }}
+          onRenameCancel={() => setRenamingId(null)}
           indent={indent}
           rowHeight={rowHeight}
           onRowClick={(ev) => handleRowClick(row, ev)}

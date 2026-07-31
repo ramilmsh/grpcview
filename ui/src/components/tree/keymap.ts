@@ -252,9 +252,9 @@ export function keyToIntent(stroke: KeyStroke, isMac: boolean): TreeIntent | nul
       // as every other bare-key row in this switch. Per the plan's key
       // table, Escape also cancels typeahead and cancels rename — this
       // intent deliberately covers NEITHER of those:
-      //   - rename-cancel needs no intent at all: EditableName's own <input>
-      //     already handles its own Escape keydown (components/ui/
-      //     EditableName.tsx: "Enter/blur commit; Escape cancels"), and T1's
+      //   - rename-cancel needs no intent at all: the tree's own rename box
+      //     handles its own Escape keydown (components/tree/RenameInput.tsx,
+      //     T4b — through T0/T1 this was EditableName's box), and T1's
       //     isEditableTarget guard — Tree.tsx's handleKeyDown bails out on it
       //     BEFORE building any intent, see this file's own header and the
       //     hard-constraint this phase was told to preserve — means a
@@ -275,9 +275,10 @@ export function keyToIntent(stroke: KeyStroke, isMac: boolean): TreeIntent | nul
       // leaving the key untouched (no preventDefault) otherwise — replicating
       // that no-op-when-empty conditionality is the CONSUMER's job (a later
       // phase's dispatch, once it has real selection state to check), the
-      // same way "renaming a folder is a no-op until T4a" is a consumer-side
+      // same way "is the focused row even renamable" is a consumer-side
       // decision even though F2 unconditionally produces a rename intent
-      // here regardless of what row is focused.
+      // here regardless of what row is focused. (As of T4a/T4b that consumer
+      // no longer refuses anything: folders rename too.)
       return { kind: "clearSelection" };
     case "Enter":
       // The one intent that differs by platform — see the file header's "THE

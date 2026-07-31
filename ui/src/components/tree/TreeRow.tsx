@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { CaretDown, CaretRight } from "@/components/ui/icons";
 import type { TreeAdapter, TreeProps, TreeRowModel, TreeRowState } from "./types";
 import { TreeIcon } from "./icon-map";
+import { RenameInput } from "./RenameInput";
 
 // The row SHELL: indent guides, the twistie, and (T6b) the drop indicator. Content
 // is the caller's choice of tier (plan §"Second consumer", "one provider, two
@@ -30,10 +31,15 @@ interface TreeRowProps<T> {
   selected: boolean;
   focused: boolean;
   active: boolean;
-  // Driven by Tree's renamingId prop (types.ts) — real from T0, since it doubles
-  // as the click-guard for the pencil rename that already exists, not a future
-  // T4b-only concern. dropTarget below is the one still-honest T0 constant.
+  // Driven by Tree.tsx's own internal renaming state (T4b — it was a bridge PROP
+  // through T0/T1, and folding it inward is what let the tree take over the edit
+  // UI). dropTarget below is the one still-honest T0 constant.
   renaming: boolean;
+  // Only meaningful while `renaming`. Computed by Tree.tsx, which is the only
+  // place that holds the whole flat pass this row's siblings live in.
+  renameSiblings: readonly string[];
+  onRenameCommit: (next: string) => void;
+  onRenameCancel: () => void;
   indent: number;
   rowHeight: number;
   // T2: Tree.tsx's handleRowClick reads modifier keys off the real event
@@ -55,6 +61,9 @@ export function TreeRow<T>({
   focused,
   active,
   renaming,
+  renameSiblings,
+  onRenameCommit,
+  onRenameCancel,
   indent,
   rowHeight,
   onRowClick,
@@ -75,15 +84,43 @@ export function TreeRow<T>({
     dropTarget: null,
   };
 
-  // getTreeItem() is the PORTABLE tier's data source — called only when there is no
-  // renderRow. A rich adapter's getTreeItem still has to exist to satisfy
-  // TreeAdapter<T> (it isn't optional), but renderRow overrides it per the
+  // getTreeItem() is the PORTABLE tier's data source — called for CONTENT only
+  // when there is no renderRow. A rich adapter's getTreeItem still has to exist to
+  // satisfy TreeAdapter<T> (it isn't optional), but renderRow overrides it per the
   // contract, so a rich adapter is never required to make it MEAN anything.
-  // Calling it unconditionally here would reach into data such an adapter never
-  // promised to supply.
+  // Calling it unconditionally for content would reach into data such an adapter
+  // never promised to supply.
+  //
+  // ONE NARROW EXCEPTION (T4b): the rename branch below reads `.label` off it for
+  // EVERY tier, rich included. That is the deliberate call recorded in plan
+  // §"What T4b settled" — a label is the one field of TreeItemLike that cannot be
+  // meaningless (getTypeaheadLabel would be the only alternative, and it is
+  // documented as a SEARCH key, not a display name), so it is the tree's only
+  // adapter-independent answer to "what text is this row's name". request-tree.tsx
+  // returns the display name there, which is exactly what a rename edits.
   let content: ReactNode;
   let tooltip: string | undefined;
-  if (renderRow) {
+  if (renaming) {
+    // The input replaces the WHOLE row content — both tiers, renderRow included,
+    // which is why this branch is checked first. Deliberate, minor deviation from
+    // VS Code (plan §"Deliberate deviations from VS Code" #5), which keeps the
+    // file icon beside its edit box: our rich request rows show a MethodKindTag
+    // (U, S←, B⇄) where VS Code shows a file icon, and swapping that tag for the
+    // portable tier's generic "file" icon mid-edit would be a stranger visual
+    // substitution than simply yielding the row to the input. The row SHELL —
+    // indent guides and the twistie column, below — still renders: that chrome is
+    // the tree's own, not the content's, and dropping it would make the edited row
+    // jump out of the staircase every other row is aligned to.
+    content = (
+      <RenameInput
+        current={adapter.getTreeItem(row.node).label}
+        siblings={renameSiblings}
+        onCommit={onRenameCommit}
+        onCancel={onRenameCancel}
+        ariaLabel="New name"
+      />
+    );
+  } else if (renderRow) {
     content = renderRow(row.node, state);
   } else {
     const item = adapter.getTreeItem(row.node);

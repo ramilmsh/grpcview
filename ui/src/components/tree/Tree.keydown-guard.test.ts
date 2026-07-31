@@ -3,7 +3,7 @@ import { isEditableTarget } from "./Tree";
 
 // isEditableTarget is the guard handleKeyDown uses to bail out before ever
 // building an intent (Tree.tsx, right above `export function Tree`): a row's
-// inline rename <input> (EditableName.tsx) is a DOM descendant of `.tree` and
+// inline rename <input> (RenameInput.tsx) is a DOM descendant of `.tree` and
 // never calls stopPropagation() on its own onKeyDown, so every keystroke typed
 // while renaming would otherwise bubble up and get reinterpreted by
 // keyToIntent — dropping the space in a two-word rename, popping the delete
@@ -13,7 +13,7 @@ import { isEditableTarget } from "./Tree";
 // `node` environment (vitest.config.ts) with no jsdom — see that config's own
 // header comment for why the test suite is deliberately DOM-free.
 describe("isEditableTarget", () => {
-  it("is true for an <input> — today's only in-row example (EditableName's rename box)", () => {
+  it("is true for an <input> — today's only in-row example (the tree's own rename box)", () => {
     expect(isEditableTarget({ tagName: "INPUT" })).toBe(true);
   });
 

@@ -133,7 +133,7 @@ describe("pruneNestedSelections", () => {
     // Ancestry alone never catches these: isStrictPrefix requires the prefix to
     // be strictly shorter, so an entry is not its own ancestor and two equal
     // entries each leave the other standing. Reachable via ui-store's
-    // renameItem, which remaps treeSelection id-for-id — renaming one selected
+    // moveSubtree, which remaps treeSelection id-for-id — renaming one selected
     // row onto a name another selected row already has puts the same id in the
     // list twice, and both copies resolve to the one surviving row.
     expect(pruneNestedSelections([getUser, getUser])).toEqual([getUser]);

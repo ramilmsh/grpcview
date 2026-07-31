@@ -66,13 +66,23 @@
   -webkit-user-select: none;
   user-select: none;
 }
-/* ...except the row's own inline rename box (EditableName.tsx), which IS a text
-   field: double-click-to-select-a-word, drag-select, and select-all inside it
-   must all keep working. `auto`, not `text`, so the input keeps whatever its UA
-   default is. */
+/* ...except the row's own inline rename box (components/tree/RenameInput.tsx),
+   which IS a text field: double-click-to-select-a-word, drag-select, and
+   select-all inside it must all keep working. `auto`, not `text`, so the input
+   keeps whatever its UA default is. */
 .treerow input {
   -webkit-user-select: auto;
   user-select: auto;
+}
+/* A rename whose value collides with one of the row's VISIBLE siblings (T4b).
+   Enter is refused and the box stays open, so this ring plus that refusal is the
+   whole affordance — deliberately no tooltip and no error popover at this phase.
+   An INSET ring rather than a border or outline: a border would change the
+   input's box size and shift the label under the caret mid-keystroke, and an
+   outline would be drawn outside the row's own 6px radius. */
+.treerow input.rename-invalid {
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--err);
 }
 .treerow:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
 .treerow.on { background: var(--color-accent-900); color: var(--color-text); }

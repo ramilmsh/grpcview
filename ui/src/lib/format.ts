@@ -50,7 +50,7 @@ export const keyOf = (path: string[], name: string): string =>
 // itemKey is the (name-derived) identity of an item within the tree (parent path
 // + name), used to key open tabs and per-request invocation state so a response
 // survives navigating away and back. NOTE: because it is name-derived, a rename
-// changes the key — callers must remap keyed state (see ui-store renameItem).
+// changes the key — callers must remap keyed state (see ui-store moveSubtree).
 export const itemKey = (item: ItemWithPath): string =>
   keyOf(item.path, item.item.name);
 
@@ -123,7 +123,7 @@ const isStrictPrefix = (prefix: string[], full: string[]): boolean =>
 // Ancestry alone does not cover them: isStrictPrefix requires the prefix to be
 // strictly SHORTER (an item is not its own ancestor), so two entries naming the
 // identical path each fail to prune the other and BOTH survive. That is
-// reachable, not theoretical — ui-store.ts's renameItem remaps `treeSelection`
+// reachable, not theoretical — ui-store.ts's moveSubtree remaps `treeSelection`
 // by substituting one id for another (`s.treeSelection.map(...)`), so renaming
 // a selected row onto the name of a DIFFERENT selected sibling ("Calls/bar" ->
 // "Calls/foo" while "Calls/foo" is also selected) leaves the same id in the

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Tree } from "@/components/tree/Tree";
+import { TreeRow } from "@/components/tree/TreeRow";
+import { flatten } from "@/components/tree/flatten";
 import type { TreeRowState } from "@/components/tree/types";
 import type { Item, Service } from "@grpcview/v1/workspace_pb";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
@@ -84,9 +86,7 @@ const adapter = requestTreeAdapter(roots);
 
 const noopCallbacks: RequestRowCallbacks = {
   services,
-  renamingKey: null,
-  onRenamingChange: () => {},
-  onRename: () => {},
+  onStartRename: () => {},
   onNewRequestUnder: () => {},
   onDelete: () => {},
   onEditMetadata: () => {},
@@ -94,7 +94,7 @@ const noopCallbacks: RequestRowCallbacks = {
 
 // renderRequestRow needs the callbacks bag threaded through Tree's renderRow
 // prop (this is exactly what CollectionPanel.tsx's own `renderRow` closure
-// does) — a small factory so each test can override just renamingKey.
+// does) — a small factory so a test can substitute a different bag.
 const rowRendererWith =
   (cb: RequestRowCallbacks) =>
   (item: ItemWithPath, state: TreeRowState) =>
@@ -264,7 +264,7 @@ describe("request tree rows: direct-child CSS contract", () => {
 });
 
 describe("request tree rows: folder row", () => {
-  it("renders its child count, and its gear/plus/trash buttons by title", () => {
+  it("renders its child count, and its gear/plus/pencil/trash buttons by title", () => {
     const markup = renderToStaticMarkup(
       <Tree
         adapter={adapter}
@@ -283,7 +283,10 @@ describe("request tree rows: folder row", () => {
 
     for (const row of [rowCalls, rowAdmin]) {
       const titles = findAll(row.children, (n) => n.tag === "button").map((b) => b.attrs.title);
-      expect(titles).toEqual(["Folder metadata", "Add request", "Delete folder"]);
+      // "Rename folder" is T4b's addition, in the request row's ordering habit —
+      // pencil immediately before the trash. Folders became renamable at T4a
+      // (UpdateFolderRequest.name); before that this row had no pencil at all.
+      expect(titles).toEqual(["Folder metadata", "Add request", "Rename folder", "Delete folder"]);
     }
   });
 });
@@ -314,6 +317,12 @@ describe("request tree rows: request row", () => {
 
       const titles = findAll(row.children, (n) => n.tag === "button").map((b) => b.attrs.title);
       expect(titles).toEqual(["Rename request", "Delete request"]);
+
+      // The name is a plain <span> as of T4b — no EditableName, and therefore no
+      // <input> anywhere in a row that isn't renaming. The tree renders the rename
+      // box itself now (components/tree/RenameInput.tsx), so a row content renderer
+      // holding edit state of its own would be a second, competing rename UI.
+      expect(findAll(row.children, (n) => n.tag === "input")).toHaveLength(0);
     }
   });
 });
@@ -379,28 +388,82 @@ describe("request tree rows: indent guides", () => {
   });
 });
 
-describe("request tree rows: renaming", () => {
-  it("shows an <input> instead of the plain name, and keeps rendering its buttons", () => {
-    const key = "Calls/SayHello";
-    const markup = renderToStaticMarkup(
-      <Tree
-        adapter={adapter}
-        renderRow={rowRendererWith({ ...noopCallbacks, renamingKey: key })}
-        expanded={FULLY_EXPANDED}
-        renamingId={key}
-        aria-label="Test tree"
-      />
-    );
-    const [, , rowSayHello] = rowsOf(markup);
+// T4b: "which row is renaming" is the tree's own INTERNAL state, so there is no
+// prop for a server render to set it with — a <Tree> rendered by
+// renderToStaticMarkup always starts with nothing renaming. TreeRow is therefore
+// driven directly here, which is also the honest level for these assertions: what
+// is being pinned is that the tree's rename box wins over a RICH renderRow (this
+// module's), which is TreeRow's decision, not Tree's.
+describe("request tree rows: renaming replaces the row content entirely", () => {
+  const flat = flatten(adapter, FULLY_EXPANDED);
+  const rowModel = (id: string) => flat.rows[flat.indexById.get(id) ?? -1];
 
-    expect(findAll(rowSayHello.children, (n) => n.tag === "input")).toHaveLength(1);
-    expect(rowSayHello.children.some((c) => c.text === "SayHello")).toBe(false);
+  const renamingMarkup = (id: string): PNode =>
+    rowsOf(
+      renderToStaticMarkup(
+        <TreeRow
+          row={rowModel(id)}
+          domId="test-row"
+          rowRef={() => {}}
+          adapter={adapter}
+          renderRow={rowRendererWith(noopCallbacks)}
+          selected={false}
+          focused={false}
+          active={false}
+          renaming
+          renameSiblings={[]}
+          onRenameCommit={() => {}}
+          onRenameCancel={() => {}}
+          indent={8}
+          rowHeight={22}
+          onRowClick={() => {}}
+          onTwistieClick={() => {}}
+          onContextMenu={() => {}}
+        />
+      )
+    )[0];
 
-    // Buttons are unconditional in renderRequestRow today (EditableName swaps
-    // only the name itself) — pinning that they SURVIVE a rename, not just
-    // that the input appears.
-    const titles = findAll(rowSayHello.children, (n) => n.tag === "button").map((b) => b.attrs.title);
-    expect(titles).toEqual(["Rename request", "Delete request"]);
+  it("swaps a request row's whole content for the input — tag, name and buttons all yield", () => {
+    const row = renamingMarkup("Calls/SayHello");
+
+    expect(findAll(row.children, (n) => n.tag === "input")).toHaveLength(1);
+    expect(row.children.some((c) => c.text === "SayHello")).toBe(false);
+    // The deliberate deviation from VS Code (plan §"Deliberate deviations" #5):
+    // VS Code keeps the file icon beside its edit box, we yield the whole row. So
+    // unlike the pre-T4b EditableName arrangement — which swapped only the name and
+    // left the buttons up — the MethodKindTag and BOTH row buttons are gone while
+    // the box is open.
+    expect(findAll(row.children, (n) => n.tag === "button")).toHaveLength(0);
+    expect(row.children.some((c) => hasClass(c, "mtag"))).toBe(false);
+    expect(row.children.some((c) => hasClass(c, "rowbtns"))).toBe(false);
+  });
+
+  it("keeps the row SHELL — indent guides and the twistie column — around the input", () => {
+    // The shell is the tree's own chrome, not the content's: dropping it would make
+    // the edited row jump out of the indent staircase every other row aligns to.
+    // Calls/Admin is a depth-1 EXPANDABLE row, so it proves both halves at once
+    // (one guide, plus a twistie that still draws its caret).
+    const row = renamingMarkup("Calls/Admin");
+    expect(row.children.filter((c) => hasClass(c, "guide"))).toHaveLength(1);
+    const twistie = row.children.find((c) => hasClass(c, "twistie"));
+    expect(twistie).toBeDefined();
+    expect(findAll([twistie as PNode], (n) => n.tag === "svg")).toHaveLength(1);
+    expect(findAll(row.children, (n) => n.tag === "input")).toHaveLength(1);
+  });
+
+  it("seeds the input from adapter.getTreeItem().label, even for this RICH adapter", () => {
+    // The narrow deliberate exception recorded in TreeRow.tsx and plan §"What T4b
+    // settled" #2: a rich adapter's getTreeItem is not what renders its rows, but
+    // `.label` is still the tree's only adapter-independent answer to "what text is
+    // this row's name" — and request-tree.tsx returns the display name there.
+    const row = renamingMarkup("Calls/SayHello");
+    const input = findAll(row.children, (n) => n.tag === "input")[0];
+    expect(input.attrs.value).toBe("SayHello");
+    expect(adapter.getTreeItem(rowModel("Calls/SayHello").node).label).toBe("SayHello");
+    // Not invalid on open: the sibling list excludes the renamed row itself, so a
+    // freshly opened box can never already be colliding.
+    expect(input.attrs["aria-invalid"]).toBeUndefined();
+    expect(input.classes).not.toContain("rename-invalid");
   });
 });
 

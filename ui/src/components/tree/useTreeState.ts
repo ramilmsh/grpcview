@@ -61,7 +61,7 @@ export function useTreeState<T>(props: TreeProps<T>): TreeState<T> {
   //
   // RENAME SURVIVAL (checked explicitly, T2): unlike selection/focused/expanded,
   // this state has NO rekeying path at all when a row's id changes out from
-  // under it — ui-store.ts's renameItem remaps treeSelection/treeFocused/
+  // under it — ui-store.ts's moveSubtree remaps treeSelection/treeFocused/
   // treeExpanded (all controlled, all store-owned), but the anchor is neither
   // controlled nor store-owned, so a rename leaves it holding the OLD
   // (now-nonexistent) id with nothing to notice or fix it. Deliberately NOT
@@ -163,6 +163,14 @@ export function useTreeState<T>(props: TreeProps<T>): TreeState<T> {
     // and later RECREATED with the same name at the same path is the literal same
     // id — so it is born collapsed rather than expanded like every other new folder.
     // One click fixes it.
+    //
+    // T4b adds a second face of the SAME limitation, now that folders can be
+    // renamed: a rename changes the id of the folder and of every descendant
+    // folder, so any of them the user had manually COLLAPSED is unknown to
+    // seenDefaults under its new id, and resolveExpansion (flatten.ts — it filters
+    // defaultExpanded by `seen` alone) force-expands it exactly once. Net effect:
+    // rename a folder, and collapsed folders inside it spring back open one time.
+    // Also one click each, same cause, same clean fix below.
     //
     // A reconciliation pass (walk the adapter, forget ids that no longer exist) was
     // built and then reverted, because it cost far more than the bug: it needed the

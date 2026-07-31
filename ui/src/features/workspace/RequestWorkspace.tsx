@@ -49,7 +49,7 @@ export function RequestWorkspace() {
   const endStream = useUIStore((s) => s.endStream);
   const stopStream = useUIStore((s) => s.stopStream);
   const failStream = useUIStore((s) => s.failStream);
-  const renameItem = useUIStore((s) => s.renameItem);
+  const moveSubtree = useUIStore((s) => s.moveSubtree);
   // message-shape-visibility plan §Feature 2: local open/close state for the read-only
   // request/response TS types viewer (TypesModal) — no server/draft state involved.
   const [typesOpen, setTypesOpen] = useState(false);
@@ -235,7 +235,10 @@ export function RequestWorkspace() {
     if (!next || next === itemName) return;
     updateRequest.mutate(
       { workspaceName: WORKSPACE_NAME, path, itemName, name: next },
-      { onSuccess: () => renameItem(key, keyOf(path, next), next) }
+      // moveSubtree, not a single-key remap: a REQUEST has no descendants, so the
+      // prefix half is inert here — this is simply the one function that owns the
+      // remap now (ui-store.ts; it replaced renameItem at T4b).
+      { onSuccess: () => moveSubtree(key, keyOf(path, next), next) }
     );
   };
 

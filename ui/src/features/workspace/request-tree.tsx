@@ -2,7 +2,6 @@ import { useMemo, type ReactNode } from "react";
 import { Folder, Gear, PencilSimple, Plus, Trash } from "@/components/ui/icons";
 import type { Service } from "@grpcview/v1/workspace_pb";
 import type { TreeAdapter, TreeRowState } from "@/components/tree/types";
-import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { itemKey, methodKind, resolveMethod, type ItemWithPath } from "@/lib/format";
 
@@ -75,12 +74,13 @@ export function useRequestTreeAdapter(roots: ItemWithPath[]): TreeAdapter<ItemWi
 export interface RequestRowCallbacks {
   // Resolves a request row's method-kind tag; folder rows never read this.
   services: Service[];
-  // Single "one row renames at a time" key (T4b is full F2/keyboard rename; T0
-  // keeps only today's pencil -> EditableName behavior working). Lives in
-  // CollectionPanel, not per-row state, since only one row can be mid-rename.
-  renamingKey: string | null;
-  onRenamingChange: (key: string | null) => void;
-  onRename: (item: ItemWithPath, next: string) => void;
+  // The pencil button's whole job as of T4b: ASK the tree to start renaming this
+  // row (CollectionPanel routes it to TreeHandle.startRename). There is no
+  // renamingKey/onRenamingChange/onRename trio any more — the tree owns the edit
+  // box, the validation and the commit, so a row renderer never renders name-edit
+  // UI of its own and never hears about the committed value. Both row kinds get
+  // one: folders became renamable at T4a.
+  onStartRename: (item: ItemWithPath) => void;
   onNewRequestUnder: (folder: ItemWithPath) => void;
   onDelete: (item: ItemWithPath) => void;
   onEditMetadata: (folder: ItemWithPath) => void;
@@ -129,41 +129,51 @@ export function renderRequestRow(
           >
             <Plus size={13} />
           </button>
+          {/* Renamable as of T4a (UpdateFolderRequest.name). Placed immediately
+              before the trash, matching the request row's ordering habit below. */}
+          <RowRenameButton title="Rename folder" onStartRename={() => cb.onStartRename(item)} />
           <RowDeleteButton title="Delete folder" onDelete={() => cb.onDelete(item)} />
         </span>
       </>
     );
   }
 
-  const key = itemKey(item);
-  const editing = cb.renamingKey === key;
   const request = item.item.content.case === "request" ? item.item.content.value : undefined;
   const kind = methodKind(resolveMethod(cb.services, request?.service ?? "", request?.method ?? ""));
   return (
     <>
       <MethodKindTag kind={kind} />
-      <EditableName
-        value={item.item.name}
-        editing={editing}
-        onEditingChange={(next) => cb.onRenamingChange(next ? key : null)}
-        onCommit={(next) => cb.onRename(item, next)}
-        ariaLabel="Request name"
-        style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-      />
+      {/* A plain span, not EditableName: the tree renders the rename box itself
+          (components/tree/RenameInput.tsx) and swaps out this whole row content
+          while it does, so a row renderer has no edit state left to hold. Same
+          ellipsis styling as the folder row's label above. */}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.item.name}
+      </span>
       <span className="rowbtns">
-        <button
-          className="rowbtn"
-          title="Rename request"
-          onClick={(e) => {
-            e.stopPropagation();
-            cb.onRenamingChange(key);
-          }}
-        >
-          <PencilSimple size={13} />
-        </button>
+        <RowRenameButton title="Rename request" onStartRename={() => cb.onStartRename(item)} />
         <RowDeleteButton title="Delete request" onDelete={() => cb.onDelete(item)} />
       </span>
     </>
+  );
+}
+
+// The row's hover-revealed rename affordance, shared by both row kinds (T4b).
+// Swallows the click for the same reason RowDeleteButton does: without it the
+// click also selects/opens/toggles the row underneath — and for a folder that
+// would collapse the very row about to be renamed.
+function RowRenameButton({ title, onStartRename }: { title: string; onStartRename: () => void }) {
+  return (
+    <button
+      className="rowbtn"
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        onStartRename();
+      }}
+    >
+      <PencilSimple size={13} />
+    </button>
   );
 }
 

@@ -65,6 +65,16 @@ export type IconToken =
 export interface TreeHandle<T> {
   reveal(id: string, opts?: { select?: boolean; focus?: boolean; expand?: boolean }): void;
   invalidate(node?: T): void;   // onDidChangeTreeData equivalent; no-op while sync
+  // T4b: put a row into rename mode from OUTSIDE the tree — the host's own
+  // pencil affordance (CollectionPanel's row buttons), which used to set the
+  // renamingId prop that T4b deleted. It belongs on the handle rather than
+  // coming back as a prop because "which row is mid-rename" is now internal
+  // state the component owns end to end (it renders the box, validates, and
+  // commits), and STARTING one is an action, not a value the host holds —
+  // exactly what this interface is for. No-op for an id that names no current
+  // row: with no row to host it, an input has nowhere to render and the tree
+  // would be stuck in a rename the user can neither see nor escape.
+  startRename(id: string): void;
 }
 
 export interface TreeRowState {
@@ -77,6 +87,12 @@ export interface TreeRowState {
   active: boolean;
   expanded: boolean;
   depth: number;
+  // True for the row the component is currently renaming (T4b: internal state,
+  // set by F2/macOS-Enter or TreeHandle.startRename). A rich renderRow rarely
+  // needs it — TreeRow.tsx swaps the WHOLE row content for the rename input
+  // before renderRow is ever called (see that file, and plan §"Deliberate
+  // deviations from VS Code" #5) — but it stays on the state object so a
+  // renderer that DOES want to vary its own look can.
   renaming: boolean;
   dropTarget: "into" | "before" | "after" | null;
 }
@@ -103,38 +119,22 @@ export interface TreeProps<T> {
   // the tree neither owns nor changes it.
   activeId?: string | null;
 
-  // T0 BRIDGE, not part of the enduring contract above (same shape as activeId —
-  // plain input, no onChange — and same reason): which row, if any, is mid-rename.
-  // Full F2/keyboard rename is T4b, but the host's EXISTING rename affordance
-  // (today: CollectionPanel's pencil -> EditableName, one row at a time) already
-  // exists and must keep working, which is what T0 preserves. Without this, the
-  // tree can't reproduce the pre-rewrite TreeView.tsx's row-level
-  // `onClick={editing ? undefined : ...}` guard: EditableName's <input> only
-  // stops propagation for clicks on itself, so anything else in the row (e.g. a
-  // MethodKindTag, plain content with no handler of its own) would otherwise
-  // select/focus/open the row out from under an in-progress rename. Feeds both
-  // TreeRowState.renaming (for a rich renderRow that wants to vary its own look)
-  // and the click guard itself (Tree.tsx's handleRowClick). The component does
-  // not yet own the edit UI (onRenameCommit below says the CALLER does) — so the
-  // caller is also the one tracking "which row", and hands it back in here; once
-  // T4b lands and the component takes over rename, this prop disappears and folds
-  // into internal state.
-  renamingId?: string | null;
-
-  // T1's half of the renamingId bridge: how a rename gets REQUESTED in the first
-  // place from the keyboard (F2, or Enter on macOS — keymap.ts's "rename"
-  // intent), now that there's no per-row useState/onClick for Tree.tsx's
-  // handleKeyDown to reach into. Same shape as renamingId itself (plain input
-  // there, plain output here — no round trip through internal state), and the
-  // same T0/T4b bridge: the HOST still owns "which row, if any" and decides
-  // whether a given id is even renamable (e.g. CollectionPanel says no for a
-  // folder row today, since UpdateFolderRequest has no name field yet — T4a).
-  // Once T4b lands and the component owns the edit UI outright, this and
-  // renamingId both fold into internal state and disappear together.
-  onRenamingChange?(id: string | null): void;
+  // T0's `renamingId` and T1's `onRenamingChange` bridge props are GONE (T4b):
+  // both existed only because the HOST owned the edit UI and therefore had to
+  // own "which row is mid-rename" too. The component owns it now — internal
+  // state in Tree.tsx, set by the keyboard's rename intent or by
+  // TreeHandle.startRename above, rendered by TreeRow/RenameInput, and reported
+  // to the host exactly once, as onRenameCommit below.
 
   onOpen?(node: T): void;                       // Enter / click on a leaf
-  onRenameCommit?(node: T, next: string): void;  // component owns the edit UI
+  // The component owns the edit UI (T4b: TreeRow swaps the row content for
+  // RenameInput, validates against the row's visible siblings, commits on
+  // Enter/blur and cancels on Escape) — so this fires only for a value that is
+  // non-blank, actually changed, and free of a visible-sibling collision. The
+  // host's job is purely to PERSIST it; the server remains the correctness
+  // boundary for collisions (the in-tree check is a UX affordance, and cannot
+  // see anything a filter box has hidden).
+  onRenameCommit?(node: T, next: string): void;
   onDelete?(nodes: T[]): void;                   // Delete key; host confirms
   onMove?(nodes: T[], to: { parent: T | null; before?: T }): void;
   onContextMenu?(nodes: T[], ev: React.MouseEvent): void;

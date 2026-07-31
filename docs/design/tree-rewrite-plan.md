@@ -171,7 +171,9 @@ the way `TreeView.tsx` did:
   old tree disabled a row's whole click handler while that row was being renamed
   (`onClick={editing ? undefined : …}`), and losing that guard meant a click on a renaming
   row committed the rename *and* opened the request. This one is a **T0 bridge**: at T4b the
-  component owns the edit UI, and it becomes internal state rather than a prop.
+  component owns the edit UI, and it becomes internal state rather than a prop. *(Done — both
+  it and `onRenamingChange` are deleted from `TreeProps`; `TreeHandle.startRename` is how the
+  host's pencil gets in now.)*
 
 Anything further has to clear the bar in §Risks ("Over-fitting"): name the consumer that
 wants it. A third addition (`liveAdapter`, an unfiltered adapter for expansion bookkeeping)
@@ -349,6 +351,15 @@ the viewport edges; reject drops into a dragged node's own descendant.
    filesystem dirs, and compression materially complicates rename and drop targeting
    (which segment of a compressed row is the target?). Implemented as a flag so it can be
    flipped after seeing it on real data.
+5. **The rename box replaces the whole row content** (T4b). VS Code keeps the file icon
+   visible beside its edit box; we yield the entire content area to the input, keeping only
+   the row *shell* (indent guides, twistie column). Our rich request rows show a
+   `MethodKindTag` (`U`, `S←`, `B⇄`) where VS Code shows a file icon, and swapping that tag
+   for the portable tier's generic `"file"` icon mid-edit would be a stranger visual
+   substitution than simply yielding the row. The shell stays because it is the tree's own
+   chrome, not the content's — dropping it would make the edited row jump out of the indent
+   staircase every other row aligns to. Consequence to expect in the browser: the row's
+   pencil/trash buttons and the method-kind tag disappear while the box is open.
 
 ## What T1 settled (implemented 2026-07-31)
 
@@ -488,6 +499,69 @@ Still open, deliberately: `Dialog` has **no Tab trap**, so `Tab`-then-`Escape` s
 the tree. A naive trap would break `Tab`-to-indent inside the Monaco editors that two dialogs
 host.
 
+## What T4b settled (implemented 2026-08-01)
+
+The tree owns rename end to end now: `renamingId` / `onRenamingChange` are **deleted** from
+`TreeProps` (T0/T1 built them as bridges precisely so this phase could remove them), the
+component holds `renamingId` as internal `useState`, and the host hears about a rename exactly
+once — `onRenameCommit(node, next)`, only ever for a value that is non-blank, actually changed,
+and free of a visible-sibling collision. Six calls worth recording:
+
+1. **The input replaces the whole row content**, both tiers, `renderRow` included — see
+   §"Deliberate deviations from VS Code" #5 for the reasoning and the visual consequence. The
+   branch is checked *before* `renderRow`, in `TreeRow.tsx`, so a rich renderer cannot
+   accidentally win over it.
+2. **`adapter.getTreeItem(node).label` is the rename's source of truth, even for a rich
+   adapter** — both the box's initial value and the "unchanged" comparison, and the sibling
+   labels the collision check compares against. `TreeRow.tsx`'s standing rule is that
+   `getTreeItem` must not be called for *content* on a rich adapter (`renderRow` overrides it,
+   so such an adapter never promised the field means anything), and this is a deliberate
+   narrow exception noted at that comment: a *label* is the one `TreeItemLike` field that
+   cannot be meaningless, `getTypeaheadLabel` is documented as a search key rather than a
+   display name, and `getTreeItem` is non-optional on `TreeAdapter<T>`. `request-tree.tsx`
+   returns `node.item.name` there, which is exactly what a rename edits.
+3. **`renameItem` was *replaced by* `moveSubtree`, not joined by it** — contradicting this
+   phase's own line ("`moveSubtree(oldPrefix, newPrefix)` **alongside** `renameItem`") and the
+   T0–T3 scope note's "No `moveSubtree` yet. `renameItem`'s single-key remap stays as is."
+   With folder rename shipped (T4a), a single-key remap is never the correct call — renaming a
+   folder changes the key of every descendant at once — so keeping the narrower function
+   beside the wider one that subsumes it would only be an invitation to call the wrong one.
+   `RequestWorkspace.tsx`'s request rename now goes through `moveSubtree` too, where the
+   prefix half is simply inert. The prefix is tested as `oldKey + "/"` (`keyOf`'s join
+   character), never bare `oldKey`, which is what stops a rename of `Foo` from sweeping up
+   `Foo2/x`; a descendant's tab keeps its OWN display name, since a tab shows only the item's
+   last path segment. `ui-store.test.ts` covers all of it — exact match on every keyed field,
+   one- and two-level descendants, the string-prefix sibling, unrelated keys, `oldKey ===
+   newKey`, and reference-identity preservation per collection.
+4. **`startRename(id)` joined `TreeHandle`, rather than a prop coming back.** The host still
+   needs a way in (its row pencil), but "which row is mid-rename" is now state the component
+   owns end to end — and *starting* one is an action, not a value the host holds, which is
+   exactly what the handle is for (contract: "the things that are actions rather than state").
+   It is a no-op for an id that names no current row, gated on `flat.indexById` rather than on
+   `reveal`'s `findNode` walk: `reveal` walks the whole adapter because its job is reaching a
+   node hidden behind a collapsed ancestor, whereas a rename has nowhere to render an input
+   unless a row already exists, and accepting a hidden id would leave the tree in a rename
+   with no visible box to commit or escape from.
+5. **Commit/cancel/refuse is one pure function**, `renameVerdict(value, current, siblings)` in
+   `RenameInput.tsx`, exported for unit test the same way `Tree.tsx` exports
+   `isEditableTarget` and for the same reason (no jsdom). Enter and blur consume the *same*
+   verdict and differ only on `"collision"`: Enter stays in the box so the name can be fixed,
+   blur has nowhere to stay and cancels — a blur must never commit a value the server would
+   reject. Blank or unchanged cancels silently; `Escape` cancels. Neither key calls
+   `stopPropagation`, which is load-bearing rather than an omission: `Tree.tsx`'s
+   `isEditableTarget` guard already keeps every other key typed in the box (Space, Delete,
+   arrows, Home/End, F2) from being reinterpreted as a tree intent. The collision check is a
+   **UX affordance only** — a red inset ring (`.rename-invalid`, `--err`) plus a refused
+   Enter, no tooltip and no popover — since T4a's store rejects a colliding rename
+   server-side regardless, and the in-tree check cannot see siblings the filter box hid.
+6. **The rename box focuses via a plain `useEffect`, never `requestAnimationFrame`** — the
+   trap documented under §"Verification recipe" (the harness tab runs `visibilityState:
+   "hidden"`, where rAF never fires, making an rAF focus both unverifiable *and* genuinely
+   absent). `components/ui/EditableName` is **not** reused: it stays in the repo for
+   `MethodHeader` and `ScriptsView`, keeping its rAF focus and gaining no collision
+   validation, because bolting both onto a component two unrelated call sites depend on is
+   worse than the purpose-built `RenameInput.tsx` the tree now has.
+
 ## Backend gaps (block T4 and T6)
 
 Verified in `proto/grpcview/v1/service.proto`:
@@ -514,6 +588,11 @@ T4 and T6 both make it reachable. Each needs a **prefix remap** over all keyed s
 (`openTabs`, `drafts`, `invokes`) — `moveSubtree(oldPrefix, newPrefix)` alongside
 `renameItem`. Getting this wrong silently detaches a user's open tab, unsaved draft, and
 last response from the request they belong to.
+
+**Done at T4b, and `renameItem` is gone** — `moveSubtree(oldKey, newKey, newName)` *replaced*
+it rather than joining it (§"What T4b settled" #3), and covers `treeSelection` / `treeFocused`
+/ `treeExpanded` as well as the three listed above. T6b's move reuses it as-is; only the
+caller changes.
 
 The alternative — server-assigned stable item ids — removes the whole class of bug but is
 a storage-format change touching every RPC. Out of scope here; worth its own doc if
@@ -548,7 +627,9 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
   handler + collision check mirroring `UpdateRequestRequest`.
 - **T4b — Rename in-tree.** `F2` and the pencil, inline input, collision validation,
   commit on Enter / cancel on Escape, blur-commits. Prefix remap for folder renames (see
-  hazard above).
+  hazard above). *(Implemented 2026-08-01 — see §"What T4b settled" for the six calls it
+  forced, including `moveSubtree` **replacing** `renameItem` rather than joining it, which
+  contradicts this line.)*
 - **T5 — Context menu.** Right-click → New Request / New Folder / Rename / Delete /
   Folder metadata, driven off the current selection. Keyboard-dismissable, no new deps.
 - **T6a — proto: move.** `MoveItem` RPC (or `new_path`), with reject-into-own-descendant
@@ -578,6 +659,9 @@ respect rather than "helpfully" fix:
   until T4a adds `UpdateFolderRequest.name`. The keymap still *produces* the intent, so
   T4b is a wiring change, not a keyboard change.
 
+*(Both bullets are spent as of 2026-08-01: T4a/T4b landed, `moveSubtree` replaced `renameItem`,
+and folder rename works. Kept as the record of what that pass deliberately deferred.)*
+
 ## Known limitations (accepted, not oversights)
 
 - **A folder deleted and recreated with the same name at the same path is born collapsed.**
@@ -594,6 +678,16 @@ respect rather than "helpfully" fix:
 - **Clicking a non-input part of the row that is *currently* being renamed still commits.**
   The blur fires before the click handler, so `renamingId` is already cleared by then. Verified
   that the pre-rewrite tree had the identical characteristic — this is parity, not a new gap.
+- **Renaming a folder springs its collapsed descendant folders back open, once** (T4b). Same
+  cause as the recreated-folder bullet above, reached a different way: a rename changes the id
+  of the folder *and every descendant folder*, so any of them the user had manually collapsed
+  is unknown to `seenDefaults` under its new id. `resolveExpansion` (`flatten.ts`) filters
+  `defaultExpanded` by `seen` alone — confirmed by reading it, not assumed — so each such
+  folder is force-expanded exactly once and then behaves normally. `moveSubtree` cannot fix
+  this: it faithfully remaps `treeExpanded`, and a *collapsed* folder is precisely the one that
+  is absent from that set, so there is nothing there to carry over. The renamed folder itself
+  is affected the same way if it was collapsed when renamed. One click each; the clean fix is
+  the same server-assigned stable ids, still out of scope.
 
 ## Risks
 
@@ -643,7 +737,7 @@ them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` d
 
 ```
 cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
-bazel test //ui:test --nocache_test_results                   # vitest; 253 tests as of T2
+bazel test //ui:test --nocache_test_results                   # vitest; 273 tests as of T4b
 bazel build //ui:ui                                           # the real release bundle
 ```
 
@@ -685,9 +779,10 @@ identified — neither is an app bug:
   box appears never to focus (`EditableName.tsx:41` focuses via rAF) and why `Dialog`'s initial
   focus deliberately uses a plain effect instead. To test an rAF-focused input, focus it
   yourself first and then drive the keystrokes. Check `document.visibilityState` before
-  concluding a focus bug is real. *(`EditableName`'s rAF is a genuine latent issue for anyone
-  running a hidden tab, left alone as T4b's territory — that phase moves the edit UI into the
-  component anyway.)*
+  concluding a focus bug is real. *(T4b moved the tree's rename box into the component
+  (`RenameInput.tsx`), focused by a plain effect, so the TREE is no longer subject to this.
+  `EditableName`'s rAF remains a latent issue for its two other callers, `MethodHeader` and
+  `ScriptsView` — deliberately left alone rather than changed from inside a tree phase.)*
 - **Synthetic keystrokes stop reaching the page** in some states (notably straight after a
   reload, or when the tree was focused by a scripted `.focus()` rather than a real click or
   `Tab`). Symptom: zero `keydown` events even at a `window` capture listener, so the tree looks

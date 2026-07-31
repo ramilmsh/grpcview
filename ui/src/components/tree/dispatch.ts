@@ -115,9 +115,11 @@ export type TreeAction =
   // expandable row; see the "open" case below for why (VS Code's own Enter on
   // a folder toggles, it doesn't "open" one).
   | { kind: "open"; id: string }
-  // Names which row should enter rename mode — feeds Tree.tsx's
-  // onRenamingChange bridge prop (types.ts). Takes only an id, never a node:
-  // onRenamingChange's own signature is `(id: string | null) => void`.
+  // Names which row should enter rename mode — as of T4b that lands in Tree.tsx's
+  // OWN renamingId state (the onRenamingChange bridge prop it used to feed is
+  // deleted from TreeProps). Takes only an id, never a node: this module works in
+  // ids throughout, and the row's node is one flat.indexById lookup away for
+  // whoever needs it.
   | { kind: "requestRename"; id: string }
   | { kind: "delete"; ids: readonly string[] };
 
@@ -389,11 +391,10 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
     }
 
     case "rename":
-      // PRESERVED from T1: always names the focused row; whether it is
-      // actually renamable (e.g. CollectionPanel refuses a folder id today,
-      // since UpdateFolderRequest has no `name` field until T4a) is entirely
-      // the HOST's call, not this module's — dispatch.ts has no more notion
-      // of "folder" than Tree.tsx itself ever did.
+      // PRESERVED from T1: always names the focused row. Nothing filters it any
+      // more — T4a made folders renamable too, so CollectionPanel's old "refuse a
+      // folder id" screen is gone, and rows are uniformly renamable from here.
+      // dispatch.ts still has no notion of "folder", exactly as before.
       return focusedRow ? [{ kind: "requestRename", id: focusedRow.id }] : [];
 
     case "delete": {
