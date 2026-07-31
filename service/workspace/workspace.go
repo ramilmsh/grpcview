@@ -326,6 +326,7 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 // UpdateFolder implements [grpcviewv1.WorkspaceServiceHandler].
 func (w Workspace) UpdateFolder(ctx context.Context, request *connect.Request[grpcviewv1.UpdateFolderRequest]) (*connect.Response[grpcviewv1.UpdateFolderResponse], error) {
 	patch := store.FolderPatch{
+		Name:                request.Msg.Name,
 		DraftMetadataScript: request.Msg.DraftMetadataScript,
 	}
 	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {

@@ -438,9 +438,9 @@ export declare type UpdateRequestResponse = Message<"grpcview.v1.UpdateRequestRe
 export declare const UpdateRequestResponseSchema: GenMessage<UpdateRequestResponse>;
 
 /**
- * UpdateFolderRequest patches a folder's metadata script. Mirrors
- * UpdateRequestRequest's plumbing but only carries the one folder-specific
- * field: folders have no service/method/body/middleware/target of their own.
+ * UpdateFolderRequest patches a folder's name and metadata script. Mirrors
+ * UpdateRequestRequest's plumbing but carries only the fields a folder has:
+ * folders have no service/method/body/middleware/target of their own.
  *
  * @generated from message grpcview.v1.UpdateFolderRequest
  */
@@ -471,6 +471,16 @@ export declare type UpdateFolderRequest = Message<"grpcview.v1.UpdateFolderReque
    * @generated from field: optional string draft_metadata_script = 4;
    */
   draftMetadataScript?: string | undefined;
+
+  /**
+   * name renames the folder (its display name). Unset leaves the name unchanged;
+   * a rename that collides with a sibling fails with FailedPrecondition. Mirrors
+   * UpdateRequestRequest.name, including the slug-identity model: the folder's
+   * on-disk directory (and every descendant's) stays put.
+   *
+   * @generated from field: optional string name = 5;
+   */
+  name?: string | undefined;
 };
 
 /**

@@ -433,3 +433,55 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("UpdateFolder on a request = %v, want FailedPrecondition", err)
 	}
 }
+
+// TestUpdateFolderRenameRPC covers tree-rewrite-plan.md T4a at the RPC seam: the
+// optional `name` field reaches store.FolderPatch, the returned Workspace already
+// carries the new name, and a collision surfaces as FailedPrecondition
+// (store.ErrAlreadyExists via toConnectError, same as UpdateRequest's rename).
+func TestUpdateFolderRenameRPC(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	for _, name := range []string{"Users", "Admin"} {
+		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
+			WorkspaceName: testWorkspace,
+			ItemName:      name,
+		})); err != nil {
+			t.Fatalf("CreateFolder %s: %v", name, err)
+		}
+	}
+
+	newName := "People"
+	updResp, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
+		WorkspaceName: testWorkspace,
+		ItemName:      "Users",
+		Name:          &newName,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateFolder rename: %v", err)
+	}
+	folderNamed(t, updResp.Msg.GetWorkspace(), newName)
+
+	// Persisted, not just echoed.
+	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	folderNamed(t, getResp.Msg.GetWorkspace(), newName)
+	for _, it := range getResp.Msg.GetWorkspace().GetItem().GetFolder().GetItems() {
+		if it.GetName() == "Users" {
+			t.Fatalf("old folder name survived the rename")
+		}
+	}
+
+	// A collision with a sibling folder is FailedPrecondition.
+	collide := "Admin"
+	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
+		WorkspaceName: testWorkspace,
+		ItemName:      newName,
+		Name:          &collide,
+	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("colliding rename = %v, want FailedPrecondition", err)
+	}
+}

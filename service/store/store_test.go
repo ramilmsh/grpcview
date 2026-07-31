@@ -713,6 +713,104 @@ func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
 	}
 }
 
+// TestUpdateFolderRename covers tree-rewrite-plan.md T4a: a folder rename follows
+// the same slug-identity model as a request's, which matters more for a folder
+// because its directory is also every descendant's prefix — so the children must
+// stay reachable and the folder's recorded child order must survive. It also
+// covers colliding with a sibling of either kind, a no-op rename, and a rename
+// combined with a DraftMetadataScript patch in one call.
+func TestUpdateFolderRename(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Users"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateFolder(ctx, nil, "Admin"); err != nil {
+		t.Fatal(err)
+	}
+	// A sibling *request* of the folder, to prove the collision check spans kinds.
+	if err := coll.CreateRequest(ctx, nil, "Ping", "s", "m"); err != nil {
+		t.Fatal(err)
+	}
+	// Two children so the folder's Items ordering is observable across the rename.
+	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get User", "s.S", "GetUser"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Users"}, "List Users", "s.S", "ListUsers"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Happy path: only meta.name changes; the slug dir (and its children) stay put.
+	newName := "People"
+	if err := coll.UpdateFolder(ctx, nil, "Users", FolderPatch{Name: &newName}); err != nil {
+		t.Fatalf("UpdateFolder rename: %v", err)
+	}
+	tree := filepath.Join(coll.Root(), treeDir)
+	if _, err := os.Stat(filepath.Join(tree, "users")); err != nil {
+		t.Errorf("slug dir should be stable across rename: %v", err)
+	}
+	ff := &grpcviewstorev1.Folder{}
+	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	if ff.GetMeta().GetName() != newName {
+		t.Errorf("folder.json meta.name = %q, want %q", ff.GetMeta().GetName(), newName)
+	}
+	if got := ff.GetItems(); len(got) != 2 || got[0] != "get-user" || got[1] != "list-users" {
+		t.Errorf("child slug order = %v, want [get-user list-users]", got)
+	}
+	// The parent's recorded order still names the *slug*, which the rename didn't touch.
+	col := &grpcviewstorev1.Collection{}
+	mustRead(t, coll.collectionFilePath(), col)
+	if len(col.GetItems()) != 3 || col.GetItems()[0] != "users" {
+		t.Errorf("root items = %v, want users first", col.GetItems())
+	}
+	root := rootItems(t, coll, ctx)
+	renamed := childByName(root, newName)
+	if renamed == nil || renamed.GetFolder() == nil || childByName(root, "Users") != nil {
+		t.Fatalf("rename not reflected in tree: %v", names(root))
+	}
+	// Children are still there, in order, and still reachable by the NEW path.
+	if got := names(renamed.GetFolder().GetItems()); len(got) != 2 || got[0] != "Get User" || got[1] != "List Users" {
+		t.Errorf("children after rename = %v, want [Get User, List Users]", got)
+	}
+	body := `{"id":"1"}`
+	if err := coll.UpdateRequest(ctx, []string{newName}, "Get User", RequestPatch{DraftBody: &body}); err != nil {
+		t.Errorf("child unreachable under renamed folder: %v", err)
+	}
+
+	// Collision with a sibling folder, and with a sibling request: both ErrAlreadyExists,
+	// and neither mutates meta.name.
+	for _, collide := range []string{"Admin", "Ping"} {
+		if err := coll.UpdateFolder(ctx, nil, newName, FolderPatch{Name: &collide}); !errors.Is(err, ErrAlreadyExists) {
+			t.Errorf("rename onto %q = %v, want ErrAlreadyExists", collide, err)
+		}
+	}
+	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	if ff.GetMeta().GetName() != newName {
+		t.Errorf("failed rename must not mutate meta.name, got %q", ff.GetMeta().GetName())
+	}
+
+	// A no-op rename (name == current) succeeds without self-colliding, and applies
+	// a DraftMetadataScript patched in the same call.
+	script := "export default () => ({ team: ['people'] })"
+	if err := coll.UpdateFolder(ctx, nil, newName, FolderPatch{Name: &newName, DraftMetadataScript: &script}); err != nil {
+		t.Fatalf("no-op rename + script patch: %v", err)
+	}
+	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	if ff.GetMeta().GetName() != newName || ff.GetDraftMetadataScript() != script {
+		t.Errorf("after no-op rename + script: name=%q script=%q", ff.GetMeta().GetName(), ff.GetDraftMetadataScript())
+	}
+
+	// A real rename and a script patch in one call apply both.
+	final := "Humans"
+	script2 := "export default () => ({ team: ['humans'] })"
+	if err := coll.UpdateFolder(ctx, nil, newName, FolderPatch{Name: &final, DraftMetadataScript: &script2}); err != nil {
+		t.Fatalf("rename + script patch: %v", err)
+	}
+	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	if ff.GetMeta().GetName() != final || ff.GetDraftMetadataScript() != script2 {
+		t.Errorf("after rename + script: name=%q script=%q", ff.GetMeta().GetName(), ff.GetDraftMetadataScript())
+	}
+}
+
 // TestResolveRequest covers the store.ResolveRequest refactor (gv-features-plan.md
 // Feature 3's ResolveRequest bullet): resolving a saved request by display-name
 // path to its wire shape, and propagating ErrItemNotFound / ErrNotARequest

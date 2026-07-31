@@ -308,14 +308,30 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 		return fmt.Errorf("%w: %q", ErrNotAFolder, name)
 	}
 
-	if patch.DraftMetadataScript == nil {
+	if patch.Name == nil && patch.DraftMetadataScript == nil {
 		return nil
 	}
 	// Reuse the folder.json readChildren already decoded (ch.folder) rather than
 	// re-opening and re-decoding the same file.
 	p := filepath.Join(parentDir, ch.slug, folderFileName)
 	ff := ch.folder
-	ff.DraftMetadataScript = *patch.DraftMetadataScript // plain string, like Request.DraftMetadataScript
+	// Rename mirrors UpdateRequest's: only meta.name changes, so the slug/dir —
+	// and therefore every descendant's path and this folder's recorded child order
+	// — is untouched. A collision with a different sibling (of either kind) is
+	// rejected; a no-op rename to the current name is skipped so it doesn't
+	// self-collide.
+	if patch.Name != nil && *patch.Name != name {
+		if _, exists := findByName(present, *patch.Name); exists {
+			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
+		}
+		if ff.Meta == nil {
+			ff.Meta = &grpcviewstorev1.ItemMeta{}
+		}
+		ff.Meta.Name = *patch.Name
+	}
+	if patch.DraftMetadataScript != nil {
+		ff.DraftMetadataScript = *patch.DraftMetadataScript // plain string, like Request.DraftMetadataScript
+	}
 	return writeMessage(p, ff)
 }
 

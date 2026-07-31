@@ -89,8 +89,12 @@ type ScriptPatch struct {
 
 // FolderPatch is a partial update to a folder. Like RequestPatch, a nil field is
 // left unchanged and a non-nil field is applied, so an empty-but-present
-// DraftMetadataScript ("") clears the script.
+// DraftMetadataScript ("") clears the script. Name follows RequestPatch.Name's
+// slug-identity model: the rename only rewrites meta.name, so the folder's
+// directory — and with it every descendant's on-disk location and the parent's
+// recorded slug order — stays put.
 type FolderPatch struct {
+	Name *string
 	// DraftMetadataScript patches the folder's metadata source (the TypeScript
 	// module folded into gv.metadata.inherit()'s ancestor chain). nil leaves it
 	// unchanged; a non-nil value (including "") replaces it.
