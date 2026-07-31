@@ -1,5 +1,6 @@
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//ui:vite/package_json.bzl", vite_bin = "bin")
+load("@npm//ui:vitest/package_json.bzl", vitest_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
@@ -33,12 +34,14 @@ BUILD_DEPS = [":node_modules/" + d for d in [
     "tailwindcss",
     "postcss",
     "autoprefixer",
+    "vitest",
 ]]
 
 DATA = BUILD_DEPS + [
     "package.json",
     "tsconfig.json",
     "vite.config.ts",
+    "vitest.config.ts",
     "tailwind.config.js",
     "postcss.config.js",
     "index.html",
@@ -56,6 +59,16 @@ vite_bin.vite(
     ],
     chdir = package_name(),
     visibility = ["//visibility:public"],
+)
+
+# Unit tests for the DOM-free modules (lib/ helpers, the tree component's flatten/
+# selection/keymap/typeahead). vitest is a devDependency only — it never reaches the
+# singlefile release bundle //ui:ui builds.
+vitest_bin.vitest_test(
+    name = "test",
+    args = ["run"],
+    chdir = package_name(),
+    data = DATA,
 )
 
 vite_bin.vite_binary(
