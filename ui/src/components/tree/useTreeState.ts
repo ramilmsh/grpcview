@@ -58,6 +58,29 @@ export function useTreeState<T>(props: TreeProps<T>): TreeState<T> {
   // — an implementation detail of THIS component, never something a host reads or
   // drives. TreeProps has no anchor/onAnchorChange pair, so unlike the three
   // above it is unconditionally internal: no controlled branch, ever.
+  //
+  // RENAME SURVIVAL (checked explicitly, T2): unlike selection/focused/expanded,
+  // this state has NO rekeying path at all when a row's id changes out from
+  // under it — ui-store.ts's renameItem remaps treeSelection/treeFocused/
+  // treeExpanded (all controlled, all store-owned), but the anchor is neither
+  // controlled nor store-owned, so a rename leaves it holding the OLD
+  // (now-nonexistent) id with nothing to notice or fix it. Deliberately NOT
+  // given a controlled pair to fix this: TreeProps has no consumer that has
+  // ever needed to read or drive the anchor (the plan's own "over-fitting"
+  // risk — "name the consumer that wants it" — has no answer here), so adding
+  // one now would grow the public contract for a problem that already
+  // degrades gracefully on its own. The actual consequence of a stale anchor
+  // is mild by construction, not a new gap this phase introduces: rangeSelection
+  // (selection.ts) already treats "anchor id not found in the current rows" as
+  // "no anchor" and degrades to a single-row selection — the EXACT same branch
+  // a row hidden by CollectionPanel's filter box already exercises today
+  // (selection.test.ts's "degenerates to just the focus row when the anchor id
+  // is missing from rows") — and it self-heals on the very next PLAIN move
+  // regardless, since applyIntent's "move" case (dispatch.ts) unconditionally
+  // resets the anchor to wherever focus lands. Net effect of a rename: at most
+  // one shift+arrow/shift+click, immediately after, extends from "nowhere"
+  // instead of the old pivot — never a crash, a phantom row, or a wrong
+  // selection.
   const [anchor, setAnchor] = useState<string | null>(null);
 
   const expanded = expandedControlled ? expandedProp : internalExpanded;

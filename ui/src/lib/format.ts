@@ -76,6 +76,57 @@ export const findByKey = (
 export const childPathOf = (parent: ItemWithPath | null): string[] =>
   parent ? [...parent.path, parent.item.name] : [];
 
+// fullPathOf is an item's own path INCLUDING its own name — the exact value
+// any DIRECT CHILD of it would carry as ITS OWN `.path` (compare childPathOf
+// above, which computes this same thing for a would-be NEW child rather than
+// for the item itself). The one thing pruneNestedSelections below needs to
+// test ancestry: item B is a descendant of item A exactly when fullPathOf(A)
+// is a strict prefix of fullPathOf(B).
+const fullPathOf = (item: ItemWithPath): string[] => [...item.path, item.item.name];
+
+// isStrictPrefix reports whether `prefix` names an ANCESTOR path of `full` —
+// strictly SHORTER (an item is never its own descendant) and matching
+// segment-for-segment from the root. Not exported: nothing outside
+// pruneNestedSelections below needs "is A an ancestor of B" as its own
+// primitive yet.
+const isStrictPrefix = (prefix: string[], full: string[]): boolean =>
+  prefix.length < full.length && prefix.every((segment, i) => segment === full[i]);
+
+// pruneNestedSelections keeps only the items in an arbitrary multi-selection
+// that are NOT already covered by an ANCESTOR also present in that SAME
+// selection — e.g. a folder plus one of its own (possibly deeply nested)
+// children, both reachable in one batch via shift+click across an expanded
+// folder's rows, or ctrl+click picking a folder and then one of its
+// descendants individually (components/tree/'s multi-select,
+// tree-rewrite-plan.md's T2). Deleting the ancestor already removes the whole
+// subtree server-side — DeleteRequestRequest is a path+name-addressed "remove
+// this item AND anything under it" operation (service/store/fs.go's
+// Collection.Delete does `os.RemoveAll` on the item's own directory, and is
+// itself idempotent: deleting an already-gone item is a documented no-op, not
+// an error) — so a covered descendant is not merely REDUNDANT to also
+// process, it is client-side noise a confirm dialog would otherwise miscount:
+// "Delete 5 items" when only 2 are independent operations, the other 3 being
+// removed as a side effect of one of those 2. CollectionPanel.tsx's
+// delete-confirm flow is the one caller today, but this is pure
+// ItemWithPath-tree reasoning with nothing gRPC/UI-specific about it, so it
+// lives here beside childPathOf/findByKey rather than in a feature file.
+//
+// Checking the FULL path (not just the immediate parent) is what makes a
+// selection spanning THREE levels at once (a folder, its child folder, AND
+// that child's own child, all individually selected) collapse correctly to
+// just the topmost ancestor in a single pass, with no separate
+// transitive-closure step: the grandchild's full path already has the
+// top-level folder's full path as a prefix, whether or not the MIDDLE folder
+// also happens to survive the same comparison.
+//
+// O(n²) (every item compared against every other) — fine at this app's scale
+// (plan: "dozens to low hundreds", the same reasoning flatten.ts/Tree.tsx's
+// own reveal() already lean on for their own full-tree walks).
+export const pruneNestedSelections = (items: readonly ItemWithPath[]): ItemWithPath[] => {
+  const paths = items.map(fullPathOf);
+  return items.filter((_, i) => !paths.some((other, j) => i !== j && isStrictPrefix(other, paths[i])));
+};
+
 // ── services ─────────────────────────────────────────────────────────────────
 
 // serviceName is a service's fully-qualified name (package.Service), the form a

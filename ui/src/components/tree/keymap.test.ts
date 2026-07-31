@@ -62,6 +62,33 @@ describe("keyToIntent: Windows/Linux (isMac=false)", () => {
   it("cmd+Backspace is not delete here either — macOS's binding doesn't carry over", () => {
     expect(keyToIntent(stroke("Backspace", { metaKey: true }), false)).toBeNull();
   });
+
+  it("shift+ArrowUp/shift+ArrowDown extend the selection from the anchor (T2)", () => {
+    expect(keyToIntent(stroke("ArrowUp", { shiftKey: true }), false)).toEqual({
+      kind: "extend",
+      to: "up",
+    });
+    expect(keyToIntent(stroke("ArrowDown", { shiftKey: true }), false)).toEqual({
+      kind: "extend",
+      to: "down",
+    });
+  });
+
+  it("ctrl+A selects all visible rows on this platform (T2)", () => {
+    expect(keyToIntent(stroke("a", { ctrlKey: true }), false)).toEqual({ kind: "selectAll" });
+  });
+
+  it('ctrl+A is recognized under caps lock too, where the key arrives as "A" with shiftKey still false', () => {
+    expect(keyToIntent(stroke("A", { ctrlKey: true }), false)).toEqual({ kind: "selectAll" });
+  });
+
+  it("cmd+A does nothing here — select-all's macOS chord isn't live off-mac", () => {
+    expect(keyToIntent(stroke("a", { metaKey: true }), false)).toBeNull();
+  });
+
+  it("Escape clears the selection (T2)", () => {
+    expect(keyToIntent(stroke("Escape"), false)).toEqual({ kind: "clearSelection" });
+  });
 });
 
 describe("keyToIntent: macOS (isMac=true)", () => {
@@ -112,17 +139,48 @@ describe("keyToIntent: macOS (isMac=true)", () => {
   it("a bare Backspace (no cmd) is NOT delete here either — only cmd+Backspace is", () => {
     expect(keyToIntent(stroke("Backspace"), true)).toBeNull();
   });
+
+  it("shift+ArrowUp/shift+ArrowDown extend the selection from the anchor (T2), same as off-mac", () => {
+    expect(keyToIntent(stroke("ArrowUp", { shiftKey: true }), true)).toEqual({
+      kind: "extend",
+      to: "up",
+    });
+    expect(keyToIntent(stroke("ArrowDown", { shiftKey: true }), true)).toEqual({
+      kind: "extend",
+      to: "down",
+    });
+  });
+
+  it("cmd+A selects all visible rows on this platform (T2)", () => {
+    expect(keyToIntent(stroke("a", { metaKey: true }), true)).toEqual({ kind: "selectAll" });
+  });
+
+  it('cmd+A is recognized under caps lock too, where the key arrives as "A" with shiftKey still false', () => {
+    expect(keyToIntent(stroke("A", { metaKey: true }), true)).toEqual({ kind: "selectAll" });
+  });
+
+  it("ctrl+A does nothing here — select-all's off-mac chord isn't live on macOS", () => {
+    expect(keyToIntent(stroke("a", { ctrlKey: true }), true)).toBeNull();
+  });
+
+  it("Escape clears the selection (T2), same as off-mac", () => {
+    expect(keyToIntent(stroke("Escape"), true)).toEqual({ kind: "clearSelection" });
+  });
 });
 
+// shift+ArrowDown used to be tested here as an unclaimed combination ("extending
+// a selection is T2, not built yet" — see git history). T2 is this file: bare
+// shift+Up/Down are now claimed, and covered by the "extend" tests in both
+// platform blocks above instead. What's left genuinely unclaimed — and worth
+// testing as such — is everything shift+arrow does NOT cover: the four other
+// navigation keys the plan's table never asked T2 to extend (shift+Home/End/
+// PageUp/PageDown, see keymap.ts's onlyShiftHeld call site for the full trace
+// through listWidget.js/abstractTree.js that backs this), plus select-all's own
+// exact-modifier and bare-Escape boundaries.
 describe("keyToIntent: unclaimed combinations return null, on either platform", () => {
   it("a plain letter is untouched — typeahead is T3 and must not be pre-empted here", () => {
     expect(keyToIntent(stroke("a"), false)).toBeNull();
     expect(keyToIntent(stroke("a"), true)).toBeNull();
-  });
-
-  it("shift+ArrowDown returns null — extending a selection is T2, not built yet", () => {
-    expect(keyToIntent(stroke("ArrowDown", { shiftKey: true }), false)).toBeNull();
-    expect(keyToIntent(stroke("ArrowDown", { shiftKey: true }), true)).toBeNull();
   });
 
   it("alt+ArrowUp returns null — not a combination this table claims", () => {
@@ -152,5 +210,20 @@ describe("keyToIntent: unclaimed combinations return null, on either platform", 
   it("an extra shift alongside cmd rejects the mac-only bindings — the modifier match is exact", () => {
     expect(keyToIntent(stroke("ArrowDown", { metaKey: true, shiftKey: true }), true)).toBeNull();
     expect(keyToIntent(stroke("Backspace", { metaKey: true, shiftKey: true }), true)).toBeNull();
+  });
+
+  it("shift+PageUp also returns null, same reasoning as its Home/End/PageDown siblings above", () => {
+    expect(keyToIntent(stroke("PageUp", { shiftKey: true }), false)).toBeNull();
+    expect(keyToIntent(stroke("PageUp", { shiftKey: true }), true)).toBeNull();
+  });
+
+  it("ctrl+shift+A and cmd+alt+A both return null — select-all's modifier match is exact, same reasoning as the mac-only pair above", () => {
+    expect(keyToIntent(stroke("a", { ctrlKey: true, shiftKey: true }), false)).toBeNull();
+    expect(keyToIntent(stroke("a", { metaKey: true, altKey: true }), true)).toBeNull();
+  });
+
+  it("shift+Escape and cmd+Escape both return null — Escape's binding is bare-only, like F2's", () => {
+    expect(keyToIntent(stroke("Escape", { shiftKey: true }), false)).toBeNull();
+    expect(keyToIntent(stroke("Escape", { metaKey: true }), true)).toBeNull();
   });
 });

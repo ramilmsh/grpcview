@@ -73,6 +73,24 @@ describe("renameItem", () => {
     expect(useUIStore.getState().treeSelection).toEqual([NEW, OTHER]);
   });
 
+  // Explicit multi-selection (tree-rewrite T2) regression: renameItem's own
+  // `s.treeSelection.map((id) => (id === oldKey ? newKey : id))` already
+  // handles ANY array size correctly — mapping is per-element, independent of
+  // how many other ids happen to be sitting alongside the renamed one — so
+  // this is a confirmatory test, not a new remapping mechanism. Worth pinning
+  // explicitly (three ids, only the middle one renamed, order preserved)
+  // rather than resting on the two-element case above alone: a bug that only
+  // showed up with 3+ selected ids (e.g. an accidental `.slice`/index-based
+  // rewrite instead of a per-element `.map`) would not be caught by a
+  // two-element fixture where "the other one" and "every other one" cannot be
+  // told apart.
+  it("remaps one id out of a LARGER multi-selection (3+ ids), preserving every other id and their order", () => {
+    const third = "Users/Admin/Promote";
+    useUIStore.setState({ treeSelection: [OTHER, OLD, third] });
+    useUIStore.getState().renameItem(OLD, NEW, "FetchUser");
+    expect(useUIStore.getState().treeSelection).toEqual([OTHER, NEW, third]);
+  });
+
   it("remaps treeFocused when the renamed item was focused", () => {
     useUIStore.getState().renameItem(OLD, NEW, "FetchUser");
     expect(useUIStore.getState().treeFocused).toBe(NEW);

@@ -36,7 +36,11 @@ interface TreeRowProps<T> {
   renaming: boolean;
   indent: number;
   rowHeight: number;
-  onRowClick: () => void;
+  // T2: Tree.tsx's handleRowClick reads modifier keys off the real event
+  // (shiftKey / cmd-or-ctrl) to decide plain-click vs range-extend vs
+  // toggle-membership (dispatch.ts's applyRowClick) — so, unlike T0/T1, the
+  // event itself has to reach it, not just "a click happened on this row".
+  onRowClick: (ev: React.MouseEvent) => void;
   onTwistieClick: (ev: React.MouseEvent) => void;
   onContextMenu: (ev: React.MouseEvent) => void;
 }

@@ -8,11 +8,20 @@ import { Tree } from "@/components/tree/Tree";
 import type { TreeRowState } from "@/components/tree/types";
 import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import { childPathOf, findByKey, itemKey, keyOf, serviceName, type ItemWithPath } from "@/lib/format";
+import {
+  childPathOf,
+  findByKey,
+  itemKey,
+  keyOf,
+  pruneNestedSelections,
+  serviceName,
+  type ItemWithPath,
+} from "@/lib/format";
 import { renderRequestRow, useRequestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import type { GeneratorDef } from "./generator-libs";
+import { deleteConfirmCopy } from "./delete-confirm";
 
 // Count requests in a subtree (for the header total; a folder row's own count is
 // its direct children — request-tree.tsx's getTreeItem — which is a different,
@@ -71,7 +80,14 @@ export function CollectionPanel() {
   const [folderName, setFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [pickerParent, setPickerParent] = useState<ItemWithPath | null | undefined>(undefined);
-  const [confirm, setConfirm] = useState<ItemWithPath | null>(null);
+  // The item(s) pending delete confirmation — empty means the dialog is
+  // closed. Holds the WHOLE (already-pruned — see onTreeDelete below) batch
+  // as of T2, not just one item: the tree's own onDelete can now hand over a
+  // multi-selection (tree-rewrite-plan.md's T2 line, "Make delete
+  // multi-aware"), and a row's own trash button (rowCallbacks.onDelete below)
+  // feeds the identical state via a one-element array, so there is exactly
+  // ONE confirm flow regardless of which of the two triggered it.
+  const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
   // The folder row whose metadata dialog is open (gv-features-plan.md Feature 1); null = closed.
   const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
   // Which row (if any) is mid-rename. One row at a time, so this lives here rather
@@ -130,26 +146,64 @@ export function CollectionPanel() {
     );
   };
 
+  // Fires ONE deleteRequest mutation per confirmed item — T2 makes this
+  // selection-wide; T1 only ever had exactly one item to fire for. `confirm`
+  // is already PRUNED (onTreeDelete below), so by the time this runs, no item
+  // in it is a descendant of another item also in it: deleting a folder
+  // removes its whole subtree server-side (service/store/fs.go's
+  // Collection.Delete: `os.RemoveAll` on the item's own directory), so firing
+  // a separate delete for something the batch's own folder already took with
+  // it would be pure waste, not a correctness problem in itself — Delete is
+  // documented idempotent (deleting an already-gone item is a no-op, not an
+  // error) — but pruning is what keeps the CONFIRM COPY's own count honest
+  // too (deleteConfirmCopy runs against this same pruned list), so it happens
+  // once, up front, rather than being re-derived here.
+  //
+  // Each `.mutate(...)` call is independent and unawaited, exactly like every
+  // OTHER mutation call in this codebase (createFolder/createRequest/
+  // updateRequest above all fire-and-forget the same way; grep finds no
+  // `.mutateAsync` anywhere in this app) — considered and rejected chaining
+  // them via `mutateAsync` to force strict sequencing, since the ACTUAL
+  // failure mode that would motivate it (a folder-plus-its-own-descendant
+  // batch) is already ruled out by pruning above, and introducing the only
+  // awaited-mutation pattern in the app for a batch that pruning already made
+  // safe would be new complexity without a concrete bug it fixes. Firing them
+  // concurrently is still safe to reason about: Collection.Delete takes its
+  // own mutex per call (service/store/fs.go), so the backend serializes the
+  // actual filesystem mutations regardless of request arrival order, and
+  // every mutation here shares the SAME onSuccess (useSeedGetCache,
+  // workspace-query.ts) that reseeds the Get-query cache from whichever
+  // response lands — a pre-existing characteristic of that reseed-the-whole-
+  // snapshot design for ANY two mutations fired close together, single-item
+  // or not, not something this batch delete introduces.
   const doDelete = () => {
-    if (confirm) {
+    for (const item of confirm) {
       deleteRequest.mutate({
         workspaceName: WORKSPACE_NAME,
-        path: confirm.path,
-        itemName: confirm.item.name,
+        path: item.path,
+        itemName: item.item.name,
       });
     }
-    setConfirm(null);
+    setConfirm([]);
   };
 
   // Tree's own onDelete (keyboard Delete / mac cmd+Backspace on the focused
-  // row, tree-rewrite-plan.md's T1 key table) reaches the SAME confirm dialog
-  // as each row's own trash button (RequestRowCallbacks.onDelete below) — just
-  // a second entry point into the identical `confirm` state. Single-row at
-  // T1: Tree.tsx only ever calls this with exactly the focused node, so
-  // nodes[0] is always what's wanted. T2 makes this selection-wide, which is
-  // when this dialog needs to pluralize ("Delete N items?") instead of naming
-  // one — out of scope here.
-  const onTreeDelete = (nodes: ItemWithPath[]): void => setConfirm(nodes[0] ?? null);
+  // row OR its whole selection, tree-rewrite-plan.md's T1/T2 key table)
+  // reaches the SAME confirm dialog as each row's own trash button
+  // (RequestRowCallbacks.onDelete below) — just a second entry point into the
+  // identical `confirm` state. T1 only ever called this with exactly the
+  // focused node; T2 makes Tree.tsx's own dispatch selection-aware
+  // (dispatch.ts's resolveDeleteIds), so `nodes` here can genuinely be a
+  // multi-row batch now — which is exactly when a folder AND one of its own
+  // descendants can both be IN that batch at once (reachable via shift+click
+  // across an expanded folder's rows, or ctrl+click picking both
+  // individually — see pruneNestedSelections' own comment, lib/format.ts, for
+  // the full reasoning). Pruning HERE, once, at the point delete is
+  // REQUESTED, is what lets both `confirm`'s own count (deleteConfirmCopy
+  // below) and doDelete's mutation loop above trust the list verbatim,
+  // instead of each re-deriving "but is any of these actually redundant" on
+  // its own.
+  const onTreeDelete = (nodes: ItemWithPath[]): void => setConfirm(pruneNestedSelections(nodes));
 
   // Tree's own onRenamingChange (F2, or Enter on macOS, on the focused row) is
   // a second way to set the SAME renamingKey the pencil button already drives
@@ -189,11 +243,32 @@ export function CollectionPanel() {
       // treeExpanded instead of flipping local component state.
       setTreeExpanded(new Set([...treeExpanded, itemKey(folder)]));
     },
-    onDelete: setConfirm,
+    // A row's own trash button always names exactly that ONE row, regardless
+    // of whatever the tree's broader multi-selection happens to be right now
+    // — a per-row affordance is a targeted single-item action, not "delete
+    // whatever's selected" (mirrors how a real file manager's own per-row
+    // delete icon acts on that row alone). Wrapped in a one-element array
+    // rather than passed as `setConfirm` directly (T0/T1's shape, since
+    // `confirm` used to hold a bare `ItemWithPath | null`): `confirm` is a
+    // list as of this phase, so RequestRowCallbacks.onDelete's own
+    // single-item signature (request-tree.tsx) needs an explicit adapter now.
+    // pruneNestedSelections is a no-op on a one-element array (nothing else
+    // in the array to be an ancestor of), so there is no need to route this
+    // through it too.
+    onDelete: (item) => setConfirm([item]),
     onEditMetadata: setMetadataFolder,
   };
   const renderRow = (item: ItemWithPath, state: TreeRowState): ReactNode =>
     renderRequestRow(item, state, rowCallbacks);
+
+  // Not memoized: deleteConfirmCopy is a handful of string-length/composition
+  // checks over `confirm`, which itself never holds more than a small
+  // multi-selection (this app's whole scale, per the plan: "dozens to low
+  // hundreds") — nowhere near costly enough to need useMemo the way
+  // `filtered`/`total` above are (those re-walk the ENTIRE collection tree on
+  // every keystroke in the filter box; this recomputes only when `confirm`
+  // itself changes, i.e. essentially never while the dialog is closed).
+  const deleteCopy = deleteConfirmCopy(confirm);
 
   return (
     <div
@@ -319,19 +394,21 @@ export function CollectionPanel() {
         generators={generators}
       />
 
-      {/* delete confirm */}
+      {/* delete confirm — copy is entirely deleteConfirmCopy's call
+          (./delete-confirm.ts); this JSX only ever lays out its three
+          fields, unchanged in shape whether `confirm` holds 1 item or N. */}
       <Dialog
-        open={confirm !== null}
-        onClose={() => setConfirm(null)}
-        title={confirm?.item.content.case === "folder" ? "Delete folder" : "Delete request"}
+        open={confirm.length > 0}
+        onClose={() => setConfirm([])}
+        title={deleteCopy.title}
         width={380}
       >
         <p className="dialog-body">
-          Delete <strong>{confirm?.item.name}</strong>
-          {confirm?.item.content.case === "folder" ? " and everything inside it?" : "?"}
+          Delete <strong>{deleteCopy.emphasis}</strong>
+          {deleteCopy.suffix}
         </p>
         <div className="dialog-actions">
-          <Button onClick={() => setConfirm(null)}>Cancel</Button>
+          <Button onClick={() => setConfirm([])}>Cancel</Button>
           <Button variant="danger" onClick={doDelete}>
             Delete
           </Button>

@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+import type { Item } from "@grpcview/v1/workspace_pb";
+import type { ItemWithPath } from "@/lib/format";
+import { deleteConfirmCopy } from "./delete-confirm";
+
+// deleteConfirmCopy is the pure message-builder behind CollectionPanel's
+// delete-confirm dialog — extracted into its own file specifically so
+// tree-rewrite-plan.md's T2 line ("Make delete multi-aware (confirm dialog
+// pluralizes)") is testable with no rendering at all AND with no transitive
+// pull-in of `monaco-editor` (see delete-confirm.ts's own header for why that
+// second constraint is real, not theoretical: a version of this test that
+// imported straight from ./CollectionPanel failed the whole suite on
+// "Failed to resolve entry for package 'monaco-editor'", purely from
+// evaluating CollectionPanel.tsx's module graph under this repo's
+// Bazel-sandboxed vitest run). Fixtures built structurally rather than with
+// the generated proto constructor, exactly like lib/format.test.ts and
+// request-tree.test.tsx (both explain why: the runtime _pb modules are
+// Bazel-generated and this module only imports Item as a TYPE).
+const folder = (name: string): ItemWithPath => ({
+  item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+  path: [],
+});
+
+const request = (name: string): ItemWithPath => ({
+  item: { name, content: { case: "request", value: {} } } as unknown as Item,
+  path: [],
+});
+
+describe("deleteConfirmCopy: a single item (unchanged wording from before T2)", () => {
+  it("names a request with a bare '?', no warning", () => {
+    expect(deleteConfirmCopy([request("Ping")])).toEqual({
+      title: "Delete request",
+      emphasis: "Ping",
+      suffix: "?",
+    });
+  });
+
+  it("names a folder with the 'everything inside it' warning", () => {
+    expect(deleteConfirmCopy([folder("Calls")])).toEqual({
+      title: "Delete folder",
+      emphasis: "Calls",
+      suffix: " and everything inside it?",
+    });
+  });
+});
+
+describe("deleteConfirmCopy: N > 1, homogeneous", () => {
+  it("an all-request batch reads as 'N requests?' with no folder warning", () => {
+    expect(deleteConfirmCopy([request("Ping"), request("Pong"), request("Pang")])).toEqual({
+      title: "Delete 3 requests",
+      emphasis: "3 requests",
+      suffix: "?",
+    });
+  });
+
+  it("an all-folder batch reads as 'N folders and everything inside them?'", () => {
+    expect(deleteConfirmCopy([folder("Calls"), folder("Admin")])).toEqual({
+      title: "Delete 2 folders",
+      emphasis: "2 folders",
+      suffix: " and everything inside them?",
+    });
+  });
+});
+
+describe("deleteConfirmCopy: N > 1, mixed folder + request selection", () => {
+  it("reads as 'N items', with an explicit sentence warning that folders take their contents", () => {
+    expect(deleteConfirmCopy([folder("Calls"), request("Ping"), request("Pong")])).toEqual({
+      title: "Delete 3 items",
+      emphasis: "3 items",
+      suffix: "? Folders in the selection will be deleted along with everything inside them.",
+    });
+  });
+
+  it("the folder-warning sentence appears even with just ONE folder among many requests", () => {
+    // The whole point of the mixed case: a bare "and everything inside them?"
+    // would misleadingly imply EVERY selected row is a folder.
+    const copy = deleteConfirmCopy([request("A"), request("B"), request("C"), folder("D")]);
+    expect(copy.suffix).toContain("Folders in the selection will be deleted");
+  });
+});
+
+describe("deleteConfirmCopy: defensive n===0 (never actually shown — confirm.length > 0 gates the dialog)", () => {
+  it("does not throw — folderCount===items.length===0 makes 'allFolders' vacuously true, an arbitrary but harmless tie-break for output nobody ever sees", () => {
+    expect(deleteConfirmCopy([])).toEqual({
+      title: "Delete 0 folders",
+      emphasis: "0 folders",
+      suffix: " and everything inside them?",
+    });
+  });
+});

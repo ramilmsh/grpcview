@@ -390,6 +390,59 @@ the T1 line didn't spell out, recorded here so they aren't re-derived or "fixed"
 but that glue is not — it needs component state, and this suite has no DOM. T2 has to edit
 that same switch (`shift`+arrow, `cmd+A`, `Escape`); extract it into a pure
 `applyIntent(intent, ctx) → actions` then, rather than now and again immediately after.
+*(Done — `dispatch.ts`.)*
+
+## What T2 settled (implemented 2026-07-31)
+
+1. **The dispatch extraction happened, and it is where the tests went.** `dispatch.ts`
+   exports plain-data `TreeAction[]` plus `applyIntent<T>(intent, ctx)`; `Tree.tsx` is now a
+   thin interpreter over the returned actions. `setExpanded` carries a *desired final state*
+   rather than a toggle, so an action list stays meaningful independent of when it is applied.
+   `TreeAction` deliberately lives in `dispatch.ts`, not `types.ts` — `types.ts` is the public
+   adapter/props contract, and this is private wiring between two modules. This is what T1's
+   untested glue is finally covered by: `dispatch.test.ts` is 65 of the suite's 228 tests.
+2. **The anchor gets no controlled pair, and a rename can leave it stale.** `ui-store.ts`'s
+   `renameItem` rekeys `treeSelection`/`treeFocused`/`treeExpanded` because all three are
+   store-owned; the anchor is neither controlled nor store-owned, so after a rename it holds
+   an id that no longer exists. Left that way on purpose: `TreeProps` has no consumer that
+   wants to read or drive an anchor (the over-fitting test — "name the consumer" — has no
+   answer), and the failure already degrades gracefully. `rangeSelection` treats a missing
+   anchor id as "no anchor" and falls back to a single-row selection — the same branch the
+   filter box already exercises — and `applyIntent`'s `move` case resets the anchor on the
+   next plain arrow key. Worst case is one shift+arrow immediately after a rename extending
+   from nowhere.
+3. **Nested selections are pruned once, at the point delete is requested.** A batch can hold
+   a folder *and* its own descendant (shift+click across an expanded folder, or ctrl+click
+   picking both). `pruneNestedSelections` (`lib/format.ts`) drops any item that has a strict
+   path-prefix ancestor in the same batch, which also collapses a three-level selection to its
+   topmost ancestor in one pass with no separate transitive-closure step. Pruning is not about
+   correctness of the deletes — `Collection.Delete` is `os.RemoveAll` and idempotent, so a
+   redundant delete is a no-op — it is about the confirm dialog's *count* being honest:
+   otherwise it offers "Delete 5 items" when only 2 are independent operations.
+4. **A row's own trash button stays single-item.** It acts on that row regardless of what the
+   broader selection is, matching how a file manager's per-row delete icon behaves; only the
+   keyboard path is selection-wide. Both feed one `confirm` state (a list), so there is exactly
+   one confirm flow. `deleteConfirmCopy` (`delete-confirm.ts`) keeps the single-item wording
+   byte-identical to T1's and pluralizes only above one, picking "folders"/"requests"/"items"
+   by composition.
+5. **Batch deletes fire unawaited, like every other mutation here.** Considered and rejected
+   sequencing them with `mutateAsync` — nothing else in the app awaits a mutation, the failure
+   mode that would justify it is already ruled out by pruning, and `Collection.Delete` takes a
+   per-call mutex server-side.
+
+**T2 did not finish.** The three implementation phases landed and all three gates are green
+(228 tests, up from T1's 135), but the adversarial review and fix phases were terminated
+without producing anything: no reviewer ever emitted its findings. So unlike T0 and T1, **no
+second pair of eyes has been over this diff** — for both of those phases, review caught real
+bugs that the implementer, the typecheck, and the test suite all missed (T1's rename-box key
+leak and its `PageDown`-is-`End` paging bug). Treat T2 as implemented-but-unreviewed. Before
+building on it, review `dispatch.ts`'s `applyIntent` against the T2 rows of the UX spec above,
+and `Tree.tsx`'s interpreter for equivalence with the switch it replaced (`git show
+8d14b02:ui/src/components/tree/Tree.tsx`).
+
+One cosmetic loose end found while reading: `deleteConfirmCopy([])` returns "Delete 0 folders".
+Unreachable today — the dialog only opens when the list is non-empty — but it is an odd branch
+to leave for whoever touches that function next.
 
 ## Backend gaps (block T4 and T6)
 
@@ -440,6 +493,8 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
   *Verify:* tab into the tree, drive it entirely by keyboard.
 - **T2 — Multi-select.** Anchor semantics, `shift`/`cmd` click and `shift+arrow`,
   `cmd+A`, `Escape`. Make delete multi-aware (confirm dialog pluralizes).
+  *(Implemented 2026-07-31, **not reviewed** — see §"What T2 settled" for the five calls it
+  forced and what was left undone.)*
 - **T3 — Typeahead.** 1s buffer, wrap-around, match highlight. *After this lands, delete
   the monaco spike's leftovers.* Verified 2026-07-31: the spike code was **never
   committed** (no `features/tree-spike/`, no `ActiveView` case, no Rail entry in git
@@ -544,7 +599,7 @@ them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` d
 
 ```
 cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
-bazel test //ui:test --nocache_test_results                   # vitest; 135 tests as of T1
+bazel test //ui:test --nocache_test_results                   # vitest; 228 tests as of T2
 bazel build //ui:ui                                           # the real release bundle
 ```
 
@@ -558,8 +613,8 @@ an earlier run.
 jsdom, deliberately — so nothing here dispatches a real event, computes layout, or reads
 `getComputedStyle`. Pure modules (`keymap`, `navigate`, `flatten`, `selection`, the
 editable-target guard) are covered directly; row markup is covered structurally via
-`renderToStaticMarkup`. Three T1 behaviors are therefore verified by code reasoning only and
-are owed a browser pass:
+`renderToStaticMarkup`. These behaviors are therefore verified by code reasoning only and are
+owed a browser pass — the first three from T1, the rest from T2:
 
 - **`PageUp`/`PageDown` page by one real screen**, not the whole tree (needs a collection tall
   enough to overflow the 278px panel).
@@ -567,6 +622,15 @@ are owed a browser pass:
   tell), reposition with `Home`/arrows, then `Delete`/`cmd+Backspace` mid-edit must edit text
   rather than pop the delete dialog, and commit must not immediately re-enter rename on macOS.
 - **`scrollIntoView` keeps the focused row visible** when arrowing past either viewport edge.
+- **Modifier clicks hit the right branch.** `cmd`/`ctrl`+click toggles one row without opening
+  it or toggling a folder; `shift`+click extends from the anchor. Neither is reachable without
+  a real `MouseEvent` carrying modifier state.
+- **`cmd+A` does not reach the browser's own Select All**, and `Escape` clears the selection
+  without also closing whatever dialog happens to be open.
+- **A multi-row delete confirms once and removes every item.** Select a folder plus a sibling
+  request, `Delete`, and check the dialog counts 2 (not 5, if the folder has children) and that
+  both are gone afterwards. This is the one owed check with a destructive failure mode, so do
+  it against a throwaway `HOME` workspace.
 
 Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
 convention used by the request-body and definition-sources tracks.

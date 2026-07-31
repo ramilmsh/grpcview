@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Item } from "@grpcview/v1/workspace_pb";
-import { childPathOf, findByKey, itemKey, keyOf, type ItemWithPath } from "./format";
+import { childPathOf, findByKey, itemKey, keyOf, pruneNestedSelections, type ItemWithPath } from "./format";
 
 // The key convention is name-derived (see format.ts / the plan's "identity hazard"),
 // so these helpers are what open tabs, drafts and invoke results hang off. A silent
@@ -81,5 +81,55 @@ describe("childPathOf", () => {
 
   it("is the empty root path for no parent", () => {
     expect(childPathOf(null)).toEqual([]);
+  });
+});
+
+// pruneNestedSelections — the tree-rewrite T2 multi-select delete needs this
+// to keep a confirm dialog's count (and the actual delete loop) honest when a
+// folder AND one of its own descendants are both selected at once, reachable
+// via shift+click across an expanded folder's rows or ctrl+click picking both
+// individually. Reuses the SAME `tree` fixture as itemKey/findByKey above:
+// Ping (root request), Users (folder: GetUser + Admin), Admin (nested folder:
+// Ban).
+describe("pruneNestedSelections", () => {
+  const [ping, users] = tree;
+  const [getUser, admin] = users.children!;
+  const [ban] = admin.children!;
+
+  it("keeps everything when nothing in the selection is nested under anything else", () => {
+    expect(pruneNestedSelections([ping, getUser])).toEqual([ping, getUser]);
+  });
+
+  it("drops a DIRECT child when its folder is also in the selection", () => {
+    expect(pruneNestedSelections([users, getUser])).toEqual([users]);
+  });
+
+  it("drops a GRANDCHILD when its top-level ancestor is also in the selection, even without the middle folder", () => {
+    // Users + Ban, WITHOUT Admin itself — proves the check walks the full
+    // path, not just an immediate parent/child relationship.
+    expect(pruneNestedSelections([users, ban])).toEqual([users]);
+  });
+
+  it("is relative to what's actually IN the batch: Admin survives when Users (its own ancestor) isn't selected", () => {
+    expect(pruneNestedSelections([admin, ban])).toEqual([admin]);
+  });
+
+  it("collapses a THREE-level selection (folder, its child folder, and that child's own child) to just the topmost ancestor in one pass", () => {
+    expect(pruneNestedSelections([users, admin, ban])).toEqual([users]);
+  });
+
+  it("preserves the original relative order of the SURVIVING items, not tree order", () => {
+    // GetUser is listed before Ping in the input, and before Users too —
+    // GetUser is pruned (Users is its ancestor and is also selected), leaving
+    // Ping then Users in exactly the order they appeared in the input.
+    expect(pruneNestedSelections([getUser, ping, users])).toEqual([ping, users]);
+  });
+
+  it("is a no-op for a single-item selection", () => {
+    expect(pruneNestedSelections([ban])).toEqual([ban]);
+  });
+
+  it("is empty for an empty selection", () => {
+    expect(pruneNestedSelections([])).toEqual([]);
   });
 });
