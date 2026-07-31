@@ -12,6 +12,13 @@ import {
   type ClickMods,
   type TreeAction,
 } from "./dispatch";
+import {
+  autoScrollDelta,
+  dropTargetAt,
+  zoneForOffset,
+  type DropResolution,
+  type DropZone,
+} from "./dnd";
 
 // The component itself: keyboard + aria (T1), multi-select (T2), event wiring
 // (docs/design/tree-rewrite-plan.md's module table). T0 covered mouse-only
@@ -191,6 +198,22 @@ function findScrollport(el: HTMLElement): HTMLElement {
   return el;
 }
 
+// Where the pointer is currently offering to drop (T6b): the row it is over, the
+// side of that row (dnd.ts's zone geometry), and the destination that resolves to.
+// The resolution is carried alongside rather than recomputed at drop time so the
+// drop uses exactly the destination the INDICATOR promised — the row's `data-index`
+// and the flat array can both have moved on between the last dragover and the drop
+// (a mutation elsewhere reseeding the workspace cache mid-drag), and honouring the
+// stale-but-shown answer is the behavior the user consented to. A `before` naming a
+// child that no longer exists appends rather than failing, server-side
+// (MoveItemRequest's own documentation), so the worst case of a stale resolution is
+// a position one off — not an error.
+interface DropState {
+  rowId: string;
+  zone: DropZone;
+  res: DropResolution;
+}
+
 export function Tree<T>(props: TreeProps<T>): ReactNode {
   const {
     adapter,
@@ -200,6 +223,8 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     onDelete,
     onContextMenu,
     onRenameCommit,
+    onMove,
+    canDrop,
     activeId = null,
     indent = 8,
     rowHeight = 22,
@@ -245,6 +270,41 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   // than querying for it.
   const containerRef = useRef<HTMLDivElement>(null);
   const rowEls = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // DRAG STATE (T6b), two values, each held as STATE *and* mirrored in a REF. The
+  // doubling is not redundancy: the state copy is what paints (the dragged rows'
+  // in-flight opacity, the drop indicator), and the ref copy is what a drag handler
+  // READS, because the handlers run in a stream of events that can fire several
+  // times before React commits anything — a `dragover` reading the state value from
+  // its closure would be reading whatever the last committed render held, and
+  // `handleDrop` in particular has to see the resolution the very last `dragover`
+  // computed, not the one from the render before it. Both are written together
+  // through the two setters below so they cannot diverge.
+  //
+  // `dragIds` is ALSO why the drag payload never round-trips through `dataTransfer`
+  // (see handleDragStart): the ids live here for the drag's whole life.
+  const [dragIds, setDragIdsState] = useState<readonly string[] | null>(null);
+  const dragIdsRef = useRef<readonly string[] | null>(null);
+  const setDragIds = (next: readonly string[] | null): void => {
+    dragIdsRef.current = next;
+    setDragIdsState(next);
+  };
+  const [dropState, setDropStateValue] = useState<DropState | null>(null);
+  const dropStateRef = useRef<DropState | null>(null);
+  // Deduplicated on (row, zone): `dragover` fires continuously — on every pointer
+  // move and, per the HTML drag-and-drop processing model, at least every 350ms even
+  // for a stationary pointer — and the indicator only changes when one of those two
+  // changes. Without this the whole tree re-renders several times a second for the
+  // duration of every drag.
+  const setDropState = (next: DropState | null): void => {
+    const current = dropStateRef.current;
+    if (current === null && next === null) return;
+    if (current !== null && next !== null && current.rowId === next.rowId && current.zone === next.zone) {
+      return;
+    }
+    dropStateRef.current = next;
+    setDropStateValue(next);
+  };
 
   // aria-activedescendant needs a DOM id, but a row's OWN id (adapter.getId —
   // e.g. request-tree.tsx's path+name itemKey) is user-authored text that can
@@ -576,6 +636,210 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     onContextMenu(nodes, ev);
   };
 
+  // ── drag and drop (T6b) ──────────────────────────────────────────────────────
+  // NATIVE HTML5 drag and drop, no library (the plan's T6b line: "Native HTML5
+  // first; react-dnd@16 only if it falls short" — it did not fall short; see
+  // §"What T6b settled"). The DECISIONS all live in dnd.ts, pure and unit-tested
+  // (zone geometry, zone -> destination, validity, the autoscroll step); what is
+  // left here is the DOM half no pure module could do: reading a pointer, measuring
+  // a row's box, scrolling the scrollport, and turning ids back into nodes for the
+  // host's two callbacks. Exactly the same split as keyboard/mouse (dispatch.ts).
+  //
+  // ONE delegated set of handlers on the CONTAINER, not per row — only `dragstart`
+  // is per-row (the row is what becomes draggable). This is monaco's own structure
+  // (listView.js binds the dnd stream to its one dom node and recovers the row via
+  // `data-index`, :893+) and it removes an entire class of flicker: with per-row
+  // handlers, moving the pointer from one row to the next fires `dragleave` on the
+  // old row BEFORE `dragover` on the new one, so a naive per-row clear blanks the
+  // indicator between every pair of rows. Delegated, `dragleave` fires only when the
+  // pointer leaves the tree entirely.
+
+  // The dragged rows, in ROW ORDER regardless of the order `selection` happens to
+  // hold them in — a multi-row move fires one MoveItem per node with the same
+  // `before`, so each insertion lands ahead of that sibling and the firing order IS
+  // the resulting sibling order. Visual order in, visual order out.
+  const draggedNodes = (ids: readonly string[]): T[] =>
+    [...ids]
+      .filter((id) => flat.indexById.has(id))
+      .sort((a, b) => (flat.indexById.get(a) ?? 0) - (flat.indexById.get(b) ?? 0))
+      .map((id) => flat.rows[flat.indexById.get(id) ?? -1].node);
+
+  // dnd.ts speaks ids; TreeProps.onMove/canDrop speak nodes. This is the one
+  // boundary between them. `null` means the resolution named a row that has since
+  // vanished, which is not a drop this component can describe to a host.
+  const destinationFor = (res: DropResolution): { parent: T | null; before?: T } | null => {
+    let parent: T | null = null;
+    if (res.parentId !== null) {
+      const node = nodeFor(res.parentId);
+      if (node === undefined) return null;
+      parent = node;
+    }
+    if (res.beforeId === null) return { parent };
+    const before = nodeFor(res.beforeId);
+    // A missing `before` degrades to append rather than rejecting the drop —
+    // MoveItemRequest.before does the same thing server-side for a name that no
+    // longer identifies a child, on the same reading (a stale sibling is a UI race,
+    // not a corrupt request).
+    return before === undefined ? { parent } : { parent, before };
+  };
+
+  const endDrag = (): void => {
+    setDragIds(null);
+    setDropState(null);
+  };
+
+  const handleDragStart = (row: TreeRowModel<T>, ev: React.DragEvent): void => {
+    // WHICH rows travel: the whole selection if the gesture started on a selected
+    // row, otherwise just this one — and in that second case the selection is
+    // REPLACED by it first, which is what VS Code's explorer does and what keeps the
+    // highlight from disagreeing with what is visibly in flight. The anchor moves
+    // with it for the same reason handleContextMenu moves it when it starts a new
+    // selection (listWidget.js:611-612): leaving it on a row that is no longer
+    // selected makes the next shift+click extend from nowhere. Focus is deliberately
+    // NOT moved — a drag fires no `click`, the widget's own drag path sets no focus,
+    // and moving the roving cursor on a gesture the user may abort mid-air would be
+    // a change they never asked for.
+    let ids: readonly string[];
+    if (selection.includes(row.id)) {
+      ids = selection.filter((id) => flat.indexById.has(id));
+    } else {
+      ids = replaceSelection(row.id);
+      setSelection(ids);
+      setAnchor(row.id);
+    }
+    setDragIds(ids);
+
+    // dataTransfer is written ONLY to make the browser treat this as a real drag —
+    // a drag with an empty dataTransfer is cancelled outright in some browsers — and
+    // is never read back. It CANNOT be the drag payload: `getData` is deliberately
+    // unreadable during `dragover` in every browser (the drag data store is in
+    // protected mode until drop), which is exactly when the tree needs to know what
+    // is being dragged in order to decide whether a drop is legal. So node identity
+    // lives in `dragIdsRef` for the drag's whole life and this line is inert. Do not
+    // "clean it up" into a JSON payload and read it in handleDrop: that reintroduces
+    // the dragover blindness the ref exists to avoid.
+    //
+    // The text is the dragged rows' LABELS, so dropping onto some unrelated text
+    // target outside the app pastes something a human recognises rather than
+    // path-derived internal ids. Reading `.label` off a rich adapter is the same
+    // narrow exception TreeRow.tsx's rename branch already makes and documents — it
+    // is the only adapter-independent answer to "what is this row called".
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData(
+      "text/plain",
+      draggedNodes(ids)
+        .map((node) => adapter.getTreeItem(node).label)
+        .join("\n")
+    );
+  };
+
+  // The row (and its element) under a drag event's target. Walks up from the real
+  // target — which is whatever descendant of the row the pointer happens to be over,
+  // a label span or a hover button — to the nearest `data-index` carrier, exactly as
+  // listView.js's getItemIndexFromEventTarget does. Bounded to THIS tree's container
+  // so a nested tree's rows can never be mistaken for ours.
+  const rowElementFor = (ev: React.DragEvent): { index: number; el: HTMLElement } | null => {
+    const container = containerRef.current;
+    const target = ev.target;
+    if (container === null || !(target instanceof HTMLElement)) return null;
+    const el = target.closest<HTMLElement>("[data-index]");
+    if (el === null || !container.contains(el)) return null;
+    const index = Number(el.dataset.index);
+    if (!Number.isInteger(index) || index < 0 || index >= flat.rows.length) return null;
+    return { index, el };
+  };
+
+  // Scrolls the real scrollport (findScrollport — `.tree` has no bounded height of
+  // its own) when the pointer is within dnd.ts's edge band. Driven off the dragover
+  // events themselves rather than an rAF loop or an interval: see autoScrollDelta's
+  // own comment for why (no timer to leak, and rAF does not fire in the automated
+  // browser harness at all).
+  const autoScroll = (pointerY: number): void => {
+    const container = containerRef.current;
+    if (container === null) return;
+    const port = findScrollport(container);
+    const rect = port.getBoundingClientRect();
+    const delta = autoScrollDelta(pointerY, rect.top, rect.bottom);
+    if (delta !== 0) port.scrollTop += delta;
+  };
+
+  const handleDragOver = (ev: React.DragEvent<HTMLDivElement>): void => {
+    // A drag that did not start in this tree — a file from the desktop, a selection
+    // from another panel — is left entirely alone: no indicator, and crucially no
+    // preventDefault, so the browser shows its own no-drop cursor and whatever
+    // outer handler wants it still gets it.
+    const ids = dragIdsRef.current;
+    if (ids === null) return;
+
+    // Before the target check, so autoscroll keeps working while the pointer is over
+    // a gap or past the last row — those are precisely the positions a user reaches
+    // for when they want the list to move.
+    autoScroll(ev.clientY);
+
+    const hit = rowElementFor(ev);
+    if (hit === null) {
+      setDropState(null);
+      return;
+    }
+    const row = flat.rows[hit.index];
+    const rect = hit.el.getBoundingClientRect();
+    const zone = zoneForOffset({
+      offsetY: ev.clientY - rect.top,
+      // The MEASURED height, not the `rowHeight` prop: the two agree today, but the
+      // geometry has to be relative to the box the pointer is actually inside.
+      rowHeight: rect.height,
+      expandable: row.expandable,
+    });
+    const res = dropTargetAt(flat, hit.index, zone, ids);
+    if (res === null) {
+      setDropState(null);
+      return;
+    }
+    // The host's veto, consulted only for drops the tree already considers legal —
+    // it exists for what the tree CANNOT know (a destination that already holds an
+    // item with this display name, whose children may be collapsed or filtered out
+    // of `flat` entirely), never as a second copy of the structural rules.
+    const to = destinationFor(res);
+    if (to === null || (canDrop && !canDrop(draggedNodes(ids), to))) {
+      setDropState(null);
+      return;
+    }
+
+    // preventDefault is what makes a drop possible AT ALL, and it is called only on
+    // this accepted path — which is how an invalid target gets the native no-drop
+    // cursor for free, with no cursor management of our own.
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    setDropState({ rowId: row.id, zone, res });
+  };
+
+  // Fires only when the pointer leaves the whole tree (handlers are delegated), and
+  // `relatedTarget` — the element being entered — is what distinguishes that from
+  // crossing between two of our own descendants. A null relatedTarget (leaving the
+  // window entirely) correctly falls through to the clear.
+  const handleDragLeave = (ev: React.DragEvent<HTMLDivElement>): void => {
+    const entering = ev.relatedTarget;
+    if (entering instanceof Node && ev.currentTarget.contains(entering)) return;
+    setDropState(null);
+  };
+
+  const handleDrop = (ev: React.DragEvent<HTMLDivElement>): void => {
+    const ids = dragIdsRef.current;
+    const drop = dropStateRef.current;
+    endDrag();
+    if (ids === null || drop === null) return;
+    ev.preventDefault();
+    const to = destinationFor(drop.res);
+    const nodes = draggedNodes(ids);
+    if (to !== null && nodes.length > 0) onMove?.(nodes, to);
+  };
+
+  // Fires on the source row for every drag that ends, dropped or cancelled, and
+  // bubbles to this container — so this is the one guaranteed teardown. There is no
+  // timer or animation frame to cancel here by design (see autoScroll above), which
+  // is why nothing needs an unmount cleanup.
+  const handleDragEnd = (): void => endDrag();
+
   // The keyboard INTERPRETER (docs/design/tree-rewrite-plan.md's "VS Code UX
   // spec"). Building a KeyStroke from the real event and resolving it to an
   // intent is still done here (keyToIntent stays a DOM-free table, per its
@@ -677,12 +941,20 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
       tabIndex={0}
       aria-activedescendant={focusedRow ? domIdFor(focusedRow.id) : undefined}
       onKeyDown={handleKeyDown}
+      // Every drag event EXCEPT dragstart is delegated here rather than bound per
+      // row — see the drag-and-drop section above for why (row-to-row flicker, and
+      // monaco's own structure).
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onDragEnd={handleDragEnd}
     >
-      {flat.rows.map((row) => (
+      {flat.rows.map((row, index) => (
         <TreeRow
           key={row.id}
           row={row}
           domId={domIdFor(row.id)}
+          dataIndex={index}
           rowRef={(el) => {
             if (el) rowEls.current.set(row.id, el);
             else rowEls.current.delete(row.id);
@@ -693,6 +965,9 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           focused={focused === row.id}
           active={row.id === activeId}
           renaming={row.id === renamingId}
+          dropTarget={dropState?.rowId === row.id ? dropState.zone : null}
+          dropDepth={dropState?.rowId === row.id ? dropState.res.depth : 0}
+          dragging={dragIds?.includes(row.id) ?? false}
           renameSiblings={row.id === renamingId ? siblingLabelsFor(row) : NO_SIBLINGS}
           // Leaving rename mode is THIS component's job in both directions —
           // RenameInput never assumes its caller did (see its own comment) — so
@@ -710,6 +985,7 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           onRowClick={(ev) => handleRowClick(row, ev)}
           onTwistieClick={(ev) => handleTwistieClick(row, ev)}
           onContextMenu={(ev) => handleContextMenu(row, ev)}
+          onDragStart={(ev) => handleDragStart(row, ev)}
         />
       ))}
     </div>

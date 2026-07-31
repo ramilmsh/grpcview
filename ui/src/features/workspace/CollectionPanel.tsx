@@ -11,6 +11,7 @@ import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } fro
 import { useUIStore } from "@/lib/ui-store";
 import {
   childPathOf,
+  findByKey,
   itemKey,
   keyOf,
   pruneNestedSelections,
@@ -61,7 +62,7 @@ const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => {
 export function CollectionPanel() {
   const { workspace, services } = useWorkspace();
   const rootItems = useRootItems(workspace);
-  const { createFolder, createRequest, deleteRequest, updateRequest, updateFolder } =
+  const { createFolder, createRequest, deleteRequest, updateRequest, updateFolder, moveItem } =
     useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
   const activeKey = useUIStore((s) => s.activeKey);
@@ -259,6 +260,126 @@ export function CollectionPanel() {
   // its own.
   const onTreeDelete = (nodes: ItemWithPath[]): void => setConfirm(pruneNestedSelections(nodes));
 
+  // ── drag and drop (T6b) ────────────────────────────────────────────────────
+
+  // The destination folder's REAL children, resolved out of the UNFILTERED
+  // `rootItems` rather than read off `to.parent.children`. That distinction is
+  // load-bearing, not defensive: the tree's adapter is built over `filtered`, so
+  // every ItemWithPath the tree hands back — `to.parent` included — carries
+  // children pruned to whatever the filter box left visible (filterTree above
+  // rebuilds each folder as `{...it, children: kids}`). Testing a name collision
+  // against that pruned list would call a drop legal while the server holds a
+  // hidden sibling of the same name and rejects it.
+  const destinationChildren = (parent: ItemWithPath | null): ItemWithPath[] =>
+    parent ? findByKey(rootItems, itemKey(parent))?.children ?? [] : rootItems;
+
+  const samePath = (a: readonly string[], b: readonly string[]): boolean =>
+    a.length === b.length && a.every((segment, i) => segment === b[i]);
+
+  // The host's half of drop validity. The TREE already rejects everything
+  // structural — into a leaf, into a dragged node's own subtree, a no-op move
+  // (components/tree/dnd.ts) — so this covers only what the tree cannot see: the
+  // destination's OWN children, which may be collapsed (not rows at all) or
+  // filtered out. `Collection.Move` refuses a reparent onto an existing display
+  // name with FailedPrecondition/ErrAlreadyExists — a move never silently renames
+  // what it moves — and this is that same rule, enforced early so the pointer shows
+  // an invalid drop instead of the drop appearing to work and nothing happening.
+  //
+  // A REORDER inside the item's own parent is exempt: the colliding name there is
+  // the item itself, and the server skips the check entirely for that case (same
+  // destDir → the pure-reorder branch). The running `taken` set also catches the
+  // one collision the destination's children cannot: two rows in a multi-drag that
+  // share a display name and are both being reparented into the same folder.
+  const canDropHere = (
+    nodes: ItemWithPath[],
+    to: { parent: ItemWithPath | null; before?: ItemWithPath }
+  ): boolean => {
+    const newPath = childPathOf(to.parent);
+    const taken = new Set(destinationChildren(to.parent).map((child) => child.item.name));
+    for (const node of pruneNestedSelections(nodes)) {
+      if (samePath(node.path, newPath)) continue; // pure reorder in its own parent
+      if (taken.has(node.item.name)) return false;
+      taken.add(node.item.name);
+    }
+    return true;
+  };
+
+  // One MoveItem per dropped item. `path`/`itemName` address the item, `newPath` is
+  // the destination parent (childPathOf already maps a null parent to `[]`, which is
+  // exactly new_path's "collection root"), and `before` names the destination
+  // sibling to insert ahead of — unset appends. A newPath resolving to the item's
+  // CURRENT parent is a pure reorder server-side, which is why "dropped between two
+  // rows of the same folder" needs no separate code path here.
+  //
+  // Pruned first, for the same reason the delete batch is: dragging a folder plus
+  // one of its own children must move one thing. The second call would address a
+  // path that no longer exists by the time it ran (the child moved WITH its folder),
+  // and would therefore fail rather than merely being redundant.
+  //
+  // The onSuccess is the plan's IDENTITY HAZARD, and it is not optional: a move
+  // changes the item's key exactly as a rename does (itemKey is path+name derived),
+  // and for a folder it changes every descendant's. moveSubtree is the same
+  // prefix remap doRename above uses — openTabs, drafts, invokes, treeSelection,
+  // treeFocused, treeExpanded. Skipping it detaches an open tab from its draft and
+  // last response silently, which reads as lost work rather than as a bug.
+  //
+  // Still fire-and-forget — nothing in this app awaits a mutation (doDelete's
+  // comment has the full reasoning) — but unlike every other batch here these
+  // calls are SEQUENCED, each one fired from the previous one's onSuccess.
+  //
+  // The reason is specific to move and does not apply to the delete batch this
+  // otherwise mirrors. Every call in a multi-row move carries the SAME `before`,
+  // so each insertion lands immediately ahead of that one sibling and the order
+  // the server PROCESSES them in becomes the resulting sibling order. Fired
+  // concurrently, that order is whatever the transport and the store's per-call
+  // mutex happen to produce: correct data in a permuted order, and — unlike a
+  // stale cache — the permutation is written to disk. Tree.tsx sorts the dragged
+  // set into row order precisely so that "visual order in, visual order out"
+  // holds; sequencing here is the other half of that promise, without which the
+  // sort is necessary but not sufficient.
+  //
+  // Chaining through onSuccess rather than awaiting mutateAsync is what keeps
+  // this from becoming the app's only awaited-mutation path: onSuccess is the
+  // same callback every other mutation in this file already uses, and each link
+  // does exactly what a single-item move does. A failed call simply stops the
+  // chain, which is the better half-applied state to be left in — a prefix of
+  // the batch moved, in the right order — rather than an arbitrary subset.
+  const onTreeMove = (
+    nodes: ItemWithPath[],
+    to: { parent: ItemWithPath | null; before?: ItemWithPath }
+  ): void => {
+    const newPath = childPathOf(to.parent);
+    const batch = pruneNestedSelections(nodes);
+    const fire = (i: number): void => {
+      const node = batch[i];
+      if (node === undefined) return;
+      moveItem.mutate(
+        {
+          workspaceName: WORKSPACE_NAME,
+          path: node.path,
+          itemName: node.item.name,
+          newPath,
+          before: to.before?.item.name,
+        },
+        {
+          onSuccess: () => {
+            moveSubtree(itemKey(node), keyOf(newPath, node.item.name), node.item.name);
+            fire(i + 1);
+          },
+        }
+      );
+    };
+    fire(0);
+    // Force the destination open, the way every create path does (expandFolder) —
+    // otherwise an `into` drop on a collapsed folder makes the dragged rows appear
+    // to vanish. Unconditional rather than gated on the drop being `into` (a zone
+    // onMove is not told, deliberately — the destination is the whole contract): for
+    // a between-rows drop the parent is necessarily expanded already, since its
+    // children were the visible rows the pointer was between, so this is a no-op
+    // there.
+    if (to.parent) expandFolder(to.parent);
+  };
+
   // Callbacks renderRequestRow needs beyond ItemWithPath itself — see
   // request-tree.tsx's RequestRowCallbacks for why these can't be derived from the
   // node alone.
@@ -424,6 +545,8 @@ export function CollectionPanel() {
             onOpen={openTab}
             onRenameCommit={doRename}
             onDelete={onTreeDelete}
+            onMove={onTreeMove}
+            canDrop={canDropHere}
             // The tree has already selected the row if it wasn't selected, moved
             // focus to it, and preventDefault()ed the native menu; `nodes` is its
             // post-click selection. All that is left is to put a menu at the

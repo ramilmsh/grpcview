@@ -404,6 +404,7 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
         <TreeRow
           row={rowModel(id)}
           domId="test-row"
+          dataIndex={0}
           rowRef={() => {}}
           adapter={adapter}
           renderRow={rowRendererWith(noopCallbacks)}
@@ -411,6 +412,9 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
           focused={false}
           active={false}
           renaming
+          dropTarget={null}
+          dropDepth={0}
+          dragging={false}
           renameSiblings={[]}
           onRenameCommit={() => {}}
           onRenameCancel={() => {}}
@@ -419,6 +423,7 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
           onRowClick={() => {}}
           onTwistieClick={() => {}}
           onContextMenu={() => {}}
+          onDragStart={() => {}}
         />
       )
     )[0];

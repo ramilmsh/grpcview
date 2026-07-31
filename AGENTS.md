@@ -250,6 +250,96 @@ unlike a reflection target they cannot be re-fetched; the resolve caches are
 disposable. protojson drops `buf`'s image extensions, which nothing reads —
 `source_code_info` round-trips intact.
 
+## The collection tree
+
+`ui/src/components/tree/` is a **hand-rolled, domain-agnostic tree component** —
+not a library wrapper, and it knows nothing about gRPC. `features/workspace/`
+supplies the gRPC half (`request-tree.tsx`'s adapter + row renderer,
+`CollectionPanel.tsx`'s callbacks). Keep that boundary: everything in
+`components/tree/` must remain reusable by a second tree (the descriptor explorer
+is the intended one), which is what forces every gRPC-shaped decision out into the
+host.
+
+- **One contract, two row tiers** (`types.ts`). A `TreeAdapter<T>` supplies
+  `getId` / `getChildren` / `getCollapsibleState` / `getParent` / `getTreeItem`. A
+  caller that supplies only that gets the **portable** tier: a default row built
+  from `getTreeItem` (label, description, an abstract `IconToken`), renderable by a
+  VS Code `TreeItem` too. Passing `renderRow` opts into the **rich** tier —
+  arbitrary React per row, standalone-only. The request tree is rich (method-kind
+  tags, hover buttons); a portable provider must avoid `renderRow`, stick to the
+  `IconToken` vocabulary, and enumerate its `kind` strings.
+- **The flat visible-rows array is the load-bearing decision.** `flatten.ts`
+  reduces roots + the expanded set to an ordered `TreeRowModel[]` plus an id→index
+  map, and *every* behavior — arrow keys, range select, drop targeting — is array
+  arithmetic over it, never recursion. A node's own `"expanded"` default is
+  *reported* by `flatten`, never self-applied; `resolveExpansion` folds it in
+  synchronously during render (so there is no collapsed first frame) and
+  `useTreeState` remembers which ids it has force-opened so a manual collapse is
+  never sprung back open.
+- **State is controlled, owned by zustand** (`ui-store.ts`: `treeExpanded`,
+  `treeSelection`, `treeFocused`) so it survives re-renders and view switches. Each
+  pair is independently controlled; omit one to fall back to internal state. The
+  range-select anchor is internal by design.
+- **Decisions are pure functions; `Tree.tsx` is a thin interpreter.** `keymap.ts`
+  maps a keystroke (+ `isMac`) to an intent with no DOM; `dispatch.ts` maps an
+  intent *or* a click *or* a twistie click to a plain `TreeAction[]`; `navigate.ts`
+  does the index math; `dnd.ts` does the drop geometry. `Tree.tsx` builds events,
+  measures the DOM, and applies actions in one place. New interaction behavior
+  belongs in the pure module, with a unit test — the suite has **no jsdom**, which
+  is exactly why the decisions are DOM-free.
+- **Keyboard/mouse follow VS Code per platform**, verified against the vendored
+  monaco sources in `ui/node_modules/monaco-editor/esm/vs/base/browser/ui/`
+  (`listWidget.js`, `listView.js`, `abstractTree.js`) — cite them when changing
+  behavior. Arrows/Home/End/PageUp/PageDown move a *logical* cursor: DOM focus
+  stays on the `.tree` container with `aria-activedescendant` naming the row, never
+  a roving per-row tabindex. `Enter` is platform-split (macOS renames, `cmd+↓`
+  opens; elsewhere `Enter` opens), `F2` renames everywhere, `shift`+click/arrow
+  extend from the anchor, `cmd/ctrl`+click toggles, `cmd/ctrl+A` selects all
+  visible, `Escape` clears. Paging measures the nearest scrollable ancestor, not
+  `.tree` (which has no bounded height of its own).
+- **Rename is the component's** (`RenameInput.tsx`): it renders the box, validates
+  against the row's visible siblings, commits on Enter/blur, cancels on Escape, and
+  reports exactly once as `onRenameCommit`. The host only persists it; the server
+  stays the collision authority. `TreeHandle.startRename(id)` is how an outside
+  affordance (the row pencil, the context menu) starts one.
+- **The context menu is the host's.** The tree selects/focuses the row and hands
+  over `(nodes, ev)`; `CollectionPanel` renders `components/ui/Menu.tsx`, because
+  the items are gRPC-shaped. Empty-space right-click is the panel's own handler,
+  guarded on `defaultPrevented`.
+- **Drag and drop is native HTML5, no library.** A row is `draggable`; every other
+  drag event is delegated to the container, which recovers the row from
+  `data-index` (monaco's own structure). Geometry: a folder row splits into
+  quarters — outer quarters are *between-rows*, the middle half is *into* — and a
+  leaf splits in half, since there is no inside of a request. `after` an **expanded**
+  folder means position 0 *inside* it, because that is where the indicator line
+  visibly sits. `into` washes the row; between-rows draws a 2px accent line
+  **indented to the destination's depth** (a full-width line cannot say which parent
+  the item lands in). The dragged set is the selection if the drag started on a
+  selected row, else that row alone. The tree rejects the structurally impossible
+  (into a leaf, into a dragged node's own subtree, a no-op); the host's `canDrop`
+  covers only what the tree cannot see — a destination that already holds the same
+  display name, whose children may be collapsed or filtered out. One `MoveItem` per
+  moved item; a `new_path` resolving to the current parent is a pure reorder, so
+  reorder and reparent are one call. A multi-row move is the **one batch in this app
+  that is sequenced** rather than fired concurrently (each call from the previous
+  one's `onSuccess`): every call carries the same `before`, so the order the server
+  processes them in *becomes* the persisted sibling order. Do not "simplify" it back
+  into a loop.
+- **The identity hazard: `itemKey` is path+name derived**, so a rename *or a move*
+  changes an item's key — and for a folder, every descendant's. Any such mutation
+  must call `ui-store.ts`'s `moveSubtree(oldKey, newKey, newName)`, which prefix-remaps
+  `openTabs` / `drafts` / `invokes` / `treeSelection` / `treeFocused` / `treeExpanded`.
+  Getting it wrong silently detaches an open tab from its draft and last response,
+  which reads as lost work rather than as a bug. There is one remapper; do not write
+  a second.
+- **Still outstanding: typeahead (T3).** Letter keys are deliberately unclaimed by
+  `keymap.ts` — they fall through untouched — and there is no `typeahead.ts`. The
+  intended behavior is VS Code's: jump focus to the next label match, 1s buffer,
+  wrap-around, composing with (not replacing) the header filter box. Also unbuilt:
+  compact folders (the `compactFolders` prop is accepted and does nothing), sticky
+  scroll, virtualization, and the async `getChildren` promise path (`flatten` and
+  `reveal` both throw loudly on a thenable rather than silently dropping a branch).
+
 ## Views (no router)
 
 The SPA has **no URL router**. `App.tsx` renders a single `AppShell` and switches

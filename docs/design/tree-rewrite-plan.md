@@ -682,6 +682,133 @@ dependency was added (enduring decision 6's cap holds). Eight calls worth record
    buttons (gear/plus/pencil/trash) are untouched — the menu is an additional path to the same
    handlers, exactly as F2 and the pencil are two paths to one rename.
 
+## What T6b settled (implemented 2026-08-01)
+
+Drag and drop works: into a folder, between rows, multi-row, with autoscroll and the
+prefix remap. Ten calls worth recording.
+
+1. **Native HTML5 sufficed; `react-dnd` was NOT added.** Enduring decision 6's one
+   permitted dependency stays unspent, and `ui/BUILD.bazel`'s `BUILD_DEPS` is
+   untouched. Nothing in this phase wanted a backend abstraction, a drag layer, or a
+   custom drag preview — the four things react-dnd exists to provide. What the native
+   API cost was one non-obvious workaround (#4) and one structural choice (#3);
+   neither is worth a runtime dep in a single-file offline bundle.
+2. **The zone geometry is monaco's quartering, read from source.**
+   `listView.js:888-892`'s `getTargetSector` is
+   `clamp(Math.floor((offsetY / size) / 0.25), 0, 3)` — four quarters, floored (an
+   exact quarter boundary belongs to the *lower* sector), clamped for a pointer
+   outside the row's box. The widget stops there: the sector is handed to the
+   caller's `dnd.onDragOver` delegate (`abstractTree.js:63-64`) and the
+   sector→before/into/after mapping lives in the workbench's file-explorer delegate,
+   which is **not vendored**. So the quartering is verified and the mapping (outer
+   quarters between-rows, middle half into) is our reading of it. A **leaf splits in
+   half instead**, written as its own branch rather than by folding sectors 1/2 into
+   before/after: there is no inside of a request, and "the whole box is a
+   between-rows target" is what makes dropping between two requests easy to hit.
+   `zoneForOffset` is pure, and `dnd.test.ts` pins the exact midpoint and both
+   quarter boundaries.
+3. **`after` an EXPANDED folder resolves to position 0 INSIDE it**, not to the
+   folder's next sibling. The indicator is drawn at a y-position, and at that
+   boundary the next row on screen *is* the folder's first child — a line there,
+   indented one level in, unambiguously means "ahead of that child", while the
+   folder's real next sibling may be many rows further down with a whole subtree in
+   between. It also keeps the bottom quarter useful rather than a duplicate of
+   `into`: the two adjacent bands give "first child" and "last child". An expanded
+   folder with no visible children degrades to append-inside. A **collapsed** folder
+   keeps the ordinary sibling reading.
+4. **The drag payload does NOT round-trip through `dataTransfer`.** `getData` is
+   unreadable during `dragover` in every browser (the drag data store is in
+   protected mode until drop), which is exactly when the tree must know what is
+   being dragged in order to decide whether the drop is legal. So the dragged ids
+   live in a ref for the drag's whole life and `setData("text/plain", …)` exists
+   only to make the browser treat the gesture as a real drag — it is written with
+   the dragged rows' labels (so dropping outside the app pastes something a human
+   recognises) and never read back. This is flagged in the code as a
+   do-not-"clean-up", because turning it into a JSON payload read at drop time
+   reintroduces the dragover blindness the ref exists to avoid.
+5. **Drag events are DELEGATED to the container; only `dragstart` is per-row.** This
+   is monaco's own structure (`listView.js` binds the dnd stream to one dom node and
+   recovers the row by walking up to a `data-index` attribute, `:893+`, which
+   `TreeRow` now emits) and it removes a whole class of flicker: with per-row
+   handlers, moving the pointer between two rows fires `dragleave` on the old row
+   *before* `dragover` on the new one, so any per-row clear blanks the indicator
+   between every pair of rows. Delegated, `dragleave` fires only on leaving the tree,
+   and `relatedTarget` distinguishes that from crossing our own descendants.
+   Monaco's 100ms debounced clear (`onDragLeaveTimeout`) is therefore not needed and
+   not copied.
+6. **Autoscroll is dragover-driven, not rAF and not an interval.** Same shape as
+   `animateDragAndDropScrollTop` (`listView.js:865-876`) — a proportional step,
+   faster deeper into the edge band, clamped — with two deliberate differences. The
+   widget calls it from an rAF loop at ~60fps, hence its small per-call step (0.3
+   slope, 14px cap); ours runs once per `dragover`, which the HTML drag-and-drop
+   processing model fires on movement and at least every 350ms even for a stationary
+   pointer, so the per-call step is "however far the pointer pushed into the band",
+   capped at 28px. rAF was rejected because it **never fires in the automated
+   browser harness** (§"Verification recipe"), and an interval because an
+   event-driven step has nothing to leak if a drop, a dragend or an unmount is
+   missed. The band is 24px rather than 35 because a 278px sidebar of 22px rows would
+   otherwise arm autoscroll a row and a half in from each edge. Measured against
+   `findScrollport`, never `.tree` (no bounded height of its own — the same trap
+   §"What T1 settled" #4 records for paging).
+7. **Validity is split, and the host's half is real.** The tree rejects what is
+   structural: into a leaf, into or around a row inside the dragged set's own
+   subtree (via `navigate.ts`'s existing `descendantIds` — no second walk), and a
+   no-op move. The host's `canDrop` covers exactly one thing the tree cannot know:
+   `Collection.Move` refuses a **reparent** onto an existing display name
+   (`ErrAlreadyExists` — a move never silently renames what it moves), and the
+   destination's children may be collapsed (not rows at all) or hidden by the filter
+   box. It resolves them out of the **unfiltered** `rootItems`, not off
+   `to.parent.children`, because the adapter is built over `filtered` and every node
+   it hands back carries pruned children. A pure reorder inside the item's own
+   parent is exempt (the colliding name there is the item itself, and the server
+   skips the check for that branch). So `canDrop` is passed, and it is not a
+   `() => true`.
+8. **A no-op drop is rejected rather than fired**, and it is only defined for a
+   single dragged row: insert-before-itself, insert-before-its-own-next-sibling, or
+   append-when-already-last. For a multi-row drag there is no position that leaves
+   every member unchanged (the set is reinserted contiguously), so no rule is
+   invented — those drops go through.
+9. **Multi-item moves are SEQUENCED — the one place this app does not fire a batch
+   concurrently.** One `MoveItem` per pruned node, each fired from the previous
+   one's `onSuccess`. Every call in a batch carries the *same* `before`, so each
+   insertion lands immediately ahead of that one sibling and the order the server
+   **processes** them in becomes the resulting sibling order. Fired concurrently
+   that order is whatever the transport and the store's per-call mutex happen to
+   produce: correct data in a permuted order — and unlike a stale cache, the
+   permutation is written to disk. `Tree.tsx` sorts the dragged set into row order
+   so that "visual order in, visual order out" holds; sequencing is the other half
+   of that promise, without which the sort is necessary but not sufficient.
+
+   This is deliberately *not* the reasoning `doDelete` documents for batch delete,
+   and the difference is the point: there, pruning already rules the failure mode
+   out, so concurrency costs nothing. Chaining through `onSuccess` rather than
+   awaiting `mutateAsync` is what keeps this from becoming the app's only
+   awaited-mutation path — `onSuccess` is the callback every mutation here already
+   uses, and each link does exactly what a single-item move does. A failed call
+   stops the chain, leaving a *prefix* of the batch moved in the right order rather
+   than an arbitrary subset. Verified on disk: dragging three rows into a folder
+   leaves `folder.json`'s `items` in visual order.
+10. **`moveSubtree` was reused verbatim; the destination is force-expanded.** The
+    move's `onSuccess` calls `moveSubtree(itemKey(node), keyOf(newPath, name), name)`
+    — the identity hazard, discharged by the remapper T4b already built and tested.
+    The destination folder is force-expanded through the same `expandFolder` helper
+    T5 extracted, unconditionally rather than gated on the drop being `into`: `onMove`
+    is deliberately not told the zone (the destination is the whole contract), and for
+    a between-rows drop the parent is necessarily expanded already, so it is a no-op
+    there. `dispatch.ts` was **not** extended — its header names T6's drag-drop as a
+    likely emitter of "collapse the source, expand the target" in one action list, but
+    a drop changes neither focus nor selection nor expansion *inside* the tree
+    (selection follows the moved rows for free, since `moveSubtree` remaps
+    `treeSelection`), so there was no `TreeAction` to emit. The fold in `applyActions`
+    stays correct and unexercised by this phase.
+
+Two things deliberately NOT built, both VS Code behaviors: **auto-expand on
+hover** (`abstractTree.js:71-81` opens a collapsed folder after a 500ms
+`disposableTimeout` while the pointer rests on it) — it is a timer to leak and the
+folder is one twistie click away mid-drag; and **a custom drag preview**, i.e. the
+native single-row ghost is used even for a multi-row drag, where VS Code draws a
+badge with the count.
+
 ## Backend gaps (block T4 and T6)
 
 Verified in `proto/grpcview/v1/service.proto`:
@@ -759,6 +886,9 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
   enforced server-side too.
 - **T6b — Drag and drop.** Native HTML5 first; `react-dnd@16` only if it falls short.
   Into-folder + between-rows, multi-drag, autoscroll, prefix remap on move.
+  *(Implemented 2026-08-01 — see §"What T6b settled" for the ten calls it forced,
+  including the after-an-expanded-folder resolution, the `dataTransfer`
+  non-round-trip, and why `react-dnd` was not added.)*
 - **T7 — Optional polish.** Compact folders (flag), sticky scroll, and virtualization via
   `@tanstack/react-virtual` *only if* a real collection ever makes it necessary.
 - **T8 — Async children** (*owned by the descriptor-explorer track, but on its critical
@@ -860,7 +990,7 @@ them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` d
 
 ```
 cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
-bazel test //ui:test --nocache_test_results                   # vitest; 316 tests as of T5
+bazel test //ui:test --nocache_test_results                   # vitest; 369 tests as of T6b
 bazel build //ui:ui                                           # the real release bundle
 ```
 
@@ -931,6 +1061,62 @@ math needs real layout — neither is reachable from a node-environment suite):
   (long-gone) menu card, so `Backdrop`'s pre-existing `isConnected` guard correctly declines to
   restore it. One click on the tree fixes it.
 
+Owed for **T6b** — a real drag is the single least testable thing in this rewrite. Two
+corrections to the assumption this list was written under, both established on 2026-08-01:
+
+1. **`left_click_drag` does NOT start an HTML5 drag.** CDP-synthesised mouse events never
+   engage the browser's own gesture recognition, so the harness cannot perform a drag the way
+   a user does. The row merely gets selected, which looks exactly like a broken feature.
+2. **But the harness CAN drive the handlers.** `new DataTransfer()` is constructible in the
+   page, and `new DragEvent(type, {dataTransfer, clientX, clientY})` dispatched on a row
+   reaches React's synthetic system. That exercises everything in `Tree.tsx` and `dnd.ts`
+   against real layout — `getBoundingClientRect`, the delegated `data-index` lookup, the
+   indicator markup, the mutations. **Read the DOM one macrotask later**, not synchronously:
+   React 18 batches, so a same-tick read sees the pre-dispatch DOM and every assertion
+   silently reports "nothing happened".
+
+Everything below marked ✅ was discharged that way against the production binary on a
+throwaway `HOME`. What a synthetic `DragEvent` still cannot reach — and so genuinely needs a
+human hand on a real mouse — is only the browser's own gesture layer: the drag ghost, the
+no-drop cursor, and **autoscroll** (which needs sustained real pointer movement near an edge).
+
+- ✅ **Into a folder.** Drag a root request onto the MIDDLE of a folder row. The whole row must
+  wash accent with a 2px ring (distinguishable from the 1px focus ring), and on release the
+  request appears inside the folder — force-expanded if it was collapsed.
+- ✅ **Between two rows, and the indent is the point.** Drag a request to the boundary between
+  the last child of a folder and the next root row. Aim at the bottom quarter of the child:
+  the line must be indented one level (lands *inside* the folder). Aim at the top quarter of
+  the root row below: the line must be at the root's indent (lands *outside*). Both are the
+  same pixel boundary; only the indent distinguishes them.
+- ✅ **The bottom quarter of an EXPANDED folder means "first child".** Drag onto it and check the
+  item lands ahead of the folder's existing first child, not after the folder.
+- ✅ **A leaf has no middle.** Drag over a request row from top to bottom: only a line at the top
+  edge then a line at the bottom edge, never a row wash.
+- **Reorder within one folder** (drag a request above its sibling) and confirm the order sticks
+  across a reload — this is the pure-reorder path, which touches only the recorded order.
+- ✅ **Invalid drops are refused** (no indicator; the native no-drop cursor itself is gesture-layer). Drag a folder onto itself, onto one of its
+  own children, and onto its own current position (before itself / before its next sibling):
+  no indicator, no cursor change to "move", and nothing happens on release.
+- ✅ **Name collision is refused before the RPC.** Two folders each containing a request called
+  the same thing; drag one onto the other folder. Must read as invalid rather than appearing to
+  work. Repeat with the filter box hiding the colliding sibling — this is the case that
+  motivated resolving destination children out of the unfiltered tree.
+- ✅ **Multi-row drag.** `cmd`+click three requests, drag from one of them into a folder: all
+  three move, in their original top-to-bottom order — and check `folder.json`'s `items` on
+  disk, not just the rendered tree, since the order is what §"What T6b settled" #9 sequences
+  the calls to guarantee. Then drag from an UNSELECTED row: the selection must collapse to
+  that one row and only it moves.
+- **Autoscroll.** With a collection tall enough to overflow the 278px panel, drag to within
+  ~24px of the panel's top and bottom edges: the list must scroll, and it must **stop** as
+  soon as the pointer comes back inside.
+- ✅ **Open tabs survive the move.** Open a request, type into its body, invoke it, then drag it
+  into another folder. The tab must stay open, keep the draft and the last response, and stay
+  active. Repeat by dragging a FOLDER that contains an open request — same expectation for
+  every descendant. This is the identity hazard, and its failure mode is silent.
+- ✅ **A dragged row reads as in-flight** (dimmed) while the drag is live, and everything is clean
+  after a CANCELLED drag (Escape mid-drag, or release outside the panel): no lingering
+  indicator, no dimmed rows, and the tree is still keyboard-drivable.
+
 **Two traps in the browser harness itself**, both of which cost time on 2026-08-01 before being
 identified — neither is an app bug:
 
@@ -951,3 +1137,15 @@ identified — neither is an app bug:
 
 Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
 convention used by the request-body and definition-sources tracks.
+
+**Half done, 2026-08-01.** `AGENTS.md` gained a §"The collection tree" describing the
+component as it now is — the contract, the two tiers, the flat-array decision, controlled
+state, the pure-decision/thin-interpreter split, the keyboard/mouse model, rename, the
+context menu, drag and drop, and the `moveSubtree` identity hazard — plus what is still
+unbuilt. **This doc is deliberately NOT deleted yet**, for two reasons: T6b needs its
+browser pass first (the owed list above), and this file remains the only record of **T3
+(typeahead), which was never implemented** — letter keys are unclaimed by `keymap.ts`,
+there is no `typeahead.ts`, and the intended behavior (1s buffer, wrap-around, composing
+with the filter box rather than replacing it, per §"Deliberate deviations" #3) exists
+nowhere else. Whoever deletes this doc must carry T3 — and T7's compact-folders/sticky-
+scroll/virtualization notes and T8's async-children rationale — somewhere that survives.

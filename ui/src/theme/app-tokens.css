@@ -160,6 +160,68 @@
   width: 1px; background: var(--line); pointer-events: none;
 }
 
+/* drag and drop feedback (T6b). Three states, all painted by the row SHELL
+   (TreeRow.tsx) from dnd.ts's resolved drop:
+
+     .dragging  → the rows currently in flight, dimmed
+     .dropinto  → "this folder becomes the parent": whole-row wash + ring
+     .dropline  → "it lands at this boundary": a 2px line at one edge, INDENTED
+
+   The into/between distinction is the whole point of having two treatments: one
+   says which CONTAINER, the other says which POSITION. */
+/* Opacity, which nothing else here competes for. Note the browser snapshots the
+   native drag ghost around the time `dragstart` is dispatched, so whether the ghost
+   itself is dimmed depends on when React commits the class — cosmetic either way,
+   and not worth deferring the state write for. */
+.treerow.dragging { opacity: .45; }
+
+/* An accent wash plus a 2px inset ring. Both halves are needed and both are
+   deliberate:
+     - the wash alone would be confusable with .on (also accent-tinted), which is
+       painted at the same time on whichever row is the open tab;
+     - the ring alone would be indistinguishable from .foc, which is literally
+       `inset 0 0 0 1px var(--color-accent)`. TWO px, not one, so a row that is
+       both focused and the drop target still reads as the drop target — and
+       declared after .foc so it wins the box-shadow property outright rather than
+       relying on source order elsewhere in the cascade.
+   Stronger than every other row state on purpose: it is transient, it only exists
+   while the pointer is held over the row, and it has to be unmistakable before the
+   user releases the button.
+
+   The `.tree` prefix is there for SPECIFICITY, not scoping: `.treerow.on.sel` above
+   is three classes, so a two-class selector here would lose the background on a row
+   that is simultaneously the open tab, selected, and the drop target. Three classes
+   declared later wins outright. */
+.tree .treerow.dropinto {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+/* The between-rows indicator. INDENTED to the destination's depth (--drop-depth,
+   set inline by TreeRow.tsx from dnd.ts's DropResolution.depth) at the same
+   --tree-indent pitch the guides use, because that indent is the indicator's only
+   informational content: at the boundary below the last child of a folder, a
+   full-width line cannot distinguish "last inside the folder" from "next sibling
+   AFTER the folder", and those are different destinations. Deliberately unlike
+   monaco, whose own drop-target-before/after rules are a 1px FULL-width line
+   (listWidget.js:768-780) — its list widget has no depth to express, and the
+   file explorer that does drops only INTO folders.
+
+   Straddles the row edge (±1px on a 2px line) so it reads as sitting BETWEEN two
+   rows rather than inside either; rows stack with no vertical gap, so the two
+   halves land one in each row. */
+.dropline {
+  position: absolute;
+  left: calc(var(--drop-depth, 0) * var(--tree-indent));
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  pointer-events: none;
+}
+.dropline.before { top: -1px; }
+.dropline.after { bottom: -1px; }
+
 /* roving-tabindex container (T1): the TREE takes real DOM focus, never a row, so
    the browser's default ring must never show here — .foc above is what focus looks
    like instead. The :focus-visible rule matches nocturne.css's global one in

@@ -25,6 +25,14 @@ interface TreeRowProps<T> {
   // focused. Both are computed and keyed by Tree.tsx (the only place that
   // knows this row's id in the CURRENT flat pass), not here.
   domId: string;
+  // T6b: this row's index in the flat array, written out as `data-index`. Drag
+  // events are delegated to ONE handler on the container (Tree.tsx), which has to
+  // get from the event's target back to a row — and monaco's own list does exactly
+  // this, reading a `data-index` attribute while walking up from the target
+  // (listView.js's getItemIndexFromEventTarget, :893+). The alternative, reversing
+  // `domId` back into a row id, would mean un-doing useId()'s prefix and
+  // encodeURIComponent by hand at every dragover.
+  dataIndex: number;
   rowRef: (el: HTMLDivElement | null) => void;
   adapter: TreeAdapter<T>;
   renderRow?: TreeProps<T>["renderRow"];
@@ -33,8 +41,20 @@ interface TreeRowProps<T> {
   active: boolean;
   // Driven by Tree.tsx's own internal renaming state (T4b — it was a bridge PROP
   // through T0/T1, and folding it inward is what let the tree take over the edit
-  // UI). dropTarget below is the one still-honest T0 constant.
+  // UI).
   renaming: boolean;
+  // T6b. Which side of this row the pointer is currently offering to drop on, and
+  // — for the between-rows cases — the DEPTH the dropped rows would land at, which
+  // is what the indicator line is indented to. A full-width line cannot say which
+  // parent the item lands in; the indent is the whole message. Both come from
+  // dnd.ts's resolution, computed once per dragover in Tree.tsx.
+  dropTarget: TreeRowState["dropTarget"];
+  dropDepth: number;
+  // True while this row is part of the set currently being dragged, so it can read
+  // as in-flight (reduced opacity, `.treerow.dragging`). Not a TreeRowState field:
+  // that object is the ROW CONTENT's contract, and this is shell chrome — the same
+  // line drawn for the indent guides and the twistie.
+  dragging: boolean;
   // Only meaningful while `renaming`. Computed by Tree.tsx, which is the only
   // place that holds the whole flat pass this row's siblings live in.
   renameSiblings: readonly string[];
@@ -49,11 +69,16 @@ interface TreeRowProps<T> {
   onRowClick: (ev: React.MouseEvent) => void;
   onTwistieClick: (ev: React.MouseEvent) => void;
   onContextMenu: (ev: React.MouseEvent) => void;
+  // T6b: only DRAGSTART is per-row — the row is the thing that becomes draggable,
+  // and only the row knows which id started the gesture. Every other drag event
+  // (dragover/dragleave/drop/dragend) is delegated to the container; see Tree.tsx.
+  onDragStart: (ev: React.DragEvent) => void;
 }
 
 export function TreeRow<T>({
   row,
   domId,
+  dataIndex,
   rowRef,
   adapter,
   renderRow,
@@ -61,6 +86,9 @@ export function TreeRow<T>({
   focused,
   active,
   renaming,
+  dropTarget,
+  dropDepth,
+  dragging,
   renameSiblings,
   onRenameCommit,
   onRenameCancel,
@@ -69,11 +97,12 @@ export function TreeRow<T>({
   onRowClick,
   onTwistieClick,
   onContextMenu,
+  onDragStart,
 }: TreeRowProps<T>): ReactNode {
-  // dropTarget is the one honest T0 constant left here — T6b is what starts
-  // varying it. Passing the real TreeRowState shape now (rather than a narrower
-  // ad-hoc object) means a rich renderRow never has to change its signature when
-  // that phase lands — only the value it receives starts changing.
+  // Every field of TreeRowState now genuinely varies — `dropTarget` was the last
+  // T0 constant here, and T6b is what started varying it. Passing the real shape
+  // from the start (rather than a narrower ad-hoc object) is why no rich renderRow
+  // has had to change its signature across any of these phases.
   const state: TreeRowState = {
     focused,
     selected,
@@ -81,7 +110,7 @@ export function TreeRow<T>({
     expanded: row.expanded,
     depth: row.depth,
     renaming,
-    dropTarget: null,
+    dropTarget,
   };
 
   // getTreeItem() is the PORTABLE tier's data source — called for CONTENT only
@@ -145,12 +174,20 @@ export function TreeRow<T>({
 
   return (
     <div
-      className={clsx("treerow", selected && "sel", focused && "foc", active && "on")}
+      className={clsx(
+        "treerow",
+        selected && "sel",
+        focused && "foc",
+        active && "on",
+        dragging && "dragging",
+        dropTarget === "into" && "dropinto"
+      )}
       // id/ref come right after className (not before) so the rendered markup's
       // FIRST attribute stays `class="..."` — Tree.portable.test.tsx and
       // request-tree.test.tsx both scrape rows via a `<div class="treerow...`
       // prefix match; reordering these would silently break that scrape.
       id={domId}
+      data-index={dataIndex}
       ref={rowRef}
       // --tree-indent is set here (not left to app-tokens.css's :root default) so
       // the `indent` PROP, not just the CSS token, actually drives the guides'
@@ -174,7 +211,26 @@ export function TreeRow<T>({
       title={tooltip}
       onClick={onRowClick}
       onContextMenu={onContextMenu}
+      // NOT draggable while renaming: the row is hosting a text input, where
+      // drag-selecting a substring must work and dragging the ROW must not start.
+      // This is also where the plan's "reject dragging a row that is mid-rename"
+      // rule is actually enforced — refusing it at the source beats letting the
+      // gesture start and then rejecting every drop it could make.
+      draggable={!renaming}
+      onDragStart={onDragStart}
     >
+      {/* The between-rows drop indicator (T6b): a real element rather than a
+          ::before/::after, because .treerow.on::before is already taken (the open
+          tab's left bar) and a row can be both. Rendered only for the between
+          cases — an `into` drop paints the whole row instead (.dropinto). --drop-depth
+          is what indents it to the destination's depth; see the .dropline rules in
+          app-tokens.css. */}
+      {(dropTarget === "before" || dropTarget === "after") && (
+        <span
+          className={clsx("dropline", dropTarget)}
+          style={{ "--drop-depth": dropDepth } as CSSProperties}
+        />
+      )}
       {/* One guide per ancestor level, 0-indexed — none at depth 0. Purely visual;
           --i is read by the .guide rule in app-tokens.css. */}
       {Array.from({ length: row.depth }, (_, i) => (

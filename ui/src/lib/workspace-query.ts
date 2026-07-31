@@ -19,6 +19,7 @@ import {
   deleteRequest,
   updateRequest,
   updateFolder,
+  moveItem,
   addDescriptorSource,
   removeDescriptorSource,
   refreshDescriptorSource,
@@ -140,6 +141,13 @@ export function useWorkspaceMutations() {
     // Workspace it returns, so the tree (and any inherit()-dependent request) reflects the save
     // without a refetch round-trip.
     updateFolder: useMutation(updateFolder, opts),
+    // moveItem reparents and/or reorders one item (tree-rewrite-plan.md T6a/T6b —
+    // the collection tree's drag and drop). The one mutation the Update* RPCs
+    // deliberately cannot express: their path + item_name are pure ADDRESSING.
+    // A new_path resolving to the item's current parent is a pure reorder, so
+    // "dropped between two rows in the same folder" and "dropped into a different
+    // folder" are one call, not two. Seeds the Get cache like every other write.
+    moveItem: useMutation(moveItem, opts),
     // The four descriptor-source mutations. Each returns the whole re-derived
     // Workspace (sources, merged services, merged descriptor_set), so seeding the
     // Get cache with it is what makes a reorder or refresh take effect everywhere —
