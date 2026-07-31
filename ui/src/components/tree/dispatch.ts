@@ -529,6 +529,20 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
 export interface ClickMods {
   shiftKey: boolean;
   modKey: boolean;
+  // Whether the click event was produced by a RIGHT-CLICK GESTURE rather than a
+  // primary-button click — resolved by the caller, like modKey, because it is
+  // platform-dependent (Tree.tsx's handleRowClick has the full reasoning and the
+  // exact test). Mirrors listWidget.js:526-528's `isMouseRightClick` (`isMouseEvent
+  // (event) && event.button === 2`), consumed at :613-615 in the same
+  // `onViewPointer` this function's plain branch below is modelled on: there,
+  // `setFocus`/`setAnchor` run unconditionally and only `setSelection` is skipped
+  // for a right click. This function goes further and emits NOTHING at all (see
+  // the guard at the top of applyRowClick) — not a divergence in behavior but a
+  // consequence of where the equivalent work lives here: the SAME gesture also
+  // fires a `contextmenu` event, and Tree.tsx's handleContextMenu already owns
+  // focus/anchor/selection for it. Two handlers each emitting actions for one
+  // physical gesture would race over the same state for no gain.
+  rightButton: boolean;
 }
 
 // Every field applyIntent's ctx carries EXCEPT rowsPerPage — a click never
@@ -557,6 +571,16 @@ export function applyRowClick<T>(
   ctx: ApplyClickCtx<T>
 ): TreeAction[] {
   const { flat, focused, selection, anchor } = ctx;
+
+  // A right-click gesture that ALSO reached a click handler is not a click —
+  // checked before shift/modKey so no branch below can reinterpret it (on
+  // macOS, `modKey` is cmd, so a ctrl+click would otherwise fall all the way
+  // through to the plain branch and OPEN the row; that is the gap the plan's
+  // §"The review T2 was owed" deferred to this phase, and this is where it
+  // closes). Returning no actions is deliberate and complete — see ClickMods.
+  // rightButton for why the gesture's own contextmenu handler, not this one,
+  // owns the resulting focus/anchor/selection.
+  if (mods.rightButton) return [];
 
   if (mods.shiftKey) {
     // shift+click — extend from the anchor (rangeSelection, selection.ts;
@@ -613,8 +637,9 @@ export function applyRowClick<T>(
   // sets the anchor, all landing on the clicked row regardless of leaf/folder:
   // listWidget.js:611-614's onViewPointer does exactly these three
   // (`setFocus`/`setAnchor` unconditionally, `setSelection` unless it was a
-  // right click — right-click's own path is Tree.tsx's separate
-  // handleContextMenu, untouched by this phase) for EVERY plain click; the
+  // right click — that right-click exemption is the `mods.rightButton` guard at
+  // the top of this function as of T5; right-click's own path is Tree.tsx's
+  // separate handleContextMenu) for EVERY plain click; the
   // base list widget has no notion of "folder" at all, so the expand-vs-open
   // fork below is a TREE-layer concept layered on top by the caller — mirrors
   // abstractTree.js's own Left/Right/twistie handling living outside the base

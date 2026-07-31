@@ -488,7 +488,9 @@ Two proposed findings were **rejected** — do not re-open them:
 - *"macOS ctrl+click falls into the plain-click branch and opens the row."* Not reproducible:
   Chrome/macOS fires no `click` for ctrl+click. It is a real gap in Firefox, and VS Code's
   `MouseController` does guard it (`isMouseRightClick` → skip `setSelection`) — add that guard
-  at **T5**, when there is a context menu for it to interact with.
+  at **T5**, when there is a context menu for it to interact with. *(Done at T5, as a
+  deliberate superset of VS Code's own check — see §"What T5 settled" #2 for what the vendored
+  `isMouseRightClick` actually guards and why one term had to be added to it.)*
 
 Two nits also fixed: `pruneNestedSelections` now de-duplicates exact-equal entries (a rename
 collision can produce two identical keys, which made the dialog count read 2 for one row), and
@@ -562,6 +564,124 @@ and free of a visible-sibling collision. Six calls worth recording:
    validation, because bolting both onto a component two unrelated call sites depend on is
    worse than the purpose-built `RenameInput.tsx` the tree now has.
 
+## What T5 settled (implemented 2026-08-01)
+
+Right-click works, on rows and on the panel's empty space, driven off the selection.
+`TreeProps.onContextMenu` is unchanged — the tree still does not render a menu — and no
+dependency was added (enduring decision 6's cap holds). Eight calls worth recording:
+
+1. **A right-click now moves FOCUS, and sets the ANCHOR only when it starts a new
+   selection.** T2 left both undone and cited `listWidget.js:583-589`; that method was
+   re-read rather than trusted, and it does exactly one thing —
+   `this.list.setFocus(focus, e.browserEvent)`, with no `setSelection` and no `setAnchor`
+   anywhere in it. So moving focus is the faithful behavior *and* the useful one: it is what
+   makes the next keystroke after a right-click (Escape, an arrow, F2) act on the row the
+   user pointed at. `scroll: false`, like every other mouse-driven focus in the file (§"The
+   review T2 was owed" #3). The stale anchor is fixed **only in the branch that has one**:
+   when the right-click *replaces* the selection, the anchor is left naming a row that is no
+   longer selected at all, so it is repointed at the clicked row — matching
+   `listWidget.js:611-612`, where any pointer landing on a row sets focus *and* anchor. When
+   the row was already selected the anchor is left alone: that selection and its anchor are
+   already coherent, and silently re-anchoring a multi-row selection onto whichever of its
+   rows happened to be right-clicked would change what a later shift+click extends —
+   a real behavior change the widget's own `onContextMenu` does not make. One thing that
+   method does which is deliberately *not* reproduced: it computes `focus` as `[]` when
+   `e.index` is undefined, i.e. an empty-space right-click *clears* focus. Our tree only ever
+   sees right-clicks on rows; empty space is the host's handler (#5) and leaves tree state
+   untouched.
+2. **The macOS ctrl+click guard is a deliberate SUPERSET of VS Code's.**
+   `isRightClickGesture(ev, isMac)` (exported from `Tree.tsx` beside `isEditableTarget`, for
+   the same no-jsdom reason) feeds `ClickMods.rightButton`, and `applyRowClick` checks it
+   **before** shift and modKey. Two findings from reading the vendored source.
+   `isMouseRightClick` is `isMouseEvent(event) && event.button === 2`
+   (`listWidget.js:526-528`), consumed at `:613-615` where it gates *only* `setSelection` —
+   `setFocus`/`setAnchor` run regardless. That `button === 2` half is close to dead code in a
+   browser, because `click` is a primary-button event by spec (right/middle produce
+   `auxclick`); it is mirrored anyway, since it costs a comparison and the widget's event
+   stream is not exactly ours. The term that actually *fires* is `isMac && ctrlKey`, and **VS
+   Code does not have it** — Firefox delivers a macOS ctrl+click as a `click` with button 0
+   and `ctrlKey` true, which a `button === 2` test misses. It never manifests in VS Code
+   because Electron is Chromium-only and Chromium fires no `click` for that gesture (which is
+   exactly why the finding was originally filed "not reproducible" and deferred here). Gated
+   on `isMac` because ctrl is the multi-select modKey everywhere else. `applyRowClick` returns
+   **no actions at all** for the gesture rather than mirroring the widget's focus+anchor: the
+   same physical gesture also fires `contextmenu`, and `handleContextMenu` already owns
+   focus/anchor/selection for it, so two handlers emitting actions for one gesture would only
+   race.
+3. **The menu is `components/ui/Menu.tsx`, not `components/tree/`.** Enduring decision 1 says
+   the tree knows nothing about gRPC; a *menu* is not tree-specific either, and this menu's
+   items (`New request`, `Folder metadata`) are entirely gRPC-shaped. So it is a design-system
+   primitive beside `Dialog`/`Backdrop`, the tree keeps handing over `(nodes, ev)`, and
+   `CollectionPanel` renders it — which is §Risks' "Scope creep into the row renderer"
+   boundary honoured at the phase that predicted it would be tested. Keyboard model: `↑`/`↓`
+   step (skipping disabled, wrapping), `Home`/`End`, `Enter`/`Space` invoke, `Escape` closes.
+   `stepMenuIndex` and the flip math (`menuPosition`) are exported pure functions —
+   `Home`/`End` are *the same stepper* from a virtual out-of-array position, the rule
+   §"What T1 settled" #4 already established for an unfocused tree, so there is no separate
+   edge-finder that could disagree about what "enabled" means.
+4. **Escape's double-handling trap was avoided by taking DOM focus, not by special-casing.**
+   Verbatim the defect review caught for `Dialog` (§"The review T2 was owed" #1):
+   `Backdrop`'s Escape listener is on `window` and the tree's own `onKeyDown` also binds
+   Escape, so a menu that did not hold focus would let one keypress close the menu *and* wipe
+   the selection the menu was opened to act on. The card is `tabIndex={-1}` and focuses itself
+   in a **plain effect, never rAF** (the hidden-tab trap under §"Verification recipe"), so the
+   keydown's bubble path never includes `.tree`. The menu's own Escape handler
+   `stopPropagation`s so `Backdrop`'s window listener does not also fire; that listener stays
+   as the fallback for focus landing outside the card. `Backdrop` gained a **`transparent`
+   prop** (`.dialog-backdrop.clear` — no dimming wash, no centering grid) rather than a fork:
+   a context menu that dimmed the window would read as a modal, but the focus save/restore is
+   subtle enough that two copies would drift. ARIA follows the tree's model — `role="menu"`
+   with `aria-activedescendant` on the card rather than per-item DOM focus — chosen partly for
+   consistency and partly because the card must *keep* focus for the Escape isolation above to
+   hold. `aria-disabled`, not the native `disabled` attribute, because a disabled `<button>`
+   is removed from the hit-test model and would lose the `onMouseEnter` that drives the
+   highlight. **`Backdrop`'s focus restore also gained a guard**, and this one is not
+   cosmetic: it now restores to the opener only when focus is *stray* (activeElement is
+   `<body>`), because a menu item that opens a dialog unmounts the menu's backdrop and mounts
+   the dialog in ONE commit, and React applies the dialog input's `autoFocus` during the
+   **layout** phase — before any passive-effect cleanup. Without the guard every "New
+   folder"/"New request" opened from the context menu would focus its name field and then
+   immediately un-focus it. The mirror case (a menu item that starts an inline rename) works
+   either way, since `RenameInput` focuses in a passive effect *create* and React runs every
+   destroy before any create.
+5. **A multi-row selection offers Delete and OMITS the rest.** Delete is the one genuinely
+   batch-capable action (`doDelete` already loops, `deleteConfirmCopy` already pluralizes);
+   rename, both creates and folder metadata are single-target and would need an arbitrary rule
+   for which selected row they meant. Omitted rather than greyed because a menu whose every
+   row but one is greyed is noise — the greyed affordance is reserved for the one case where
+   the action *is* available in principle and blocked by a fixable condition ("New request"
+   with no definition source yet, mirroring the header + button's own `disabled`). Narrowing
+   is decided on the **raw** selection length, not the pruned batch: the user sees N rows
+   highlighted, so the menu describes N rows. The Delete **label** is
+   `deleteConfirmCopy(pruned).title` — the confirm dialog's own pluralizer, reused rather than
+   reimplemented, and run against the pruned batch so the label cannot disagree with the
+   dialog it opens ("Delete folder", not "Delete 4 items", when three of four rows are inside
+   the fourth). That pruned list is also what the action fires on.
+6. **`submitFolder`'s hardcoded `path: []` is gone.** `showNewFolder: boolean` became
+   `newFolderParent: ItemWithPath | null | undefined`, the same closed/root/folder shape
+   `pickerParent` already used, and the path comes from `childPathOf`. The parent is
+   force-expanded on open, the way `onNewRequestUnder` always did (extracted as
+   `expandFolder`, now that two paths need it), and the dialog title names the destination
+   ("New folder in Alpha") because a menu item invoked three levels down has to say where the
+   folder will land.
+7. **A request row gets Rename + Delete only — no sibling-creating actions.** A knowing
+   narrowing of VS Code, whose explorer offers New File/New Folder on a *file* row (creating
+   in that file's parent). A create action whose destination is the clicked row's invisible
+   parent is the one item here whose target the user cannot see, and the parent folder is one
+   right-click away. Recorded rather than silently done, per the "VS Code familiarity over
+   optimality" rule's own requirement that deviations be written down.
+8. **Empty-space right-click is `CollectionPanel`'s handler, guarded on `defaultPrevented`.**
+   The tree only sees right-clicks that land on rows, so the panel's scroll container carries
+   its own `onContextMenu` offering the root's two creation actions. A row right-click is
+   handled by the tree first, which `preventDefault()`s it, and React's synthetic event
+   bubbles up carrying that flag — so `ev.defaultPrevented` is what stops every row menu from
+   being immediately overwritten by the root's. Both handlers also bail on
+   `isEditableTarget`: a right-click inside an open rename box goes to the browser, because
+   the native menu is the only way to paste into it, and monaco's controller guards the
+   identical case identically (`listWidget.js:584`'s `isInputElement` early return). The row
+   buttons (gear/plus/pencil/trash) are untouched — the menu is an additional path to the same
+   handlers, exactly as F2 and the pencil are two paths to one rename.
+
 ## Backend gaps (block T4 and T6)
 
 Verified in `proto/grpcview/v1/service.proto`:
@@ -632,6 +752,9 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
   contradicts this line.)*
 - **T5 — Context menu.** Right-click → New Request / New Folder / Rename / Delete /
   Folder metadata, driven off the current selection. Keyboard-dismissable, no new deps.
+  *(Implemented 2026-08-01 — see §"What T5 settled" for the eight calls it forced, including
+  the right-click focus/anchor decision, the macOS ctrl+click guard this phase was handed by
+  T2's review, and `submitFolder` losing its hardcoded root path.)*
 - **T6a — proto: move.** `MoveItem` RPC (or `new_path`), with reject-into-own-descendant
   enforced server-side too.
 - **T6b — Drag and drop.** Native HTML5 first; `react-dnd@16` only if it falls short.
@@ -737,7 +860,7 @@ them, and no `tsc` step is wired into `ui/BUILD.bazel`. `bazel test //ui:test` d
 
 ```
 cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json   # the only real typecheck
-bazel test //ui:test --nocache_test_results                   # vitest; 273 tests as of T4b
+bazel test //ui:test --nocache_test_results                   # vitest; 316 tests as of T5
 bazel build //ui:ui                                           # the real release bundle
 ```
 
@@ -770,6 +893,43 @@ folders) on the production binary; they are kept here as the recipe to re-run, n
   request, `Delete`, and check the dialog counts 2 (not 5, if the folder has children) and that
   both are gone afterwards. This is the one owed check with a destructive failure mode, so do
   it against a throwaway `HOME` workspace.
+
+Owed for **T5** (right-click needs a real `MouseEvent` with `button`/`ctrlKey`, and the flip
+math needs real layout — neither is reachable from a node-environment suite):
+
+- **The menu appears at the pointer and flips.** Right-click a row near the bottom of the
+  sidebar; the card must open upward rather than clip. Right-click near the top; it opens
+  downward. No flash at the unflipped position (the placement runs in a `useLayoutEffect`).
+- **The item list narrows with the selection.** A folder row → New request / New folder /
+  Folder metadata / Rename / Delete folder. A request row → Rename / Delete request. Two rows
+  (`cmd`+click) → *only* "Delete 2 requests". Empty space below the last row → New request /
+  New folder, acting on the root. With no definition source, "New request" is greyed and does
+  nothing when clicked.
+- **The keyboard drives it, and Escape does not eat the selection.** Right-click a row, then
+  `↓`/`↑` to move the highlight (a disabled item must be skipped), `Home`/`End` to jump,
+  `Enter` to invoke; `Escape` must close the menu and **leave the selection intact** (the trap
+  in §"What T5 settled" #4). After `Escape`, the tree must still be keyboard-drivable —
+  arrow keys move the cursor without a fresh click.
+- **Menu → Rename does not immediately blur-cancel.** The rename box mounts in the same commit
+  the menu unmounts in, and this relies on React running every effect *cleanup*
+  (Backdrop's focus-restore-to-`.tree`) before any effect *create* (the box focusing itself).
+  If the ordering ever inverts, the box appears and instantly closes.
+- **macOS ctrl+click does not open the row.** In Chrome it should behave exactly like a
+  right-click (menu, no tab opened). Worth repeating in Firefox if available, since that is the
+  browser where the guard actually fires.
+- **New folder respects the clicked folder.** Right-click `Alpha` → New folder → the dialog
+  title reads "New folder in Alpha", the folder is force-expanded, and the new folder appears
+  *inside* `Alpha`, not at the root. The header's own folder button must still create at the
+  root.
+- **Right-click inside an open rename box shows the NATIVE menu**, not ours, and does not open
+  the root menu either.
+- **A dialog opened FROM the menu keeps its `autoFocus`.** Right-click a folder → New folder →
+  type immediately, without clicking the field. This is the `Backdrop` guard in §"What T5
+  settled" #4, and it turns on React's layout-vs-passive effect ordering, which no test here
+  can observe. Known nit, not fixed: after a menu-driven **delete** is confirmed, focus lands
+  on `<body>` rather than back on the tree — the confirm dialog's captured opener is the
+  (long-gone) menu card, so `Backdrop`'s pre-existing `isConnected` guard correctly declines to
+  restore it. One click on the tree fixes it.
 
 **Two traps in the browser harness itself**, both of which cost time on 2026-08-01 before being
 identified — neither is an app bug:

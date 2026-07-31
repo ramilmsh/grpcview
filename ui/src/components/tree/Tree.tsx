@@ -127,6 +127,47 @@ export function isEditableTarget(target: { tagName?: string; isContentEditable?:
   );
 }
 
+// Whether a mouse event that arrived on a CLICK handler was actually produced by
+// a right-click gesture — the guard the plan's §"The review T2 was owed"
+// deferred to T5 ("macOS ctrl+click falls into the plain-click branch and opens
+// the row ... VS Code's MouseController does guard it (isMouseRightClick → skip
+// setSelection) — add that guard at T5, when there is a context menu for it to
+// interact with"). Consumed as ClickMods.rightButton (dispatch.ts), which is
+// where the resulting behavior is documented.
+//
+// What the vendored widget actually checks: `isMouseRightClick(event)` is
+// `isMouseEvent(event) && event.button === 2` (listWidget.js:526-528), tested in
+// `onViewPointer` at :613-615. This predicate is a deliberate SUPERSET of that,
+// by one term. Two findings from reading it:
+//
+//   - The `button === 2` half is close to dead code in a browser. `click` is a
+//     primary-button event by spec (right/middle buttons produce `auxclick`), so
+//     a plain right-click never reaches a click handler with button 2 at all.
+//     Mirrored anyway: it costs one comparison, it is what the widget says, and
+//     the widget's own stream (onMouseClick/onMouseMiddleClick/onTap) is not
+//     exactly ours.
+//   - The `isMac && ctrlKey` half is the term that actually fires, and VS Code
+//     does NOT have it. On macOS ctrl+click IS a right-click gesture at the OS
+//     level, and Firefox delivers it as a `click` with button 0 and ctrlKey
+//     true — so VS Code's check would miss it too. It never manifests there
+//     because Electron is Chromium-only, and Chromium fires no `click` for
+//     ctrl+click; we ship in whatever browser the user has, so the extra term is
+//     the difference between "faithful" and "correct". Gated on isMac because
+//     ctrl is the multi-select modKey everywhere ELSE (see handleRowClick's
+//     platform ternary) — an ungated term would break cmd/ctrl+click on
+//     Windows/Linux outright.
+//
+// isMac is a parameter, not a read of platform.ts's IS_MAC, for the same reason
+// keyToIntent takes it as data: both platforms stay exercisable from one test
+// process with no navigator sniffing. Duck-typed over the two fields it reads so
+// it is callable with a plain object (no DOM), like isEditableTarget above.
+export function isRightClickGesture(
+  ev: { button: number; ctrlKey: boolean },
+  isMac: boolean
+): boolean {
+  return ev.button === 2 || (isMac && ev.ctrlKey);
+}
+
 // PageUp/PageDown's rowsPerPage (in the "move" case below) needs the height of
 // the actual SCROLLING viewport onto the tree, not `.tree`'s own box.
 // app-tokens.css gives `.tree` no height or overflow of its own (only
@@ -451,7 +492,11 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     // own comment, dispatch.ts — the same split keyToIntent already uses for
     // `isMac`, for the same "keep the decision layer pure data-in-data-out"
     // reason).
-    const mods: ClickMods = { shiftKey: ev.shiftKey, modKey: IS_MAC ? ev.metaKey : ev.ctrlKey };
+    const mods: ClickMods = {
+      shiftKey: ev.shiftKey,
+      modKey: IS_MAC ? ev.metaKey : ev.ctrlKey,
+      rightButton: isRightClickGesture(ev, IS_MAC),
+    };
     applyActions(applyRowClick(row, mods, { flat, focused, selection, anchor }));
   };
 
@@ -470,44 +515,65 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     applyActions(applyTwistieClick(row, { flat, focused, selection, anchor }));
   };
 
-  // Right-click: select the row first if it isn't already selected, then hand off
-  // to the caller — no menu UI at T0 (T5). preventDefault so the browser's native
-  // menu doesn't show atop whatever the caller does with the callback; nodes are
-  // computed from the POST-click selection (not the stale closure value), since
-  // setSelection's effect isn't visible until the next render.
+  // Right-click: select the row if it isn't already selected, move focus to it,
+  // then hand off to the caller. The tree still does NOT render a menu — that is
+  // the host's job (see components/ui/Menu.tsx's header, and the plan's §Risks
+  // "Scope creep into the row renderer"), because the items are entirely
+  // gRPC-shaped and enduring decision 1 forbids this component knowing about
+  // them. preventDefault so the browser's native menu doesn't show atop whatever
+  // the caller does with the callback; nodes are computed from the POST-click
+  // selection (not the stale closure value), since setSelection's effect isn't
+  // visible until the next render.
   //
-  // UNCHANGED by this phase — re-verified against the plan's own mouse-list rule
-  // ("right-click → if the row is not already selected, select it, then
-  // onContextMenu") rather than assumed: the `nextSelection` line below already
-  // does exactly that, so there was nothing here for T2 to fix. Two things this
-  // check surfaced but did NOT change, since a multi-row context menu is T5's
-  // business, not this phase's (per this phase's own brief): (1) this never
-  // moves FOCUS or the ANCHOR, unlike every applyRowClick branch above — the
-  // real base widget's OWN dedicated onContextMenu handler
-  // (listWidget.js:583-589) matches that asymmetry (it calls `this.list.
-  // setFocus(focus, ...)` but never setSelection/setAnchor at all), so a
-  // right-click moving focus while leaving selection alone is that method's
-  // job, not this one's — and the plan's mouse-list rule for right-click never
-  // mentions focus either. (2) It never sets the anchor, which means a
-  // right-click that starts a NEW single-row selection here (the `!selection.
-  // includes(row.id)` branch) leaves a stale anchor in place for a later
-  // shift+click/shift+arrow to extend from — the identical faithful-parity
-  // tradeoff applyIntent's "open" case above already accepts and documents at
-  // length for Enter; left exactly as-is here for the same reason (T5 owns
-  // actually wiring a menu — CollectionPanel passes no onContextMenu today, so
-  // this function is presently unreachable dead code from the app's own
-  // perspective, per its own comment just below).
+  // FOCUS MOVES, as of T5 — the two things T2 recorded as deliberately not done
+  // here, both resolved this phase:
+  //
+  // (1) The base widget's own dedicated onContextMenu (listWidget.js:583-589)
+  //     was re-read rather than taken on trust, and it does exactly one thing:
+  //     `this.list.setFocus(focus, e.browserEvent)`, with no setSelection and no
+  //     setAnchor anywhere in the method. (It also computes `focus` as `[]` when
+  //     `e.index` is undefined, i.e. a right-click on empty space CLEARS focus —
+  //     not reproducible from here, since this handler only ever fires for a
+  //     row; CollectionPanel's own panel-level handler covers empty space and
+  //     leaves tree state alone.) So moving focus is the faithful behavior, and
+  //     it is also the useful one: it is what makes the very next keystroke after
+  //     a right-click (Escape, an arrow, F2) act on the row the user pointed at.
+  //     scroll: false, like every mouse-driven focus in this file — the pointer
+  //     is physically on the row already, and scrolling a partially clipped row
+  //     into view would yank the list out from under the cursor (plan §"The
+  //     review T2 was owed" #3).
+  //
+  // (2) The stale ANCHOR is fixed, but only in the branch that has one: when
+  //     this right-click REPLACES the selection, the anchor is left pointing at a
+  //     row that is no longer selected at all, so a following shift+click would
+  //     extend from nowhere the user can see. Setting it to the clicked row
+  //     matches listWidget.js:611-612 (`setFocus` + `setAnchor` for any pointer
+  //     landing on a row) and costs nothing. When the row is ALREADY selected the
+  //     anchor is left untouched: the existing selection and its anchor are
+  //     coherent, and silently re-anchoring a multi-row selection onto whichever
+  //     of its rows happened to be right-clicked would change what a later
+  //     shift+click extends — a real behavior change, and the widget's own
+  //     onContextMenu does not make it.
+  //
+  // A right-click on a row that is mid-rename is handed to the browser instead.
+  // The native menu is the only way to paste into that input, and monaco's
+  // controller guards the identical case the identical way (listWidget.js:584's
+  // `isInputElement(e.browserEvent.target)` early return).
   const handleContextMenu = (row: TreeRowModel<T>, ev: React.MouseEvent): void => {
-    // No menu wired up (T5 doesn't exist yet, and CollectionPanel passes no
-    // onContextMenu today) means truly do nothing — not even preventDefault —
-    // so the browser's native context menu still shows, exactly as it did before
-    // this component existed at all.
+    // No menu wired up by the host means truly do nothing — not even
+    // preventDefault — so the browser's native context menu still shows, exactly
+    // as it did before this component existed at all.
     if (!onContextMenu) return;
+    if (isEditableTarget(ev.target as HTMLElement)) return;
     ev.preventDefault();
     const nextSelection = selection.includes(row.id) ? selection : replaceSelection(row.id);
-    if (nextSelection !== selection) setSelection(nextSelection);
+    if (nextSelection !== selection) {
+      setSelection(nextSelection);
+      setAnchor(row.id);
+    }
+    focusRow(row.id, false);
     const nodes = nextSelection.map(nodeFor).filter((n): n is T => n !== undefined);
-    onContextMenu?.(nodes, ev);
+    onContextMenu(nodes, ev);
   };
 
   // The keyboard INTERPRETER (docs/design/tree-rewrite-plan.md's "VS Code UX

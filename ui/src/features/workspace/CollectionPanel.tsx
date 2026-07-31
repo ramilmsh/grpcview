@@ -4,7 +4,8 @@ import { ScriptKind, type Service, type Method } from "@grpcview/v1/workspace_pb
 import { IconButton, Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
-import { Tree } from "@/components/tree/Tree";
+import { Menu } from "@/components/ui/Menu";
+import { Tree, isEditableTarget } from "@/components/tree/Tree";
 import type { TreeHandle, TreeRowState } from "@/components/tree/types";
 import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
@@ -21,6 +22,7 @@ import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import type { GeneratorDef } from "./generator-libs";
 import { deleteConfirmCopy } from "./delete-confirm";
+import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
 
 // Count requests in a subtree (for the header total; a folder row's own count is
 // its direct children — request-tree.tsx's getTreeItem — which is a different,
@@ -78,7 +80,15 @@ export function CollectionPanel() {
 
   const [filter, setFilter] = useState("");
   const [folderName, setFolderName] = useState("");
-  const [showNewFolder, setShowNewFolder] = useState(false);
+  // Where a new folder would be created — `undefined` means the dialog is CLOSED,
+  // `null` means the collection root, a folder means inside that folder. Exactly
+  // the three-state shape `pickerParent` below already uses for new requests, and
+  // it replaces T0's `showNewFolder` boolean: submitFolder used to hardcode
+  // `path: []`, which is right for the header button and wrong for a folder row's
+  // context menu — "New folder" on `Alpha` has to create inside `Alpha` (T5).
+  const [newFolderParent, setNewFolderParent] = useState<ItemWithPath | null | undefined>(
+    undefined
+  );
   const [pickerParent, setPickerParent] = useState<ItemWithPath | null | undefined>(undefined);
   // The item(s) pending delete confirmation — empty means the dialog is
   // closed. Holds the WHOLE (already-pruned — see onTreeDelete below) batch
@@ -96,6 +106,13 @@ export function CollectionPanel() {
   // button needs to START one — TreeHandle.startRename, the home the contract
   // gives to actions rather than values (components/tree/types.ts).
   const treeRef = useRef<TreeHandle<ItemWithPath>>(null);
+  // The open context menu (T5): where it was summoned, and the rows it acts on
+  // (empty = a right-click on the panel's empty space, i.e. the collection root).
+  // null = closed. The TREE does not render the menu — it hands over the nodes
+  // plus the event and stops there, because the items are gRPC-shaped and
+  // enduring decision 1 forbids the component knowing about them
+  // (tree-rewrite-plan.md §Risks, "Scope creep into the row renderer").
+  const [menu, setMenu] = useState<{ x: number; y: number; nodes: ItemWithPath[] } | null>(null);
 
   const filtered = useMemo(() => filterTree(rootItems, filter), [rootItems, filter]);
   const total = useMemo(() => countRequests(rootItems), [rootItems]);
@@ -114,13 +131,28 @@ export function CollectionPanel() {
     [workspace?.scripts]
   );
 
+  // Force a folder open, so a request/folder created inside it is immediately
+  // visible instead of landing in a collapsed subtree. Expansion is CONTROLLED
+  // state (enduring decision 5), so "open it" means adding its id to
+  // treeExpanded; extracted because both create paths need it now (T0 had it
+  // inline in onNewRequestUnder alone, T5 adds the new-folder-in-folder case).
+  const expandFolder = (folder: ItemWithPath): void =>
+    setTreeExpanded(new Set([...treeExpanded, itemKey(folder)]));
+
   const submitFolder = () => {
     const name = folderName.trim();
     if (name) {
-      createFolder.mutate({ workspaceName: WORKSPACE_NAME, path: [], itemName: name });
+      // childPathOf, not a hardcoded `[]`: the parent is the collection root only
+      // when the header's own folder button opened this dialog. See
+      // newFolderParent's declaration.
+      createFolder.mutate({
+        workspaceName: WORKSPACE_NAME,
+        path: childPathOf(newFolderParent ?? null),
+        itemName: name,
+      });
     }
     setFolderName("");
-    setShowNewFolder(false);
+    setNewFolderParent(undefined);
   };
 
   const onPick = (service: Service, method: Method) => {
@@ -239,10 +271,7 @@ export function CollectionPanel() {
     onStartRename: (item) => treeRef.current?.startRename(itemKey(item)),
     onNewRequestUnder: (folder) => {
       setPickerParent(folder);
-      // Mirrors today's setOpen(true) on the folder a new request is added into —
-      // expansion is controlled state now, so "open it" means adding its id to
-      // treeExpanded instead of flipping local component state.
-      setTreeExpanded(new Set([...treeExpanded, itemKey(folder)]));
+      expandFolder(folder);
     },
     // A row's own trash button always names exactly that ONE row, regardless
     // of whatever the tree's broader multi-selection happens to be right now
@@ -261,6 +290,28 @@ export function CollectionPanel() {
   };
   const renderRow = (item: ItemWithPath, state: TreeRowState): ReactNode =>
     renderRequestRow(item, state, rowCallbacks);
+
+  // What the context menu's items DO — every one of them an existing handler,
+  // reached by a second path (the menu) exactly as F2 and the row pencil are two
+  // paths to one rename. Nothing new is created here; the only novelty is that
+  // `newFolder` can now name a parent at all (see submitFolder).
+  const menuActions: CollectionMenuActions = {
+    newRequest: (parent) => {
+      setPickerParent(parent);
+      if (parent) expandFolder(parent);
+    },
+    newFolder: (parent) => {
+      setNewFolderParent(parent);
+      if (parent) expandFolder(parent);
+    },
+    startRename: (item) => treeRef.current?.startRename(itemKey(item)),
+    // Already pruned by collectionMenuItems (its own comment explains why it has
+    // to be, for the label's count to match the dialog's), and onTreeDelete
+    // prunes again — idempotent, and cheaper to leave than to add a second
+    // "already pruned?" entry point to the one confirm flow.
+    requestDelete: onTreeDelete,
+    editFolderMetadata: setMetadataFolder,
+  };
 
   // Not memoized: deleteConfirmCopy is a handful of string-length/composition
   // checks over `confirm`, which itself never holds more than a small
@@ -289,7 +340,7 @@ export function CollectionPanel() {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <IconButton title="New folder" onClick={() => setShowNewFolder(true)}>
+        <IconButton title="New folder" onClick={() => setNewFolderParent(null)}>
           <FolderPlus />
         </IconButton>
         <IconButton
@@ -302,7 +353,31 @@ export function CollectionPanel() {
       </div>
 
       {/* tree */}
-      <div style={{ flex: 1, overflow: "auto", padding: "8px" }}>
+      <div
+        style={{ flex: 1, overflow: "auto", padding: "8px" }}
+        // Right-click on the panel's EMPTY SPACE (below the last row, or the
+        // "Collection / N reqs" strip) offers the collection ROOT's creation
+        // actions. It has to live here rather than in the tree: the tree only
+        // sees right-clicks that land on one of its rows, and this scroll
+        // container is the surface the rest of the panel actually is.
+        //
+        // defaultPrevented is the guard against double-firing. A right-click ON a
+        // row is handled first by Tree.tsx's own handleContextMenu, which
+        // preventDefault()s it — and React's synthetic event bubbles up here
+        // carrying that flag, so seeing it means "a row already claimed this
+        // gesture". Without the guard, every row right-click would open the row's
+        // menu and then immediately overwrite it with the root's.
+        // isEditableTarget mirrors the same escape hatch the tree makes for a
+        // mid-rename row: that path deliberately does NOT preventDefault (the
+        // native menu is the only way to paste into the box), so this handler has
+        // to make the identical exception or it would swallow the gesture the
+        // tree just declined.
+        onContextMenu={(ev) => {
+          if (ev.defaultPrevented || isEditableTarget(ev.target as HTMLElement)) return;
+          ev.preventDefault();
+          setMenu({ x: ev.clientX, y: ev.clientY, nodes: [] });
+        }}
+      >
         <div
           className="flex items-center justify-between"
           style={{ padding: "2px 6px 6px" }}
@@ -349,16 +424,28 @@ export function CollectionPanel() {
             onOpen={openTab}
             onRenameCommit={doRename}
             onDelete={onTreeDelete}
+            // The tree has already selected the row if it wasn't selected, moved
+            // focus to it, and preventDefault()ed the native menu; `nodes` is its
+            // post-click selection. All that is left is to put a menu at the
+            // pointer. clientX/clientY, not pageX/pageY: .menu is
+            // position: fixed (app-tokens.css), so it is placed in viewport
+            // coordinates.
+            onContextMenu={(nodes, ev) =>
+              setMenu({ x: ev.clientX, y: ev.clientY, nodes })
+            }
             aria-label="Collection"
           />
         )}
       </div>
 
-      {/* new folder dialog */}
+      {/* new folder dialog. The title NAMES the destination when it isn't the
+          root — "New folder" is unambiguous from the header button, but a menu
+          item invoked on some folder three levels down needs to say where the
+          folder is about to land. */}
       <Dialog
-        open={showNewFolder}
-        onClose={() => setShowNewFolder(false)}
-        title="New folder"
+        open={newFolderParent !== undefined}
+        onClose={() => setNewFolderParent(undefined)}
+        title={newFolderParent ? `New folder in ${newFolderParent.item.name}` : "New folder"}
         width={380}
       >
         <Input
@@ -371,12 +458,30 @@ export function CollectionPanel() {
           }}
         />
         <div className="dialog-actions">
-          <Button onClick={() => setShowNewFolder(false)}>Cancel</Button>
+          <Button onClick={() => setNewFolderParent(undefined)}>Cancel</Button>
           <Button variant="primary" onClick={submitFolder} disabled={!folderName.trim()}>
             Create
           </Button>
         </div>
       </Dialog>
+
+      {/* context menu (T5). Mounted only while open — Menu wraps Backdrop, whose
+          Escape listener and opener-focus save/restore live for exactly the
+          backdrop's lifetime (see its own header). Keyed on the summon point plus
+          the row set so a second right-click somewhere else remounts it rather
+          than repositioning a menu that still holds the previous row's
+          highlight. */}
+      {menu ? (
+        <Menu
+          key={`${menu.x},${menu.y},${menu.nodes.map(itemKey).join("|")}`}
+          x={menu.x}
+          y={menu.y}
+          items={collectionMenuItems(menu.nodes, menuActions, {
+            canCreateRequest: services.length > 0,
+          })}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
 
       {/* new request: method picker */}
       <MethodPickerModal

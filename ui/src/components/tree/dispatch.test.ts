@@ -496,7 +496,7 @@ describe("applyIntent: every intent against a null focused id (nonempty tree)", 
 // argument is a whole row, not a bare id.
 describe("applyRowClick: plain click", () => {
   it("on a leaf: selects it, focuses it, sets the anchor, and opens it", () => {
-    expect(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false }, ctx())).toEqual([
+    expect(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false, rightButton: false }, ctx())).toEqual([
       { kind: "setSelection", ids: ["leaf-c"] },
       { kind: "focus", id: "leaf-c", scroll: false },
       { kind: "setAnchor", id: "leaf-c" },
@@ -505,7 +505,7 @@ describe("applyRowClick: plain click", () => {
   });
 
   it("on an EXPANDED folder: selects, focuses, anchors, and COLLAPSES instead of opening", () => {
-    expect(applyRowClick(rowIn("folder-a"), { shiftKey: false, modKey: false }, ctx())).toEqual([
+    expect(applyRowClick(rowIn("folder-a"), { shiftKey: false, modKey: false, rightButton: false }, ctx())).toEqual([
       { kind: "setSelection", ids: ["folder-a"] },
       { kind: "focus", id: "folder-a", scroll: false },
       { kind: "setAnchor", id: "folder-a" },
@@ -514,7 +514,7 @@ describe("applyRowClick: plain click", () => {
   });
 
   it("on a COLLAPSED folder: selects, focuses, anchors, and expands — the opposite fork", () => {
-    expect(applyRowClick(rowIn("folder-b"), { shiftKey: false, modKey: false }, ctx())).toEqual([
+    expect(applyRowClick(rowIn("folder-b"), { shiftKey: false, modKey: false, rightButton: false }, ctx())).toEqual([
       { kind: "setSelection", ids: ["folder-b"] },
       { kind: "focus", id: "folder-b", scroll: false },
       { kind: "setAnchor", id: "folder-b" },
@@ -525,7 +525,7 @@ describe("applyRowClick: plain click", () => {
   it("REPLACES an existing multi-selection down to just the clicked row, regardless of leaf/folder", () => {
     const actions = applyRowClick(
       rowIn("leaf-c"),
-      { shiftKey: false, modKey: false },
+      { shiftKey: false, modKey: false, rightButton: false },
       ctx({ selection: ["folder-a", "a1", "a2"] })
     );
     expect(actions).toContainEqual({ kind: "setSelection", ids: ["leaf-c"] });
@@ -536,7 +536,7 @@ describe("applyRowClick: cmd/ctrl+click (modKey)", () => {
   it("adds an unselected row to the selection, and moves BOTH focus and anchor to it", () => {
     const actions = applyRowClick(
       rowIn("a2"),
-      { shiftKey: false, modKey: true },
+      { shiftKey: false, modKey: true, rightButton: false },
       ctx({ selection: ["a1"], anchor: "a1", focused: "a1" })
     );
     expect(actions).toEqual([
@@ -549,7 +549,7 @@ describe("applyRowClick: cmd/ctrl+click (modKey)", () => {
   it("removes an already-selected row from the selection, leaving the rest in place", () => {
     const actions = applyRowClick(
       rowIn("a1"),
-      { shiftKey: false, modKey: true },
+      { shiftKey: false, modKey: true, rightButton: false },
       ctx({ selection: ["folder-a", "a1", "a2"] })
     );
     expect(actions).toEqual([
@@ -560,10 +560,10 @@ describe("applyRowClick: cmd/ctrl+click (modKey)", () => {
   });
 
   it("never opens a leaf, and never toggles a folder's expansion", () => {
-    const onLeaf = applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: true }, ctx());
+    const onLeaf = applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: true, rightButton: false }, ctx());
     expect(onLeaf.some((a) => a.kind === "open")).toBe(false);
 
-    const onFolder = applyRowClick(rowIn("folder-a"), { shiftKey: false, modKey: true }, ctx());
+    const onFolder = applyRowClick(rowIn("folder-a"), { shiftKey: false, modKey: true, rightButton: false }, ctx());
     expect(onFolder.some((a) => a.kind === "setExpanded")).toBe(false);
   });
 });
@@ -572,7 +572,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
   it("extends the selection from an existing anchor to the clicked row, leaving the anchor unchanged regardless of current focus", () => {
     const actions = applyRowClick(
       rowIn("folder-b"),
-      { shiftKey: true, modKey: false },
+      { shiftKey: true, modKey: false, rightButton: false },
       ctx({ anchor: "a1", focused: "folder-empty" }) // focused is irrelevant once anchor is set
     );
     expect(actions).toEqual([
@@ -585,7 +585,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
   it("bootstraps the anchor from the CURRENT focus when there is no anchor yet", () => {
     const actions = applyRowClick(
       rowIn("a2"),
-      { shiftKey: true, modKey: false },
+      { shiftKey: true, modKey: false, rightButton: false },
       ctx({ anchor: null, focused: "folder-a" })
     );
     expect(actions).toEqual([
@@ -598,7 +598,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
   it("degrades to a single-row selection when the anchor no longer names a visible row — e.g. its item was renamed out from under it (§3's finding), same fallback selection.ts's rangeSelection already provides for a filtered-out anchor", () => {
     const actions = applyRowClick(
       rowIn("folder-b"),
-      { shiftKey: true, modKey: false },
+      { shiftKey: true, modKey: false, rightButton: false },
       ctx({ anchor: "stale-pre-rename-key", focused: "a1" })
     );
     expect(actions).toEqual([
@@ -611,7 +611,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
   it("never opens or toggles expansion, even on a folder", () => {
     const actions = applyRowClick(
       rowIn("folder-b"),
-      { shiftKey: true, modKey: false },
+      { shiftKey: true, modKey: false, rightButton: false },
       ctx({ anchor: "leaf-c" })
     );
     expect(actions.some((a) => a.kind === "open" || a.kind === "setExpanded")).toBe(false);
@@ -622,7 +622,7 @@ describe("applyRowClick: modifier precedence", () => {
   it("when both shiftKey and modKey are held, shift wins — mirrors listWidget.js's changeSelection testing isSelectionRangeChangeEvent before isSelectionSingleChangeEvent", () => {
     const actions = applyRowClick(
       rowIn("folder-b"),
-      { shiftKey: true, modKey: true },
+      { shiftKey: true, modKey: true, rightButton: false },
       ctx({ anchor: "a1", focused: "a1" })
     );
     expect(actions).toEqual([
@@ -630,6 +630,58 @@ describe("applyRowClick: modifier precedence", () => {
       { kind: "setAnchor", id: "a1" },
       { kind: "setSelection", ids: ["a1", "a2", "folder-b"] },
     ]);
+  });
+});
+
+// The right-click guard the plan's §"The review T2 was owed" deferred to T5
+// ("macOS ctrl+click falls into the plain-click branch and opens the row ... VS
+// Code's MouseController does guard it"). Whether a given event IS a right-click
+// gesture is Tree.tsx's isRightClickGesture (tested in Tree.click-guard.test.ts);
+// what applyRowClick does once told is this.
+describe("applyRowClick: a right-click gesture that reached a click handler", () => {
+  it("emits nothing at all — the contextmenu handler owns this gesture", () => {
+    expect(
+      applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false, rightButton: true }, ctx())
+    ).toEqual([]);
+  });
+
+  it("does not open a leaf (the concrete defect: macOS ctrl+click opened the row)", () => {
+    const actions = applyRowClick(
+      rowIn("leaf-c"),
+      { shiftKey: false, modKey: false, rightButton: true },
+      ctx()
+    );
+    expect(actions.some((a) => a.kind === "open")).toBe(false);
+  });
+
+  it("does not toggle a folder either", () => {
+    const actions = applyRowClick(
+      rowIn("folder-a"),
+      { shiftKey: false, modKey: false, rightButton: true },
+      ctx()
+    );
+    expect(actions.some((a) => a.kind === "setExpanded")).toBe(false);
+  });
+
+  it("wins over BOTH modifier branches — checked before shift and before modKey", () => {
+    // Ordering matters specifically on macOS, where modKey is cmd: a ctrl+click
+    // there has modKey false and would otherwise fall through to the plain
+    // branch. But the guard is placed above shift too, so no combination of
+    // modifiers can reinterpret a right-click as a selection change.
+    expect(
+      applyRowClick(
+        rowIn("folder-b"),
+        { shiftKey: true, modKey: false, rightButton: true },
+        ctx({ anchor: "a1", focused: "a1" })
+      )
+    ).toEqual([]);
+    expect(
+      applyRowClick(
+        rowIn("folder-b"),
+        { shiftKey: false, modKey: true, rightButton: true },
+        ctx({ selection: ["a1"] })
+      )
+    ).toEqual([]);
   });
 });
 
@@ -654,9 +706,9 @@ describe("the focus action's scroll flag, by producer", () => {
   });
 
   it("every MOUSE focus does not (plain click, cmd/ctrl+click, shift+click, twistie collapse)", () => {
-    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false }, ctx()))).toEqual([false]);
-    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: true }, ctx()))).toEqual([false]);
-    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: true, modKey: false }, ctx({ anchor: "a1" })))).toEqual([false]);
+    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false, rightButton: false }, ctx()))).toEqual([false]);
+    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: true, rightButton: false }, ctx()))).toEqual([false]);
+    expect(focusFlags(applyRowClick(rowIn("leaf-c"), { shiftKey: true, modKey: false, rightButton: false }, ctx({ anchor: "a1" })))).toEqual([false]);
     expect(focusFlags(applyTwistieClick(rowIn("folder-a"), ctx({ focused: "a1" })))).toEqual([false]);
   });
 });

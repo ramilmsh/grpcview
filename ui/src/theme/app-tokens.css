@@ -284,3 +284,37 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 }
 .freshopt:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
 .freshopt.on { color: var(--color-accent); border-color: var(--color-accent-700); background: var(--color-accent-900); }
+
+/* ── context menu (T5, components/ui/Menu.tsx) ──────────────────────────────
+   A design-system primitive, not a tree one — hence its rules live here beside
+   .dialog-* rather than with the components/tree/ block above. Compact density
+   to match .treerow (13px, ~5px vertical padding) since the collection panel is
+   where it is first used, and --radius-md's 8px for the card. */
+
+/* the behavioral-only variant of nocturne.css's .dialog-backdrop: same overlay,
+   same click-to-close hit area, no dimming wash, no centering grid — the card
+   places itself (position: fixed at the click). See Backdrop's `transparent`. */
+.dialog-backdrop.clear { background: none; padding: 0; display: block; }
+
+.menu {
+  position: fixed; min-width: 176px; max-width: 300px;
+  display: flex; flex-direction: column; padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--panel-2); border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.menuitem {
+  display: flex; align-items: center; padding: 5px 9px; border-radius: 5px;
+  font-family: inherit; font-size: 13px; text-align: left; white-space: nowrap;
+  color: var(--color-neutral-300); background: transparent; border: none; cursor: pointer;
+}
+/* ONE highlight, driven by state (keyboard arrows AND hover both write it — see
+   Menu.tsx's onMouseEnter), so there is no CSS :hover competing with a keyboard
+   cursor and both being painted at once. */
+.menuitem.hl { background: color-mix(in srgb, var(--color-text) 10%, transparent); color: var(--color-text); }
+/* the destructive item, exactly as .rowbtn.danger does it: neutral at rest, red
+   only once highlighted, so an open menu is not permanently shouting one row. */
+.menuitem.danger.hl { background: var(--err-bg); color: var(--err); }
+.menuitem[aria-disabled="true"] { color: var(--color-neutral-600); cursor: default; }
+.menuitem[aria-disabled="true"].hl { background: transparent; }
+.menusep { height: 1px; margin: 4px 3px; background: var(--line); }
