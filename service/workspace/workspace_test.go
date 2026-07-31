@@ -485,3 +485,82 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 		t.Fatalf("colliding rename = %v, want FailedPrecondition", err)
 	}
 }
+
+// itemNames returns the display names of a folder's ordered children.
+func itemNames(items []*grpcviewv1.Item) []string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = it.GetName()
+	}
+	return out
+}
+
+// TestMoveItemRPC covers tree-rewrite-plan.md T6a at the RPC seam: MoveItem
+// reparents an item and the Workspace it returns already reflects the new tree
+// (persisted, not just echoed), and an into-own-descendant move surfaces as
+// FailedPrecondition — store.ErrMoveIntoDescendant via toConnectError — so the
+// drag-and-drop UI can tell an illegal drop apart from a real server fault.
+func TestMoveItemRPC(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	for _, name := range []string{"Src", "Dst"} {
+		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
+			WorkspaceName: testWorkspace,
+			ItemName:      name,
+		})); err != nil {
+			t.Fatalf("CreateFolder %s: %v", name, err)
+		}
+	}
+	if _, err := w.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
+		WorkspaceName: testWorkspace,
+		Path:          []string{"Src"},
+		ItemName:      "Leaf",
+		Service:       "s",
+		Method:        "m",
+	})); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	moveResp, err := w.MoveItem(ctx, connect.NewRequest(&grpcviewv1.MoveItemRequest{
+		WorkspaceName: testWorkspace,
+		Path:          []string{"Src"},
+		ItemName:      "Leaf",
+		NewPath:       []string{"Dst"},
+	}))
+	if err != nil {
+		t.Fatalf("MoveItem: %v", err)
+	}
+	if got := itemNames(folderNamed(t, moveResp.Msg.GetWorkspace(), "Dst").GetItems()); len(got) != 1 || got[0] != "Leaf" {
+		t.Fatalf("Dst in mutate response = %v, want [Leaf]", got)
+	}
+	if got := itemNames(folderNamed(t, moveResp.Msg.GetWorkspace(), "Src").GetItems()); len(got) != 0 {
+		t.Fatalf("Src in mutate response = %v, want empty", got)
+	}
+
+	// Persisted, not just echoed.
+	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got := itemNames(folderNamed(t, getResp.Msg.GetWorkspace(), "Dst").GetItems()); len(got) != 1 || got[0] != "Leaf" {
+		t.Fatalf("Dst after Get = %v, want [Leaf]", got)
+	}
+
+	// Moving a folder into its own child is FailedPrecondition, not an opaque Internal.
+	if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
+		WorkspaceName: testWorkspace,
+		Path:          []string{"Dst"},
+		ItemName:      "Inner",
+	})); err != nil {
+		t.Fatalf("CreateFolder Inner: %v", err)
+	}
+	if _, err := w.MoveItem(ctx, connect.NewRequest(&grpcviewv1.MoveItemRequest{
+		WorkspaceName: testWorkspace,
+		ItemName:      "Dst",
+		NewPath:       []string{"Dst", "Inner"},
+	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("move into own descendant = %v, want FailedPrecondition", err)
+	}
+}

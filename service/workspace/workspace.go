@@ -70,7 +70,7 @@ func toConnectError(err error) error {
 	case errors.Is(err, store.ErrItemNotFound), errors.Is(err, store.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, store.ErrNotAFolder), errors.Is(err, store.ErrNotARequest),
-		errors.Is(err, store.ErrAlreadyExists):
+		errors.Is(err, store.ErrAlreadyExists), errors.Is(err, store.ErrMoveIntoDescendant):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	default:
 		return err
@@ -336,6 +336,19 @@ func (w Workspace) UpdateFolder(ctx context.Context, request *connect.Request[gr
 		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.UpdateFolderResponse{Workspace: ws}), nil
+}
+
+// MoveItem implements [grpcviewv1.WorkspaceServiceHandler]. `before` is passed as
+// the raw *string rather than through GetBefore(), because the getter would collapse
+// "unset" (append to the end) into "" (insert before an item literally named "").
+func (w Workspace) MoveItem(ctx context.Context, request *connect.Request[grpcviewv1.MoveItemRequest]) (*connect.Response[grpcviewv1.MoveItemResponse], error) {
+	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+		return coll.Move(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), request.Msg.GetNewPath(), request.Msg.Before)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.MoveItemResponse{Workspace: ws}), nil
 }
 
 // CreateScript implements [grpcviewv1.WorkspaceServiceHandler].

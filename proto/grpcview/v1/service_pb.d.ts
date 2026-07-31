@@ -506,6 +506,84 @@ export declare type UpdateFolderResponse = Message<"grpcview.v1.UpdateFolderResp
 export declare const UpdateFolderResponseSchema: GenMessage<UpdateFolderResponse>;
 
 /**
+ * MoveItemRequest reparents and/or reorders one tree item (of either kind). It is
+ * the one mutation the Update* RPCs deliberately cannot express: their `path` +
+ * `item_name` are pure ADDRESSING and `name` only rewrites the display name, per
+ * the slug-identity model — nothing there moves an item between folders.
+ *
+ * Moving a folder into itself, or into any of its own descendants, is rejected
+ * with FailedPrecondition (store.ErrMoveIntoDescendant): the drop would detach
+ * the subtree from the tree entirely. The check is enforced in the store, not
+ * just in the dragging UI, so a stale or hand-written request cannot corrupt the
+ * collection. A destination that already holds an item with the same DISPLAY name
+ * is likewise FailedPrecondition (store.ErrAlreadyExists) — a move never silently
+ * renames what it moves.
+ *
+ * @generated from message grpcview.v1.MoveItemRequest
+ */
+export declare type MoveItemRequest = Message<"grpcview.v1.MoveItemRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * path + item_name address the item to move, exactly like every other item RPC.
+   *
+   * @generated from field: repeated string path = 2;
+   */
+  path: string[];
+
+  /**
+   * @generated from field: string item_name = 3;
+   */
+  itemName: string;
+
+  /**
+   * new_path is the DESTINATION parent folder's display-name path (empty = the
+   * collection root). Resolving to the item's CURRENT parent means a pure reorder
+   * within that parent: the item's on-disk directory is left untouched and only
+   * the recorded sibling order changes.
+   *
+   * @generated from field: repeated string new_path = 4;
+   */
+  newPath: string[];
+
+  /**
+   * before names a sibling in the destination parent to insert this item ahead of;
+   * unset appends to the end. This is what makes a drop BETWEEN two rows
+   * expressible and not just a drop INTO a folder. A `before` that no longer names
+   * a child of the destination appends rather than failing — a stale drop target is
+   * a UI race, not a corrupt request.
+   *
+   * @generated from field: optional string before = 5;
+   */
+  before?: string | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.MoveItemRequest.
+ * Use `create(MoveItemRequestSchema)` to create a new message.
+ */
+export declare const MoveItemRequestSchema: GenMessage<MoveItemRequest>;
+
+/**
+ * @generated from message grpcview.v1.MoveItemResponse
+ */
+export declare type MoveItemResponse = Message<"grpcview.v1.MoveItemResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   */
+  workspace?: Workspace | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.MoveItemResponse.
+ * Use `create(MoveItemResponseSchema)` to create a new message.
+ */
+export declare const MoveItemResponseSchema: GenMessage<MoveItemResponse>;
+
+/**
  * @generated from message grpcview.v1.GetRequest
  */
 export declare type GetRequest = Message<"grpcview.v1.GetRequest"> & {
@@ -1111,6 +1189,17 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof UpdateFolderRequestSchema;
     output: typeof UpdateFolderResponseSchema;
+  },
+  /**
+   * MoveItem reparents and/or reorders an item; a drop into the moved folder's own
+   * subtree is rejected server-side.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.MoveItem
+   */
+  moveItem: {
+    methodKind: "unary";
+    input: typeof MoveItemRequestSchema;
+    output: typeof MoveItemResponseSchema;
   },
   /**
    * Invoke executes a unary RPC against a target server and returns the result

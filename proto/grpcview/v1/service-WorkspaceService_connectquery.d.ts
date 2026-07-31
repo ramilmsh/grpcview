@@ -75,6 +75,13 @@ export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
  */
 export const updateFolder: typeof WorkspaceService["method"]["updateFolder"];
 /**
+ * MoveItem reparents and/or reorders an item; a drop into the moved folder's own
+ * subtree is rejected server-side.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.MoveItem
+ */
+export const moveItem: typeof WorkspaceService["method"]["moveItem"];
+/**
  * Invoke executes a unary RPC against a target server and returns the result
  * (status, response body, request/response metadata, latency).
  *

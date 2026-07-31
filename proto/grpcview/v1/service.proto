@@ -152,6 +152,40 @@ message UpdateFolderResponse {
   Workspace workspace = 1;
 }
 
+// MoveItemRequest reparents and/or reorders one tree item (of either kind). It is
+// the one mutation the Update* RPCs deliberately cannot express: their `path` +
+// `item_name` are pure ADDRESSING and `name` only rewrites the display name, per
+// the slug-identity model — nothing there moves an item between folders.
+//
+// Moving a folder into itself, or into any of its own descendants, is rejected
+// with FailedPrecondition (store.ErrMoveIntoDescendant): the drop would detach
+// the subtree from the tree entirely. The check is enforced in the store, not
+// just in the dragging UI, so a stale or hand-written request cannot corrupt the
+// collection. A destination that already holds an item with the same DISPLAY name
+// is likewise FailedPrecondition (store.ErrAlreadyExists) — a move never silently
+// renames what it moves.
+message MoveItemRequest {
+  string workspace_name = 1;
+  // path + item_name address the item to move, exactly like every other item RPC.
+  repeated string path = 2;
+  string item_name = 3;
+  // new_path is the DESTINATION parent folder's display-name path (empty = the
+  // collection root). Resolving to the item's CURRENT parent means a pure reorder
+  // within that parent: the item's on-disk directory is left untouched and only
+  // the recorded sibling order changes.
+  repeated string new_path = 4;
+  // before names a sibling in the destination parent to insert this item ahead of;
+  // unset appends to the end. This is what makes a drop BETWEEN two rows
+  // expressible and not just a drop INTO a folder. A `before` that no longer names
+  // a child of the destination appends rather than failing — a stale drop target is
+  // a UI race, not a corrupt request.
+  optional string before = 5;
+}
+
+message MoveItemResponse {
+  Workspace workspace = 1;
+}
+
 message GetRequest {
   string workspace_name = 1;
 }
@@ -341,6 +375,9 @@ service WorkspaceService {
   rpc UpdateRequest(UpdateRequestRequest) returns (UpdateRequestResponse);
   // UpdateFolder updates a folder's metadata script in the workspace
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
+  // MoveItem reparents and/or reorders an item; a drop into the moved folder's own
+  // subtree is rejected server-side.
+  rpc MoveItem(MoveItemRequest) returns (MoveItemResponse);
   // Invoke executes a unary RPC against a target server and returns the result
   // (status, response body, request/response metadata, latency).
   rpc Invoke(InvokeRequest) returns (InvokeResponse);

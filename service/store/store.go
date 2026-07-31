@@ -49,6 +49,11 @@ var (
 	// ErrAlreadyExists means an item with that display name already exists in
 	// the parent folder.
 	ErrAlreadyExists = errors.New("item already exists")
+	// ErrMoveIntoDescendant means a Move targeted the moved item itself or one of
+	// its own descendants. Such a move has no meaning — it would splice the subtree
+	// out of the tree — so it is rejected here rather than trusted to the caller,
+	// which for a drag-and-drop UI may be working from a stale tree snapshot.
+	ErrMoveIntoDescendant = errors.New("cannot move an item into itself or its own descendant")
 )
 
 // RequestPatch is a partial update to a request. A nil field is left unchanged;

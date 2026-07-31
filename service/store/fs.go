@@ -515,6 +515,129 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	return c.writeOrder(parentDir, slices.DeleteFunc(base, func(s string) bool { return s == ch.slug }))
 }
 
+// Move reparents and/or reorders the item named name in parent, placing it in the
+// folder addressed by newParent (empty = the tree root) ahead of the sibling named
+// before there (nil appends). It handles items of either kind; a folder brings its
+// whole subtree with it, since the move is a single directory rename.
+//
+// Unlike Delete, a missing source item is an ERROR (ErrItemNotFound), not a no-op:
+// deleting something already gone is a benign repeat of the caller's intent, but
+// moving something that isn't there cannot be what the caller meant.
+//
+// When newParent resolves to the item's CURRENT parent this is a pure reorder: the
+// on-disk directory is not touched at all, only the parent's recorded slug order.
+// "Same parent" is decided on the resolved directory rather than by comparing the
+// two display-name paths, since two differently-spelled paths can address the same
+// folder and the directory identity is the definitionally correct test.
+//
+// A `before` that does not name a child of the destination appends instead of
+// failing — a drop target the client resolved against a tree snapshot that has
+// since changed is a UI race, not a corrupt request. (`before` naming the moved
+// item itself lands in the same bucket and appends.)
+//
+// Moving an item into itself or into its own descendant returns
+// ErrMoveIntoDescendant; a destination that already holds a different item with the
+// same display name returns ErrAlreadyExists (the store has no rename-on-move).
+//
+// Note the reparent does not carry the item's gitignored run history along: history
+// is keyed by tree-relative slug path (see historyFilePath), so a moved request
+// starts fresh at its new location. That is the same trade the slug-path keying
+// already makes and is local, regenerable state either way.
+func (c *Collection) Move(_ context.Context, parent []string, name string, newParent []string, before *string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return err
+	}
+	parentDir, present, ch, ok, err := c.resolveChild(parent, name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrItemNotFound, name)
+	}
+	// A bad destination path propagates resolveFolder's ErrItemNotFound/ErrNotAFolder
+	// untouched: those are exactly the codes the caller wants for "you dropped onto
+	// something that is gone, or onto a request".
+	destDir, err := c.resolveFolder(newParent)
+	if err != nil {
+		return err
+	}
+
+	srcDir := filepath.Join(parentDir, ch.slug)
+	// Reject into-self / into-own-descendant on the resolved directories (both come
+	// from the same treeRoot walk, so they are directly comparable). The test is
+	// filepath.Rel and not a string prefix check: ".../foo" IS a string prefix of
+	// ".../foobar", which is a perfectly legal sibling folder. A rel of "." means the
+	// destination IS the item; a rel that does not begin by stepping OUT of srcDir
+	// (".." / "../…") means the destination is nested inside it.
+	rel, err := filepath.Rel(srcDir, destDir)
+	if err != nil {
+		return err
+	}
+	if rel == "." || !(rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+		return fmt.Errorf("%w: %q", ErrMoveIntoDescendant, name)
+	}
+
+	// Same parent: a pure reorder. No rename, no new slug — just the recorded order
+	// with this item's slug lifted out and reinserted at the requested position.
+	if destDir == parentDir {
+		base, err := c.reconciledSlugsFrom(parentDir, present)
+		if err != nil {
+			return err
+		}
+		base = slices.DeleteFunc(base, func(s string) bool { return s == ch.slug })
+		return c.writeOrder(parentDir, insertSlug(base, ch.slug, before, present))
+	}
+
+	destChildren, err := c.readChildren(destDir)
+	if err != nil {
+		return err
+	}
+	if _, exists := findByName(destChildren, ch.name); exists {
+		return fmt.Errorf("%w: %q", ErrAlreadyExists, ch.name)
+	}
+	// The slug is only unique WITHIN a folder, so it cannot be assumed to survive a
+	// reparent: two items with the same slugified name in different folders is
+	// entirely normal, and renaming onto an existing directory would merge or destroy
+	// it. Allocate a fresh slug against the destination's siblings instead.
+	newSlug := uniqueSlug(ch.name, slugSet(destChildren))
+
+	srcBase, err := c.reconciledSlugsFrom(parentDir, present)
+	if err != nil {
+		return err
+	}
+	destBase, err := c.reconciledSlugsFrom(destDir, destChildren)
+	if err != nil {
+		return err
+	}
+	// The directory moves FIRST: writeOrder re-reads the folder's own config, and of
+	// the two possible half-applied states ("order updated, directory not" vs
+	// "directory moved, order not"), the latter is the one reconcileOrder already
+	// self-heals on the next load.
+	if err := os.Rename(srcDir, filepath.Join(destDir, newSlug)); err != nil {
+		return err
+	}
+	if err := c.writeOrder(parentDir, slices.DeleteFunc(srcBase, func(s string) bool { return s == ch.slug })); err != nil {
+		return err
+	}
+	return c.writeOrder(destDir, insertSlug(destBase, newSlug, before, destChildren))
+}
+
+// insertSlug places slug in slugs ahead of the sibling whose DISPLAY name is
+// *before, resolved against the siblings snapshot; it appends when before is unset
+// or no longer names one of them (see Move on why a stale target appends).
+func insertSlug(slugs []string, slug string, before *string, siblings []childEntry) []string {
+	if before != nil {
+		if ch, ok := findByName(siblings, *before); ok {
+			if i := slices.Index(slugs, ch.slug); i >= 0 {
+				return slices.Insert(slugs, i, slug)
+			}
+		}
+	}
+	return append(slugs, slug)
+}
+
 // DescriptorState is the whole descriptor configuration of a collection, written
 // in one shot by PutDescriptorState.
 type DescriptorState struct {

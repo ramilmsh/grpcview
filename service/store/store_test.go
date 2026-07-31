@@ -289,6 +289,248 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+// before is a shorthand for Move's optional `before` argument, which is a *string
+// so that "unset = append" stays distinguishable from "insert ahead of the sibling
+// literally named empty-string".
+func before(name string) *string { return &name }
+
+// folderItems returns the ordered children of the folder addressed by the given
+// display-name path (empty path = the collection root), failing the test if any
+// segment does not name a folder.
+func folderItems(t *testing.T, coll *Collection, ctx context.Context, path ...string) []*grpcviewv1.Item {
+	t.Helper()
+	items := rootItems(t, coll, ctx)
+	for _, name := range path {
+		it := childByName(items, name)
+		if it == nil || it.GetFolder() == nil {
+			t.Fatalf("folder %q not found under path %v", name, path)
+		}
+		items = it.GetFolder().GetItems()
+	}
+	return items
+}
+
+// mustDir / mustNotDir assert an item's on-disk directory does / does not exist,
+// which is how the Move tests tell a reparent (directory renamed) apart from a
+// pure reorder (directory untouched).
+func mustDir(t *testing.T, coll *Collection, slugs ...string) {
+	t.Helper()
+	p := filepath.Join(append([]string{coll.Root(), treeDir}, slugs...)...)
+	if _, err := os.Stat(p); err != nil {
+		t.Errorf("expected dir %s: %v", p, err)
+	}
+}
+
+func mustNotDir(t *testing.T, coll *Collection, slugs ...string) {
+	t.Helper()
+	p := filepath.Join(append([]string{coll.Root(), treeDir}, slugs...)...)
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("dir %s should be gone, stat err = %v", p, err)
+	}
+}
+
+// TestMoveReparent covers tree-rewrite-plan.md T6a's core case: a request moved out
+// of a folder to the root and back in, with both parents' recorded order correct and
+// the on-disk directory following the item.
+func TestMoveReparent(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Folder"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"A", "B"} {
+		if err := coll.CreateRequest(ctx, []string{"Folder"}, name, "s", "m"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := coll.CreateRequest(ctx, nil, "R1", "s", "m"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Folder -> root, appended (before unset).
+	if err := coll.Move(ctx, []string{"Folder"}, "A", nil, nil); err != nil {
+		t.Fatalf("Move to root: %v", err)
+	}
+	if got := names(folderItems(t, coll, ctx)); len(got) != 3 || got[0] != "Folder" || got[1] != "R1" || got[2] != "A" {
+		t.Errorf("root order = %v, want [Folder R1 A]", got)
+	}
+	if got := names(folderItems(t, coll, ctx, "Folder")); len(got) != 1 || got[0] != "B" {
+		t.Errorf("source folder = %v, want [B]", got)
+	}
+	mustDir(t, coll, "a")
+	mustNotDir(t, coll, "folder", "a")
+
+	// root -> Folder, inserted ahead of B.
+	if err := coll.Move(ctx, nil, "A", []string{"Folder"}, before("B")); err != nil {
+		t.Fatalf("Move into folder: %v", err)
+	}
+	if got := names(folderItems(t, coll, ctx, "Folder")); len(got) != 2 || got[0] != "A" || got[1] != "B" {
+		t.Errorf("dest folder = %v, want [A B]", got)
+	}
+	if got := names(folderItems(t, coll, ctx)); len(got) != 2 || got[0] != "Folder" || got[1] != "R1" {
+		t.Errorf("root order = %v, want [Folder R1]", got)
+	}
+	mustDir(t, coll, "folder", "a")
+	mustNotDir(t, coll, "a")
+}
+
+// TestMoveFolderWithChildren asserts a reparented folder brings its whole subtree
+// along (the move is one directory rename) and the descendants stay addressable
+// under the new path.
+func TestMoveFolderWithChildren(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Outer"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateFolder(ctx, []string{"Outer"}, "Inner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Outer", "Inner"}, "Deep", "s.S", "Deep"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateFolder(ctx, nil, "Target"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := coll.Move(ctx, []string{"Outer"}, "Inner", []string{"Target"}, nil); err != nil {
+		t.Fatalf("Move folder: %v", err)
+	}
+	if got := names(folderItems(t, coll, ctx, "Outer")); len(got) != 0 {
+		t.Errorf("source folder = %v, want empty", got)
+	}
+	if got := names(folderItems(t, coll, ctx, "Target", "Inner")); len(got) != 1 || got[0] != "Deep" {
+		t.Errorf("moved subtree = %v, want [Deep]", got)
+	}
+	mustDir(t, coll, "target", "inner", "deep")
+	mustNotDir(t, coll, "outer", "inner")
+	// Still loadable through the NEW display-name path.
+	if _, err := coll.ResolveRequest(ctx, []string{"Target", "Inner"}, "Deep"); err != nil {
+		t.Errorf("descendant unreachable after move: %v", err)
+	}
+}
+
+// TestMoveReorderWithinParent covers the pure-reorder case (destination resolves to
+// the current parent): the recorded order changes but no directory is renamed. It
+// also covers the two `before` fallbacks — unset appends, and a `before` that no
+// longer names a sibling appends rather than erroring.
+func TestMoveReorderWithinParent(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	for _, name := range []string{"A", "B", "C"} {
+		if err := coll.CreateRequest(ctx, nil, name, "s", "m"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := coll.Move(ctx, nil, "C", nil, before("A")); err != nil {
+		t.Fatalf("reorder: %v", err)
+	}
+	if got := names(folderItems(t, coll, ctx)); len(got) != 3 || got[0] != "C" || got[1] != "A" || got[2] != "B" {
+		t.Errorf("root order = %v, want [C A B]", got)
+	}
+	// A reorder must not touch the filesystem: the item's dir is still at its
+	// original path under its original slug.
+	mustDir(t, coll, "c")
+
+	// before unset appends.
+	if err := coll.Move(ctx, nil, "C", nil, nil); err != nil {
+		t.Fatalf("reorder append: %v", err)
+	}
+	if got := names(folderItems(t, coll, ctx)); len(got) != 3 || got[0] != "A" || got[1] != "B" || got[2] != "C" {
+		t.Errorf("root order = %v, want [A B C]", got)
+	}
+
+	// A stale `before` (no such sibling) appends instead of failing.
+	if err := coll.Move(ctx, nil, "A", nil, before("Ghost")); err != nil {
+		t.Fatalf("stale before should append, got %v", err)
+	}
+	if got := names(folderItems(t, coll, ctx)); len(got) != 3 || got[0] != "B" || got[1] != "C" || got[2] != "A" {
+		t.Errorf("root order = %v, want [B C A]", got)
+	}
+}
+
+// TestMoveRejections covers everything Move refuses: a destination display-name
+// collision, a move into the item itself or into its own grandchild, and a missing
+// source item (which — unlike Delete — is an error, not an idempotent no-op).
+func TestMoveRejections(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	for _, name := range []string{"Src", "Dst"} {
+		if err := coll.CreateFolder(ctx, nil, name); err != nil {
+			t.Fatal(err)
+		}
+		if err := coll.CreateRequest(ctx, []string{name}, "Req", "s", "m"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := coll.CreateFolder(ctx, []string{"Src"}, "Mid"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateFolder(ctx, []string{"Src", "Mid"}, "Leaf"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Destination already holds an item with the same display name.
+	if err := coll.Move(ctx, []string{"Src"}, "Req", []string{"Dst"}, nil); !errors.Is(err, ErrAlreadyExists) {
+		t.Errorf("colliding move = %v, want ErrAlreadyExists", err)
+	}
+	// Into itself, and into its own grandchild.
+	if err := coll.Move(ctx, nil, "Src", []string{"Src"}, nil); !errors.Is(err, ErrMoveIntoDescendant) {
+		t.Errorf("move into self = %v, want ErrMoveIntoDescendant", err)
+	}
+	if err := coll.Move(ctx, nil, "Src", []string{"Src", "Mid", "Leaf"}, nil); !errors.Is(err, ErrMoveIntoDescendant) {
+		t.Errorf("move into grandchild = %v, want ErrMoveIntoDescendant", err)
+	}
+	// A missing source item is an error, not a no-op.
+	if err := coll.Move(ctx, nil, "Ghost", []string{"Dst"}, nil); !errors.Is(err, ErrItemNotFound) {
+		t.Errorf("move missing item = %v, want ErrItemNotFound", err)
+	}
+	// None of the rejections mutated anything.
+	if got := names(folderItems(t, coll, ctx, "Src")); len(got) != 2 || got[0] != "Req" || got[1] != "Mid" {
+		t.Errorf("Src after rejections = %v, want [Req Mid]", got)
+	}
+	mustDir(t, coll, "src", "mid", "leaf")
+}
+
+// TestMoveSlugCollision is the case a naive os.Rename silently destroys: slugs are
+// only unique WITHIN a folder, so two same-slug items in different folders is normal
+// and a reparent must allocate a fresh slug in the destination.
+func TestMoveSlugCollision(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	for _, name := range []string{"Src", "Dst"} {
+		if err := coll.CreateFolder(ctx, nil, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Distinct display names that slugify identically, so no display-name collision
+	// blocks the move but the slugs would.
+	if err := coll.CreateRequest(ctx, []string{"Dst"}, "Get User", "s", "m"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Src"}, "get user", "s", "m"); err != nil {
+		t.Fatal(err)
+	}
+	mustDir(t, coll, "dst", "get-user")
+	mustDir(t, coll, "src", "get-user")
+
+	if err := coll.Move(ctx, []string{"Src"}, "get user", []string{"Dst"}, nil); err != nil {
+		t.Fatalf("Move with colliding slug: %v", err)
+	}
+	// Both survive, on distinct directories, in recorded order.
+	mustDir(t, coll, "dst", "get-user")
+	mustDir(t, coll, "dst", "get-user-2")
+	mustNotDir(t, coll, "src", "get-user")
+	if got := names(folderItems(t, coll, ctx, "Dst")); len(got) != 2 || got[0] != "Get User" || got[1] != "get user" {
+		t.Errorf("Dst after move = %v, want [Get User, get user]", got)
+	}
+	ff := &grpcviewstorev1.Folder{}
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "dst", folderFileName), ff)
+	if got := ff.GetItems(); len(got) != 2 || got[0] != "get-user" || got[1] != "get-user-2" {
+		t.Errorf("Dst slug order = %v, want [get-user get-user-2]", got)
+	}
+	// The moved request is addressable under its new path.
+	if _, err := coll.ResolveRequest(ctx, []string{"Dst"}, "get user"); err != nil {
+		t.Errorf("moved request unreachable: %v", err)
+	}
+}
+
 func TestDescriptorStatePersistence(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
