@@ -39,6 +39,49 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
 - The default shell here is fish. For commands that need bash semantics, wrap
   them: `bash -c '...'`.
 
+## Delegating to background agents
+
+Code-writing here is delegated to background agents (Workflow / Agent) while the
+main thread orchestrates, verifies in a browser, and commits.
+
+Measured across the first 25 agents of the tree rewrite: **~83% of token spend
+was context handling, not reasoning or writing.** Cache reads alone fit
+`≈ 1300 × turns²` (so a 100-turn agent costs 4× a 50-turn one, and a 180-turn
+agent 16×), and wall clock runs ~10s/turn. **Turn count is the lever that
+matters** — every rule below exists to cut it.
+
+- **Scope one agent to ~40 turns.** Halving a job quarters its cache cost. The
+  ~30–50k of context each additional agent re-establishes is ~1% of even a small
+  agent's total, so splitting never eats the gain — a worry that sounds right and
+  is wrong by two orders of magnitude.
+- **Pre-load context; don't make the agent find it.** Paste the relevant excerpt
+  into the brief, and name exact paths and line ranges. "Check how the vendored
+  monaco does it" buys a ~15-turn grep expedition *per agent*; the 40 lines it
+  eventually reads cost ~500 tokens to paste. Agents left to discover their own
+  context hit Read×40+.
+- **Cap the verify loop: run each gate at most twice, then report the failure
+  verbatim and stop.** "Make all the gates pass" licenses iterate-until-green,
+  the single biggest turn driver observed (one agent made 46 `Bash` calls). The
+  orchestrator re-runs every gate before committing anyway, so grinding to green
+  inside the agent is duplicated work at quadratic cost.
+- **One reviewer, handed the diff.** Read-only review agents burned 25% of all
+  output tokens and wrote no code. Keep the adversarial pass — it has caught real
+  bugs that two implementers and a typecheck all missed — but put `git diff` in
+  the brief instead of letting the reviewer rediscover it.
+- **`effort`: one tier below the session's, floored at `medium`. Never `low`** —
+  low mangles output, and a mangled result costs a whole re-run.
+
+Capping the verify loop is a ban on *grinding*, never a licence to skip testing.
+Agents in this repo have a track record of **reporting passes that never
+happened**, in two specific ways:
+
+- A new `.go` file that was never added to its `BUILD.bazel` `srcs` isn't
+  compiled, so the package still builds and its tests still "pass". Check that
+  new sources actually landed in `srcs`.
+- Bazel serves cached results, so a test target can report `PASSED` without
+  running. When validating someone else's claimed pass, always
+  `--nocache_test_results`, and check the named test count changed.
+
 ## Architecture
 
 - **Frontend** (`ui/`): a React 18 + TypeScript single-page app built with Vite.
@@ -291,6 +334,27 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 
   This copies the regenerated `.d.ts` declarations into the source tree. The
   runtime `_pb` modules are Bazel-generated and not committed.
+
+### Frontend gates
+
+Three, and they check different things — a change to `ui/` isn't verified until
+all three are green:
+
+```bash
+cd ui && ./node_modules/.bin/tsc --noEmit -p tsconfig.json  # the only real typecheck
+bazel test //ui:test                                        # vitest
+bazel build //ui:ui                                         # the real release bundle
+```
+
+**`bazel build //ui:ui` does not typecheck.** Vite builds with esbuild, which
+strips types without checking them, so a genuine type error produces a green
+build. `tsc --noEmit` is the only gate that catches it, and it is not yet a Bazel
+target — it has to be run by hand.
+
+`//ui:test` runs vitest under `environment: "node"` with no jsdom. Component
+behavior is tested by rendering with `renderToStaticMarkup` and asserting on
+markup; anything needing real layout, focus, or event dispatch can only be
+verified in a browser (see Browser verification hook below).
 
 ## Directory Structure
 
