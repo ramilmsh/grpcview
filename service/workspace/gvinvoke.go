@@ -83,8 +83,9 @@ type gvInvokeStatus struct {
 // scriptInvoker returns the scripting.Invoker that every gv.invoke call made by a script
 // running against workspaceName's engine re-enters through (threaded onto ctx by invokeUnary
 // via scripting.WithInvoker). It parses the {path, params} envelope, enforces the depth cap,
-// splits path into a display-name parent path + item name, resolves the named saved request via
-// store.ResolveRequest, and calls the SAME invokeUnary the public Invoke RPC uses — with
+// splits path into a display-name parent path + item name, resolves the named saved request
+// through the shared resolveSavedRun (invoke_saved.go, which the InvokeSaved RPC also goes
+// through), and calls the SAME invokeUnary the public Invoke RPC uses — with
 // recordHistory=false (D6: a script fan-out must not spam N requests' histories) and the
 // caller's params threaded through so the target's own body/metadata/middleware (and, per D4,
 // its ancestor folders' metadata scripts) see them as gv.request.params.
@@ -112,28 +113,22 @@ func (w Workspace) scriptInvoker(workspaceName string) scripting.Invoker {
 			return nil, err
 		}
 
-		coll, err := w.store.Open(ctx, workspaceName)
-		if err != nil {
-			return nil, err
-		}
-		target, err := coll.ResolveRequest(ctx, parent, name)
+		// The same resolve + invokeSpec build the InvokeSaved RPC runs (invoke_saved.go): one
+		// helper, so a script's re-entry and an addressed RPC run cannot resolve a saved request
+		// differently. recordHistory=false is D6 — a script fan-out must not spam N histories.
+		run, err := w.resolveSavedRun(ctx, savedInvoke{
+			workspaceName: workspaceName,
+			parent:        parent,
+			itemName:      name,
+			params:        env.Params,
+			recordHistory: false, // D6
+		})
 		if err != nil {
 			return nil, fmt.Errorf("gv.invoke(%q): %w", env.Path, err)
 		}
 
 		childCtx := withGvInvokeDepth(ctx, depth+1)
-		out, err := w.invokeUnary(childCtx, invokeSpec{
-			workspaceName:  workspaceName,
-			path:           parent,
-			itemName:       name,
-			service:        target.GetService(),
-			method:         target.GetMethod(),
-			target:         target.GetTarget(),
-			body:           target.GetDraftBody(),
-			metadataScript: target.GetDraftMetadataScript(),
-			params:         env.Params,
-			recordHistory:  false, // D6
-		})
+		out, err := w.invokeUnary(childCtx, run.spec)
 		if err != nil {
 			return nil, err
 		}

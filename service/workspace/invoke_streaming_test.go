@@ -61,7 +61,7 @@ func collectStream(ctx context.Context, w Workspace, msg *grpcviewv1.InvokeStrea
 		frames = append(frames, resp)
 		return nil
 	}
-	return frames, w.streamInvoke(ctx, msg, send)
+	return frames, w.streamInvoke(ctx, msg, send, nil, true)
 }
 
 // splitFrames separates collected frames into the message payloads and the single

@@ -52,8 +52,8 @@ import (
 // by path/item_name; an ad-hoc invoke (empty item_name), a request that isn't stored, or one
 // with no attached middleware is a no-op that returns its inputs unchanged. Failures are
 // Connect FailedPrecondition naming the offending script. params backs gv.request.params for
-// every middleware run in the chain (gv-features-plan.md Feature 3) — nil outside a gv.invoke
-// re-entry.
+// every middleware run in the chain (gv-features-plan.md Feature 3) — set by a gv.invoke
+// re-entry and by the addressed InvokeSaved RPCs, nil for the public Invoke/InvokeStreaming.
 func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName string, path []string, itemName, service string, target *grpcviewv1.Server, bodies []string, md *structpb.Struct, params map[string]any) ([]string, *structpb.Struct, error) {
 	if itemName == "" {
 		return bodies, md, nil // ad-hoc invoke: no saved request to attach middleware to

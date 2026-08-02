@@ -820,6 +820,161 @@ export declare type InvokeStreamResponse = Message<"grpcview.v1.InvokeStreamResp
 export declare const InvokeStreamResponseSchema: GenMessage<InvokeStreamResponse>;
 
 /**
+ * InvokeSavedRequest runs the request SAVED at path/item_name, resolving its body,
+ * metadata script, attached middleware and target server-side — the addressed
+ * counterpart to InvokeRequest, which carries the caller's own (possibly unsaved)
+ * body. It backs both InvokeSaved and InvokeSavedStreaming.
+ *
+ * @generated from message grpcview.v1.InvokeSavedRequest
+ */
+export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * path is the saved request's PARENT-folder display-name path, outermost first;
+   * empty for a request at the top level.
+   *
+   * @generated from field: repeated string path = 2;
+   */
+  path: string[];
+
+  /**
+   * item_name is the saved request's own display name.
+   *
+   * @generated from field: string item_name = 3;
+   */
+  itemName: string;
+
+  /**
+   * params is this run's gv.request.params: the object the request's body, metadata
+   * script, ancestor folder metadata scripts and middleware all read it from.
+   *
+   * @generated from field: google.protobuf.Struct params = 4;
+   */
+  params?: JsonObject | undefined;
+
+  /**
+   * target overrides the saved request's target for this run; unset uses the saved
+   * one (and, when that is unset too, the same default Invoke applies).
+   *
+   * @generated from field: optional grpcview.v1.Server target = 5;
+   */
+  target?: Server | undefined;
+
+  /**
+   * messages, when non-empty, override the saved body for this run only — the
+   * request bodies as JSON (or TypeScript) text, in send order. The rule matches
+   * InvokeStreamRequest.messages: unary and server-streaming targets expect exactly
+   * one; client-streaming and bidi targets receive all of them composed up-front.
+   *
+   * @generated from field: repeated string messages = 6;
+   */
+  messages: string[];
+
+  /**
+   * record_history gates whether this run is appended to the saved request's run
+   * history. It defaults to TRUE (an explicit false opts out) because an addressed
+   * run is a real user-initiated one, unlike a script's fan-out.
+   *
+   * @generated from field: optional bool record_history = 7;
+   */
+  recordHistory?: boolean | undefined;
+
+  /**
+   * dry_run resolves and evaluates everything the call needs and then sends
+   * nothing, reporting the outcome in InvokeSavedResponse.resolved. Nothing is
+   * dialed, so a dry run works with the target down. Rejected by the streaming form,
+   * which has no frame to carry the result — dry-run any request, of any streaming
+   * kind, through the unary one.
+   *
+   * @generated from field: bool dry_run = 8;
+   */
+  dryRun: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeSavedRequest.
+ * Use `create(InvokeSavedRequestSchema)` to create a new message.
+ */
+export declare const InvokeSavedRequestSchema: GenMessage<InvokeSavedRequest>;
+
+/**
+ * InvokeSavedResponse carries a saved request's run: response for a real call,
+ * resolved for a dry run. Exactly one of the two is ever set.
+ *
+ * @generated from message grpcview.v1.InvokeSavedResponse
+ */
+export declare type InvokeSavedResponse = Message<"grpcview.v1.InvokeSavedResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Request.Response response = 1;
+   */
+  response?: Request_Response | undefined;
+
+  /**
+   * @generated from field: optional grpcview.v1.ResolvedRequest resolved = 2;
+   */
+  resolved?: ResolvedRequest | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeSavedResponse.
+ * Use `create(InvokeSavedResponseSchema)` to create a new message.
+ */
+export declare const InvokeSavedResponseSchema: GenMessage<InvokeSavedResponse>;
+
+/**
+ * ResolvedRequest is what a dry run reports: everything the server would have sent,
+ * post-evaluation and post-middleware, with nothing dialed.
+ *
+ * @generated from message grpcview.v1.ResolvedRequest
+ */
+export declare type ResolvedRequest = Message<"grpcview.v1.ResolvedRequest"> & {
+  /**
+   * @generated from field: string service = 1;
+   */
+  service: string;
+
+  /**
+   * @generated from field: string method = 2;
+   */
+  method: string;
+
+  /**
+   * target is the server the call would have been sent to, after the saved
+   * request's own target and the per-run override are applied.
+   *
+   * @generated from field: grpcview.v1.Server target = 3;
+   */
+  target?: Server | undefined;
+
+  /**
+   * messages are the evaluated request bodies as JSON, post-middleware, in send
+   * order — one entry for a unary or server-streaming target, all of them for a
+   * client-streaming or bidi one.
+   *
+   * @generated from field: repeated string messages = 4;
+   */
+  messages: string[];
+
+  /**
+   * metadata is the evaluated outgoing metadata, post-middleware, as
+   * {[key]: string[]}.
+   *
+   * @generated from field: google.protobuf.Struct metadata = 5;
+   */
+  metadata?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.ResolvedRequest.
+ * Use `create(ResolvedRequestSchema)` to create a new message.
+ */
+export declare const ResolvedRequestSchema: GenMessage<ResolvedRequest>;
+
+/**
  * CreateScriptRequest creates a new, empty script of the given kind in the
  * collection. The name must be unique among scripts.
  *
@@ -1224,6 +1379,47 @@ export declare const WorkspaceService: GenService<{
   invokeStreaming: {
     methodKind: "server_streaming";
     input: typeof InvokeStreamRequestSchema;
+    output: typeof InvokeStreamResponseSchema;
+  },
+  /**
+   * Runs the request saved at a collection path and returns the result of the call.
+   *
+   * Requires workspace_name, item_name (the request's display name) and path (its
+   * parent folders, outermost first; empty at the top level). The saved request's own
+   * body, metadata, middleware and target are used, so the caller supplies no body of
+   * its own. params is a free-form object its body and metadata read values from. For one
+   * run only: target overrides where the call goes, messages override the request
+   * bodies as JSON text, record_history defaults to true, and dry_run evaluates
+   * everything but sends nothing.
+   *
+   * Returns the response message, the call's gRPC status, request and response
+   * metadata and the latency — or, for a dry run, only the resolved request. A status
+   * the target returned is reported in the response, never as an error. A streaming
+   * method needs the streaming form of this call.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.InvokeSaved
+   */
+  invokeSaved: {
+    methodKind: "unary";
+    input: typeof InvokeSavedRequestSchema;
+    output: typeof InvokeSavedResponseSchema;
+  },
+  /**
+   * Runs the request saved at a collection path and streams every response message back.
+   *
+   * Takes the same arguments as the unary form except dry_run, which is rejected here.
+   * Handles a method of any kind: a client-streaming or bidi method is sent every entry
+   * of messages up-front, in order, since there is no live interleave.
+   *
+   * Returns zero or more message frames as the target emits them, then one final frame
+   * carrying the gRPC status, request and response metadata and the latency. A status
+   * the target returned is reported in that final frame, never as an error.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.InvokeSavedStreaming
+   */
+  invokeSavedStreaming: {
+    methodKind: "server_streaming";
+    input: typeof InvokeSavedRequestSchema;
     output: typeof InvokeStreamResponseSchema;
   },
   /**

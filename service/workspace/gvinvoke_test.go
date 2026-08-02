@@ -22,19 +22,7 @@ import (
 // (so resolveMethod can dial+reflect it without a workspace reflection source configured).
 func gvTarget(t *testing.T, w Workspace, ctx context.Context, parent []string, name, body string, port int) {
 	t.Helper()
-	coll, err := w.store.Open(ctx, testWorkspace)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if err := coll.CreateRequest(ctx, parent, name, echoService, "Unary"); err != nil {
-		t.Fatalf("CreateRequest %q: %v", name, err)
-	}
-	target := &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)}
-	if err := coll.UpdateRequest(ctx, parent, name, store.RequestPatch{
-		DraftBody: &body, SetTarget: true, Target: target,
-	}); err != nil {
-		t.Fatalf("UpdateRequest %q: %v", name, err)
-	}
+	saveRequest(t, w, ctx, parent, name, "Unary", body, loopback(port))
 }
 
 // TestGvInvokeNestedReentrancy is the headline test (gv-features-plan.md Feature 3 Phase 2's

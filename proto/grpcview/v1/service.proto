@@ -269,6 +269,64 @@ message InvokeStreamResponse {
   }
 }
 
+// InvokeSavedRequest runs the request SAVED at path/item_name, resolving its body,
+// metadata script, attached middleware and target server-side — the addressed
+// counterpart to InvokeRequest, which carries the caller's own (possibly unsaved)
+// body. It backs both InvokeSaved and InvokeSavedStreaming.
+message InvokeSavedRequest {
+  string                 workspace_name = 1;
+  // path is the saved request's PARENT-folder display-name path, outermost first;
+  // empty for a request at the top level.
+  repeated string        path           = 2;
+  // item_name is the saved request's own display name.
+  string                 item_name      = 3;
+  // params is this run's gv.request.params: the object the request's body, metadata
+  // script, ancestor folder metadata scripts and middleware all read it from.
+  google.protobuf.Struct params         = 4;
+  // target overrides the saved request's target for this run; unset uses the saved
+  // one (and, when that is unset too, the same default Invoke applies).
+  optional Server        target         = 5;
+  // messages, when non-empty, override the saved body for this run only — the
+  // request bodies as JSON (or TypeScript) text, in send order. The rule matches
+  // InvokeStreamRequest.messages: unary and server-streaming targets expect exactly
+  // one; client-streaming and bidi targets receive all of them composed up-front.
+  repeated string        messages       = 6;
+  // record_history gates whether this run is appended to the saved request's run
+  // history. It defaults to TRUE (an explicit false opts out) because an addressed
+  // run is a real user-initiated one, unlike a script's fan-out.
+  optional bool          record_history = 7;
+  // dry_run resolves and evaluates everything the call needs and then sends
+  // nothing, reporting the outcome in InvokeSavedResponse.resolved. Nothing is
+  // dialed, so a dry run works with the target down. Rejected by the streaming form,
+  // which has no frame to carry the result — dry-run any request, of any streaming
+  // kind, through the unary one.
+  bool                   dry_run        = 8;
+}
+
+// InvokeSavedResponse carries a saved request's run: response for a real call,
+// resolved for a dry run. Exactly one of the two is ever set.
+message InvokeSavedResponse {
+  Request.Response         response = 1;
+  optional ResolvedRequest resolved = 2;
+}
+
+// ResolvedRequest is what a dry run reports: everything the server would have sent,
+// post-evaluation and post-middleware, with nothing dialed.
+message ResolvedRequest {
+  string                 service  = 1;
+  string                 method   = 2;
+  // target is the server the call would have been sent to, after the saved
+  // request's own target and the per-run override are applied.
+  Server                 target   = 3;
+  // messages are the evaluated request bodies as JSON, post-middleware, in send
+  // order — one entry for a unary or server-streaming target, all of them for a
+  // client-streaming or bidi one.
+  repeated string        messages = 4;
+  // metadata is the evaluated outgoing metadata, post-middleware, as
+  // {[key]: string[]}.
+  google.protobuf.Struct metadata = 5;
+}
+
 // CreateScriptRequest creates a new, empty script of the given kind in the
 // collection. The name must be unique among scripts.
 message CreateScriptRequest {
@@ -387,6 +445,31 @@ service WorkspaceService {
   // browser transport (connect-web) cannot stream a request body; see
   // InvokeStreamRequest for how client messages are supplied.
   rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamResponse);
+  // Runs the request saved at a collection path and returns the result of the call.
+  //
+  // Requires workspace_name, item_name (the request's display name) and path (its
+  // parent folders, outermost first; empty at the top level). The saved request's own
+  // body, metadata, middleware and target are used, so the caller supplies no body of
+  // its own. params is a free-form object its body and metadata read values from. For one
+  // run only: target overrides where the call goes, messages override the request
+  // bodies as JSON text, record_history defaults to true, and dry_run evaluates
+  // everything but sends nothing.
+  //
+  // Returns the response message, the call's gRPC status, request and response
+  // metadata and the latency — or, for a dry run, only the resolved request. A status
+  // the target returned is reported in the response, never as an error. A streaming
+  // method needs the streaming form of this call.
+  rpc InvokeSaved(InvokeSavedRequest) returns (InvokeSavedResponse);
+  // Runs the request saved at a collection path and streams every response message back.
+  //
+  // Takes the same arguments as the unary form except dry_run, which is rejected here.
+  // Handles a method of any kind: a client-streaming or bidi method is sent every entry
+  // of messages up-front, in order, since there is no live interleave.
+  //
+  // Returns zero or more message frames as the target emits them, then one final frame
+  // carrying the gRPC status, request and response metadata and the latency. A status
+  // the target returned is reported in that final frame, never as an error.
+  rpc InvokeSavedStreaming(InvokeSavedRequest) returns (stream InvokeStreamResponse);
   // RunScript evaluates a script through the scripting engine and returns its
   // value, console output, and any error — the scratchpad and the per-kind
   // test-run surface that validates the engine end to end.

@@ -54,9 +54,14 @@ const emptyBody = "{}"
 const MaxFolderMetadataDepth = 16
 
 // invokeSpec carries everything invokeUnary needs to run one unary RPC — the union of what its
-// two callers build: the public Invoke RPC (below; params=nil, recordHistory=true) and
-// gv.invoke's re-entry (scriptInvoker, gvinvoke.go; params=the caller's kwargs,
-// recordHistory=false — gv-features-plan.md Feature 3 D6). Field names mirror InvokeRequest's;
+// callers build: the public Invoke RPC (below; params=nil, recordHistory=true), the addressed
+// InvokeSaved RPC and gv.invoke's re-entry (both via resolveSavedRun, invoke_saved.go, which
+// reads them off the SAVED request; params=the caller's own, recordHistory=true for the RPC —
+// cli-generator-exploration.md D7 — and false for the script re-entry — gv-features-plan.md
+// Feature 3 D6). streamInvoke additionally builds one to carry the shared pre-send inputs
+// (resolvePreSend), where only the addressing/body/metadata/params fields apply.
+//
+// Field names mirror InvokeRequest's;
 // workspaceName/path/itemName/service/method/target address WHERE and WHAT to call and (via
 // path+itemName) where to attach history/middleware; body/metadataScript/metadata are the
 // (possibly unsaved) editor-shaped inputs resolveInvokeBody/resolveInvokeMetadata evaluate;
@@ -110,28 +115,7 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 	if body == "" {
 		body = emptyBody
 	}
-	// Evaluate the body → JSON: whether the client sent a TS module or a bare expression
-	// (plain protojson included), resolveInvokeBody normalizes it to the one module form, runs
-	// it through the engine, and its returned object becomes the JSON message. The same shared
-	// pre-send step streamInvoke runs.
-	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, []string{body}, spec.params)
-	if err != nil {
-		return nil, err
-	}
-	// Compute the outgoing metadata Struct: when metadata_script is set it is a TypeScript
-	// module evaluated exactly like the TS body (generators composable as ambient globals);
-	// otherwise the request's metadata Struct is used as-is (today's path). The same shared
-	// pre-send step streamInvoke runs. spec.params backs gv.request.params for this eval (and,
-	// when the script mentions inherit(), every ancestor folder script's eval too — D4).
-	outgoingMD, err := w.resolveInvokeMetadata(ctx, spec.workspaceName, spec.path, spec.metadataScript, spec.metadata, spec.params)
-	if err != nil {
-		return nil, err
-	}
-	// Run the saved request's attached middleware chain (§S3) on the evaluated outgoing
-	// request — middleware rewrites the body/metadata in order. The same shared pre-send step
-	// streamInvoke runs; a no-op when nothing is attached, and a per-middleware failure is a
-	// Connect error grpcview can't get past, like a bad body.
-	resolvedBodies, resolvedMD, err := w.applyRequestMiddleware(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.target, evaluatedBodies, outgoingMD, spec.params)
+	resolvedBodies, resolvedMD, err := w.resolvePreSend(ctx, spec, []string{body})
 	if err != nil {
 		return nil, err
 	}
@@ -189,14 +173,40 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 	return out, nil
 }
 
+// resolvePreSend runs the three shared pre-send steps EVERY invoke goes through, in the one
+// order they must run in: evaluate the TypeScript bodies → JSON (resolveInvokeBody, which also
+// normalizes a bare-expression body into the module form), compute the outgoing metadata
+// (resolveInvokeMetadata — a metadata_script evaluated like a body, else spec.metadata as-is,
+// with the ancestor-folder fold behind it), then run the saved request's attached middleware
+// chain over both (applyRequestMiddleware, a no-op when nothing is attached). spec.params backs
+// gv.request.params for all three. It returns the bodies and metadata the call would actually
+// send.
+//
+// It exists as a function because THREE callers need exactly this sequence: invokeUnary (one
+// body), streamInvoke (many), and InvokeSaved's dry run, which stops right here and reports
+// what it got without dialing. Any failure is a Connect error grpcview itself can't get past
+// (a body/metadata that won't evaluate, a middleware that throws) — nothing has been sent, so
+// unary Invoke surfaces it as a Connect error and streamInvoke sends no frames.
+func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies []string) ([]string, *structpb.Struct, error) {
+	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, bodies, spec.params)
+	if err != nil {
+		return nil, nil, err
+	}
+	outgoingMD, err := w.resolveInvokeMetadata(ctx, spec.workspaceName, spec.path, spec.metadataScript, spec.metadata, spec.params)
+	if err != nil {
+		return nil, nil, err
+	}
+	return w.applyRequestMiddleware(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.target, evaluatedBodies, outgoingMD, spec.params)
+}
+
 // Invoke executes a single unary RPC against the target server and returns the
 // result. A gRPC-level failure of the *invoked* call (e.g. the target returns
 // NotFound) is not an error of this RPC: it is reported in the response's
 // Status so the UI can render it. Only failures grpcview itself can't get past
 // — no target, unreachable schema, a body that doesn't fit the request type —
 // surface as Connect errors. All the actual work is invokeUnary; Invoke only builds its spec
-// from the wire request (params=nil — gv.invoke is the only caller that ever sets it —
-// recordHistory=true) and wraps the result.
+// from the wire request (params=nil — InvokeRequest carries no params field, unlike the
+// addressed InvokeSaved — recordHistory=true) and wraps the result.
 func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
 	msg := request.Msg
 	out, err := w.invokeUnary(ctx, invokeSpec{
@@ -221,7 +231,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 // It is a thin seam: all logic lives in streamInvoke, which writes frames through
 // a plain send func so it can be unit-tested without a real connect.ServerStream.
 func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamResponse]) error {
-	return w.streamInvoke(ctx, request.Msg, stream.Send)
+	return w.streamInvoke(ctx, request.Msg, stream.Send, nil, true)
 }
 
 // streamInvoke executes an RPC of any kind against the target and streams the
@@ -248,7 +258,12 @@ func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request
 // (client aborted / ctx cancelled) we stop and return that error without
 // panicking; ctx cancellation propagates into the target call and surfaces as
 // the terminal frame's (Canceled) status or a failed send.
-func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+//
+// params backs gv.request.params for every script this run evaluates (bodies, metadata,
+// ancestor folder metadata, middleware) and recordHistory gates the history append, mirroring
+// invokeSpec's two fields of the same name: the public InvokeStreaming passes (nil, true), while
+// InvokeSavedStreaming passes the caller's params and its record_history.
+func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error, params map[string]any, recordHistory bool) error {
 	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, msg.GetTarget(), msg.GetWorkspaceName(), msg.GetService(), msg.GetMethod())
 	if err != nil {
 		return err
@@ -263,26 +278,20 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	if len(bodies) == 0 {
 		bodies = []string{emptyBody}
 	}
-	// Evaluate the TypeScript bodies → JSON: every message is a canonical TS module
-	// (the frontend migrates before sending), so each is run through the engine and its
-	// returned object becomes the JSON message. The same shared pre-send step unary Invoke
-	// runs; a failure is a pre-flight Connect error that sends no frames.
-	bodies, err = w.resolveInvokeBody(ctx, msg.GetWorkspaceName(), bodies, nil)
-	if err != nil {
-		return err
-	}
-	// Compute the outgoing metadata Struct (metadata_script evaluated like the TS body, else
-	// the request's metadata Struct as-is), the same shared pre-send step unary Invoke runs.
-	// A failure is a pre-flight Connect error that sends no frames. params is nil for now —
-	// gv.invoke() (Feature 3) is the only planned caller that will ever pass non-nil params here.
-	outgoingMD, err := w.resolveInvokeMetadata(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetMetadataScript(), msg.GetMetadata(), nil)
-	if err != nil {
-		return err
-	}
-	// Run the saved request's attached middleware chain (§S3) on the evaluated outgoing
-	// request, the same shared pre-send step unary Invoke runs. A per-middleware failure is a
-	// pre-flight Connect error that sends no frames.
-	bodies, resolvedMD, err := w.applyRequestMiddleware(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetTarget(), bodies, outgoingMD, nil)
+	// Evaluate the bodies, compute the outgoing metadata and run the attached middleware chain
+	// — the same shared pre-send sequence unary Invoke runs (resolvePreSend), with this run's
+	// params behind all three. A failure there is a pre-flight Connect error that sends no
+	// frames.
+	bodies, resolvedMD, err := w.resolvePreSend(ctx, invokeSpec{
+		workspaceName:  msg.GetWorkspaceName(),
+		path:           msg.GetPath(),
+		itemName:       msg.GetItemName(),
+		service:        msg.GetService(),
+		target:         msg.GetTarget(),
+		metadataScript: msg.GetMetadataScript(),
+		metadata:       msg.GetMetadata(),
+		params:         params,
+	}, bodies)
 	if err != nil {
 		return err
 	}
@@ -453,11 +462,13 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	// the terminal status/metadata/latency/timestamp; the streamed payloads are not
 	// stored (out.Response is empty for streams) and only the first request message
 	// is captured — a documented limitation, see recordHistory.
-	var body string
-	if bodies := msg.GetMessages(); len(bodies) > 0 {
-		body = bodies[0]
+	if recordHistory {
+		var body string
+		if bodies := msg.GetMessages(); len(bodies) > 0 {
+			body = bodies[0]
+		}
+		w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), body, out)
 	}
-	w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), body, out)
 	return nil
 }
 
@@ -481,8 +492,9 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 // workspace's saved generators by calling them as ambient globals; the workspace generators are
 // loaded once and each body folds in the ones it transitively reaches (see transitiveGenerators /
 // engine.RunRequestBody). params backs gv.request.params for every body's eval (gv-features-plan.md
-// Feature 3) — nil outside a gv.invoke re-entry (the public Invoke's own top-level body, and every
-// streamInvoke call, always pass nil: streaming is not a gv.invoke target in v1). A throw,
+// Feature 3) — set by a gv.invoke re-entry and by the addressed InvokeSaved/InvokeSavedStreaming
+// RPCs (whose params field is the point), nil for the public Invoke/InvokeStreaming, which carry
+// no such field and take the caller's body verbatim instead. A throw,
 // timeout, or a non-object return is a Connect FailedPrecondition, mirroring the middleware error
 // policy (middlewareError).
 func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string, params map[string]any) ([]string, error) {
@@ -655,10 +667,9 @@ func (w Workspace) loadGenerators(ctx context.Context, workspaceName string) (ma
 // walks path's ancestor folder scripts and the result becomes gv.metadata.inherit()'s data for
 // THIS script's own eval; otherwise the fold is skipped entirely and inherit() just returns {}
 // (the efficiency gate — the fold cost is O(depth) fresh QuickJS instantiations). params backs
-// gv.request.params for both the fold and this eval; every caller passes nil today — Feature 1
-// only plumbs the parameter, a later gv.invoke() wiring (Feature 3) fills it in (see the plan's
-// "Cross-feature interactions": "cleanly absorb Feature 1's already-present
-// resolveInvokeMetadata(path, params) fold").
+// gv.request.params for both the fold and this eval; it is non-nil for a gv.invoke re-entry and
+// for the addressed InvokeSaved/InvokeSavedStreaming RPCs, and nil for the public
+// Invoke/InvokeStreaming, which have no params field.
 //
 // When metadataScript is empty this is a pure no-op: the fallback Struct (the request's
 // metadata field, i.e. today's path) is returned verbatim, so a request carrying a plain

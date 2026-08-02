@@ -89,6 +89,25 @@ export const moveItem: typeof WorkspaceService["method"]["moveItem"];
  */
 export const invoke: typeof WorkspaceService["method"]["invoke"];
 /**
+ * Runs the request saved at a collection path and returns the result of the call.
+ *
+ * Requires workspace_name, item_name (the request's display name) and path (its
+ * parent folders, outermost first; empty at the top level). The saved request's own
+ * body, metadata, middleware and target are used, so the caller supplies no body of
+ * its own. params is a free-form object its body and metadata read values from. For one
+ * run only: target overrides where the call goes, messages override the request
+ * bodies as JSON text, record_history defaults to true, and dry_run evaluates
+ * everything but sends nothing.
+ *
+ * Returns the response message, the call's gRPC status, request and response
+ * metadata and the latency — or, for a dry run, only the resolved request. A status
+ * the target returned is reported in the response, never as an error. A streaming
+ * method needs the streaming form of this call.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.InvokeSaved
+ */
+export const invokeSaved: typeof WorkspaceService["method"]["invokeSaved"];
+/**
  * RunScript evaluates a script through the scripting engine and returns its
  * value, console output, and any error — the scratchpad and the per-kind
  * test-run surface that validates the engine end to end.
