@@ -113,28 +113,33 @@ every bare object — silently. Wrapping in `=> ( … )` puts it in expression p
 the misparse disappears. `ui/src/features/workspace/body-wrapper.ts` has documented this
 for a while; the bug was that only the frontend knew.
 
-## The structural change: the sniff belongs to the backend
+## The structural change: the sniff belongs to the backend — **implemented**
 
-Today normalization lives in the UI — `migrateBodyToTs` in `body-wrapper.ts` — and the
-backend assumes every body it receives is already a module. That was sound when the
-browser was the only client. With four surfaces it is the defect: a CLI pipe, an MCP
+Normalization used to live in the UI — `migrateBodyToTs` in `body-wrapper.ts` — with the
+backend assuming every body it received was already a module. That was sound when the
+browser was the only client. With four surfaces it was the defect: a CLI pipe, an MCP
 `invoke`, or a hand-edited file reaches `resolveInvokeBody` without passing through any
-browser code, hits the last-expression path, and misparses.
+browser code, hit the last-expression path, and misparsed.
 
-So the sniff moves to **`resolveInvokeBody` (`service/workspace/invoke.go:478`)**, the
-one choke point all three call sites funnel through — unary `Invoke` (`:117`),
-`InvokeStreaming` (`:270`), and `gv.invoke`'s re-entry. The whole implementation is:
+The sniff now lives in **`resolveInvokeBody` (`service/workspace/invoke.go`)**, the one
+choke point all three call sites funnel through — unary `Invoke`, `InvokeStreaming`, and
+`gv.invoke`'s re-entry. The whole implementation is:
 
 ```go
-if !hasDefaultExport(body) {
+if !scripting.HasDefaultExport(body) {
     body = "export default async () => (\n" + body + "\n)"
 }
 ```
 
+It runs *before* `transitiveGenerators` scans the source, and both see the same wrapped
+string — otherwise an expression body's generator call sites go undetected and composition
+silently stops working for form 2. `scripting.HasDefaultExport` is exported precisely so
+this decision uses the same regex the entry-point convention does.
+
 One branch, one evaluation path, and every surface inherits it including ones not yet
 designed. The UI keeps `wrap` / `isCanonical` / the hidden-wrapper machinery, but
 strictly as a **view** concern — how Monaco presents a body and gets it type-checked. It
-stops being what makes invoke work.
+stopped being what makes invoke work.
 
 ## Consequences worth stating
 

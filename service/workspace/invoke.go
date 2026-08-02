@@ -41,11 +41,11 @@ import (
 // are dropped (and the drop logged) when a new run pushes the list over it.
 const historyLimit = 50
 
-// emptyTSBody is the canonical empty TypeScript request body. Every body is evaluated as a TS
-// module on invoke now (resolveInvokeBody), so an invoke that carries no body — or a stream
-// with no messages — defaults to this module (it returns an empty object) rather than bare
-// "{}" JSON, which is not a module that returns an object.
-const emptyTSBody = "export default () => ({})"
+// emptyBody is what an invoke that carries no body — or a stream with no messages — falls back
+// to. It is the plain empty object, not a module wrapping one: resolveInvokeBody wraps an
+// expression body itself now, so "{}" lands in expression position where it means what it looks
+// like, and the fallback needs no knowledge of the module form at all.
+const emptyBody = "{}"
 
 // MaxFolderMetadataDepth bounds the ancestor-folder-metadata chain foldAncestorMetadata walks
 // (gv-features-plan.md Feature 1, D5's folder-chain cap): a path deeper than this is rejected as
@@ -70,7 +70,7 @@ type invokeSpec struct {
 	service        string
 	method         string
 	target         *grpcviewv1.Server
-	body           string // raw TS body source; "" defaults to emptyTSBody
+	body           string // raw TS body source; "" defaults to emptyBody
 	metadataScript string
 	metadata       *structpb.Struct // fallback metadata Struct used when metadataScript is empty
 	params         map[string]any   // gv.invoke(path, params)'s kwargs
@@ -108,11 +108,11 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 
 	body := strings.TrimSpace(spec.body)
 	if body == "" {
-		body = emptyTSBody
+		body = emptyBody
 	}
-	// Evaluate the TypeScript body → JSON: the body is always a
-	// canonical TS module (the frontend migrates any legacy body before sending), so it is run
-	// through the engine and its returned object becomes the JSON message. The same shared
+	// Evaluate the body → JSON: whether the client sent a TS module or a bare expression
+	// (plain protojson included), resolveInvokeBody normalizes it to the one module form, runs
+	// it through the engine, and its returned object becomes the JSON message. The same shared
 	// pre-send step streamInvoke runs.
 	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, []string{body}, spec.params)
 	if err != nil {
@@ -261,7 +261,7 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 	// frames sent.
 	bodies := msg.GetMessages()
 	if len(bodies) == 0 {
-		bodies = []string{emptyTSBody}
+		bodies = []string{emptyBody}
 	}
 	// Evaluate the TypeScript bodies → JSON: every message is a canonical TS module
 	// (the frontend migrates before sending), so each is run through the engine and its
@@ -462,11 +462,21 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 }
 
 // resolveInvokeBody is the shared pre-send body-evaluation step for unary Invoke (one body)
-// and streaming InvokeStreaming (many). Every body is a
-// canonical TS/JS module (the frontend migrates any legacy body/JSON to this form before
-// sending), so each is run through the engine — uncached, so Math.random()/now() vary per
+// and streaming InvokeStreaming (many), and it is the ONE seam that normalizes the two
+// accepted body forms into a single evaluation path. A body is either a MODULE (it declares
+// `export default`, and runs as-is) or an EXPRESSION (anything else — most importantly plain
+// protojson, but equally `cfg()` or a template string), which is wrapped in
+// `export default async () => ( … )` so that it becomes the first form. The wrap has to live
+// here rather than in the browser because valid JSON is a valid TS *expression* but not a
+// valid TS *module* — a bare `{ … }` at statement position parses as a block — so any client
+// that never runs browser code (a CLI pipe, an MCP call, a hand-edited file) would otherwise
+// misparse its own body. The sniff is a regex, so a literal `export default` inside a string
+// literal reads as a module and is left unwrapped; that is an accepted false positive rather
+// than a reason to carry a TS parser.
+//
+// Both forms then run through the engine — uncached, so Math.random()/now() vary per
 // invoke, and fully sandboxed (empty Grant, no vars/secrets/env, exactly like the middleware
-// runs) — and its returned JSON object REPLACES the body, which then flows through the existing
+// runs) — and the returned JSON object REPLACES the body, which then flows through the existing
 // middleware/UnmarshalJSON pipeline unchanged. A body may also COMPOSE the
 // workspace's saved generators by calling them as ambient globals; the workspace generators are
 // loaded once and each body folds in the ones it transitively reaches (see transitiveGenerators /
@@ -490,6 +500,13 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 	}
 	out := make([]string, len(bodies))
 	for i, body := range bodies {
+		// Normalize an expression body into a module, so exactly one form reaches the engine.
+		// This must happen BEFORE transitiveGenerators sees the source, and both must see the
+		// same string: call-site detection is textual, and the wrap is transparent to it only
+		// because the wrapped source is what gets scanned and what gets run.
+		if !scripting.HasDefaultExport(body) {
+			body = "export default async () => (\n" + body + "\n)"
+		}
 		// The whole body is the generator source (its own `export default` fires the
 		// entry-point convention with no positional args, per entry.go). transitiveGenerators
 		// narrows allGens to just what this body reaches — the generators it calls plus, to a

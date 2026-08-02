@@ -59,6 +59,48 @@ func TestResolveInvokeBody(t *testing.T) {
 	}
 }
 
+// TestResolveInvokeBodyExpressionBody covers the OTHER accepted body form: an EXPRESSION (most
+// importantly plain protojson) that resolveInvokeBody wraps into the module form itself, so a
+// client that never runs browser code still gets its body evaluated. It also pins IDEMPOTENCE —
+// a body that already is a module must be untouched, which is what protects the UI's Send path
+// from the wrap — and that a non-object result still fails the same way after wrapping.
+func TestResolveInvokeBodyExpressionBody(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+
+	for _, c := range []struct{ name, body, want string }{
+		{"bare protojson object", `{"a":1}`, `{"a":1}`},
+		{"already a module is unchanged", `export default () => ({"a":1})`, `{"a":1}`},
+		{"multi-line bare object", "{\n  \"a\": 1,\n  \"b\": \"two\"\n}", `{"a":1,"b":"two"}`},
+		{"expression calling into JS", `{ "a": 1 + 1 }`, `{"a":2}`},
+		{"the emptyBody default", emptyBody, `{}`},
+		{"bare empty object", `{}`, `{}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{c.body}, nil)
+			if err != nil {
+				t.Fatalf("resolveInvokeBody(%q): %v", c.body, err)
+			}
+			if len(out) != 1 || out[0] != c.want {
+				t.Fatalf("got %q, want [%s]", out, c.want)
+			}
+		})
+	}
+
+	for _, c := range []struct{ name, body string }{
+		{"bare array is not an object", `[1,2]`},
+		{"bare number is not an object", `42`},
+		{"bare string is not an object", `"nope"`},
+	} {
+		t.Run(c.name+" errors FailedPrecondition", func(t *testing.T) {
+			if _, err := w.resolveInvokeBody(ctx, testWorkspace,
+				[]string{c.body}, nil); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
+			}
+		})
+	}
+}
+
 // TestResolveInvokeBodyComposition covers pillar C on the invoke path (ts-request-body-plan
 // T3): a TYPESCRIPT body calls a generator saved in the workspace (via the store), and the
 // produced JSON reflects the composed call. It also proves FAILURE ISOLATION — a broken
@@ -78,6 +120,20 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		}
 		if len(out) != 1 || out[0] != `{"id":"id-42","n":7}` {
 			t.Fatalf("got %q, want [{\"id\":\"id-42\",\"n\":7}]", out)
+		}
+	})
+
+	t.Run("an expression body composes a saved generator", func(t *testing.T) {
+		// The ordering proof: the wrap has to happen before transitiveGenerators scans the
+		// source, and both have to see the SAME string, or the bare object's mkid() call site
+		// is never found and the generator is left out of the bundle.
+		out, err := w.resolveInvokeBody(ctx, testWorkspace,
+			[]string{`{ "id": mkid() }`}, nil)
+		if err != nil {
+			t.Fatalf("resolveInvokeBody: %v", err)
+		}
+		if len(out) != 1 || out[0] != `{"id":"id-42"}` {
+			t.Fatalf("got %q, want [{\"id\":\"id-42\"}]", out)
 		}
 	})
 

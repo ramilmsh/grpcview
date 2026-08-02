@@ -31,6 +31,14 @@ var (
 
 func hasDefaultExport(source string) bool { return exportDefaultRe.MatchString(source) }
 
+// HasDefaultExport reports whether source is a MODULE — i.e. whether the entry-point
+// convention above will fire for it. It is exported because the discrimination is not
+// private to the engine: a caller handed an arbitrary request body has to tell a module
+// apart from a bare expression before it can decide whether to wrap it, and that call
+// must agree with the one compileGenerator makes for the same source. Sharing this
+// function is how it agrees — the detection regex exists exactly once.
+func HasDefaultExport(source string) bool { return hasDefaultExport(source) }
+
 func hasHandleOrDefaultExport(source string) bool {
 	return hasDefaultExport(source) || exportHandleRe.MatchString(source)
 }
