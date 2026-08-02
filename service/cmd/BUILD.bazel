@@ -13,11 +13,21 @@ go_library(
     embedsrcs = ["index.html"],
     importpath = "codeberg.org/ramilmsh/grpcview/service/cmd",
     visibility = ["//visibility:private"],
-    deps = ["//service"],
+    deps = [
+        "//service",
+        "//service/cli",
+    ],
 )
 
 go_binary(
     name = "cmd",
     embed = [":cmd_lib"],
     visibility = ["//visibility:public"],
+    # tools/workspace_status.sh emits STABLE_VERSION_TAG, and this is the repo's
+    # only consumer of it. rules_go substitutes {VAR} only when stamping is on;
+    # .bazelrc deliberately does not set --stamp (it would cost a remote-cache hit
+    # on every stamped target on every commit), and an unstamped build omits the
+    # -X flag rather than embedding the placeholder, so cli.version keeps its
+    # "dev" default.
+    x_defs = {"codeberg.org/ramilmsh/grpcview/service/cli.version": "{STABLE_VERSION_TAG}"},
 )

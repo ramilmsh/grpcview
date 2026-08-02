@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cli",
+    srcs = [
+        "client.go",
+        "root.go",
+    ],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/cli",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "//service/workspace",
+        "@com_connectrpc_connect//:connect",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_test(
+    name = "cli_test",
+    srcs = ["root_test.go"],
+    embed = [":cli"],
+    deps = ["@com_github_spf13_cobra//:cobra"],
+)

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,14 +26,19 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
+// Options configures the server. argv parsing lives in the callers (the CLI
+// command tree in //service/cli, or dev's own flag set), never here: Run cannot
+// own argv once the binary dispatches subcommands.
+type Options struct {
+	// Port is the TCP port to listen on.
+	Port int
+}
+
 func Run(
 	ctx context.Context,
 	indexPage io.ReadCloser,
+	opts Options,
 ) error {
-	var port int
-	flag.IntVar(&port, "port", 10000, "port to start the server at")
-	flag.Parse()
-
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	ws, err := workspace.New(ctx)
@@ -77,7 +81,7 @@ func Run(
 		MaxAge:         int((2 * time.Hour).Seconds()),
 	})
 
-	address := net.TCPAddr{IP: net.IPv4zero, Port: port}
+	address := net.TCPAddr{IP: net.IPv4zero, Port: opts.Port}
 	logger.InfoContext(ctx, "starting server", "address", address.String())
 	err = http.ListenAndServe(
 		address.String(),
