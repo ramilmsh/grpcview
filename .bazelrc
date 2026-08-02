@@ -14,6 +14,12 @@ common --host_per_file_copt=external/.*protobuf.*/src/.*@--PROTOBUF_WAS_NOT_SUPP
 common --per_file_copt=external/.*grpc.*/src/.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
 common --host_per_file_copt=external/.*grpc.*/src/.*@--GRPC_WAS_NOT_SUPPOSED_TO_BE_BUILT
 
+# Keep SourceCodeInfo in the descriptor sets handed to the protoc plugins, so proto doc
+# comments survive into generated code. Without it protoc strips source info from the
+# descriptor set a plugin is given, and every Go plugin here emits comment-free output
+# (the TypeScript path got comments anyway, which is why the gap went unnoticed).
+common --protocopt=--include_source_info
+
 build --workspace_status_command=$(pwd)/tools/workspace_status.sh
 
 build:linux --sandbox_add_mount_pair=/tmp
