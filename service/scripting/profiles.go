@@ -2,11 +2,6 @@ package scripting
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"io"
-	"sync"
 	"time"
 )
 
@@ -30,7 +25,6 @@ type Engine struct {
 	longLived   bool
 	mwPool      *Pool
 	bundler     *bundler
-	genCache    sync.Map // config digest -> Result
 	poolMaxIdle int
 	resolveDir  string
 	nodePaths   []string
@@ -51,8 +45,8 @@ func WithResolveDir(dir string) EngineOption { return func(e *Engine) { e.resolv
 // esbuild consults them only alongside a WithResolveDir.
 func WithNodePaths(paths ...string) EngineOption { return func(e *Engine) { e.nodePaths = paths } }
 
-// NewEngine compiles a Runtime (outer page ceiling maxPages) and wires the middleware pool,
-// generator cache and embedded npm registry over it.
+// NewEngine compiles a Runtime (outer page ceiling maxPages) and wires the middleware pool and
+// the embedded npm registry over it.
 func NewEngine(ctx context.Context, maxPages uint32, opts ...EngineOption) (*Engine, error) {
 	rt, err := New(ctx, maxPages)
 	if err != nil {
@@ -102,25 +96,7 @@ func withProfileDeadline(ctx context.Context, p Profile) (context.Context, conte
 	return context.WithTimeout(ctx, p.Timeout)
 }
 
-// RunGenerator runs a generator script, caching the result by a digest of the configuration
-// (profile, source, grant, vars/secrets/env/args) — never the per-invoke request.
-func (e *Engine) RunGenerator(ctx context.Context, source string, g Grant, in Input) (Result, error) {
-	key, kerr := configDigest(Generator.Name, source, g, in)
-	if kerr == nil {
-		if v, ok := e.genCache.Load(key); ok {
-			return v.(Result).clone(), nil // clone: never share the cache's slices
-		}
-	}
-	res, err := e.runGenerator(ctx, source, g, in)
-	if err != nil {
-		return res, err
-	}
-	if kerr == nil {
-		e.genCache.Store(key, res.clone())
-	}
-	return res, nil
-}
-
+// runGenerator runs a generator script on a fresh instance under the Generator profile.
 func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in Input) (Result, error) {
 	c, postlude, err := e.compileGenerator(source, g, in.Args)
 	if err != nil {
@@ -132,7 +108,7 @@ func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in In
 }
 
 // RunRequestBody runs a TypeScript request body, exposing gens (name -> source) as ambient
-// globals so the body can compose them. Uncached: a body may vary per invoke.
+// globals so the body can compose them.
 func (e *Engine) RunRequestBody(ctx context.Context, body string, gens map[string]string, g Grant, in Input) (Result, error) {
 	if len(gens) == 0 {
 		return e.runGenerator(ctx, body, g, in)
@@ -181,42 +157,4 @@ func (e *Engine) runFresh(ctx context.Context, c compiled, g Grant, in Input, me
 	defer inst.disposeContext(context.WithoutCancel(ctx))
 
 	return inst.runCompiled(ctx, c, g, in, postlude)
-}
-
-// A digest error must never become a fallback key: distinct configs would collide and one
-// run could return another's secrets.
-func configDigest(profile, source string, g Grant, in Input) (string, error) {
-	h := sha256.New()
-	writeField(h, profile)
-	writeField(h, source)
-	grantJSON, err := json.Marshal(g)
-	if err != nil {
-		return "", err
-	}
-	writeField(h, string(grantJSON))
-	envJSON, err := json.Marshal(struct {
-		Vars, Secrets, Env map[string]any
-		Args               []any
-	}{in.Vars, in.Secrets, in.Env, in.Args})
-	if err != nil {
-		return "", err
-	}
-	writeField(h, string(envJSON))
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func (r Result) clone() Result {
-	out := Result{}
-	if r.Value != nil {
-		out.Value = append(json.RawMessage(nil), r.Value...)
-	}
-	if r.Logs != nil {
-		out.Logs = append([]LogLine(nil), r.Logs...)
-	}
-	return out
-}
-
-func writeField(h io.Writer, s string) {
-	_, _ = io.WriteString(h, s)
-	_, _ = h.Write([]byte{0}) // separator so field boundaries can't be forged
 }

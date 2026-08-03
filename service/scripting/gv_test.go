@@ -1,7 +1,7 @@
 package scripting
 
 // Tests for the shared gv global and the gv.invoke host bridge, exercised through
-// Engine.RunScenario/RunGenerator.
+// Engine.RunScenario.
 
 import (
 	"context"
@@ -186,43 +186,5 @@ func TestInvokeDepthContextSeam(t *testing.T) {
 	nested := WithInvokeDepth(ctx, 4)
 	if got := invokeDepthFromContext(nested); got != 4 {
 		t.Fatalf("depth after a second WithInvokeDepth(4) = %d, want 4", got)
-	}
-}
-
-func TestConfigDigestIgnoresGvFields(t *testing.T) {
-	base := Input{Vars: map[string]any{"a": 1}}
-	withGv := base
-	withGv.Params = map[string]any{"secret": "leak-if-digested"}
-	withGv.InheritedMetadata = map[string][]string{"authorization": {"should-not-affect-digest"}}
-
-	d1, err := configDigest(Generator.Name, "src", Grant{}, base)
-	if err != nil {
-		t.Fatalf("configDigest(base): %v", err)
-	}
-	d2, err := configDigest(Generator.Name, "src", Grant{}, withGv)
-	if err != nil {
-		t.Fatalf("configDigest(withGv): %v", err)
-	}
-	if d1 != d2 {
-		t.Fatalf("configDigest changed when only Params/InheritedMetadata differed: %s vs %s "+
-			"— these fields must never affect the generator cache key", d1, d2)
-	}
-}
-
-func TestRunGeneratorCacheIgnoresParams(t *testing.T) {
-	e := newEngine(t)
-	src := `gv.request.params`
-
-	res1, err := e.RunGenerator(context.Background(), src, Grant{}, Input{Params: map[string]any{"v": float64(1)}})
-	if err != nil {
-		t.Fatalf("first run: %v", err)
-	}
-	res2, err := e.RunGenerator(context.Background(), src, Grant{}, Input{Params: map[string]any{"v": float64(2)}})
-	if err != nil {
-		t.Fatalf("second run: %v", err)
-	}
-	if string(res1.Value) != string(res2.Value) {
-		t.Fatalf("cache did not ignore Params: first=%s second=%s (want a cache hit serving the first value both times)",
-			res1.Value, res2.Value)
 	}
 }

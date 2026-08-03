@@ -17,9 +17,9 @@ type Input struct {
 	Env     map[string]any
 	// Args are the positional arguments a generator's exported entry point is called with.
 	Args []any
-	// Params backs gv.request.params; deliberately excluded from configDigest.
+	// Params backs gv.request.params.
 	Params map[string]any
-	// InheritedMetadata backs gv.metadata.inherit(); also excluded from configDigest.
+	// InheritedMetadata backs gv.metadata.inherit().
 	InheritedMetadata map[string][]string
 }
 

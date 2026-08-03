@@ -519,8 +519,6 @@ func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName strin
 			continue
 		}
 		folderPath := path[:i+1]
-		// Folder scripts must run through the uncached RunRequestBody path, never the cached
-		// RunGenerator one: the injected InheritedMetadata is not part of the cache key.
 		res, rerr := w.engine.RunRequestBody(ctx, script, transitiveGenerators(script, allGens), scripting.Grant{}, scripting.Input{
 			Params:            params,
 			InheritedMetadata: accum,

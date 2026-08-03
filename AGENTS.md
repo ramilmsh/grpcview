@@ -186,12 +186,6 @@ context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
   record history. Bounded by a ctx depth counter (`gvinvoke.go`) — a depth cap only,
   with no cycle set, so self-recursive pagination still works.
 
-**Cache-soundness invariant:** the invoker and any non-empty `params`/inherited
-metadata ride only the **uncached** `RunRequestBody`/`RunMiddleware` path. The
-`RunGenerator` path is cached by `configDigest` (`profiles.go`, which reads only
-`{Vars, Secrets, Env, Args}`) and must keep seeing `params === {}`, `inherit() ===
-{}`, and a throwing `invoke`. Never route folder metadata through `RunGenerator`.
-
 ## Definition sources (where schemas come from)
 
 A workspace's services and `descriptor_set` are **derived**, never authored. They

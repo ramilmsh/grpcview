@@ -21,7 +21,7 @@ func TestGeneratorEntryPoint(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			res, err := e.RunGenerator(context.Background(), c.src, Grant{}, Input{Args: c.args})
+			res, err := e.runGenerator(context.Background(), c.src, Grant{}, Input{Args: c.args})
 			if err != nil {
 				t.Fatalf("run: %v", err)
 			}
@@ -32,19 +32,19 @@ func TestGeneratorEntryPoint(t *testing.T) {
 	}
 }
 
-func TestGeneratorArgsVaryCache(t *testing.T) {
+func TestGeneratorArgsVaryPerRun(t *testing.T) {
 	e := newEngine(t)
 	const src = `export default (x) => x * 10`
-	r1, err := e.RunGenerator(context.Background(), src, Grant{}, Input{Args: []any{2}})
+	r1, err := e.runGenerator(context.Background(), src, Grant{}, Input{Args: []any{2}})
 	if err != nil {
 		t.Fatalf("run 2: %v", err)
 	}
-	r2, err := e.RunGenerator(context.Background(), src, Grant{}, Input{Args: []any{5}})
+	r2, err := e.runGenerator(context.Background(), src, Grant{}, Input{Args: []any{5}})
 	if err != nil {
 		t.Fatalf("run 5: %v", err)
 	}
 	if string(r1.Value) != "20" || string(r2.Value) != "50" {
-		t.Fatalf("args not threaded through cache: %s / %s, want 20 / 50", r1.Value, r2.Value)
+		t.Fatalf("args not threaded per run: %s / %s, want 20 / 50", r1.Value, r2.Value)
 	}
 }
 

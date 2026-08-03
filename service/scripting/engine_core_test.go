@@ -2,7 +2,6 @@ package scripting
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -249,7 +248,7 @@ func TestProfilesBounded(t *testing.T) {
 		name string
 		run  func(context.Context, string, Grant, Input) (Result, error)
 	}{
-		{"generator", e.RunGenerator},
+		{"generator", e.runGenerator},
 		{"middleware", e.RunMiddleware},
 		{"scenario", e.RunScenario},
 	}
@@ -276,58 +275,6 @@ func TestProfilesBounded(t *testing.T) {
 				t.Fatalf("interrupt took %v, expected it to be prompt", elapsed)
 			}
 		})
-	}
-}
-
-func TestGeneratorCacheHit(t *testing.T) {
-	e := newEngine(t)
-	src := `({generated: true})`
-	grant := Grant{}
-	in := Input{Vars: map[string]any{"seed": "abc"}}
-
-	key, err := configDigest(Generator.Name, src, grant, in)
-	if err != nil {
-		t.Fatalf("configDigest: %v", err)
-	}
-	e.genCache.Store(key, Result{Value: json.RawMessage(`"FROM-CACHE"`)})
-
-	res, err := e.RunGenerator(context.Background(), src, grant, in)
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if string(res.Value) != `"FROM-CACHE"` {
-		t.Fatalf("cache miss: value = %s, want the pre-seeded sentinel (cache not consulted)", res.Value)
-	}
-
-	res, err = e.RunGenerator(context.Background(), src, grant, Input{Vars: map[string]any{"seed": "xyz"}})
-	if err != nil {
-		t.Fatalf("run (different input): %v", err)
-	}
-	if string(res.Value) != `{"generated":true}` {
-		t.Fatalf("different input: value = %s, want the real script result", res.Value)
-	}
-}
-
-func TestGeneratorCachePopulates(t *testing.T) {
-	e := newEngine(t)
-	src := `({v: 1 + 1})`
-	res1, err := e.RunGenerator(context.Background(), src, Grant{}, Input{})
-	if err != nil {
-		t.Fatalf("first run: %v", err)
-	}
-	key, err := configDigest(Generator.Name, src, Grant{}, Input{})
-	if err != nil {
-		t.Fatalf("configDigest: %v", err)
-	}
-	if _, ok := e.genCache.Load(key); !ok {
-		t.Fatal("cache not populated after first run")
-	}
-	res2, err := e.RunGenerator(context.Background(), src, Grant{}, Input{})
-	if err != nil {
-		t.Fatalf("second run: %v", err)
-	}
-	if string(res1.Value) != string(res2.Value) || string(res2.Value) != `{"v":2}` {
-		t.Fatalf("cached result mismatch: %s vs %s", res1.Value, res2.Value)
 	}
 }
 
