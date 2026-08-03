@@ -246,7 +246,7 @@ agent spends turns discovering its own context.
 
 ## Phase 2 — cross-cutting synthesis (3 agents, sequential after Phase 1)
 
-Each is fed *all sixteen* module reports plus the global scan output.
+Each is fed *all seventeen* module reports plus the global scan output.
 
 - **X1 · Vocabulary.** `vocab` output + every `axis: naming` finding.
   Produces one canonical term per concept and the full rename list across proto,
@@ -261,6 +261,74 @@ Each is fed *all sixteen* module reports plus the global scan output.
   `convert.go` still the only store↔wire bridge?
 
 Main thread then dedupes into one ranked ledger.
+
+### Phase 2 results (run 2026-08-03)
+
+**210 findings → 91 decisions.** All three reports reconcile 1:1 against their
+ledger subsets, checked mechanically by `audit/reconcile.mjs` rather than taken
+from the agents' self-reports: X1 44→25, X2 74→40, X3 92→26. 69 decisions `high`,
+13 `medium`, 9 mixed-per-finding. **Zero `DROP`s**, one `ESCALATE`. Net ~3400
+lines touched, of which roughly **−1500 is deletion**.
+
+Ran X1 first rather than all three at once — its canonical-term table is a real
+input to the other two, so X2/X3 name what they extract instead of inventing
+words that a later rename undoes. X2 and X3 then ran in parallel.
+
+**The ordering held.** The 91 decisions carry 56 constraints, 29 cross-agent, and
+the graph is **acyclic in four topological layers** — three agents that could not
+see each other's reports produced a globally consistent order. Only two edges
+point backward into X1, both caught by X3 because it ran last: `D-X3-7` before
+`D-X1-14` (collapse `service/scripting` before renaming its concepts, or you
+rename twenty names and delete five of them), and `D-X2-27` before `D-X1-8`.
+
+**51 files are touched by more than one agent, 13 by three or more** — those need
+one owner and one pass regardless of wave. The list is in the ledger.
+
+Highest-leverage decision is `D-X1-1`: `collection` names the persisted artifact
+on every layer, `workspace` only the UI view. X1 found this doc's own
+§Architecture cannot hold one word across two adjacent lines — `:92` "persists
+the workspace to disk", `:93` "a filesystem-backed collection" — so the doc was a
+fourth instance of the drift, not the authority licensing it.
+
+Three things worth keeping from how the phase went:
+
+- **Both falsifications of §Architecture's disk↔wire claim were real, and the
+  code was right both times.** X3 overruled G9's proposed fix on G1's evidence
+  and moved the *doc* instead: committed files use `grpcview.store.v1`,
+  disposable `.grpcview/` state carries whatever is cheapest. A cache's migration
+  story is `rm -rf`.
+- **Phase 1 fixes got overruled on checkable facts, not taste** — G2 lost a
+  cluster to G1 by claiming a field was "three different types" when all three
+  sites assign `*grpcviewstorev1.ItemMeta`; G3's own blank-body fix was too
+  aggressive (two of its four guards run on *evaluated* bodies, so normalizing
+  would turn a defaulted `{}` into `InvalidArgument`); G5 proposed a test helper
+  that already exists twice.
+- **X2 found the one thing no per-slice agent could:** collapsing the 14
+  identical mutation responses lets `mutate` return the `*connect.Response`
+  itself, turning nine 8-line handlers into nine 3-line ones. That deletes one of
+  G4's two reasons for retiring cluster GD02, and X2 reaffirms the retirement
+  anyway so the shrunken cluster is not read as an invitation.
+
+**Wave-0 hazard for any proto renumber:** `.grpcview/cache/sources/*.binpb`
+decodes *wrong* rather than failing, because `SourceResolves` keys its map by
+`r.GetId()` and a moved `id` field number yields an empty string. Disposable is
+not self-invalidating. Every renumbering wave carries "delete `.grpcview/cache/`"
+in its change note, and the browser smoke test starts from a cleared cache or it
+is testing stale bytes.
+
+**Defects are now eight, not five.** Phase 2 added: `Tree.tsx:293`'s drag
+comparator using `?? 0` where four sibling sites use `?? -1` (sorting an absent
+id to the front of a multi-row drag); `format.ts`'s `serviceName` missing the
+empty-package guard that both Go and `TypesModal` have; and `History.Response`
+carrying one `metadata` field where `Request.Response` has the request/response
+split, so recorded history silently loses one direction. `D-X2-8` and `D-X2-5`
+fix the last two as side effects — **review those two as behavior changes.**
+
+`AGENTS.md` corrections now total ten plus one new paragraph (the UI layering
+rule the doc has never stated, which is why three slices independently found
+violations of it). Two were already being reasoned from by Phase-1 agents, and
+one had generated a proposed 15-line patch to make correct code match an
+incorrect sentence — the cost of a stale doc, measured.
 
 ---
 
