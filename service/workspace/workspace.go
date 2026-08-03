@@ -22,10 +22,11 @@ import (
 const scriptingMaxPages = 4096
 
 // Workspace is the WorkspaceService handler: a thin adapter over store.Store that also owns the
-// shared scripting Engine.
+// shared scripting Engine and the linked-definitions memo.
 type Workspace struct {
 	store  *store.Store
 	engine *scripting.Engine
+	defs   *definitionsCache
 }
 
 // New returns a handler persisting collections under os.UserConfigDir()/.grpcview/<name>, with
@@ -42,6 +43,7 @@ func New(ctx context.Context) (Workspace, error) {
 	return Workspace{
 		store:  store.New(filepath.Join(configDir, ".grpcview"), slog.Default()),
 		engine: engine,
+		defs:   newDefinitionsCache(),
 	}, nil
 }
 

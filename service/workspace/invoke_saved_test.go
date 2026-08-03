@@ -105,7 +105,7 @@ func TestInvokeSavedRunsTheSavedRequest(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
 		`export default () => ({ message: "saved-body" })`, loopback(port))
@@ -134,7 +134,7 @@ func TestInvokeSavedNestedPath(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestInvokeSavedParamsReachTheBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	createGenerator(t, w, ctx, "prefix", `export default () => "p:"`)
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
@@ -190,7 +190,7 @@ func TestInvokeSavedOverrides(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
 		`export default () => ({ message: "saved" })`, loopback(deadPort(t)))
@@ -254,7 +254,7 @@ func TestInvokeSavedTargetStatusIsInThePayload(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startFailingEchoServer(t)
+	port := echoTarget(t, w, ctx, startFailingEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Denied", "Unary",
 		`export default () => ({ message: "hi" })`, loopback(port))
@@ -282,7 +282,7 @@ func TestInvokeSavedRecordHistory(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
 		`export default () => ({ message: "hi" })`, loopback(port))
@@ -388,7 +388,7 @@ func TestInvokeSavedStreamingSendsEveryMessage(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Upload", "ClientStream",
 		`export default () => ({ message: "saved" })`, loopback(port))
@@ -429,7 +429,7 @@ func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Stream", "ServerStream",
 		`export default () => ({ message: "s-" + gv.request.params.n, count: 2 })`, loopback(port))
@@ -464,7 +464,7 @@ func TestInvokeSavedStreamingMethodViaUnary(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Stream", "ServerStream",
 		`export default () => ({ message: "hi" })`, loopback(port))
@@ -484,7 +484,7 @@ func TestInvokeSavedEmptyBodyRuns(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Empty", "Unary", "", loopback(port))
 

@@ -44,7 +44,10 @@ func startReflectionServer(t *testing.T, withHealth bool) int {
 
 func newTestWorkspace(t *testing.T) Workspace {
 	t.Helper()
-	return Workspace{store: store.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))}
+	return Workspace{
+		store: store.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		defs:  newDefinitionsCache(),
+	}
 }
 
 func newTestWorkspaceWithEngine(t *testing.T) Workspace {
@@ -57,6 +60,7 @@ func newTestWorkspaceWithEngine(t *testing.T) Workspace {
 	return Workspace{
 		store:  store.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
 		engine: eng,
+		defs:   newDefinitionsCache(),
 	}
 }
 

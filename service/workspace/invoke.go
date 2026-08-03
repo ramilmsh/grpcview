@@ -25,7 +25,6 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
-	"github.com/jhump/protoreflect/grpcreflect"
 
 	"google.golang.org/protobuf/runtime/protoiface"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -639,35 +638,30 @@ func (w Workspace) recordHistory(ctx context.Context, workspaceName string, path
 
 const codeOK = 0
 
+// resolveMethod pairs a connection to the target with the method's descriptor. The descriptor comes
+// from the workspace's merged definitions, NOT from reflection on the target: the descriptor sources
+// already resolved and cached it, and re-resolving here would both duplicate that work and confine
+// invoke to targets that serve reflection — which the deployment you actually call often doesn't.
 func (w Workspace) resolveMethod(ctx context.Context, target *grpcviewv1.Server, workspaceName, service, method string) (*grpc.ClientConn, *desc.MethodDescriptor, func(), error) {
-	resolved, err := w.resolveTarget(ctx, target, workspaceName, service)
+	defs, err := w.definitions(ctx, workspaceName)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	methodDesc, err := defs.method(workspaceName, service, method)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	resolved, err := w.resolveTarget(ctx, target, workspaceName, service)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	conn, err := dial(resolved)
 	if err != nil {
 		return nil, nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connect to %s: %w", resolved.GetAddress(), err))
 	}
 
-	refClient := grpcreflect.NewClientAuto(ctx, conn)
-	cleanup := func() {
-		refClient.Reset()
-		_ = conn.Close()
-	}
-
-	svcDesc, err := refClient.ResolveService(service)
-	if err != nil {
-		cleanup()
-		return nil, nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("resolve service %q: %w", service, err))
-	}
-	methodDesc := svcDesc.FindMethodByName(method)
-	if methodDesc == nil {
-		cleanup()
-		return nil, nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("method %q not found in service %q", method, service))
-	}
-
-	return conn, methodDesc, cleanup, nil
+	return conn, methodDesc, func() { _ = conn.Close() }, nil
 }
 
 func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server, workspaceName, service string) (*grpcviewv1.Server, error) {

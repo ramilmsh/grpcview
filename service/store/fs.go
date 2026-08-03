@@ -80,6 +80,16 @@ func overlayResolved(sources, cached []*grpcviewv1.DescriptorSource) {
 	}
 }
 
+// Merged returns the resolved-schema cache as a bare Workspace: the merged descriptor set, the
+// services derived from it, and each source's derived summary. It reads one file and never walks
+// the request tree, so the invoke path can consult the definitions without paying for a Load.
+// An absent cache is not an error — it yields a zero Workspace, which reads as "no definitions".
+func (c *Collection) Merged(_ context.Context) (*grpcviewv1.Workspace, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.readMergedCache()
+}
+
 // Sources returns just the committed descriptor sources from the manifest.
 func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource, error) {
 	c.mu.Lock()

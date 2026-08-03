@@ -16,59 +16,15 @@ import (
 )
 
 func (w Workspace) describeMethod(ctx context.Context, workspaceName, service, method string) (*desc.MethodDescriptor, string, error) {
-	coll, err := w.store.Open(ctx, workspaceName)
+	defs, err := w.definitions(ctx, workspaceName)
 	if err != nil {
 		return nil, "", err
 	}
-	ws, err := coll.Load(ctx)
+	methodDesc, err := defs.method(workspaceName, service, method)
 	if err != nil {
-		return nil, "", toConnectError(err)
+		return nil, "", err
 	}
-
-	if len(ws.GetDescriptorSet()) == 0 {
-		return nil, "", connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"workspace %q has no resolved definitions: add a descriptor source (or refresh one) first", workspaceName))
-	}
-
-	fds := &descriptorpb.FileDescriptorSet{}
-	if err := proto.Unmarshal(ws.GetDescriptorSet(), fds); err != nil {
-		return nil, "", fmt.Errorf("parse the workspace's descriptor set: %w", err)
-	}
-	files, err := desc.CreateFileDescriptorsFromSet(fds)
-	if err != nil {
-		return nil, "", connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("link the workspace's descriptor set: %w", err))
-	}
-
-	var serviceDesc *desc.ServiceDescriptor
-	for _, fd := range files {
-		if sd := fd.FindService(service); sd != nil {
-			serviceDesc = sd
-			break
-		}
-	}
-	if serviceDesc == nil {
-		return nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
-			"service %q is not in workspace %q's definitions", service, workspaceName))
-	}
-	methodDesc := serviceDesc.FindMethodByName(method)
-	if methodDesc == nil {
-		return nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
-			"method %q is not in service %q", method, service))
-	}
-
-	return methodDesc, wonServiceBy(ws.GetSources(), service), nil
-}
-
-func wonServiceBy(sources []*grpcviewv1.DescriptorSource, service string) string {
-	for _, src := range sources {
-		for _, name := range src.GetResolved().GetWonServiceNames() {
-			if name == service {
-				return src.GetId()
-			}
-		}
-	}
-	return ""
+	return methodDesc, defs.wonBy(service), nil
 }
 
 // DescribeMethod reports one method's input and output shape from the workspace's resolved

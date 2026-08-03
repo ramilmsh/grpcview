@@ -21,7 +21,7 @@ func TestGvInvokeNestedReentrancy(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
 
@@ -65,7 +65,7 @@ func TestGvInvokeFromStreamingPath(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
 
@@ -105,7 +105,7 @@ func TestGvInvokeFromSavedDryRun(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
 	// A's own target is dead: a dry run must not dial it, but B's real one is still invoked.
@@ -139,7 +139,7 @@ func TestGvInvokeSuppressesNestedHistory(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "b" })`, port)
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -193,7 +193,7 @@ func TestScriptInvokerAddressingSplitsOnSlash(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestScriptInvokerStreamingTargetRejects(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
@@ -280,7 +280,7 @@ func TestScriptInvokerDepthCapRejects(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	gvTarget(t, w, ctx, nil, "Target", `export default () => ({ message: "hi" })`, port)
 	envelope := []byte(`{"path":"Target","params":{}}`)

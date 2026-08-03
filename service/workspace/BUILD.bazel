@@ -3,6 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "workspace",
     srcs = [
+        "definitions.go",
         "describe.go",
         "gvinvoke.go",
         "invoke.go",
@@ -43,6 +44,7 @@ go_test(
     name = "workspace_test",
     srcs = [
         "body_test.go",
+        "definitions_test.go",
         "describe_test.go",
         "folder_metadata_test.go",
         "gvinvoke_test.go",

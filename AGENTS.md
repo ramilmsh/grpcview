@@ -229,6 +229,22 @@ Consequences worth preserving, each of which was a bug before:
   written before ids existed produces — silently retarget those operations at the
   first of them. A source with no id gets one derived; duplicate and contentless
   entries are dropped.
+- **The sources are the *only* resolver; invoke never resolves again.** Both
+  Describe and Invoke read method descriptors from the merged set through the one
+  seam in `service/workspace/definitions.go`, and neither reflects on the target at
+  call time. Invoke used to run `grpcreflect` over its own connection, which made a
+  reflection service a *precondition for calling anything* — so a workspace whose
+  schema came from a `buf build` upload could describe a method it could not invoke,
+  and the deployment you actually call (behind a gateway, with reflection stripped)
+  answered `Unimplemented` no matter how well its descriptors were known. Dialing is
+  now the only thing invoke needs the network for. The corollary is that a workspace
+  with no resolved definitions gets `FailedPrecondition` and nothing is sent, which
+  is also the contract the CLI already enforced before reaching the backend.
+- **Linking the merged set is memoized, not repeated.** `definitionsCache` keys the
+  linked descriptors by workspace and invalidates on the descriptor set's digest, so
+  the per-invoke cost is one cache read, not a re-link of every file. Source
+  *summaries* are re-read each time regardless: a reorder changes which source won a
+  service without changing a single descriptor.
 - **A service's dial target is independent of who won its descriptors**:
   `Service.source` is the first *reflection* source that serves it. An upload has
   no address, so without that split, placing one first for its comments would

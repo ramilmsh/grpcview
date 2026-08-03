@@ -30,6 +30,18 @@ func startEchoServer(t *testing.T) int {
 	return lis.Addr().(*net.TCPAddr).Port
 }
 
+// echoTarget starts an echo server AND registers it as w's descriptor source. Invoke resolves the
+// method descriptor from the workspace's definitions, never by reflecting on the target, so a bare
+// server with nothing pointing at it is not enough to invoke against.
+func echoTarget(t *testing.T, w Workspace, ctx context.Context, start func(*testing.T) int) int {
+	t.Helper()
+	port := start(t)
+	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(reflectionAddReq(port))); err != nil {
+		t.Fatalf("AddDescriptorSource (echo reflection on :%d): %v", port, err)
+	}
+	return port
+}
+
 func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.InvokeStreamRequest {
 	wrapped := make([]string, len(messages))
 	for i, m := range messages {
@@ -86,7 +98,7 @@ func splitFrames(t *testing.T, frames []*grpcviewv1.InvokeStreamingResponse) (ms
 
 func TestStreamInvokeKinds(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, context.Background(), startEchoServer)
 
 	cases := []struct {
 		name     string
@@ -137,7 +149,7 @@ func TestStreamInvokeKinds(t *testing.T) {
 
 func TestStreamInvokeDefaultsEmptyMessages(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, context.Background(), startEchoServer)
 
 	frames, err := collectStream(context.Background(), w, echoStreamReq(port, "Unary"))
 	if err != nil {
@@ -154,7 +166,7 @@ func TestStreamInvokeDefaultsEmptyMessages(t *testing.T) {
 
 func TestStreamInvokePreflightErrors(t *testing.T) {
 	w := newTestWorkspace(t)
-	port := startEchoServer(t)
+	port := echoTarget(t, w, context.Background(), startEchoServer)
 
 	t.Run("unknown_method", func(t *testing.T) {
 		frames, err := collectStream(context.Background(), w, echoStreamReq(port, "NoSuchMethod", `{}`))

@@ -62,7 +62,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	target := &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)}
 
 	const runs = 3
@@ -140,7 +140,7 @@ func TestStreamInvokeRecordsHistory(t *testing.T) {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	msg := echoStreamReq(port, "ServerStream", `{"message":"hi","count":3}`)
 	msg.Spec.ItemName = "Stream"
 	if _, err := collectStream(ctx, w, msg); err != nil {

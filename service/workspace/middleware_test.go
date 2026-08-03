@@ -80,7 +80,7 @@ func TestInvokeMiddlewareInjectsMetadata(t *testing.T) {
 	createMiddleware(t, w, ctx, "inject", `export function handle(ctx){ ctx.metadata["x-injected"] = "yes"; return ctx }`)
 	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"inject"})
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"hi"}`)
 	if got := resp.Msg.GetResponse().GetStatus().GetCode(); got != int32(codeOK) {
 		t.Fatalf("status = %d (%s)", got, resp.Msg.GetResponse().GetStatus().GetMessage())
@@ -97,7 +97,7 @@ func TestInvokeMiddlewareRewritesBody(t *testing.T) {
 	createMiddleware(t, w, ctx, "rewrite", `export function handle(ctx){ ctx.body.message = "rewritten"; return ctx }`)
 	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"rewrite"})
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"orig"}`)
 	if got := echoedMessage(t, resp); got != "echo: rewritten" {
 		t.Fatalf("echoed message = %q, want %q (body not rewritten)", got, "echo: rewritten")
@@ -112,7 +112,7 @@ func TestInvokeMiddlewareChainOrdered(t *testing.T) {
 	createMiddleware(t, w, ctx, "second", `export function handle(ctx){ ctx.body.message = ctx.body.message + "B"; return ctx }`)
 	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"first", "second"})
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"orig"}`)
 	if got := echoedMessage(t, resp); got != "echo: AB" {
 		t.Fatalf("echoed message = %q, want %q (chain not run in order)", got, "echo: AB")
@@ -125,7 +125,7 @@ func TestInvokeMiddlewareNoOp(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	saveRequestWithMiddleware(t, w, ctx, "Plain", nil)
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	if got := echoedMessage(t, echoInvoke(t, w, ctx, port, "Plain", `{"message":"orig"}`)); got != "echo: orig" {
 		t.Fatalf("detached middleware changed body: %q", got)
 	}
@@ -144,7 +144,7 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 	saveRequestWithMiddleware(t, w, ctx, "Malformed", []string{"malformed"})
 	saveRequestWithMiddleware(t, w, ctx, "Missing", []string{"ghost"})
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	for _, item := range []string{"Boom", "Malformed", "Missing"} {
 		_, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 			Spec: &grpcviewv1.InvokeSpec{
@@ -169,7 +169,7 @@ func TestStreamInvokeRunsMiddleware(t *testing.T) {
 	createMiddleware(t, w, ctx, "streamrewrite", `export function handle(ctx){ ctx.body.message = "streamed"; return ctx }`)
 	saveRequestWithMiddleware(t, w, ctx, "Stream", []string{"streamrewrite"})
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	msg := echoStreamReq(port, "ServerStream", `{"message":"orig","count":2}`)
 	msg.Spec.ItemName = "Stream"
 	frames, err := collectStream(ctx, w, msg)

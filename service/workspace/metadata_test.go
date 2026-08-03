@@ -82,7 +82,7 @@ func TestInvokeMetadataScript(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	createGenerator(t, w, ctx, "bearer", `export default () => "Bearer tok"`)
 
-	port := startEchoServer(t)
+	port := echoTarget(t, w, ctx, startEchoServer)
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
 			WorkspaceName:  testWorkspace,
