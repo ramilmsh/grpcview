@@ -115,9 +115,11 @@ func TestGvInvokeFromSavedDryRun(t *testing.T) {
 }`, loopback(deadPort(t)))
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      "A",
-		DryRun:        true,
+		Spec: &grpcviewv1.SavedInvokeSpec{
+			WorkspaceName: testWorkspace,
+			ItemName:      "A",
+		},
+		DryRun: true,
 	})
 	if err != nil {
 		t.Fatalf("InvokeSaved (dry_run): %v (gv.invoke must be available on the dry-run path)", err)

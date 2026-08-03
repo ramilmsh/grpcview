@@ -36,7 +36,7 @@ type fakeClient struct {
 
 	gotGet         []*grpcviewv1.GetRequest
 	gotSaved       []*grpcviewv1.InvokeSavedRequest
-	gotSavedStream []*grpcviewv1.InvokeSavedRequest
+	gotSavedStream []*grpcviewv1.InvokeSavedStreamRequest
 	gotAdhoc       []*grpcviewv1.InvokeRequest
 	gotAdhocStream []*grpcviewv1.InvokeStreamRequest
 	closed         int
@@ -71,7 +71,7 @@ func (f *fakeClient) InvokeStream(_ context.Context, msg *grpcviewv1.InvokeStrea
 	return f.pump(send)
 }
 
-func (f *fakeClient) InvokeSavedStream(_ context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+func (f *fakeClient) InvokeSavedStream(_ context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	f.gotSavedStream = append(f.gotSavedStream, msg)
 	return f.pump(send)
 }
@@ -189,20 +189,21 @@ func TestInvoke(t *testing.T) {
 					t.Fatalf("InvokeSaved called %d time(s), want 1", len(fc.gotSaved))
 				}
 				got := fc.gotSaved[0]
-				if got.GetWorkspaceName() != "default" {
-					t.Errorf("workspace_name = %q, want %q", got.GetWorkspaceName(), "default")
+				spec := got.GetSpec()
+				if spec.GetWorkspaceName() != "default" {
+					t.Errorf("workspace_name = %q, want %q", spec.GetWorkspaceName(), "default")
 				}
-				if want := []string{"Auth"}; len(got.GetPath()) != 1 || got.GetPath()[0] != want[0] {
-					t.Errorf("path = %v, want %v", got.GetPath(), want)
+				if want := []string{"Auth"}; len(spec.GetPath()) != 1 || spec.GetPath()[0] != want[0] {
+					t.Errorf("path = %v, want %v", spec.GetPath(), want)
 				}
-				if got.GetItemName() != "Login" {
-					t.Errorf("item_name = %q, want %q", got.GetItemName(), "Login")
+				if spec.GetItemName() != "Login" {
+					t.Errorf("item_name = %q, want %q", spec.GetItemName(), "Login")
 				}
-				if got.Messages != nil {
-					t.Errorf("messages = %v, want nil with no -f and empty stdin", got.Messages)
+				if spec.Messages != nil {
+					t.Errorf("messages = %v, want nil with no -f and empty stdin", spec.Messages)
 				}
-				if got.RecordHistory != nil {
-					t.Errorf("record_history = %v, want nil (the server default is true)", got.GetRecordHistory())
+				if spec.RecordHistory != nil {
+					t.Errorf("record_history = %v, want nil (the server default is true)", spec.GetRecordHistory())
 				}
 				if got.GetDryRun() {
 					t.Error("dry_run must be false without --dry-run")
@@ -282,7 +283,7 @@ func TestInvoke(t *testing.T) {
 			wantOut:  "{\"token\":\"t\"}\n",
 			wantCode: 0,
 			check: func(t *testing.T, fc *fakeClient) {
-				params := fc.gotSaved[0].GetParams().AsMap()
+				params := fc.gotSaved[0].GetSpec().GetParams().AsMap()
 				if got, ok := params["n"].(float64); !ok || got != 3 {
 					t.Errorf("params[n] = %#v, want the JSON number 3", params["n"])
 				}
@@ -338,7 +339,7 @@ func TestInvoke(t *testing.T) {
 			wantOut:  "{\"token\":\"t\"}\n",
 			wantCode: 0,
 			check: func(t *testing.T, fc *fakeClient) {
-				target := fc.gotSaved[0].GetTarget()
+				target := fc.gotSaved[0].GetSpec().GetTarget()
 				if target.GetAddress() != "127.0.0.1:50055" {
 					t.Errorf("target.address = %q, want %q", target.GetAddress(), "127.0.0.1:50055")
 				}
@@ -353,8 +354,8 @@ func TestInvoke(t *testing.T) {
 			wantOut:  "{\"token\":\"t\"}\n",
 			wantCode: 0,
 			check: func(t *testing.T, fc *fakeClient) {
-				if fc.gotSaved[0].RecordHistory == nil || fc.gotSaved[0].GetRecordHistory() {
-					t.Errorf("record_history = %v, want an explicit false", fc.gotSaved[0].RecordHistory)
+				if spec := fc.gotSaved[0].GetSpec(); spec.RecordHistory == nil || spec.GetRecordHistory() {
+					t.Errorf("record_history = %v, want an explicit false", spec.RecordHistory)
 				}
 			},
 		},
@@ -406,7 +407,7 @@ func TestInvoke(t *testing.T) {
 			wantOut:  "{\"token\":\"t\"}\n",
 			wantCode: 0,
 			check: func(t *testing.T, fc *fakeClient) {
-				got := fc.gotSaved[0].GetMessages()
+				got := fc.gotSaved[0].GetSpec().GetMessages()
 				if len(got) != 1 {
 					t.Fatalf("messages = %d entries, want exactly 1: a TS module is one body", len(got))
 				}
@@ -427,7 +428,7 @@ func TestInvoke(t *testing.T) {
 					t.Fatalf("InvokeSavedStream called %d time(s), want 1: a client-streaming method never goes through the unary RPC", len(fc.gotSavedStream))
 				}
 				want := []string{"{\"i\":1}", "{\"i\":2}", "{\"i\":3}"}
-				got := fc.gotSavedStream[0].GetMessages()
+				got := fc.gotSavedStream[0].GetSpec().GetMessages()
 				if len(got) != len(want) {
 					t.Fatalf("messages = %v, want %v (blank lines skipped)", got, want)
 				}
@@ -568,7 +569,7 @@ func TestInvokeParamsFile(t *testing.T) {
 	if code != 0 || out != "{\"token\":\"t\"}\n" || errOut != "" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
-	params := fc.gotSaved[0].GetParams().AsMap()
+	params := fc.gotSaved[0].GetSpec().GetParams().AsMap()
 	if params["tenant"] != "from-flag" {
 		t.Errorf("params[tenant] = %#v, want the explicit --param to win", params["tenant"])
 	}
@@ -588,7 +589,7 @@ func TestInvokeBodyFromFile(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if got := fc.gotSaved[0].GetMessages(); len(got) != 1 || got[0] != tsBody {
+	if got := fc.gotSaved[0].GetSpec().GetMessages(); len(got) != 1 || got[0] != tsBody {
 		t.Errorf("messages = %q, want one entry equal to the file's bytes", got)
 	}
 }
@@ -770,8 +771,8 @@ func TestInvokeAppliesTheGlobalTimeout(t *testing.T) {
 	if deadline.IsZero() {
 		t.Error("want --timeout applied as a context deadline around the call")
 	}
-	if fc.gotSaved[0].GetWorkspaceName() != "other" {
-		t.Errorf("workspace_name = %q, want %q", fc.gotSaved[0].GetWorkspaceName(), "other")
+	if fc.gotSaved[0].GetSpec().GetWorkspaceName() != "other" {
+		t.Errorf("workspace_name = %q, want %q", fc.gotSaved[0].GetSpec().GetWorkspaceName(), "other")
 	}
 }
 

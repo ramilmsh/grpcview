@@ -181,8 +181,9 @@ message InvokeStreamingResponse {
   }
 }
 
-// Runs the request SAVED at path/item_name, resolved server-side.
-message InvokeSavedRequest {
+// Addresses the request SAVED at path/item_name and says how to run it once;
+// everything the unary and streaming saved forms share.
+message SavedInvokeSpec {
   string                 workspace_name = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string        path           = 2;
@@ -195,8 +196,19 @@ message InvokeSavedRequest {
   repeated string        messages       = 6;
   // Whether to append this run to the request's history. Defaults to TRUE.
   optional bool          record_history = 7;
-  // Resolve and evaluate everything, send nothing. Rejected by the streaming form.
-  bool                   dry_run        = 8;
+}
+
+// Runs the request SAVED at path/item_name, resolved server-side.
+message InvokeSavedRequest {
+  SavedInvokeSpec spec    = 1;
+  // Resolve and evaluate everything, send nothing.
+  bool            dry_run = 2;
+}
+
+// The streaming saved form has no dry_run: a dry run reports one resolved
+// request, which is the unary shape.
+message InvokeSavedStreamRequest {
+  SavedInvokeSpec spec = 1;
 }
 
 // Exactly one of `response` (a real call) and `resolved` (a dry run) is set.
@@ -313,8 +325,8 @@ service WorkspaceService {
   // InvokeSaved reports a status the target returned in the response, never as
   // an error.
   rpc InvokeSaved(InvokeSavedRequest) returns (InvokeSavedResponse);
-  // InvokeSavedStreaming is InvokeSaved for any streaming kind; dry_run is rejected.
-  rpc InvokeSavedStreaming(InvokeSavedRequest) returns (stream InvokeStreamingResponse);
+  // InvokeSavedStreaming is InvokeSaved for any streaming kind.
+  rpc InvokeSavedStreaming(InvokeSavedStreamRequest) returns (stream InvokeStreamingResponse);
   // DescribeMethod answers from already-resolved definitions, so it works with
   // the target down. Doc comments survive only if the winning source carried
   // them — reflection strips them, an uploaded descriptor set keeps them.

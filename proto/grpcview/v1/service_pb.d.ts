@@ -709,11 +709,12 @@ export declare type InvokeStreamingResponse = Message<"grpcview.v1.InvokeStreami
 export declare const InvokeStreamingResponseSchema: GenMessage<InvokeStreamingResponse>;
 
 /**
- * Runs the request SAVED at path/item_name, resolved server-side.
+ * Addresses the request SAVED at path/item_name and says how to run it once;
+ * everything the unary and streaming saved forms share.
  *
- * @generated from message grpcview.v1.InvokeSavedRequest
+ * @generated from message grpcview.v1.SavedInvokeSpec
  */
-export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest"> & {
+export declare type SavedInvokeSpec = Message<"grpcview.v1.SavedInvokeSpec"> & {
   /**
    * @generated from field: string workspace_name = 1;
    */
@@ -758,11 +759,29 @@ export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest
    * @generated from field: optional bool record_history = 7;
    */
   recordHistory?: boolean | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.SavedInvokeSpec.
+ * Use `create(SavedInvokeSpecSchema)` to create a new message.
+ */
+export declare const SavedInvokeSpecSchema: GenMessage<SavedInvokeSpec>;
+
+/**
+ * Runs the request SAVED at path/item_name, resolved server-side.
+ *
+ * @generated from message grpcview.v1.InvokeSavedRequest
+ */
+export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest"> & {
+  /**
+   * @generated from field: grpcview.v1.SavedInvokeSpec spec = 1;
+   */
+  spec?: SavedInvokeSpec | undefined;
 
   /**
-   * Resolve and evaluate everything, send nothing. Rejected by the streaming form.
+   * Resolve and evaluate everything, send nothing.
    *
-   * @generated from field: bool dry_run = 8;
+   * @generated from field: bool dry_run = 2;
    */
   dryRun: boolean;
 };
@@ -772,6 +791,25 @@ export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest
  * Use `create(InvokeSavedRequestSchema)` to create a new message.
  */
 export declare const InvokeSavedRequestSchema: GenMessage<InvokeSavedRequest>;
+
+/**
+ * The streaming saved form has no dry_run: a dry run reports one resolved
+ * request, which is the unary shape.
+ *
+ * @generated from message grpcview.v1.InvokeSavedStreamRequest
+ */
+export declare type InvokeSavedStreamRequest = Message<"grpcview.v1.InvokeSavedStreamRequest"> & {
+  /**
+   * @generated from field: grpcview.v1.SavedInvokeSpec spec = 1;
+   */
+  spec?: SavedInvokeSpec | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeSavedStreamRequest.
+ * Use `create(InvokeSavedStreamRequestSchema)` to create a new message.
+ */
+export declare const InvokeSavedStreamRequestSchema: GenMessage<InvokeSavedStreamRequest>;
 
 /**
  * Exactly one of `response` (a real call) and `resolved` (a dry run) is set.
@@ -1271,13 +1309,13 @@ export declare const WorkspaceService: GenService<{
     output: typeof InvokeSavedResponseSchema;
   },
   /**
-   * InvokeSavedStreaming is InvokeSaved for any streaming kind; dry_run is rejected.
+   * InvokeSavedStreaming is InvokeSaved for any streaming kind.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.InvokeSavedStreaming
    */
   invokeSavedStreaming: {
     methodKind: "server_streaming";
-    input: typeof InvokeSavedRequestSchema;
+    input: typeof InvokeSavedStreamRequestSchema;
     output: typeof InvokeStreamingResponseSchema;
   },
   /**

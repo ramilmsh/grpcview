@@ -165,6 +165,7 @@ func TestDescribeMethodPullsInReferencedTypes(t *testing.T) {
 	files := linkDescribedSet(t, got.GetDescriptorSet())
 	for _, name := range []string{
 		"grpcview.v1.InvokeSavedRequest",
+		"grpcview.v1.SavedInvokeSpec",
 		"grpcview.v1.InvokeSavedResponse",
 		"grpcview.v1.Server",
 		"grpcview.v1.ResolvedRequest",

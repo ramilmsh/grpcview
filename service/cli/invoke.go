@@ -154,22 +154,22 @@ func invokeSaved(ctx context.Context, s Streams, sess session, g *globalFlags, f
 		return err
 	}
 
-	msg := &grpcviewv1.InvokeSavedRequest{
+	spec := &grpcviewv1.SavedInvokeSpec{
 		WorkspaceName: g.Workspace,
 		Path:          target.parent,
 		ItemName:      target.itemName,
 		Params:        params,
 		Target:        buildTarget(f),
 		Messages:      messages,
-		DryRun:        f.dryRun,
 	}
 	// record_history defaults to true server-side, so only the opt-out is sent.
 	if f.noHistory {
-		msg.RecordHistory = proto.Bool(false)
+		spec.RecordHistory = proto.Bool(false)
 	}
 
+	// A dry run reports one resolved request, so it is the unary RPC even for a streaming kind.
 	if f.dryRun {
-		resp, err := sess.InvokeSaved(ctx, connect.NewRequest(msg))
+		resp, err := sess.InvokeSaved(ctx, connect.NewRequest(&grpcviewv1.InvokeSavedRequest{Spec: spec, DryRun: true}))
 		if err != nil {
 			return fmt.Errorf("failed to resolve %s: %w", target.arg, err)
 		}
@@ -177,12 +177,13 @@ func invokeSaved(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	}
 
 	if target.kind.streaming() {
+		msg := &grpcviewv1.InvokeSavedStreamRequest{Spec: spec}
 		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 			return sess.InvokeSavedStream(ctx, msg, send)
 		})
 	}
 
-	resp, err := sess.InvokeSaved(ctx, connect.NewRequest(msg))
+	resp, err := sess.InvokeSaved(ctx, connect.NewRequest(&grpcviewv1.InvokeSavedRequest{Spec: spec}))
 	if err != nil {
 		return fmt.Errorf("failed to invoke %s: %w", target.arg, err)
 	}
