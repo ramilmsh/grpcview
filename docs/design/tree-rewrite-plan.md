@@ -11,8 +11,7 @@ per-node `useState`, single-select, no keyboard support).
 Investigated and rejected (2026-07-30/31):
 
 - **monaco's internal `vs/base/browser/ui/tree`** — the literal VS Code widget, already
-  in our bundle via the Peek References contrib. Spiked and browser-verified; findings in
-  `tree-spike-findings.md`. Rejected: no type contract (284-line hand-written shim),
+  in our bundle via the Peek References contrib. Spiked and browser-verified. Rejected: no type contract (284-line hand-written shim),
   undocumented/unversioned internal API, find widget unreachable in the shipped build,
   and — decisively — row content lives in a *recycled DOM pool* outside React, so our
   hover-reveal gear/pencil/plus/trash affordances would have to be hand-wired per
@@ -868,8 +867,7 @@ Each phase is one commit on `trunk`, browser-verified before the next starts.
 - **T3 — Typeahead.** 1s buffer, wrap-around, match highlight. *After this lands, delete
   the monaco spike's leftovers.* Verified 2026-07-31: the spike code was **never
   committed** (no `features/tree-spike/`, no `ActiveView` case, no Rail entry in git
-  history), so this reduces to deleting `tree-spike-findings.md` — it has served its
-  purpose as a behavioral reference.
+  history), so there is nothing left to delete.
 - **T4a — proto: folder rename.** Add `optional string name` to `UpdateFolderRequest` +
   handler + collision check mirroring `UpdateRequestRequest`.
 - **T4b — Rename in-tree.** `F2` and the pencil, inline input, collision validation,
