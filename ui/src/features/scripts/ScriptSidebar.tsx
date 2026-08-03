@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { MagnifyingGlass, Plus, ShieldCheck } from "@/components/ui/icons";
+import { MagnifyingGlass, Plus, Shield } from "@/components/ui/icons";
 import { IconButton } from "@/components/ui/Button";
 import type { Script } from "@grpcview/v1/workspace_pb";
 import { kindMeta, SIDEBAR_ORDER } from "./script-kinds";
@@ -117,8 +117,8 @@ export function ScriptSidebar({
         }}
         title="QuickJS compiled to WASM, run in-process by wazero — hard memory + wall-clock bounds; filesystem and process denied, network open to every script"
       >
-        <ShieldCheck size={14} style={{ color: "var(--ok)" }} />
-        QuickJS·WASM<span style={{ color: "var(--color-neutral-700)" }}>·</span>sandboxed
+        <Shield size={14} />
+        QuickJS·WASM<span style={{ color: "var(--color-neutral-700)" }}>·</span>bounded
       </div>
     </div>
   );

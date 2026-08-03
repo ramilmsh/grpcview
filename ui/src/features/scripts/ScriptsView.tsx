@@ -81,7 +81,8 @@ function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
       <div style={{ fontSize: 15, color: "var(--color-neutral-200)" }}>No script selected</div>
       <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0, maxWidth: 420 }}>
         Pick a script from the sidebar, or create a generator, middleware, or scenario
-        to author and test-run it — fully sandboxed.
+        to author and test-run it. See a script's Capabilities tab for what the runtime
+        enforces.
       </p>
       <Button variant="primary" onClick={onNew} style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}>
         <Plus size={14} />
