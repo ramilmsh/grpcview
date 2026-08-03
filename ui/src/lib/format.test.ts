@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { Item } from "@grpcview/v1/workspace_pb";
-import { childPathOf, findByKey, itemKey, keyOf, pruneNestedSelections, type ItemWithPath } from "./format";
+import type { Item, Method, Service } from "@grpcview/v1/workspace_pb";
+import {
+  childPathOf,
+  findByKey,
+  itemKey,
+  keyOf,
+  pruneNestedSelections,
+  resolveMethod,
+  serviceName,
+  type ItemWithPath,
+} from "./format";
 
 const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWithPath => ({
   item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
@@ -20,6 +29,35 @@ const tree: ItemWithPath[] = [
     folder("Admin", ["Users"], [request("Ban", ["Users", "Admin"])]),
   ]),
 ];
+
+const service = (pkg: string, name: string, methods: string[]): Service =>
+  ({
+    package: pkg,
+    name,
+    methods: methods.map((m) => ({ name: m }) as unknown as Method),
+  }) as unknown as Service;
+
+describe("serviceName", () => {
+  it("joins a package and a name with a dot", () => {
+    expect(serviceName(service("echo.v1", "EchoService", []))).toBe("echo.v1.EchoService");
+  });
+
+  it("is just the name in the EMPTY package — a leading dot matches nothing", () => {
+    expect(serviceName(service("", "EchoService", []))).toBe("EchoService");
+  });
+});
+
+describe("resolveMethod", () => {
+  it("finds a method on a packaged service", () => {
+    const services = [service("echo.v1", "EchoService", ["Echo"])];
+    expect(resolveMethod(services, "echo.v1.EchoService", "Echo")?.name).toBe("Echo");
+  });
+
+  it("finds a method on a service in the EMPTY package (regression: the leading dot)", () => {
+    const services = [service("", "EchoService", ["Echo"])];
+    expect(resolveMethod(services, "EchoService", "Echo")?.name).toBe("Echo");
+  });
+});
 
 describe("keyOf", () => {
   it("joins a parent path and name with /", () => {

@@ -81,7 +81,11 @@ export const pruneNestedSelections = (items: readonly ItemWithPath[]): ItemWithP
   });
 };
 
-export const serviceName = (s: Service): string => `${s.package}.${s.name}`;
+// Matches service/cli's serviceFullName: a service in the EMPTY proto package has
+// no dot to join on, so prefixing one yields ".EchoService" and never compares
+// equal to the name the rest of the app carries.
+export const serviceName = (s: Service): string =>
+  s.package ? `${s.package}.${s.name}` : s.name;
 
 export const resolveMethod = (
   services: Service[],
