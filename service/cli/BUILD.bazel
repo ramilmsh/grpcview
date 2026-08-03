@@ -11,6 +11,7 @@ go_library(
         "resolve.go",
         "root.go",
         "sources.go",
+        "write.go",
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/cli",
     visibility = ["//visibility:public"],
@@ -35,6 +36,7 @@ go_test(
         "resolve_test.go",
         "root_test.go",
         "sources_test.go",
+        "write_test.go",
     ],
     embed = [":cli"],
     deps = [

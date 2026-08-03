@@ -143,6 +143,12 @@ func newRootCmd(
 	root.AddCommand(newLsCmd(s, globals, open))
 	root.AddCommand(newGetCmd(s, globals, open))
 	root.AddCommand(newSourcesCmd(s, globals, open))
+	// The write verbs. Each takes only what it needs: only `request create` and
+	// `script` read stdin or write output, so the other parents have no Streams to
+	// be handed.
+	root.AddCommand(newRequestCmd(s, globals, open))
+	root.AddCommand(newFolderCmd(globals, open))
+	root.AddCommand(newScriptCmd(s, globals, open))
 	root.AddCommand(newServeCmd(serve))
 	root.AddCommand(newVersionCmd())
 

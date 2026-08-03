@@ -31,6 +31,10 @@ type fakeClient struct {
 	frames    []*grpcviewv1.InvokeStreamResponse
 	invokeErr error
 
+	// writes is the mutating half of the fake, defined in write_test.go next to
+	// the verbs it serves.
+	writes writeCalls
+
 	gotGet         []*grpcviewv1.GetRequest
 	gotSaved       []*grpcviewv1.InvokeSavedRequest
 	gotSavedStream []*grpcviewv1.InvokeSavedRequest
