@@ -331,6 +331,47 @@ func TestRemoveDescriptorSourceUnknownID(t *testing.T) {
 	}
 }
 
+// TestMutateCreatesTheCollection pins that a mutation against a workspace nobody
+// has read yet WORKS. Creation used to be a side effect of Get alone, which was
+// invisible while the browser was the only client (it always loads the workspace
+// before it can mutate anything) and made the first mutation against a fresh
+// directory fail with "collection not found" — which a shell hits immediately,
+// since `grpcview sources add` is a plausible first-ever command.
+//
+// Deliberately NO ensureWorkspace call: that helper is exactly the read this test
+// must not perform.
+func TestMutateCreatesTheCollection(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("a tree mutation", func(t *testing.T) {
+		w := newTestWorkspace(t)
+		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
+			WorkspaceName: testWorkspace,
+			ItemName:      "First",
+		})); err != nil {
+			t.Fatalf("CreateFolder on an unread workspace: %v", err)
+		}
+		got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if items := got.Msg.GetWorkspace().GetItem().GetFolder().GetItems(); len(items) != 1 || items[0].GetName() != "First" {
+			t.Fatalf("items = %v, want the created folder to have persisted", items)
+		}
+	})
+
+	t.Run("a source mutation", func(t *testing.T) {
+		w := newTestWorkspace(t)
+		// Reorder over an empty list is the cheapest source mutation that touches no
+		// network at all, so this asserts the create-on-demand seam and nothing else.
+		if _, err := w.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
+			WorkspaceName: testWorkspace,
+		})); err != nil {
+			t.Fatalf("ReorderDescriptorSources on an unread workspace: %v", err)
+		}
+	})
+}
+
 // folderNamed returns the named top-level folder from a Workspace snapshot,
 // failing the test if it is missing or not a folder — the lookup
 // TestUpdateFolderRPC needs to inspect the RPC's response/reload shape.

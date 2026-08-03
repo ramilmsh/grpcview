@@ -217,6 +217,9 @@ func (w Workspace) openWithSources(ctx context.Context, name string) (*store.Col
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to create workspace: %w", err)
+	}
 	ws, err := coll.Load(ctx)
 	if err != nil {
 		return nil, nil, toConnectError(err)
@@ -252,10 +255,21 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 // reloaded workspace, mapping store sentinels to Connect codes. The four
 // tree-mutating RPCs share this open→mutate→reload→map policy and differ only in
 // the response type, which each caller wraps.
+//
+// It auto-creates the collection, exactly as Get does. Creation being a
+// side-effect of READING was invisible while the browser was the only client —
+// it always loads the workspace before it can mutate anything — but it made the
+// FIRST mutation against a fresh directory fail with "collection not found",
+// which a CLI hits immediately (`grpcview sources add …` as the very first
+// command). Every entry point now creates on demand rather than only the read
+// one.
 func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Collection) error) (*grpcviewv1.Workspace, error) {
 	coll, err := w.store.Open(ctx, name)
 	if err != nil {
 		return nil, err
+	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		return nil, fmt.Errorf("failed to create workspace: %w", err)
 	}
 	if err := fn(coll); err != nil {
 		return nil, toConnectError(err)
