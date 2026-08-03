@@ -175,16 +175,3 @@ func TestGvInvokeStubRejects(t *testing.T) {
 	}
 }
 
-func TestInvokeDepthContextSeam(t *testing.T) {
-	if got := invokeDepthFromContext(context.Background()); got != 0 {
-		t.Fatalf("depth on a bare context = %d, want 0", got)
-	}
-	ctx := WithInvokeDepth(context.Background(), 3)
-	if got := invokeDepthFromContext(ctx); got != 3 {
-		t.Fatalf("depth after WithInvokeDepth(3) = %d, want 3", got)
-	}
-	nested := WithInvokeDepth(ctx, 4)
-	if got := invokeDepthFromContext(nested); got != 4 {
-		t.Fatalf("depth after a second WithInvokeDepth(4) = %d, want 4", got)
-	}
-}

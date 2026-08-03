@@ -346,18 +346,6 @@ func invokerFromContext(ctx context.Context) Invoker {
 	return inv
 }
 
-type invokeDepthCtxKey struct{}
-
-// WithInvokeDepth returns a context carrying depth as the current gv.invoke nesting count.
-func WithInvokeDepth(ctx context.Context, depth int) context.Context {
-	return context.WithValue(ctx, invokeDepthCtxKey{}, depth)
-}
-
-func invokeDepthFromContext(ctx context.Context) int {
-	d, _ := ctx.Value(invokeDepthCtxKey{}).(int)
-	return d
-}
-
 type sinkCtxKey struct{}
 
 func withSink(ctx context.Context, s *logCollector) context.Context {

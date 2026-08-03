@@ -18,12 +18,10 @@ import (
 // a request that re-invokes itself with a next-page token must keep working.
 const maxInvokeDepth = 8
 
-// gvInvokeDepthCtxKey is workspace's own copy of the count, since scripting's ctx key has no
-// exported getter — the cap is workspace-side policy.
+// gvInvokeDepthCtxKey carries the count; the cap is workspace-side policy.
 type gvInvokeDepthCtxKey struct{}
 
 func withGvInvokeDepth(ctx context.Context, depth int) context.Context {
-	ctx = scripting.WithInvokeDepth(ctx, depth)
 	return context.WithValue(ctx, gvInvokeDepthCtxKey{}, depth)
 }
 
