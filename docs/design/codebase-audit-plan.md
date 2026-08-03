@@ -338,6 +338,33 @@ The ledger lands as a checklist. Some "inconsistencies" are deliberate and only
 you know which — `AGENTS.md` §VS Code familiarity, for one, makes some
 non-obvious naming intentional. Nothing gets applied without a tick.
 
+### Triage decisions (2026-08-03)
+
+**`D-X3-2` (`Store.Open`) — resolved: rename it, the name is the defect.**
+`Open` does no I/O at all (mutex, map lookup, `filepath.Join`, insert,
+`return coll, nil`); the failure a reader expects from it is one line later at
+`coll.Load(ctx)`, which returns `store.ErrNotFound`. Becomes:
+
+```go
+// Collection returns the named collection's handle, creating the in-memory
+// record on first use; it does not touch disk.
+func (s *Store) Collection(name string) *Collection {
+```
+
+after `database/sql`'s `db.Conn(ctx) *sql.Conn`. Both the `error` and the ignored
+`ctx` go with it, unblocking `D-X3-3`'s 40 dead branches (11 production + 29
+test, verified by grep).
+
+Neither G1 nor X3 proposed a rename — both narrowed the signature and left the
+misleading name, which is why the dead `error` looked load-bearing to three
+separate readers. **And X3 overstated the objection it escalated on:** it called
+`_ context.Context` a package-wide convention that excepting `Open` would break,
+but `Open` is the *only* method on `*Store`. Every other `_ context.Context` is on
+`*Collection`, and all of those touch disk in `fs.go` — so the convention is
+"`*Collection` methods carry `ctx` because they do I/O", which `Open` was never a
+member of. The rename creates zero exceptions rather than one, so there was less
+to trade than the escalation claimed.
+
 ---
 
 ## Phase 4 — apply in waves
