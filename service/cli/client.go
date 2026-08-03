@@ -11,29 +11,82 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
 )
 
-// Client is the slice of WorkspaceService the CLI verbs use. Its methods are
+// Client is the slice of WorkspaceService the CLI verbs use. Unary methods are
 // spelled with the Connect handler signature, which is also the generated
-// Connect *client* signature for every unary RPC — so the in-process handler
-// and the wire client satisfy one interface with no adapter. Only the streaming
-// RPC differs between the two shapes, and no C0 verb needs it.
+// Connect *client* signature — so the in-process handler and the wire client
+// satisfy those with no adapter at all.
 //
-// Methods are added as verbs need them; C0 declares just enough to prove the
-// two bindings line up.
+// The streaming methods are the exception, and the reason both bindings are
+// wrapped below: a handler receives a *connect.ServerStream and a client
+// returns a *connect.ServerStreamForClient, and connect exposes no way to build
+// the former outside a served request. Neither shape works for both, so Client
+// declares the one shape a CLI actually wants — frames delivered to a callback —
+// and each binding adapts its own side onto it.
+//
+// Methods are added as verbs need them.
 type Client interface {
 	Get(context.Context, *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error)
 	Invoke(context.Context, *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error)
+	InvokeSaved(context.Context, *connect.Request[grpcviewv1.InvokeSavedRequest]) (*connect.Response[grpcviewv1.InvokeSavedResponse], error)
+
+	// InvokeStream runs an ad-hoc streaming invoke, handing every frame to send
+	// in arrival order. It returns when the terminal frame has been delivered,
+	// or early with the first error send or the transport reports.
+	InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error
+	// InvokeSavedStream is InvokeStream for a saved request, addressed by path.
+	InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error
+}
+
+// inProcess binds Client to the handler called directly as a Go value: no
+// server, no port, no HTTP. Every method is the handler's own — including the
+// two streaming ones, which workspace exports in send-func form precisely
+// because there is no *connect.ServerStream to hand it here.
+type inProcess struct {
+	workspace.Workspace
+}
+
+// remote binds Client to the generated Connect client over HTTP. Only the
+// streaming methods need adapting: the generated client returns a stream to
+// pull from, so the pull loop lives here and the CLI above it never sees the
+// difference.
+type remote struct {
+	grpcviewv1.WorkspaceServiceClient
+}
+
+func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+	stream, err := r.WorkspaceServiceClient.InvokeStreaming(ctx, connect.NewRequest(msg))
+	if err != nil {
+		return err
+	}
+	return drain(stream, send)
+}
+
+func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+	stream, err := r.WorkspaceServiceClient.InvokeSavedStreaming(ctx, connect.NewRequest(msg))
+	if err != nil {
+		return err
+	}
+	return drain(stream, send)
+}
+
+// drain pumps a client-side stream into a send callback and closes it. A send
+// failure stops the pump and wins over the stream's own error: the caller
+// (a broken pipe, a render error) is the more specific failure.
+func drain(stream *connect.ServerStreamForClient[grpcviewv1.InvokeStreamResponse], send func(*grpcviewv1.InvokeStreamResponse) error) error {
+	defer stream.Close()
+	for stream.Receive() {
+		if err := send(stream.Msg()); err != nil {
+			return err
+		}
+	}
+	return stream.Err()
 }
 
 // The two bindings, asserted at compile time. This is the whole point of C0:
 // if either signature drifts, the build breaks here rather than in a verb.
 var (
-	// in-process: a plain Go struct over the store and the scripting engine,
-	// no server and no port. Value receivers, so the value satisfies Client.
-	_ Client = workspace.Workspace{}
-	// remote: the generated Connect client over HTTP. Asserted against the
-	// interface NewWorkspaceServiceClient returns, so the check costs nothing at
-	// init (the constructor does real reflection work).
-	_ Client = (grpcviewv1.WorkspaceServiceClient)(nil)
+	_ Client = inProcess{}
+	_ Client = remote{}
 )
 
 // session is a Client together with the teardown its binding needs. The
@@ -59,7 +112,7 @@ type clientFactory func(ctx context.Context, g *globalFlags) (session, error)
 func openClient(ctx context.Context, g *globalFlags) (session, error) {
 	if g != nil && g.Server != "" {
 		return session{
-			Client: grpcviewv1.NewWorkspaceServiceClient(http.DefaultClient, g.Server),
+			Client: remote{grpcviewv1.NewWorkspaceServiceClient(http.DefaultClient, g.Server)},
 			close:  func(context.Context) error { return nil },
 		}, nil
 	}
@@ -68,5 +121,5 @@ func openClient(ctx context.Context, g *globalFlags) (session, error) {
 	if err != nil {
 		return session{}, fmt.Errorf("failed to open workspace: %w", err)
 	}
-	return session{Client: ws, close: ws.Close}, nil
+	return session{Client: inProcess{ws}, close: ws.Close}, nil
 }

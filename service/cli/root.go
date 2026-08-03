@@ -139,10 +139,7 @@ func newRootCmd(
 	// set of accepted values.
 	globals := registerGlobalFlags(root)
 
-	// No C0 verb reads the globals or opens a client. Both exist so that the
-	// first verb that does (C1) closes over them instead of inventing its own.
-	_, _ = globals, open
-
+	root.AddCommand(newInvokeCmd(s, globals, open))
 	root.AddCommand(newServeCmd(serve))
 	root.AddCommand(newVersionCmd())
 

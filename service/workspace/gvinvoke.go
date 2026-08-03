@@ -143,6 +143,13 @@ func (w Workspace) scriptInvoker(workspaceName string) scripting.Invoker {
 // "/" is unreachable this way, an accepted v1 gap. An empty path, or one whose final segment is
 // empty (e.g. a trailing slash), is rejected up front rather than resolving to a confusing
 // "not found".
+// SplitInvokePath is splitInvokePath, exported so every surface that addresses a saved request
+// by a slash path — gv.invoke, the CLI's invoke verb — splits it the same way. A second parser
+// would disagree about a trailing slash or an empty segment within a week.
+func SplitInvokePath(path string) (parent []string, name string, err error) {
+	return splitInvokePath(path)
+}
+
 func splitInvokePath(path string) (parent []string, name string, err error) {
 	segments := strings.Split(path, "/")
 	name = segments[len(segments)-1]

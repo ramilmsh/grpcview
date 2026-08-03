@@ -151,6 +151,22 @@ func (w Workspace) InvokeSavedStreaming(ctx context.Context, request *connect.Re
 	return w.invokeSavedStream(ctx, request.Msg, stream.Send)
 }
 
+// InvokeSavedStream is the send-func form of InvokeSavedStreaming, exported for an IN-PROCESS
+// caller. connect exposes no way to build a *connect.ServerStream outside a served request, so a
+// caller holding this handler as a plain Go value (the CLI's default binding) cannot go through
+// the handler method at all; it streams through a callback instead. The wire client, which gets
+// frames from a *connect.ServerStreamForClient, adapts onto the same callback on its own side.
+func (w Workspace) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+	return w.invokeSavedStream(ctx, msg, send)
+}
+
+// InvokeStream is InvokeSavedStream's ad-hoc counterpart: the send-func form of InvokeStreaming,
+// for the same in-process reason. params is nil and history is recorded, exactly as the wire
+// InvokeStreaming does — an ad-hoc run carries its own body and has no params field.
+func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+	return w.streamInvoke(ctx, msg, send, nil, true)
+}
+
 // invokeSavedStream resolves the saved request and runs it through streamInvoke, which maps the
 // target method's real streaming kind onto the one server-streaming frame protocol. Every
 // message is composed up-front for a client-streaming or bidi target — the existing convention
