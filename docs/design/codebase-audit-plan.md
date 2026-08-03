@@ -113,7 +113,7 @@ the `bazel_env` toolchain on a throwaway stdlib-only module, which keeps the
 | scan | Go + proto | TypeScript |
 |---|---|---|
 | `dupes` | 29 clusters (12 production, 17 test-only), min 40 AST nodes | 11 clusters (9 production, 2 test-only), min 55 |
-| `dead` | 198 exported symbols → 2 referenced nowhere, 8 test-only, 22 never referenced outside their package | 215 exports → 0 referenced nowhere, 16 test-only, 24 never referenced outside their file |
+| `dead` | 198 exported symbols → 1 referenced nowhere, 5 test-only, 20 never referenced outside their package | 215 exports → 0 referenced nowhere, 16 test-only, 24 never referenced outside their file |
 | `vocab` | 4,476 (word, decl-kind, site) records | 6,010 records |
 
 Outputs: `dupes-{go,ts}.{tsv,txt}`, `dead-{go,ts}.{tsv,txt}`,
@@ -157,10 +157,19 @@ Headline evidence, already visible without an agent:
   store + UI panel), `workspace` (75, wire + Go service + UI hooks), `tree` (42,
   store dir + UI component) name overlapping concepts; `folder` adds 42 more.
   X1 has its opening question.
-- `WrapUnary` (`service/logging.go:48`) and `WasmPageSize`
-  (`service/scripting/engine.go:23`) are referenced nowhere at all.
-- 22 Go exports are never used outside their own package, 20 of them in
-  `service/scripting` — that package's surface is exported by habit, not need.
+- `WasmPageSize` (`service/scripting/engine.go:23`) is the one Go export
+  referenced nowhere at all.
+- 20 Go exports are never used outside their own package, **19 of them in
+  `service/scripting`** — that package's surface is exported by habit, not need.
+  `Collection.Root` (`store/store.go:99`) and `Engine.RunGenerator`
+  (`scripting/profiles.go:107`) have production callers only in tests.
+- The `dead` Go pass needed one correction the plan's "known limit" predicted:
+  interface-satisfying methods look unreferenced, because the dispatch is
+  dynamic and the interface (`connect.Interceptor`) is declared outside the
+  scanned tree. The scanner now suppresses any method name matching an
+  interface declared in-tree plus a small external list; that alone removed
+  five false positives, `logging.go`'s three `Wrap*` methods among them.
+  **Treat every remaining Go dead-code line as a lead, not a verdict.**
 
 ---
 
