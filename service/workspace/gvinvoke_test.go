@@ -56,6 +56,79 @@ func TestGvInvokeNestedReentrancy(t *testing.T) {
 	}
 }
 
+// The Invoker rides resolvePreSend, not invokeUnary: a STREAMING request's body must be able to
+// call gv.invoke too. While it was installed by invokeUnary alone this rejected with
+// "invoke is not available in this context" and streamInvoke returned FailedPrecondition.
+func TestGvInvokeFromStreamingPath(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := startEchoServer(t)
+
+	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
+
+	body := `export default async () => {
+  const b = await gv.invoke("B", { id: 3 });
+  return { message: "S-ok=" + b.ok + "-body=" + b.body.message, count: 1 };
+}`
+	frames, err := collectStream(ctx, w, &grpcviewv1.InvokeStreamRequest{
+		WorkspaceName: testWorkspace,
+		Service:       echoService,
+		Method:        "ServerStream",
+		Messages:      []string{body},
+		Target:        &grpcviewv1.Server{Address: loopback(port)},
+	})
+	if err != nil {
+		t.Fatalf("streamInvoke: %v (gv.invoke must be available on the streaming path)", err)
+	}
+	msgs, result := splitFrames(t, frames)
+	if code := result.GetStatus().GetCode(); code != int32(codeOK) {
+		t.Fatalf("terminal status = %d (%s), want OK", code, result.GetStatus().GetMessage())
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("message frames = %d, want 1 (the body asked for count 1)", len(msgs))
+	}
+	want := "echo #0: S-ok=true-body=echo: id-3"
+	if got := decodeEchoMessage(t, msgs[0]); got != want {
+		t.Fatalf("echoed message = %q, want %q (nested gv.invoke did not run from the "+
+			"streaming path)", got, want)
+	}
+}
+
+// The same seam covers the saved-request DRY RUN, which stops after resolvePreSend and so never
+// reaches invokeUnary at all: its body's gv.invoke used to reject unconditionally.
+func TestGvInvokeFromSavedDryRun(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := startEchoServer(t)
+
+	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
+	// A's own target is dead: a dry run must not dial it, but B's real one is still invoked.
+	saveRequest(t, w, ctx, nil, "A", "Unary", `export default async () => {
+  const b = await gv.invoke("B", { id: 5 });
+  return { message: "D-ok=" + b.ok + "-body=" + b.body.message };
+}`, loopback(deadPort(t)))
+
+	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
+		WorkspaceName: testWorkspace,
+		ItemName:      "A",
+		DryRun:        true,
+	})
+	if err != nil {
+		t.Fatalf("InvokeSaved (dry_run): %v (gv.invoke must be available on the dry-run path)", err)
+	}
+	msgs := got.GetResolved().GetMessages()
+	if len(msgs) != 1 {
+		t.Fatalf("resolved messages = %d, want 1", len(msgs))
+	}
+	want := "D-ok=true-body=echo: id-5"
+	if evaluated := decodeEchoMessage(t, []byte(msgs[0])); evaluated != want {
+		t.Fatalf("evaluated body message = %q, want %q (nested gv.invoke did not run from the "+
+			"dry-run path)", evaluated, want)
+	}
+}
+
 func TestGvInvokeSuppressesNestedHistory(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

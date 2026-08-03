@@ -59,8 +59,6 @@ type invokeSpec struct {
 }
 
 func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv1.Request_Response, error) {
-	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))
-
 	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, spec.target, spec.workspaceName, spec.service, spec.method)
 	if err != nil {
 		return nil, err
@@ -133,7 +131,12 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 	return out, nil
 }
 
+// resolvePreSend is the ONE seam every invoke path shares, so the gv.invoke Invoker is installed
+// here and nowhere else: hanging it off a single caller left it missing from the streaming and
+// dry-run paths.
 func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies []string) ([]string, *structpb.Struct, error) {
+	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))
+
 	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, bodies, spec.params)
 	if err != nil {
 		return nil, nil, err
