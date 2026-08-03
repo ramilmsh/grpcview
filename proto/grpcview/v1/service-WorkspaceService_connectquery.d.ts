@@ -108,6 +108,24 @@ export const invoke: typeof WorkspaceService["method"]["invoke"];
  */
 export const invokeSaved: typeof WorkspaceService["method"]["invokeSaved"];
 /**
+ * Describes the input and output shape of one method, without calling anything.
+ *
+ * Requires workspace_name, service (fully qualified, e.g. "echo.v1.EchoService") and
+ * method (its own name, e.g. "Unary"). The shape comes from definitions the workspace
+ * has already resolved, so this answers even when the target is unreachable.
+ *
+ * Returns the method's input and output messages plus every type they reference —
+ * twice: as rendered .proto text to read, and as serialized FileDescriptorSet bytes to
+ * parse — with the id of the source they were read from and whether either side of the
+ * call streams.
+ *
+ * Doc comments come through only if that source carried them: a server answering by
+ * reflection strips them, an uploaded descriptor set built with them keeps them.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.DescribeMethod
+ */
+export const describeMethod: typeof WorkspaceService["method"]["describeMethod"];
+/**
  * RunScript evaluates a script through the scripting engine and returns its
  * value, console output, and any error — the scratchpad and the per-kind
  * test-run surface that validates the engine end to end.

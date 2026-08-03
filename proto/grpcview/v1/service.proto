@@ -327,6 +327,36 @@ message ResolvedRequest {
   google.protobuf.Struct metadata = 5;
 }
 
+// DescribeMethodRequest asks for one method's schema, read from the workspace's
+// already-resolved definitions. Nothing is dialed, so it answers from a box that
+// cannot reach the target.
+message DescribeMethodRequest {
+  string workspace_name = 1;
+  // service is the fully-qualified service name, e.g. "echo.v1.EchoService".
+  string service        = 2;
+  // method is the method's own name, e.g. "Unary" — not qualified by the service.
+  string method         = 3;
+}
+
+// DescribeMethodResponse carries the same schema twice: once rendered for a human
+// to read, once as descriptors for a program to parse.
+message DescribeMethodResponse {
+  // proto_text is the rendered .proto view: the method, its input and output
+  // messages, and every type they transitively reference. Doc comments appear only
+  // when the winning source carried them.
+  string proto_text        = 1;
+  // descriptor_set is a serialized FileDescriptorSet covering the same closure,
+  // self-contained (transitive imports included) so it links on its own.
+  bytes  descriptor_set    = 2;
+  // source_id names the definition source the schema was read from, e.g.
+  // "reflection:localhost:9000" or "upload:api.binpb".
+  string source_id         = 3;
+  // client_streaming is true when the caller sends a stream of request messages.
+  bool   client_streaming  = 4;
+  // server_streaming is true when the target replies with a stream of messages.
+  bool   server_streaming  = 5;
+}
+
 // CreateScriptRequest creates a new, empty script of the given kind in the
 // collection. The name must be unique among scripts.
 message CreateScriptRequest {
@@ -470,6 +500,20 @@ service WorkspaceService {
   // carrying the gRPC status, request and response metadata and the latency. A status
   // the target returned is reported in that final frame, never as an error.
   rpc InvokeSavedStreaming(InvokeSavedRequest) returns (stream InvokeStreamResponse);
+  // Describes the input and output shape of one method, without calling anything.
+  //
+  // Requires workspace_name, service (fully qualified, e.g. "echo.v1.EchoService") and
+  // method (its own name, e.g. "Unary"). The shape comes from definitions the workspace
+  // has already resolved, so this answers even when the target is unreachable.
+  //
+  // Returns the method's input and output messages plus every type they reference —
+  // twice: as rendered .proto text to read, and as serialized FileDescriptorSet bytes to
+  // parse — with the id of the source they were read from and whether either side of the
+  // call streams.
+  //
+  // Doc comments come through only if that source carried them: a server answering by
+  // reflection strips them, an uploaded descriptor set built with them keeps them.
+  rpc DescribeMethod(DescribeMethodRequest) returns (DescribeMethodResponse);
   // RunScript evaluates a script through the scripting engine and returns its
   // value, console output, and any error — the scratchpad and the per-kind
   // test-run surface that validates the engine end to end.

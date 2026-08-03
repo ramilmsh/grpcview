@@ -975,6 +975,93 @@ export declare type ResolvedRequest = Message<"grpcview.v1.ResolvedRequest"> & {
 export declare const ResolvedRequestSchema: GenMessage<ResolvedRequest>;
 
 /**
+ * DescribeMethodRequest asks for one method's schema, read from the workspace's
+ * already-resolved definitions. Nothing is dialed, so it answers from a box that
+ * cannot reach the target.
+ *
+ * @generated from message grpcview.v1.DescribeMethodRequest
+ */
+export declare type DescribeMethodRequest = Message<"grpcview.v1.DescribeMethodRequest"> & {
+  /**
+   * @generated from field: string workspace_name = 1;
+   */
+  workspaceName: string;
+
+  /**
+   * service is the fully-qualified service name, e.g. "echo.v1.EchoService".
+   *
+   * @generated from field: string service = 2;
+   */
+  service: string;
+
+  /**
+   * method is the method's own name, e.g. "Unary" — not qualified by the service.
+   *
+   * @generated from field: string method = 3;
+   */
+  method: string;
+};
+
+/**
+ * Describes the message grpcview.v1.DescribeMethodRequest.
+ * Use `create(DescribeMethodRequestSchema)` to create a new message.
+ */
+export declare const DescribeMethodRequestSchema: GenMessage<DescribeMethodRequest>;
+
+/**
+ * DescribeMethodResponse carries the same schema twice: once rendered for a human
+ * to read, once as descriptors for a program to parse.
+ *
+ * @generated from message grpcview.v1.DescribeMethodResponse
+ */
+export declare type DescribeMethodResponse = Message<"grpcview.v1.DescribeMethodResponse"> & {
+  /**
+   * proto_text is the rendered .proto view: the method, its input and output
+   * messages, and every type they transitively reference. Doc comments appear only
+   * when the winning source carried them.
+   *
+   * @generated from field: string proto_text = 1;
+   */
+  protoText: string;
+
+  /**
+   * descriptor_set is a serialized FileDescriptorSet covering the same closure,
+   * self-contained (transitive imports included) so it links on its own.
+   *
+   * @generated from field: bytes descriptor_set = 2;
+   */
+  descriptorSet: Uint8Array;
+
+  /**
+   * source_id names the definition source the schema was read from, e.g.
+   * "reflection:localhost:9000" or "upload:api.binpb".
+   *
+   * @generated from field: string source_id = 3;
+   */
+  sourceId: string;
+
+  /**
+   * client_streaming is true when the caller sends a stream of request messages.
+   *
+   * @generated from field: bool client_streaming = 4;
+   */
+  clientStreaming: boolean;
+
+  /**
+   * server_streaming is true when the target replies with a stream of messages.
+   *
+   * @generated from field: bool server_streaming = 5;
+   */
+  serverStreaming: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.DescribeMethodResponse.
+ * Use `create(DescribeMethodResponseSchema)` to create a new message.
+ */
+export declare const DescribeMethodResponseSchema: GenMessage<DescribeMethodResponse>;
+
+/**
  * CreateScriptRequest creates a new, empty script of the given kind in the
  * collection. The name must be unique among scripts.
  *
@@ -1421,6 +1508,28 @@ export declare const WorkspaceService: GenService<{
     methodKind: "server_streaming";
     input: typeof InvokeSavedRequestSchema;
     output: typeof InvokeStreamResponseSchema;
+  },
+  /**
+   * Describes the input and output shape of one method, without calling anything.
+   *
+   * Requires workspace_name, service (fully qualified, e.g. "echo.v1.EchoService") and
+   * method (its own name, e.g. "Unary"). The shape comes from definitions the workspace
+   * has already resolved, so this answers even when the target is unreachable.
+   *
+   * Returns the method's input and output messages plus every type they reference —
+   * twice: as rendered .proto text to read, and as serialized FileDescriptorSet bytes to
+   * parse — with the id of the source they were read from and whether either side of the
+   * call streams.
+   *
+   * Doc comments come through only if that source carried them: a server answering by
+   * reflection strips them, an uploaded descriptor set built with them keeps them.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.DescribeMethod
+   */
+  describeMethod: {
+    methodKind: "unary";
+    input: typeof DescribeMethodRequestSchema;
+    output: typeof DescribeMethodResponseSchema;
   },
   /**
    * RunScript evaluates a script through the scripting engine and returns its

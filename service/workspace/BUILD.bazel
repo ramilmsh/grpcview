@@ -3,6 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "workspace",
     srcs = [
+        "describe.go",
         "gvinvoke.go",
         "invoke.go",
         "invoke_saved.go",
@@ -20,6 +21,7 @@ go_library(
         "//service/store",
         "@com_connectrpc_connect//:connect",
         "@com_github_jhump_protoreflect//desc",
+        "@com_github_jhump_protoreflect//desc/protoprint",
         "@com_github_jhump_protoreflect//dynamic",
         "@com_github_jhump_protoreflect//dynamic/grpcdynamic",
         "@com_github_jhump_protoreflect//grpcreflect",
@@ -41,6 +43,7 @@ go_test(
     name = "workspace_test",
     srcs = [
         "body_test.go",
+        "describe_test.go",
         "folder_metadata_test.go",
         "gvinvoke_test.go",
         "invoke_history_test.go",
