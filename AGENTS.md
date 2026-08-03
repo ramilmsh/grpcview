@@ -340,6 +340,87 @@ host.
   scroll, virtualization, and the async `getChildren` promise path (`flatten` and
   `reveal` both throw loudly on a thenable rather than silently dropping a branch).
 
+## The CLI
+
+`grpcview` with no subcommand still serves the UI + API. Everything else is a
+cobra verb in `service/cli/`, on the **same binary** — the embedded UI is 26.9 MB
+of the 51.5 MB binary, so a second CLI binary would duplicate ~20 MB of Go.
+
+```
+grpcview                                serve the UI + API (default)
+grpcview serve --port 10000
+grpcview invoke <request-path>|<service>/<method>
+grpcview describe <service>/<method>    [-o proto|json]
+grpcview ls [<folder-path>]             [-o text|json]
+grpcview get
+grpcview sources ls | add | refresh | rm | reorder
+grpcview request create | rm | mv        grpcview folder create
+grpcview script ls | run                 grpcview completion bash|zsh|fish
+```
+
+The reason it exists is one verb: **run a saved request from a shell, with an exit
+code that reflects the gRPC status.** The rest is in service of that.
+
+- **`service.Run` does not own argv.** It takes `service.Options{Port}`; the CLI
+  (or `dev`'s own two-line flag set) parses. The flag is `--port`: pflag reads
+  Go-flag style `-port` as the shorthand cluster `-p -o -r -t`, and there is no
+  alias.
+- **`service/cli` must not import `//service`.** The UI embed lives in
+  `//service/cmd`, and that edge would drag 26.9 MB of `embedsrcs` into every CLI
+  test. `cli.Main` receives a `serve` closure instead.
+- **One `Client` interface, two bindings, no autodetection.** In-process
+  (`workspace.Workspace` called as a plain Go value) is the default; `--server
+  addr` is the explicit opt-in to the wire. "Dial the local server if one happens
+  to be listening" was rejected so that *which process wrote my history* never
+  depends on whether a server was up. Unary RPCs need no adapter — the handler and
+  the generated client have the same signature, asserted at compile time. Only
+  streaming differs (a handler takes `*connect.ServerStream`, a client returns
+  `*connect.ServerStreamForClient`, and connect cannot build the former outside a
+  served request), so `Client` declares the callback shape a CLI wants and
+  `workspace` exports `InvokeStream`/`InvokeSavedStream` in send-func form.
+- **Exit codes are the contract.** `0` = the call returned status OK; `1` = it
+  returned any other gRPC status (which arrives *inside* `Request.Response.status`
+  with a nil error); `2` = grpcview's own failure, nothing invoked. That 1-vs-2
+  line is exactly the Connect-error-vs-status-in-payload line the backend already
+  draws, so it needs no new classification — but it does need the invariant to
+  hold, which `invoke_saved_test.go` pins directly.
+- **stdout is data, stderr is everything else.** Latency, status text, warnings
+  and `describe`'s source id are stderr. `-o body` (default) prints nothing on a
+  failed call; `-o json` prints the whole `Request.Response` either way, because
+  there the status *is* the data. Streaming prints NDJSON. A mutation prints
+  **nothing** and exits 0 — silence is success. No colors, no TTY detection, no
+  pager, permanently. `-o` is per verb with disjoint value sets, never persistent.
+- **Structured input only, never per-field flags** (`PodSpec` has hundreds of
+  fields and kubectl has no `--containers-0-image`). Bodies arrive as `-f file`,
+  `-f -`, or a bare pipe, and the bytes are passed through **unchanged** —
+  `resolveInvokeBody` normalizes protojson and TypeScript at one seam, so `-f`
+  behaves identically for `body.json` and `body.ts`. For a client-streaming or
+  bidi method stdin is NDJSON (one message per line); for every other kind it is
+  one message verbatim, since a TS module is multi-line. That asymmetry is the
+  sharpest trap in the verb.
+- **`invoke`'s argument is resolved against both interpretations** — a saved-request
+  path and a `service/method` — off a single `Get` snapshot. One that matches both
+  is exit 2, never a guess: catching `NotFound` from `InvokeSaved` cannot work,
+  because a miss on one interpretation says nothing about the other. Paths split
+  through `workspace.SplitInvokePath`, the same parser `gv.invoke` uses.
+- **`InvokeSaved`/`InvokeSavedStreaming`** are the addressed counterparts to
+  `Invoke`: they resolve the *saved* body, metadata script, middleware and target
+  server-side, take `params` (reaching scripts as `gv.request.params`), record
+  history by default, and support `dry_run`, which stops after the shared pre-send
+  steps and reports the **evaluated** request without dialing. `resolveSavedRun` is
+  the one place a saved request becomes an `invokeSpec`, shared with `gv.invoke`.
+- **`describe` never dials.** It answers from the workspace's cached merged
+  descriptor set, so it works from a box with no route to the target, and it
+  reports which source it read: doc comments survive only if that source carried
+  them (reflection strips `source_code_info`, a `buf build` upload keeps it), so an
+  empty-comment result must be attributable. `-o json` is the protojson of a
+  `FileDescriptorSet` — the descriptors themselves, not an invented flat field
+  list, which would be a lossy re-encoding of a standard format.
+- **Two processes can write one collection directory without a lock**
+  (`Collection.mu` is in-process only). Accepted: `--server` is the opt-out and
+  `--no-history` removes the only write `invoke` performs. If a lost update ever
+  bites, the fix is one advisory lock in the store that benefits every surface.
+
 ## Views (no router)
 
 The SPA has **no URL router**. `App.tsx` renders a single `AppShell` and switches
@@ -407,7 +488,7 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 - **Run the dev backend** (serves the API without embedding the frontend):
 
   ```bash
-  bazel run //service/cmd/dev
+  bazel run //service/cmd/dev          # -port 10000; dev is serve-only, no verbs
   ```
 
 - **Run the frontend dev server** (Vite):

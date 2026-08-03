@@ -221,29 +221,24 @@ func TestToolNamesCoverEveryUnaryRPC(t *testing.T) {
 
 ## Step 3 — the subcommand
 
-- **`service/cmd/main.go`** — dispatch on `os.Args[1] == "mcp"` **before** anything calls
-  `flag.Parse()`. `service.Run` parses the global `FlagSet` itself (`service.go:36`), so the
-  subcommand token must be consumed first or it becomes a stray positional arg:
+**Superseded, and in the track's favor: argv dispatch already exists.** This step used to
+hand-roll `os.Args[1] == "mcp"` ahead of `service.Run`'s own `flag.Parse()`. The CLI track
+(`cli-generator-exploration.md` C0) has since removed `flag.Parse()` from `service.Run`
+entirely and put a cobra tree in `service/cli`, so:
 
-  ```go
-  func main() {
-      ctx := context.Background()
-      if len(os.Args) > 1 && os.Args[1] == "mcp" {
-          os.Args = append(os.Args[:1], os.Args[2:]...)
-          if err := mcp.Run(ctx); err != nil {
-              fmt.Fprintln(os.Stderr, err)
-              os.Exit(1)
-          }
-          return
-      }
-      if err := run(ctx); err != nil { … }
-  }
-  ```
-
-  Replace the existing `panic(err)` while here: a panic's goroutine dump on stderr is noise
-  in an MCP client's log pane.
-- **`service/cmd/dev/main.go`** — same two lines, purely so the fast loop
-  (`bazel run //service/cmd/dev -- mcp`) skips the UI build.
+- **`service/cli/root.go`** — one `root.AddCommand(newMcpCmd(…))`, alongside `invoke`,
+  `describe`, `ls`, `get`, `sources`, `request`, `folder` and `script`. No argv surgery, and
+  `grpcview completion` learns the verb for free.
+- **`service/cmd/main.go`** — nothing to change: it is already
+  `os.Exit(cli.Main(ctx, os.Args[1:], streams, serveFn))`, and the `panic(err)` this step
+  wanted replaced is gone.
+- **`service/cmd/dev/main.go`** — nothing to change either; `dev` stays serve-only with its
+  own `-port`. The fast loop is `bazel run //service/cmd -- mcp` once the verb exists.
+- **Exit codes and streams** come from `cli.Main`'s existing contract (`statusError` → the
+  process code; `Streams` for stdio), which is what an MCP client's log pane wants instead of
+  a goroutine dump.
+- `service/cli` **must not** import `//service`, so if `mcp.Run` ever needs the HTTP server
+  it takes the same injected-closure route `serve` does.
 - **No new flags.** The collection is `os.UserConfigDir()/.grpcview`, the same one the
   server uses (`workspace.go:52`) — that is Decision 4's shared-directory model. When
   [VS Code phase 1](../vscode/phase-1-collection-dir.md) lands `--dir`, `grpcview mcp` must
@@ -258,8 +253,7 @@ func TestToolNamesCoverEveryUnaryRPC(t *testing.T) {
 | `service/mcp/mcp.go` | new — `Run`, `shim`, `toolNames`, `trimResponse` (~120 lines) |
 | `service/mcp/mcp_test.go` | new — totality + name-shape test |
 | `service/mcp/BUILD.bazel` | new — `go_library` + `go_test` |
-| `service/cmd/main.go` | subcommand dispatch; `panic` → stderr + exit 1 |
-| `service/cmd/dev/main.go` | subcommand dispatch |
+| `service/cli/root.go` | one `root.AddCommand(newMcpCmd(…))`; the CLI track already owns argv |
 | `AGENTS.md` | a short "MCP server" section: `grpcview mcp`, the shim's three jobs, the rename map as the source of truth for tool names |
 
 ## Verify
