@@ -87,13 +87,84 @@ So the plan is three layers, and the middle one is the point:
 
 Already found while sizing this plan, no agent needed:
 
-- `ui/src/features/tree-spike/` is an empty directory — delete.
+- `ui/src/features/tree-spike/` is an empty directory — delete. **Done** in
+  Phase 0 (untracked and empty, so it never entered a diff).
 - `docs/design/tree-spike-findings.md` describes a spike that shipped; check
   against §Design docs ("shipped plans are deleted once their work lands").
+  **Checked: it should go, but not unilaterally.** `tree-rewrite-plan.md:15`
+  and `:870` cite it as the rationale for rejecting the monaco-tree approach,
+  and that plan is still live (T3 typeahead unbuilt). Deleting the findings doc
+  therefore also means rewriting those two references. Left for W0 + triage.
+
+### Phase 0 results (run 2026-08-03)
+
+Pinned at **`1440d82`** — every line number in every scan output and evidence
+brief is against that commit.
+
+Scanners live in the session scratchpad, not the repo, so no audit scaffolding
+has to be deleted later: `audit/go/main.go` (stdlib `go/parser`, subcommands
+`dupes|dead|vocab`) and `audit/ts/{scan.mjs,report.mjs}` (the
+`typescript@5.9.3` compiler API + LanguageService already in `ui/node_modules`).
+They are pure functions of the tree, so a later wave can re-run them to verify
+a deletion actually removed the last reference. Both run offline; the Go one via
+the `bazel_env` toolchain on a throwaway stdlib-only module, which keeps the
+`AGENTS.md` ban on repo-touching bare `go` commands intact.
+
+| scan | Go + proto | TypeScript |
+|---|---|---|
+| `dupes` | 29 clusters (12 production, 17 test-only), min 40 AST nodes | 11 clusters (9 production, 2 test-only), min 55 |
+| `dead` | 198 exported symbols → 2 referenced nowhere, 8 test-only, 22 never referenced outside their package | 215 exports → 0 referenced nowhere, 16 test-only, 24 never referenced outside their file |
+| `vocab` | 4,476 (word, decl-kind, site) records | 6,010 records |
+
+Outputs: `dupes-{go,ts}.{tsv,txt}`, `dead-{go,ts}.{tsv,txt}`,
+`vocab-{go,ts}.tsv`, `vocab-census.txt`, `vocab-synonyms.txt` (12 concept
+groups), `slice-coverage.md`, and `evidence/<slice>.md` × 17.
+
+**Two corrections to the slice table below, both found by making the slicer
+prove coverage instead of assuming it.**
+
+1. **The sixteen slices missed 16 `ui/src` files** (562 production LOC):
+   `WorkspaceView`, `RequestTabs`, `MessageTab`, `MetadataTab`, `JsonViewer`,
+   `FolderMetadataDialog`, `collection-menu`, `delete-confirm`,
+   `generator-libs`, `vendor/*`, `index.css`, `vite-env.d.ts`. Added as
+   **U8**, so Phase 1 is **17 agents**. Note `MessageTab.tsx` and
+   `MessagesTab.tsx` both exist — U2 gets the plural, U8 the singular, and
+   whether both should is itself a finding.
+2. **Ten Go test files have no production counterpart** and so matched no rule
+   (`capabilities_test.go`, `gv_test.go`, `engine_core_test.go`,
+   `body_test.go`, `folder_metadata_test.go`, `invoke_history_test.go`,
+   `invoke_streaming_test.go`, `metadata_test.go`, `resolve_target_test.go`,
+   `scripts_test.go`). Hand-assigned to G5 and G3.
+
+The backend slice LOC in the table below counts production code only; the
+frontend counts tests too (U1 says so explicitly). Actual totals per slice,
+after the fixes: G3 1376+1972 test, G8 1530+2045 test, U1 1662+2159 test are
+the heavy ones. G9 is 682, matching the estimate.
+
+Headline evidence, already visible without an agent:
+
+- **`Editor.tsx` and `MetadataEditor.tsx` are near-clones.** UD01 is a 495-node
+  identical subtree (`Editor.tsx:158-247` ≡ `MetadataEditor.tsx:137-226`), and
+  UD02 another 162 nodes (`:92-113` ≡ `:85-106`). Together with the twinned
+  `body-wrapper.ts` / `metadata-wrapper.ts`, U3 is the largest single
+  duplication in the repo.
+- **8 clusters span slice boundaries**, which is what no per-module agent could
+  have seen: GD04 `store/fs.go` ×2 + `store/scripts.go`, GD11
+  `layout.go`≡`scripts.go`, GD16/GD26/GD29 across store↔workspace↔cli tests,
+  UD04 `ScriptsView`≡`Editor`≡`MetadataEditor`, UD08
+  `CollectionPanel`≡`RequestWorkspace`.
+- **The predicted vocabulary split is real.** `collection` (9 declarations,
+  store + UI panel), `workspace` (75, wire + Go service + UI hooks), `tree` (42,
+  store dir + UI component) name overlapping concepts; `folder` adds 42 more.
+  X1 has its opening question.
+- `WrapUnary` (`service/logging.go:48`) and `WasmPageSize`
+  (`service/scripting/engine.go:23`) are referenced nowhere at all.
+- 22 Go exports are never used outside their own package, 20 of them in
+  `service/scripting` — that package's surface is exported by habit, not need.
 
 ---
 
-## Phase 1 — module audits (16 parallel agents, read-only)
+## Phase 1 — module audits (17 parallel agents, read-only)
 
 Slices are sized ~600–1500 source LOC so each agent stays near the ~40-turn
 budget. No agent edits anything in this phase; the output is a findings file.
@@ -126,6 +197,7 @@ layers inherit, so its findings gate several UI and Go renames.
 | U5 | scripts view | `ScriptsView` (956 lines in one file), `monaco-scripts` | 1110 |
 | U6 | lib + state + sources | `lib/*`, `features/sources/*`, `App.tsx`, `main.tsx` | 1400 |
 | U7 | design system | `components/ui/*`, `components/shell/*`, `theme/*` | 1500 |
+| U8 | workspace odds and ends | `WorkspaceView`, `RequestTabs`, `MessageTab`, `MetadataTab`, `JsonViewer`, `FolderMetadataDialog`, `collection-menu`, `delete-confirm`, `generator-libs`, `vendor/*` | 800 |
 
 ### Rubric each agent applies
 
