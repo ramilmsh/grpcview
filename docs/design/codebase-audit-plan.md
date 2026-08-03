@@ -355,6 +355,38 @@ after `database/sql`'s `db.Conn(ctx) *sql.Conn`. Both the `error` and the ignore
 `ctx` go with it, unblocking `D-X3-3`'s 40 dead branches (11 production + 29
 test, verified by grep).
 
+**`D-X1-1` (`workspace` → `collection` everywhere) — REJECTED, and the diagnosis
+was wrong.** X1 read the two words as synonym drift and picked one. They are
+instead a distinction the project has not made yet: `workspace` is heading toward
+the Go/Bazel sense — one workspace, a settings file, several folders inside it,
+monorepo-shaped — which makes an inner grouping a *different* thing from the
+outer container. Collapsing the words would destroy the distinction just before
+it is needed. **Nothing is renamed in either direction.** The counts show why
+this matters: `workspace` appears ~940 times against `collection`'s ~225, so the
+rejected change was also the most expensive one in the audit.
+
+What survives: `AGENTS.md:92-93` still contradicts itself ("persists the
+**workspace** to disk" / "a filesystem-backed **collection**"), but the fix is to
+**define both terms**, not collapse them. The store's Go type `Collection` is
+today a handle to a whole workspace directory, which is the one place the words
+are genuinely misapplied — left alone for now, deliberately, until the workspace
+model is decided.
+
+Consequences for the rest of the audit: `D-X1-1` is dropped, `D-X1-8`
+(`WorkspaceService`) is dropped, `D-X1-7` and `D-X1-10` need their target names
+revisited, and `D-X1-22`'s doc edit changes from collapsing the vocabulary to
+defining it. The **seven cross-agent ordering edges out of `D-X1-1` dissolve**,
+which removes the audit's biggest wave-1 blocker — deletions can now go first
+without fighting a rename.
+
+**`D-X3-17` (Scripts subtabs) — REJECTED as filed.** X3 called the Capabilities
+pane a false security claim and deleted it. It is *aspirational*: network is open
+today only because capability management is unbuilt, and the pane describes the
+state it will be gated behind. The pane stays; only its copy needs to stop
+asserting a present-tense guarantee. The Dependencies pane stays on the same
+grounds. This also means the Capabilities pane is **not** one of the audit's
+tracked defects — the count drops from eight to seven.
+
 Neither G1 nor X3 proposed a rename — both narrowed the signature and left the
 misleading name, which is why the dead `error` looked load-bearing to three
 separate readers. **And X3 overstated the objection it escalated on:** it called
@@ -420,3 +452,16 @@ measured `≈ 1300 × turns²` cache-read curve, that is ~1.6M cache reads per a
   lever.
 - Skip Phase 1 entirely for the slices where the deterministic scans already
   found nothing.
+
+### Triage round 2 (2026-08-03)
+
+- **`D-X3-6` generator result cache — delete.** Confirmed; not wired up.
+- **`tree-spike-findings.md` — delete**, and rewrite the two `tree-rewrite-plan.md`
+  citations to state their conclusion inline.
+- **`D-X2-8` (`serviceName` guard) and `D-X2-5` (`History.Response` metadata
+  split) — approved as behavior fixes**, reviewed as such rather than as
+  refactors.
+- **`mdToStringMap` multi-valued metadata — out of scope, fix later.** Written up
+  in `known-bugs.md` with three options and a recommendation.
+- **Bug writeups live in `docs/design/known-bugs.md`** — anything whose fix is
+  longer than a few lines gets an entry there rather than an inline aside.
