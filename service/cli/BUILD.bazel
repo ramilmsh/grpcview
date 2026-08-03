@@ -5,9 +5,12 @@ go_library(
     srcs = [
         "body.go",
         "client.go",
+        "get.go",
         "invoke.go",
+        "ls.go",
         "resolve.go",
         "root.go",
+        "sources.go",
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/cli",
     visibility = ["//visibility:public"],
@@ -26,9 +29,12 @@ go_test(
     name = "cli_test",
     srcs = [
         "body_test.go",
+        "get_test.go",
         "invoke_test.go",
+        "ls_test.go",
         "resolve_test.go",
         "root_test.go",
+        "sources_test.go",
     ],
     embed = [":cli"],
     deps = [

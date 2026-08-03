@@ -140,6 +140,9 @@ func newRootCmd(
 	globals := registerGlobalFlags(root)
 
 	root.AddCommand(newInvokeCmd(s, globals, open))
+	root.AddCommand(newLsCmd(s, globals, open))
+	root.AddCommand(newGetCmd(s, globals, open))
+	root.AddCommand(newSourcesCmd(s, globals, open))
 	root.AddCommand(newServeCmd(serve))
 	root.AddCommand(newVersionCmd())
 

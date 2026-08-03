@@ -50,7 +50,11 @@ type invokeTarget struct {
 // savedLookup is what walking the collection tree for a path found: the request,
 // or (for a better error) the fact that the path named a folder.
 type savedLookup struct {
-	req      *grpcviewv1.Request
+	req *grpcviewv1.Request
+	// item is the tree node the path resolved to, nil when nothing did. invoke
+	// needs only req; ls needs the node itself, to list a folder's children
+	// without walking the tree a second time.
+	item     *grpcviewv1.Item
 	parent   []string
 	name     string
 	isFolder bool
@@ -143,6 +147,7 @@ func lookupSaved(ws *grpcviewv1.Workspace, arg string) savedLookup {
 	}
 	return savedLookup{
 		req:      found.GetRequest(),
+		item:     found,
 		parent:   parent,
 		name:     name,
 		isFolder: found.GetFolder() != nil,
