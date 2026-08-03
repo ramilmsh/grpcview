@@ -1,8 +1,6 @@
 import { Editor as MonacoEditor } from "@monaco-editor/react";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
 
-// Read-only JSON view for response bodies. Shares the bundled Monaco + Nocturne
-// theme with the request editor (plan §7).
 export function JsonViewer({ value }: { value: string }) {
   return (
     <MonacoEditor

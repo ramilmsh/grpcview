@@ -11,23 +11,6 @@ import {
   zoneForOffset,
 } from "./dnd";
 
-// The fixture is built by running the REAL flatten() over a small adapter rather
-// than hand-writing TreeRowModels (navigate.test.ts / selection.test.ts do the
-// latter, because those modules read only `.id`/`.parentId`/array position). dnd.ts
-// reads `.depth`, `.expandable` AND `.expanded` together, and the whole point of
-// several assertions below is how those three interact — an "expanded folder whose
-// next row is its own first child" is exactly the shape a hand-written fixture
-// gets subtly wrong.
-//
-// Shape (indices are the flat row order the assertions below cite):
-//
-//   0  F1        folder, EXPANDED
-//   1    r1      request
-//   2    F2      folder, COLLAPSED (its child r2 is therefore not a row at all)
-//   3  F3        folder, EXPANDED but EMPTY
-//   4  r3        request
-//   5  r4        request
-
 interface Node {
   id: string;
   folder?: boolean;
@@ -48,9 +31,6 @@ const tree: Node[] = [
 const adapter: TreeAdapter<Node> = {
   getId: (node) => node.id,
   getChildren: (node) => (node === undefined ? tree : node.kids ?? []),
-  // "collapsed" for every folder, never "expanded": flatten() gates descent on the
-  // `expanded` SET alone, and reporting a per-node default would only add
-  // defaultExpanded noise this fixture has no use for.
   getCollapsibleState: (node) => (node.folder ? "collapsed" : "none"),
   getTreeItem: (node) => ({ label: node.id }),
   getTypeaheadLabel: (node) => node.id,
@@ -91,9 +71,7 @@ describe("zoneForOffset: a folder splits into quarters (listView.js's getTargetS
   });
 
   it("an exact quarter boundary belongs to the LOWER sector, per the floor", () => {
-    // 5.5 = exactly 0.25 of 22 -> sector 1 -> into (not before)
     expect(zoneForOffset({ ...folder, offsetY: 5.5 })).toBe("into");
-    // 16.5 = exactly 0.75 of 22 -> sector 3 -> after (not into)
     expect(zoneForOffset({ ...folder, offsetY: 16.5 })).toBe("after");
   });
 
@@ -109,17 +87,15 @@ describe("zoneForOffset: a folder splits into quarters (listView.js's getTargetS
 
 describe("nextVisibleSiblingId", () => {
   it("skips an expanded folder's whole subtree rather than taking the next row", () => {
-    // F1's next ROW is its child r1; its next SIBLING is F3, two rows further on.
     expect(nextVisibleSiblingId(flat, 0)).toBe("F3");
   });
 
   it("finds an ordinary sibling one row along", () => {
-    expect(nextVisibleSiblingId(flat, 1)).toBe("F2"); // r1 -> F2
-    expect(nextVisibleSiblingId(flat, 4)).toBe("r4"); // r3 -> r4
+    expect(nextVisibleSiblingId(flat, 1)).toBe("F2");
+    expect(nextVisibleSiblingId(flat, 4)).toBe("r4");
   });
 
   it("is null for the last child of a nested folder, not the row that follows it", () => {
-    // The row after F2 is F3, which is at a SHALLOWER depth and a different parent.
     expect(nextVisibleSiblingId(flat, 2)).toBeNull();
   });
 
@@ -172,18 +148,14 @@ describe("resolveDrop: before/after between rows", () => {
 
 describe("resolveDrop: after an EXPANDED folder resolves INSIDE it, at position 0", () => {
   it("targets the folder's first child, not the folder's next sibling", () => {
-    // The decision recorded in dnd.ts and in the plan's §"What T6b settled": the
-    // indicator sits between F1 and r1 on screen, so it means "ahead of r1".
     expect(resolveDrop(flat, 0, "after")).toEqual({ parentId: "F1", beforeId: "r1", depth: 1 });
   });
 
   it("degrades to append-inside for an expanded folder with no visible children", () => {
-    // F3 is expanded and empty, so the row after it (r3) is NOT its child.
     expect(resolveDrop(flat, 3, "after")).toEqual({ parentId: "F3", beforeId: null, depth: 1 });
   });
 
   it("a COLLAPSED folder keeps the ordinary sibling reading", () => {
-    // F2 is collapsed, so `after` it means "in F1, after F2" — i.e. append in F1.
     expect(resolveDrop(flat, 2, "after")).toEqual({ parentId: "F1", beforeId: null, depth: 1 });
   });
 });
@@ -194,7 +166,6 @@ describe("draggedSubtreeIds", () => {
   });
 
   it("does not reach a collapsed folder's children — they are not rows", () => {
-    // F2 is collapsed, so r2 is nowhere in the flat array and cannot be a target.
     expect(draggedSubtreeIds(flat, ["F2"]).has("r2")).toBe(false);
     expect([...draggedSubtreeIds(flat, ["F2"])]).toEqual(["F2"]);
   });
@@ -237,9 +208,9 @@ describe("isNoOpDrop", () => {
 
 describe("dropTargetAt: structural rejections", () => {
   it("rejects a target inside the dragged set's own subtree", () => {
-    expect(dropTargetAt(flat, 0, "into", ["F1"])).toBeNull(); // into itself
-    expect(dropTargetAt(flat, 1, "before", ["F1"])).toBeNull(); // before its own child
-    expect(dropTargetAt(flat, 2, "after", ["F1"])).toBeNull(); // after its own child folder
+    expect(dropTargetAt(flat, 0, "into", ["F1"])).toBeNull();
+    expect(dropTargetAt(flat, 1, "before", ["F1"])).toBeNull();
+    expect(dropTargetAt(flat, 2, "after", ["F1"])).toBeNull();
   });
 
   it("rejects a target row that is itself being dragged", () => {
@@ -248,15 +219,11 @@ describe("dropTargetAt: structural rejections", () => {
   });
 
   it("rejects a no-op drop reached via some OTHER row", () => {
-    // r3 already sits immediately ahead of r4, so "before r4" changes nothing.
     expect(dropTargetAt(flat, 5, "before", ["r3"])).toBeNull();
-    // F2 is already F1's last child, so appending it inside F1 changes nothing.
     expect(dropTargetAt(flat, 0, "into", ["F2"])).toBeNull();
   });
 
   it("still accepts moving a row to the OTHER side of an adjacent sibling", () => {
-    // The mirror of the first no-op above: r4 currently follows r3, so putting it
-    // ahead of r3 is a real reorder, not the same position spelled differently.
     expect(dropTargetAt(flat, 4, "before", ["r4"])).toEqual({
       parentId: null,
       beforeId: "r3",
@@ -284,7 +251,6 @@ describe("dropTargetAt: accepted drops", () => {
   });
 
   it("reorders within a folder", () => {
-    // r1 appended at the end of F1 — it currently sits ahead of F2, so this moves.
     expect(dropTargetAt(flat, 2, "after", ["r1"])).toEqual({
       parentId: "F1",
       beforeId: null,
@@ -310,8 +276,6 @@ describe("dropTargetAt: accepted drops", () => {
 });
 
 describe("autoScrollDelta", () => {
-  // A scrollport spanning y 100..400 (300px tall), so the two 24px edge bands are
-  // 100..124 and 376..400.
   const top = 100;
   const bottom = 400;
 
@@ -322,7 +286,7 @@ describe("autoScrollDelta", () => {
   });
 
   it("scrolls UP proportionally to how far into the top band the pointer is", () => {
-    expect(autoScrollDelta(100, top, bottom)).toBe(-24); // right at the edge
+    expect(autoScrollDelta(100, top, bottom)).toBe(-24);
     expect(autoScrollDelta(118, top, bottom)).toBe(-6);
   });
 

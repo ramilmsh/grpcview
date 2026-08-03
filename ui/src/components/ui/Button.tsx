@@ -13,8 +13,6 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
 }
 
-// Button wraps Nocturne's .btn + variant. Layout/size tweaks come via className
-// (the mockup sizes buttons per use).
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "secondary", className, type = "button", ...rest }, ref) => (
     <button
@@ -27,7 +25,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-// IconButton is the small square .iconbtn used for row/toolbar actions.
 export const IconButton = forwardRef<
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement>

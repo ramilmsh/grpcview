@@ -22,9 +22,6 @@ func (f *fakeClient) DescribeMethod(_ context.Context, r *connect.Request[grpcvi
 	return connect.NewResponse(f.described), nil
 }
 
-// describedEcho is the canned response: rendered text plus a real, serialized
-// FileDescriptorSet, so the -o json case is asserted by round-trip rather than by
-// string match.
 func describedEcho(t *testing.T) *grpcviewv1.DescribeMethodResponse {
 	t.Helper()
 	set := &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{{
@@ -64,8 +61,6 @@ func TestDescribe(t *testing.T) {
 		if !strings.Contains(out, "rpc Unary") {
 			t.Errorf("stdout = %q, want the rendered rpc", out)
 		}
-		// The source id is a diagnostic even though it is what explains whether
-		// comments are present in the data — so it must not be on stdout.
 		if !strings.Contains(errOut, "reflection:127.0.0.1:50055") {
 			t.Errorf("stderr = %q, want the source id", errOut)
 		}
@@ -85,8 +80,6 @@ func TestDescribe(t *testing.T) {
 		}
 	})
 
-	// -o json is the descriptors themselves, so the assertion is that they parse
-	// back into a FileDescriptorSet — not that some string appears.
 	t.Run("-o json round-trips into a FileDescriptorSet", func(t *testing.T) {
 		fc := newFake()
 		fc.described = describedEcho(t)
@@ -126,8 +119,8 @@ func TestDescribe(t *testing.T) {
 				wantErr: `invalid --output "text"`,
 			},
 			{
-				name:     "a Connect error from the RPC",
-				args:     []string{"describe", "echo.v1.EchoService/Nope"},
+				name: "a Connect error from the RPC",
+				args: []string{"describe", "echo.v1.EchoService/Nope"},
 				fake: func(fc *fakeClient) {
 					fc.describeErr = connect.NewError(connect.CodeNotFound,
 						errors.New(`method "Nope" is not in service "echo.v1.EchoService"`))

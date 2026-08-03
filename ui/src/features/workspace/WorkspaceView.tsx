@@ -2,8 +2,6 @@ import { CollectionPanel } from "./CollectionPanel";
 import { RequestTabs } from "./RequestTabs";
 import { RequestWorkspace } from "./RequestWorkspace";
 
-// WorkspaceView is the collection + request/response surface (plan §9): the
-// collection panel beside the request tabs and the active request's editor.
 export function WorkspaceView() {
   return (
     <div className="flex" style={{ flex: 1, minHeight: 0 }}>

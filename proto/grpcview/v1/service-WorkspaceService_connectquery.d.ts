@@ -5,149 +5,91 @@
 import { WorkspaceService } from "./service_pb";
 
 /**
- * AddDescriptorSource adds a descriptor source to the workspace — where its
- * definitions come from. A source whose id already exists is refreshed in place
- * (see AddDescriptorSourceRequest.file_name); a new one is appended at LOWEST
- * priority, so adding never changes which source an existing service resolves
- * from. Only the added/refreshed source is resolved (one network round-trip for
- * reflection); the merged view is rebuilt from every source's cached resolve.
+ * AddDescriptorSource appends at LOWEST priority, or refreshes in place when
+ * the source's id already exists.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.AddDescriptorSource
  */
 export const addDescriptorSource: typeof WorkspaceService["method"]["addDescriptorSource"];
 /**
- * RemoveDescriptorSource drops the source with the given id and rebuilds the
- * merged view from the cached resolves of those that remain — no network, so
- * an unreachable sibling source can never block a removal.
- *
  * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
  */
 export const removeDescriptorSource: typeof WorkspaceService["method"]["removeDescriptorSource"];
 /**
- * RefreshDescriptorSource re-resolves exactly one source (re-dialing a
- * reflection target, re-parsing an upload) and rebuilds the merged view.
- *
  * @generated from rpc grpcview.v1.WorkspaceService.RefreshDescriptorSource
  */
 export const refreshDescriptorSource: typeof WorkspaceService["method"]["refreshDescriptorSource"];
 /**
- * ReorderDescriptorSources sets the source priority order and rebuilds the
- * merged view from the cached resolves — no network. This is how you switch
- * which source's definitions win when several describe the same protos.
+ * ReorderDescriptorSources sets which source wins when several describe the
+ * same protos.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.ReorderDescriptorSources
  */
 export const reorderDescriptorSources: typeof WorkspaceService["method"]["reorderDescriptorSources"];
 /**
- * Get returns the workspace snapshot
- *
  * @generated from rpc grpcview.v1.WorkspaceService.Get
  */
 export const get: typeof WorkspaceService["method"]["get"];
 /**
- * CreateFolder creates a new folder in the workspace
- *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder
  */
 export const createFolder: typeof WorkspaceService["method"]["createFolder"];
 /**
- * CreateRequest creates a new request in the workspace
- *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateRequest
  */
 export const createRequest: typeof WorkspaceService["method"]["createRequest"];
 /**
- * DeleteRequest deletes a request from the workspace
- *
  * @generated from rpc grpcview.v1.WorkspaceService.DeleteRequest
  */
 export const deleteRequest: typeof WorkspaceService["method"]["deleteRequest"];
 /**
- * UpdateRequest updates a request in the workspace
- *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateRequest
  */
 export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
 /**
- * UpdateFolder updates a folder's metadata script in the workspace
- *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateFolder
  */
 export const updateFolder: typeof WorkspaceService["method"]["updateFolder"];
 /**
- * MoveItem reparents and/or reorders an item; a drop into the moved folder's own
- * subtree is rejected server-side.
- *
  * @generated from rpc grpcview.v1.WorkspaceService.MoveItem
  */
 export const moveItem: typeof WorkspaceService["method"]["moveItem"];
 /**
- * Invoke executes a unary RPC against a target server and returns the result
- * (status, response body, request/response metadata, latency).
+ * Invoke returns the status, response body, request/response metadata and latency.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.Invoke
  */
 export const invoke: typeof WorkspaceService["method"]["invoke"];
 /**
- * Runs the request saved at a collection path and returns the result of the call.
- *
- * Requires workspace_name, item_name (the request's display name) and path (its
- * parent folders, outermost first; empty at the top level). The saved request's own
- * body, metadata, middleware and target are used, so the caller supplies no body of
- * its own. params is a free-form object its body and metadata read values from. For one
- * run only: target overrides where the call goes, messages override the request
- * bodies as JSON text, record_history defaults to true, and dry_run evaluates
- * everything but sends nothing.
- *
- * Returns the response message, the call's gRPC status, request and response
- * metadata and the latency — or, for a dry run, only the resolved request. A status
- * the target returned is reported in the response, never as an error. A streaming
- * method needs the streaming form of this call.
+ * InvokeSaved reports a status the target returned in the response, never as
+ * an error.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.InvokeSaved
  */
 export const invokeSaved: typeof WorkspaceService["method"]["invokeSaved"];
 /**
- * Describes the input and output shape of one method, without calling anything.
- *
- * Requires workspace_name, service (fully qualified, e.g. "echo.v1.EchoService") and
- * method (its own name, e.g. "Unary"). The shape comes from definitions the workspace
- * has already resolved, so this answers even when the target is unreachable.
- *
- * Returns the method's input and output messages plus every type they reference —
- * twice: as rendered .proto text to read, and as serialized FileDescriptorSet bytes to
- * parse — with the id of the source they were read from and whether either side of the
- * call streams.
- *
- * Doc comments come through only if that source carried them: a server answering by
- * reflection strips them, an uploaded descriptor set built with them keeps them.
+ * DescribeMethod answers from already-resolved definitions, so it works with
+ * the target down. Doc comments survive only if the winning source carried
+ * them — reflection strips them, an uploaded descriptor set keeps them.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.DescribeMethod
  */
 export const describeMethod: typeof WorkspaceService["method"]["describeMethod"];
 /**
- * RunScript evaluates a script through the scripting engine and returns its
- * value, console output, and any error — the scratchpad and the per-kind
- * test-run surface that validates the engine end to end.
+ * RunScript uses a fresh isolated instance: no capabilities, no workspace state.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.RunScript
  */
 export const runScript: typeof WorkspaceService["method"]["runScript"];
 /**
- * CreateScript creates a new, empty script of a given kind in the workspace.
- *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
  */
 export const createScript: typeof WorkspaceService["method"]["createScript"];
 /**
- * UpdateScript edits a script's source and/or renames it.
- *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
  */
 export const updateScript: typeof WorkspaceService["method"]["updateScript"];
 /**
- * DeleteScript removes a script from the workspace.
- *
  * @generated from rpc grpcview.v1.WorkspaceService.DeleteScript
  */
 export const deleteScript: typeof WorkspaceService["method"]["deleteScript"];

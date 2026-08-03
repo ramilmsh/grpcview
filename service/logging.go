@@ -13,17 +13,12 @@ type loggingInterceptor struct {
 	logger *slog.Logger
 }
 
-// WrapStreamingClient implements [connect.Interceptor]. grpcview issues no
-// outbound streaming calls of its own, so this is a pass-through; returning nil
-// (the previous stub) would break any future streaming client.
+// WrapStreamingClient must return a real handler: connect panics on a nil one.
 func (l loggingInterceptor) WrapStreamingClient(handler connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return handler
 }
 
-// WrapStreamingHandler implements [connect.Interceptor]. It logs each streaming
-// RPC's completion (latency + status), mirroring WrapUnary. Returning nil here
-// (the previous unary-only stub) made connect call a nil implementation and
-// panic on the first streaming RPC (InvokeStreaming).
+// WrapStreamingHandler must return a real handler: connect panics on a nil one.
 func (l loggingInterceptor) WrapStreamingHandler(handler connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		start := time.Now()
@@ -50,7 +45,6 @@ func (l loggingInterceptor) WrapStreamingHandler(handler connect.StreamingHandle
 	}
 }
 
-// WrapUnary implements [connect.Interceptor].
 func (l loggingInterceptor) WrapUnary(handler connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		start := time.Now()

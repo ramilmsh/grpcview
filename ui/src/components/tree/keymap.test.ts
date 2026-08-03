@@ -2,9 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { KeyStroke } from "./keymap";
 import { keyToIntent } from "./keymap";
 
-// A small local builder, one door over from flatten.test.ts's leaf()/folder() and
-// selection.test.ts's row(): every modifier defaults to "not held" so a test only
-// ever spells out the one(s) it actually cares about.
 const stroke = (key: string, mods: Partial<Omit<KeyStroke, "key">> = {}): KeyStroke => ({
   key,
   shiftKey: false,
@@ -168,15 +165,6 @@ describe("keyToIntent: macOS (isMac=true)", () => {
   });
 });
 
-// shift+ArrowDown used to be tested here as an unclaimed combination ("extending
-// a selection is T2, not built yet" — see git history). T2 is this file: bare
-// shift+Up/Down are now claimed, and covered by the "extend" tests in both
-// platform blocks above instead. What's left genuinely unclaimed — and worth
-// testing as such — is everything shift+arrow does NOT cover: the four other
-// navigation keys the plan's table never asked T2 to extend (shift+Home/End/
-// PageUp/PageDown, see keymap.ts's onlyShiftHeld call site for the full trace
-// through listWidget.js/abstractTree.js that backs this), plus select-all's own
-// exact-modifier and bare-Escape boundaries.
 describe("keyToIntent: unclaimed combinations return null, on either platform", () => {
   it("a plain letter is untouched — typeahead is T3 and must not be pre-empted here", () => {
     expect(keyToIntent(stroke("a"), false)).toBeNull();

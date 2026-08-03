@@ -3,14 +3,6 @@ import type { TreeRowModel } from "./types";
 import type { FlatTree } from "./flatten";
 import { applyIntent, applyRowClick, applyTwistieClick, type ApplyIntentCtx } from "./dispatch";
 
-// dispatch.ts only ever reads a row's `.id`/`.parentId`/`.expandable`/
-// `.expanded` plus its position in the array (never `.depth`/`.posInSet`/
-// `.setSize`, which exist purely for aria — see TreeRow.tsx), so this fixture
-// takes them as explicit options rather than computing them, same "only
-// populate what's actually read" reasoning as navigate.test.ts's own row()
-// (one door over) and selection.test.ts's (two doors over). `depth` is still
-// accepted for readability at call sites even though nothing under test
-// reads it.
 const row = (
   id: string,
   opts: {
@@ -34,14 +26,6 @@ function flatOf(rows: TreeRowModel<string>[]): FlatTree<string> {
   return { rows, indexById: new Map(rows.map((r, i) => [r.id, i])), defaultExpanded: [] };
 }
 
-// One shared fixture wide enough to exercise every fork applyIntent has:
-// an EXPANDED folder with two leaf children (folder-a/a1/a2), a COLLAPSED
-// folder with no visible children of its own (folder-b), a bare root leaf
-// (leaf-c), and an EXPANDED folder that happens to have none (folder-empty —
-// distinct from folder-b, which is collapsed for a different reason: "no
-// children to show" vs. "children exist but aren't visible"). Indices, for
-// the arithmetic in the tests below: folder-a=0, a1=1, a2=2, folder-b=3,
-// leaf-c=4, folder-empty=5.
 const TREE = flatOf([
   row("folder-a", { expandable: true, expanded: true }),
   row("a1", { parentId: "folder-a", depth: 1 }),
@@ -51,20 +35,8 @@ const TREE = flatOf([
   row("folder-empty", { expandable: true, expanded: true }),
 ]);
 
-// The REAL row object out of TREE for a given id, for applyRowClick's tests
-// below (its first argument is a whole TreeRowModel, not a bare id — it needs
-// `.expandable`/`.expanded` to decide the plain-click open-vs-toggle fork).
-// Pulled from TREE itself rather than a second `row(id, {...})` call with
-// hand-copied options, so there is no way for a click fixture to silently
-// drift from what TREE actually says that row's expandable/expanded state is.
 const rowIn = (id: string): TreeRowModel<string> => TREE.rows[TREE.indexById.get(id)!];
 
-// Every field defaults to the "nothing going on yet" state (no focus, no
-// selection, no anchor) so a test only ever spells out what it actually
-// cares about — same builder-with-overrides shape as keymap.test.ts's
-// stroke(). rowsPerPage defaults to 5 (irrelevant to every test that isn't
-// specifically about pageUp/pageDown — targetIndex's own arithmetic is
-// navigate.test.ts's job, not this file's).
 function ctx(overrides: Partial<ApplyIntentCtx<string>> = {}): ApplyIntentCtx<string> {
   return {
     flat: TREE,
@@ -75,11 +47,6 @@ function ctx(overrides: Partial<ApplyIntentCtx<string>> = {}): ApplyIntentCtx<st
     ...overrides,
   };
 }
-
-// Tests below are grouped in the same order TreeIntent itself declares its
-// variants (keymap.ts) — move, extend, collapseOrParent, expandOrFirstChild,
-// toggle, open, rename, delete, selectAll, clearSelection — so a reader can
-// walk the two files side by side.
 
 describe("applyIntent: move", () => {
   it("focuses the next row down and resets the anchor to it", () => {
@@ -114,7 +81,6 @@ describe("applyIntent: move", () => {
   });
 
   it("pageDown threads rowsPerPage through to targetIndex, not some hardcoded stride", () => {
-    // folder-a(0) + 3 -> folder-b(3).
     expect(applyIntent({ kind: "move", to: "pageDown" }, ctx({ focused: "folder-a", rowsPerPage: 3 }))).toEqual([
       { kind: "focus", id: "folder-b", scroll: true },
       { kind: "setAnchor", id: "folder-b" },
@@ -133,16 +99,12 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
     const actions = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a1", anchor: "folder-a" }));
     expect(actions).toEqual([
       { kind: "focus", id: "a2", scroll: true },
-      { kind: "setAnchor", id: "folder-a" }, // unchanged — same pivot
+      { kind: "setAnchor", id: "folder-a" },
       { kind: "setSelection", ids: ["folder-a", "a1", "a2"] },
     ]);
   });
 
   it("extends upward from an existing anchor the same way", () => {
-    // From folder-b(3), up lands on a2(2); anchor stays leaf-c(4); range is
-    // the ascending span between them regardless of which side focus moved
-    // from — same "either direction" contract rangeSelection itself
-    // documents (selection.ts, selection.test.ts's reversed-pair test).
     const actions = applyIntent({ kind: "extend", to: "up" }, ctx({ focused: "folder-b", anchor: "leaf-c" }));
     expect(actions).toEqual([
       { kind: "focus", id: "a2", scroll: true },
@@ -155,20 +117,16 @@ describe("applyIntent: extend (shift+ArrowUp/ArrowDown)", () => {
     const actions = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a1", anchor: null }));
     expect(actions).toEqual([
       { kind: "focus", id: "a2", scroll: true },
-      { kind: "setAnchor", id: "a1" }, // bootstrapped from the row focus is LEAVING
+      { kind: "setAnchor", id: "a1" },
       { kind: "setSelection", ids: ["a1", "a2"] },
     ]);
   });
 
   it("a second extend in the same direction keeps the SAME bootstrapped anchor, growing the range further", () => {
-    // Simulates two consecutive shift+ArrowDown presses: this ctx is what the
-    // FIRST press's actions (the test above) would already have produced —
-    // anchor=a1 (bootstrapped), focused=a2 (the first press's new focus) —
-    // i.e. the interpreter has applied them before this second call runs.
     const second = applyIntent({ kind: "extend", to: "down" }, ctx({ focused: "a2", anchor: "a1" }));
     expect(second).toEqual([
       { kind: "focus", id: "folder-b", scroll: true },
-      { kind: "setAnchor", id: "a1" }, // NOT reset to a2 — still the original pivot
+      { kind: "setAnchor", id: "a1" },
       { kind: "setSelection", ids: ["a1", "a2", "folder-b"] },
     ]);
   });
@@ -201,9 +159,6 @@ describe("applyIntent: collapseOrParent (ArrowLeft)", () => {
   });
 
   it("focuses the parent of an already-collapsed nested folder too, not just a leaf", () => {
-    // TREE's own collapsed folder (folder-b) is a ROOT, so it can't show
-    // "focus the parent" — a dedicated nested fixture exercises a collapsed
-    // folder that DOES have one.
     const nested = flatOf([
       row("root", { expandable: true, expanded: true }),
       row("child-folder", { parentId: "root", depth: 1, expandable: true, expanded: false }),
@@ -348,9 +303,6 @@ describe("applyIntent: delete (Delete / cmd+Backspace)", () => {
   });
 
   it("acts on just the focused row, discarding a stale selection, when focus has moved outside it", () => {
-    // Simulates: ctrl+click selects folder-a/a1/a2, then a plain ArrowDown —
-    // which never touches selection, see the "move" describe block above —
-    // leaves focus on folder-b, outside that selection.
     const actions = applyIntent(
       { kind: "delete" },
       ctx({ focused: "folder-b", selection: ["folder-a", "a1", "a2"] })
@@ -359,10 +311,6 @@ describe("applyIntent: delete (Delete / cmd+Backspace)", () => {
   });
 
   it("acts on the SELECTION when nothing is focused — reachable via Tab-in then cmd/ctrl+A, which never sets focus", () => {
-    // ui-store.ts starts treeFocused at null and selectAll deliberately never
-    // sets focus (listWidget.js:317-323's onCtrlA has no view.setFocus call),
-    // so "a full selection with no focus" is an ordinary state, not a corrupt
-    // one. The plan's key table binds Delete to "delete selection".
     expect(applyIntent({ kind: "delete" }, ctx({ focused: null, selection: ["a1", "a2"] }))).toEqual([
       { kind: "delete", ids: ["a1", "a2"] },
     ]);
@@ -490,10 +438,6 @@ describe("applyIntent: every intent against a null focused id (nonempty tree)", 
   });
 });
 
-// applyRowClick — T2's mouse half (docs/design/tree-rewrite-plan.md's "Mouse"
-// list). Same TREE/ctx fixtures as applyIntent's tests above; `rowIn` (near
-// TREE's own definition) is the one addition, since applyRowClick's first
-// argument is a whole row, not a bare id.
 describe("applyRowClick: plain click", () => {
   it("on a leaf: selects it, focuses it, sets the anchor, and opens it", () => {
     expect(applyRowClick(rowIn("leaf-c"), { shiftKey: false, modKey: false, rightButton: false }, ctx())).toEqual([
@@ -573,7 +517,7 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
     const actions = applyRowClick(
       rowIn("folder-b"),
       { shiftKey: true, modKey: false, rightButton: false },
-      ctx({ anchor: "a1", focused: "folder-empty" }) // focused is irrelevant once anchor is set
+      ctx({ anchor: "a1", focused: "folder-empty" })
     );
     expect(actions).toEqual([
       { kind: "focus", id: "folder-b", scroll: false },
@@ -603,8 +547,8 @@ describe("applyRowClick: shift+click (shiftKey)", () => {
     );
     expect(actions).toEqual([
       { kind: "focus", id: "folder-b", scroll: false },
-      { kind: "setAnchor", id: "stale-pre-rename-key" }, // passed through untouched...
-      { kind: "setSelection", ids: ["folder-b"] }, // ...but rangeSelection degrades it to just the clicked row
+      { kind: "setAnchor", id: "stale-pre-rename-key" },
+      { kind: "setSelection", ids: ["folder-b"] },
     ]);
   });
 
@@ -633,11 +577,6 @@ describe("applyRowClick: modifier precedence", () => {
   });
 });
 
-// The right-click guard the plan's §"The review T2 was owed" deferred to T5
-// ("macOS ctrl+click falls into the plain-click branch and opens the row ... VS
-// Code's MouseController does guard it"). Whether a given event IS a right-click
-// gesture is Tree.tsx's isRightClickGesture (tested in Tree.click-guard.test.ts);
-// what applyRowClick does once told is this.
 describe("applyRowClick: a right-click gesture that reached a click handler", () => {
   it("emits nothing at all — the contextmenu handler owns this gesture", () => {
     expect(
@@ -664,10 +603,6 @@ describe("applyRowClick: a right-click gesture that reached a click handler", ()
   });
 
   it("wins over BOTH modifier branches — checked before shift and before modKey", () => {
-    // Ordering matters specifically on macOS, where modKey is cmd: a ctrl+click
-    // there has modKey false and would otherwise fall through to the plain
-    // branch. But the guard is placed above shift too, so no combination of
-    // modifiers can reinterpret a right-click as a selection change.
     expect(
       applyRowClick(
         rowIn("folder-b"),
@@ -685,14 +620,6 @@ describe("applyRowClick: a right-click gesture that reached a click handler", ()
   });
 });
 
-// The "focus" action's scroll flag — asserted PER PRODUCER rather than only
-// inside the individual behavioral tests above, because the rule is a property
-// of which input modality produced the action, not of any one intent: a
-// keyboard move can name an off-screen row and must scroll to it, while a
-// click names the row the pointer is already on and must NOT scroll (a
-// partially clipped row would otherwise slide out from under the cursor —
-// TreeAction's own comment in dispatch.ts records the measurement). A new
-// producer added later should have to add a line here.
 describe("the focus action's scroll flag, by producer", () => {
   const focusFlags = (actions: ReturnType<typeof applyIntent>): boolean[] =>
     actions.flatMap((a) => (a.kind === "focus" ? [a.scroll] : []));
@@ -713,11 +640,6 @@ describe("the focus action's scroll flag, by producer", () => {
   });
 });
 
-// applyTwistieClick — the collapse rebase. A twistie collapse is the one
-// interaction that can hide the rows focus and selection are pointing at
-// WITHOUT acting on them (the keyboard's ArrowLeft/Space collapse the row that
-// already holds the cursor), so it is the one that has to rebase them onto the
-// folder doing the hiding.
 describe("applyTwistieClick: expanding", () => {
   it("just expands — nothing is hidden, so focus and selection are never touched", () => {
     expect(applyTwistieClick(rowIn("folder-b"), ctx({ focused: "leaf-c", selection: ["leaf-c"] }))).toEqual([
@@ -761,8 +683,6 @@ describe("applyTwistieClick: collapsing", () => {
   });
 
   it("preserves the order of the entries it does not touch", () => {
-    // leaf-c precedes the hidden a1 in this (deliberately not row-ordered)
-    // selection; the folder takes the position of the first entry it replaces.
     expect(applyTwistieClick(rowIn("folder-a"), ctx({ selection: ["leaf-c", "a1", "folder-b"] }))).toEqual([
       { kind: "setExpanded", id: "folder-a", expanded: false },
       { kind: "setSelection", ids: ["leaf-c", "folder-a", "folder-b"] },
@@ -776,7 +696,6 @@ describe("applyTwistieClick: collapsing", () => {
   });
 
   it("rebases both halves at once, and reaches DEEPLY nested descendants, not just direct children", () => {
-    // root > mid > deep, all expanded: collapsing `root` hides mid AND deep.
     const nested = flatOf([
       row("root", { expandable: true, expanded: true }),
       row("mid", { parentId: "root", depth: 1, expandable: true, expanded: true }),

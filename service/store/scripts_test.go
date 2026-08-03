@@ -13,7 +13,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// loadScriptList loads the collection and returns its ordered wire scripts.
 func loadScriptList(t *testing.T, coll *Collection, ctx context.Context) []*grpcviewv1.Script {
 	t.Helper()
 	ws, err := coll.Load(ctx)
@@ -35,7 +34,6 @@ func scriptByName(scripts []*grpcviewv1.Script, name string) *grpcviewv1.Script 
 func TestCreateListUpdateDeleteScript(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
-	// Create three scripts of assorted kinds.
 	if err := coll.CreateScript(ctx, "uuid", grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR); err != nil {
 		t.Fatalf("CreateScript generator: %v", err)
 	}
@@ -46,7 +44,6 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 		t.Fatalf("CreateScript scenario: %v", err)
 	}
 
-	// List (via Load): three scripts, in creation order, with the right kinds.
 	scripts := loadScriptList(t, coll, ctx)
 	if len(scripts) != 3 {
 		t.Fatalf("scripts = %d, want 3 (%v)", len(scripts), scripts)
@@ -61,7 +58,6 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 		t.Fatalf("kinds not persisted: %+v", gotKind)
 	}
 
-	// On-disk shape: slug dirs, meta.name, ordered scripts[], kind.
 	col := &grpcviewstorev1.Collection{}
 	mustRead(t, coll.collectionFilePath(), col)
 	if len(col.GetScripts()) != 3 || col.GetScripts()[0] != "uuid" {
@@ -73,7 +69,6 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 		t.Fatalf("script.json = %+v, want name=happy path kind=scenario", sf)
 	}
 
-	// Update source (must not touch kind).
 	src := `export default () => 42`
 	if err := coll.UpdateScript(ctx, "uuid", ScriptPatch{Source: &src}); err != nil {
 		t.Fatalf("UpdateScript source: %v", err)
@@ -83,7 +78,6 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 		t.Fatalf("source not persisted / kind changed: %+v", got)
 	}
 
-	// Rename: slug/dir stays stable, only meta.name changes, source survives.
 	newName := "uuidv4"
 	if err := coll.UpdateScript(ctx, "uuid", ScriptPatch{Name: &newName}); err != nil {
 		t.Fatalf("UpdateScript rename: %v", err)
@@ -99,18 +93,15 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 		t.Errorf("rename dropped source: %+v", got)
 	}
 
-	// Rename collision fails with ErrAlreadyExists.
 	collide := "sign"
 	if err := coll.UpdateScript(ctx, "uuidv4", ScriptPatch{Name: &collide}); !errors.Is(err, ErrAlreadyExists) {
 		t.Errorf("rename collision = %v, want ErrAlreadyExists", err)
 	}
 
-	// Duplicate create fails.
 	if err := coll.CreateScript(ctx, "sign", grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE); !errors.Is(err, ErrAlreadyExists) {
 		t.Errorf("duplicate create = %v, want ErrAlreadyExists", err)
 	}
 
-	// Delete removes the dir and the manifest entry.
 	if err := coll.DeleteScript(ctx, "sign"); err != nil {
 		t.Fatalf("DeleteScript: %v", err)
 	}
@@ -120,19 +111,15 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 	if scriptByName(loadScriptList(t, coll, ctx), "sign") != nil {
 		t.Errorf("deleted script still listed")
 	}
-	// Deleting a missing script is a no-op.
 	if err := coll.DeleteScript(ctx, "ghost"); err != nil {
 		t.Errorf("deleting missing script should be a no-op, got %v", err)
 	}
 
-	// Update of a missing script reports ErrItemNotFound.
 	if err := coll.UpdateScript(ctx, "ghost", ScriptPatch{Source: &src}); !errors.Is(err, ErrItemNotFound) {
 		t.Errorf("update missing = %v, want ErrItemNotFound", err)
 	}
 }
 
-// TestScriptPersistRoundTrip confirms scripts survive a fresh reload from a brand-new
-// Store over the same directory (no in-memory caches shared), in order.
 func TestScriptPersistRoundTrip(t *testing.T) {
 	base := t.TempDir()
 	ctx := context.Background()

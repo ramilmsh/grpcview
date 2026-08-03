@@ -16,19 +16,12 @@ import { useWorkspace, useWorkspaceMutations, hostLabel, WORKSPACE_NAME } from "
 import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
 import { AddSourceModal } from "./AddSourceModal";
 
-// sourceLabel is the human-readable handle for a source: its dial target, or the
-// name of the file it was uploaded from.
 function sourceLabel(s: DescriptorSource): string {
   if (s.source.case === "reflection") return hostLabel(s.source.value);
   if (s.source.case === "upload") return s.source.value.fileName;
   return s.id;
 }
 
-// contribution describes, in one line, what a source actually provides once the
-// priority merge has run. A source can define services and still win none of them
-// (a higher-priority source describes the same protos) — saying so explicitly is
-// the point of the list: it's what makes "which source am I using" answerable
-// instead of guesswork.
 function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted" | "warn" } {
   const r = s.resolved;
   if (r?.error) return { text: r.error, tone: "warn" };
@@ -38,8 +31,6 @@ function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted"
   const files = `${r.fileCount} file${r.fileCount === 1 ? "" : "s"}`;
   if (defined === 0) return { text: `${files}, no services`, tone: "muted" };
   if (won === 0) {
-    // "all N" reads wrong for a single service, and a fully shadowed one-service
-    // source is the common case when an upload and its live server overlap.
     const shadowed = defined === 1 ? "its 1 service" : `all ${defined} services`;
     return { text: `${files}, ${shadowed} shadowed`, tone: "muted" };
   }
@@ -49,14 +40,7 @@ function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted"
   return { text: `${files}, ${won} service${won === 1 ? "" : "s"}`, tone: "ok" };
 }
 
-// SourcesView lists the workspace's definition sources IN PRIORITY ORDER and lets
-// you add, refresh, reorder, and remove them.
-//
-// The order is the product feature, not decoration: when two sources describe the
-// same protos — a buf-built descriptor set and the live server that serves them —
-// the higher one's definitions win, so moving a source up is how you switch which
-// one the editor and method picker resolve against. That matters because gRPC
-// reflection strips proto doc comments while a buf image keeps them.
+// SourcesView lists the definition sources in priority order — the highest wins.
 export function SourcesView() {
   const { sources } = useWorkspace();
   const {
@@ -66,7 +50,6 @@ export function SourcesView() {
     reorderDescriptorSources,
   } = useWorkspaceMutations();
   const [modalOpen, setModalOpen] = useState(false);
-  // confirm holds the source pending removal, or null.
   const [confirm, setConfirm] = useState<DescriptorSource | null>(null);
 
   const onAdd = (address: string, tls: boolean) => {
@@ -79,8 +62,6 @@ export function SourcesView() {
     );
   };
 
-  // fileName rides along as the upload's identity, so re-uploading a rebuilt image
-  // refreshes that source in place instead of adding an indistinguishable row.
   const onAddDescriptorSet = (bytes: Uint8Array, fileName: string) => {
     addDescriptorSource.mutate(
       { workspaceName: WORKSPACE_NAME, source: { case: "descriptorSet", value: bytes }, fileName },
@@ -96,8 +77,7 @@ export function SourcesView() {
     );
   };
 
-  // Moving a source sends the whole reordered id list — the backend requires a full
-  // permutation, so a stale client can't silently drop a source.
+  // The backend requires the full permutation of ids, not a single move.
   const move = (from: number, to: number) => {
     if (to < 0 || to >= sources.length) return;
     const ids = sources.map((s) => s.id);
@@ -112,7 +92,6 @@ export function SourcesView() {
     refreshDescriptorSource.isPending ||
     reorderDescriptorSources.isPending;
 
-  // Show whichever mutation last errored.
   const activeError =
     [addDescriptorSource, removeDescriptorSource, refreshDescriptorSource, reorderDescriptorSources]
       .find((m) => m.isError)?.error ?? null;
@@ -186,16 +165,12 @@ export function SourcesView() {
                     borderRadius: 9,
                   }}
                 >
-                  {/* Priority position — the number the reorder controls change. */}
                   <span
                     className="font-mono"
                     style={{ fontSize: 11, color: "var(--color-neutral-600)", width: "2ch" }}
                   >
                     {i + 1}
                   </span>
-                  {/* A source that failed to resolve must not wear the green
-                      "connected" plug — the icon is the first thing scanned, so it
-                      says the same thing as the reason line under it. */}
                   {reflection ? (
                     <PlugsConnected
                       size={18}
@@ -278,7 +253,6 @@ export function SourcesView() {
         pending={addDescriptorSource.isPending}
       />
 
-      {/* remove confirm */}
       <Dialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}

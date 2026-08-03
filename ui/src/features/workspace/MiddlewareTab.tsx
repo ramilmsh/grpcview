@@ -14,19 +14,8 @@ import { Tag } from "@/components/ui/Tag";
 import { useWorkspace } from "@/lib/workspace-query";
 import { ScriptKind, type Script } from "@grpcview/v1/workspace_pb";
 
-// MiddlewareTab manages a request's ordered attached middleware (plan §S3). The
-// backend runs each MIDDLEWARE-kind script — by display name, in this order —
-// before every invoke, so it can rewrite body / metadata / target. The attached
-// list is SERVER state (rides the Get snapshot on request.middleware, like the
-// request's service/method); every attach / detach / reorder persists the full
-// ordered list via UpdateRequest (updateMiddleware:true) and the re-seeded Get
-// cache flows the fresh list back down — there is no parallel copy in ui-store.
-//
-// Candidates are the collection's middleware scripts (workspace.scripts filtered
-// to ScriptKind.MIDDLEWARE). A rename changes a script's name-key, so an attached
-// name that no longer resolves to a middleware script renders as a broken
-// "missing" row that can still be detached (auto-rewrite on rename is out of
-// scope — the backend errors "no middleware script by that name" at invoke).
+// Middleware is attached by display name, so a renamed script leaves a "missing" row
+// that can still be detached.
 export function MiddlewareTab({
   middleware,
   onChange,
@@ -44,8 +33,6 @@ export function MiddlewareTab({
   const attachedSet = new Set(middleware);
   const candidates = middlewareScripts.filter((s) => !attachedSet.has(s.name));
 
-  // Reorder by swapping neighbours; detach drops one; attach appends. Each writes
-  // the whole ordered list (never a parallel copy) so the server stays canonical.
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
     if (j < 0 || j >= middleware.length) return;
@@ -110,9 +97,6 @@ export function MiddlewareTab({
   );
 }
 
-// describe pulls a one-line subtitle from the script's leading `//` comment (the
-// starter skeletons open with one), falling back to a plain kind label. Cheap
-// orientation without a dedicated description field on the Script wire type.
 function describe(script: Script): string {
   const firstLine = script.source
     .split("\n")

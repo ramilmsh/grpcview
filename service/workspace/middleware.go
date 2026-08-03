@@ -1,34 +1,7 @@
 package workspace
 
-// middleware.go runs a request's attached MIDDLEWARE scripts on the invoke path, pre-send
-// (scripting-ui-plan §S3 — the "use scripts (rewrite)" half). applyRequestMiddleware is the
-// shared pre-send step for both unary Invoke and streaming InvokeStreaming, run AFTER the
-// request's TypeScript body/metadata are evaluated to their outgoing values; middleware then
-// rewrites those resolved values. Each attached middleware runs via Engine.RunMiddleware with a
-// ctx built from the
-// current {body, metadata, target}; the returned ctx threads into the next middleware and
-// finally into the gRPC call.
-//
-// ctx contract (mirrors the engine's middleware entry point — entry.go's middlewarePostlude,
-// which builds ctx = { body, metadata, target } and yields the returned ctx as JSON):
-//   - ctx.body — the request message as a parsed JSON value. Passed in as the current body
-//     (spliced verbatim as raw JSON), returned as the rewritten body and re-serialized to
-//     JSON for the call. REQUIRED in the returned ctx (a missing body is a malformed ctx).
-//   - ctx.metadata — the outgoing metadata flattened to a { key: string } object. The
-//     returned object REPLACES the outgoing metadata (added/changed keys take effect; a key
-//     omitted from the returned object is dropped); scalar values are coerced to strings.
-//     A repeated (list) header is flattened to its first value when middleware is attached
-//     (a documented limitation — single-valued headers are the common case).
-//   - ctx.target — the resolved call target (host:port), threaded through the chain so a
-//     later middleware observes an earlier one's change. It is NOT applied to the dialed
-//     connection this pass: the connection is dialed (and the schema reflected) before the
-//     middleware step runs, so a live target rewrite would need a re-dial/re-reflect — left
-//     as a follow-up rather than half-applied.
-//
-// Middleware run fully SANDBOXED: an empty Grant (no host capabilities), no vars/secrets/env,
-// and no invoke() into other requests (deferred to S4). A middleware that throws/times out or
-// returns a malformed ctx is a Connect FailedPrecondition naming the offending script — the
-// same failure mode as a body/metadata evaluation error.
+// Pre-send middleware: each attached script rewrites a { body, metadata, target } ctx over the
+// already-evaluated body and metadata, and the ctx it returns threads into the next script.
 
 import (
 	"context"
@@ -46,24 +19,16 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// applyRequestMiddleware runs the target request's attached middleware chain over every body
-// (unary passes one, streaming many) and the shared metadata, in order, and returns the
-// rewritten bodies + metadata for the call. The chain is loaded from the SAVED request keyed
-// by path/item_name; an ad-hoc invoke (empty item_name), a request that isn't stored, or one
-// with no attached middleware is a no-op that returns its inputs unchanged. Failures are
-// Connect FailedPrecondition naming the offending script. params backs gv.request.params for
-// every middleware run in the chain (gv-features-plan.md Feature 3) — set by a gv.invoke
-// re-entry and by the addressed InvokeSaved RPCs, nil for the public Invoke/InvokeStreaming.
 func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName string, path []string, itemName, service string, target *grpcviewv1.Server, bodies []string, md *structpb.Struct, params map[string]any) ([]string, *structpb.Struct, error) {
 	if itemName == "" {
-		return bodies, md, nil // ad-hoc invoke: no saved request to attach middleware to
+		return bodies, md, nil
 	}
 	names, err := w.loadAttachedMiddleware(ctx, workspaceName, path, itemName)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(names) == 0 {
-		return bodies, md, nil // no attached middleware: pass through unchanged
+		return bodies, md, nil
 	}
 	if w.engine == nil {
 		return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -73,8 +38,6 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	if err != nil {
 		return nil, nil, err
 	}
-	// Resolve each attached name to a source up front so an unknown attachment fails before
-	// any middleware runs (and before we touch the outgoing request).
 	chain := make([]middlewareScript, len(names))
 	for i, name := range names {
 		src, ok := sources[name]
@@ -85,19 +48,13 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 		chain[i] = middlewareScript{name: name, source: src}
 	}
 
-	// ctx.target is informational this pass (not applied to the dialed connection); resolve
-	// it only now that middleware is actually attached. Pass service so the informational
-	// target matches the one resolveMethod actually dialed (the request's service-aware
-	// default). resolveMethod has already resolved + dialed this target, so this cannot fail
-	// here in practice.
+	// ctx.target is informational: the connection was already dialed, so a middleware's rewrite
+	// of it threads through the chain but is not applied to this call.
 	targetStr := ""
 	if resolved, terr := w.resolveTarget(ctx, target, workspaceName, service); terr == nil {
 		targetStr = resolved.GetAddress()
 	}
 
-	// mdMap and targetStr thread through the WHOLE sequence (every body, every middleware):
-	// metadata is a single per-call value, so a later body's chain observes the metadata an
-	// earlier body's chain produced (last write wins for the sent metadata).
 	mdMap := mdToStringMap(md)
 	out := make([]string, len(bodies))
 	for i, body := range bodies {
@@ -105,9 +62,6 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 		if body == "" {
 			body = "{}"
 		}
-		// The body must be valid JSON to hand the middleware a parsed ctx.body; a body that
-		// doesn't parse is the same InvalidArgument the request-message unmarshal would raise,
-		// surfaced a step earlier.
 		if !json.Valid([]byte(body)) {
 			return nil, nil, connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("invalid request body [%d]: not valid JSON, cannot run middleware", i))
@@ -132,16 +86,11 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	return out, stringMapToStruct(mdMap), nil
 }
 
-// middlewareScript is one resolved attachment: its display name (for errors) and source.
 type middlewareScript struct {
 	name   string
 	source string
 }
 
-// loadAttachedMiddleware reads the saved request's ordered attached-middleware names. A
-// missing collection or a request that isn't stored (ad-hoc / just-deleted target, or a stale
-// path) yields no middleware rather than an error, matching recordHistory's best-effort policy
-// for the same path/item_name addressing.
 func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName string, path []string, itemName string) ([]string, error) {
 	coll, err := w.store.Open(ctx, workspaceName)
 	if err != nil {
@@ -157,10 +106,6 @@ func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName str
 	return names, nil
 }
 
-// loadMiddlewareSources reads the workspace's committed scripts and returns a map from a
-// MIDDLEWARE script's display name to its source (mirroring loadGenerators in invoke.go). A
-// collection that does not exist yet yields an empty map (an attached name then fails as
-// "no middleware script", not as a missing workspace).
 func (w Workspace) loadMiddlewareSources(ctx context.Context, workspaceName string) (map[string]string, error) {
 	coll, err := w.store.Open(ctx, workspaceName)
 	if err != nil {
@@ -182,9 +127,6 @@ func (w Workspace) loadMiddlewareSources(ctx context.Context, workspaceName stri
 	return mws, nil
 }
 
-// parseMiddlewareResult decodes a middleware run's Result.Value (the returned ctx as JSON:
-// {body, metadata, target}) into the threaded values. A value that is empty, not the ctx
-// shape, or missing its body is a malformed ctx → FailedPrecondition naming the script.
 func parseMiddlewareResult(name string, value json.RawMessage) (json.RawMessage, map[string]string, string, error) {
 	if len(value) == 0 {
 		return nil, nil, "", middlewareError(name, "returned no value (a middleware must return its ctx)")
@@ -211,9 +153,6 @@ func parseMiddlewareResult(name string, value json.RawMessage) (json.RawMessage,
 	return raw.Body, md, raw.Target, nil
 }
 
-// coerceMetadataValue renders a middleware-supplied metadata value as a header string: a
-// string is used as-is, a number/boolean is stringified. An object/array/null value is not a
-// valid header and reports ok=false (a malformed ctx).
 func coerceMetadataValue(v any) (string, bool) {
 	switch x := v.(type) {
 	case string:
@@ -227,10 +166,6 @@ func coerceMetadataValue(v any) (string, bool) {
 	}
 }
 
-// mdToStringMap flattens the outgoing metadata Struct into the flat { key: string } object the
-// middleware ctx exposes (RequestInput.Metadata is map[string]string). A repeated (list) value
-// is flattened to its first element — middleware sees single-valued headers (see the file
-// header). A nil/empty Struct yields an empty (non-nil) map so a script can index ctx.metadata.
 func mdToStringMap(md *structpb.Struct) map[string]string {
 	fields := md.GetFields()
 	out := make(map[string]string, len(fields))
@@ -242,9 +177,6 @@ func mdToStringMap(md *structpb.Struct) map[string]string {
 	return out
 }
 
-// stringMapToStruct rebuilds a metadata Struct (all single string values) from the flat map a
-// middleware chain produced. An empty map yields nil — no metadata — so structToMetadata sends
-// none, matching how metadata is absent when unset.
 func stringMapToStruct(m map[string]string) *structpb.Struct {
 	if len(m) == 0 {
 		return nil
@@ -256,9 +188,6 @@ func stringMapToStruct(m map[string]string) *structpb.Struct {
 	return &structpb.Struct{Fields: fields}
 }
 
-// middlewareError renders a middleware failure as a Connect FailedPrecondition naming the
-// offending script, matching Invoke's policy that a pre-send failure grpcview itself can't get
-// past is a typed Connect error (mirrors invoke.go's bodyError).
 func middlewareError(name, detail string) error {
 	return connect.NewError(connect.CodeFailedPrecondition,
 		fmt.Errorf("middleware %q failed: %s", name, detail))

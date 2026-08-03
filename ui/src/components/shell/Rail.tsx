@@ -2,9 +2,6 @@ import clsx from "clsx";
 import { TreeStructure, Stack, BracketsCurly } from "@/components/ui/icons";
 import { useUIStore, type ActiveView } from "@/lib/ui-store";
 
-// Rail: the left view switcher. Workspace + Definition sources are the Phase-1
-// views; Scripts is the S1 authoring view (create/edit/test-run sandboxed scripts).
-// The rest (Scenarios/Environments/Git/History) arrive with their backends (plan §8).
 const VIEWS: Array<{ view: ActiveView; title: string; icon: React.ReactNode }> = [
   { view: "workspace", title: "Collection", icon: <TreeStructure /> },
   { view: "sources", title: "Definition sources", icon: <Stack /> },

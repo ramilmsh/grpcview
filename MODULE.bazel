@@ -13,19 +13,15 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.3")
 bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.2.0")
 
-# Native Apple cc toolchain, forced on the macOS host in .bazelrc (build:macos) so it
-# wins over hermetic_cc_toolchain's zig darwin toolchain, which can't compile for macOS.
-# Declared directly (also pulled transitively by protobuf) so the .bazelrc reference to
-# @@apple_support++apple_cc_configure_extension+local_config_apple_cc_toolchains stays valid.
+# Forced on in .bazelrc (build:macos) over hermetic_cc_toolchain's zig darwin toolchain,
+# which can't compile for macOS. Declared directly so .bazelrc's canonical-name reference
+# to its cc toolchains stays valid.
 bazel_dep(name = "apple_support", version = "1.24.2")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 
 # //third_party/quickjs invokes `zig cc` DIRECTLY (via @zig_sdk//:zig) to build the
-# wasm32-wasi module — no wasm cc toolchain is registered for resolution, so we drive
-# the compiler as a plain build tool. Its wasm support files live in the sibling
-# @zig_config repo, which this extension does not advertise as a root dep; that genrule
-# therefore references them by canonical name so `bazel mod tidy` cannot strip them.
+# wasm32-wasi module: no wasm cc toolchain is registered for resolution.
 use_repo(toolchains, "zig_sdk")
 
 register_toolchains(
@@ -37,12 +33,8 @@ register_toolchains(
 quickjs = use_extension("//third_party/quickjs:extensions.bzl", "quickjs")
 use_repo(quickjs, "quickjs")
 
-# protobuf >= 33.4 ships its own prebuilt protoc binary toolchain, so protoc is downloaded
-# rather than compiled from source. It is selected by --@protobuf//bazel/flags:prefer_prebuilt_protoc,
-# which defaults to true from v34 onwards; toolchain resolution is enabled by default in Bazel 9
-# (and pinned in .bazelrc). This replaces the archived toolchains_protoc module. The
-# *_WAS_NOT_SUPPOSED_TO_BE_BUILT copt guards in .bazelrc fail the build if protoc is ever
-# compiled from source, keeping us honest.
+# Ships a prebuilt protoc toolchain, so protoc is downloaded rather than compiled; the
+# *_WAS_NOT_SUPPOSED_TO_BE_BUILT copt guards in .bazelrc fail the build if it ever is.
 bazel_dep(name = "protobuf", version = "35.1")
 bazel_dep(name = "rules_buf", version = "0.5.4")
 

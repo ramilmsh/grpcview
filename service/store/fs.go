@@ -18,10 +18,7 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// Load assembles the full in-memory (wire) Workspace by walking tree/ in the
-// order recorded by each folder's config, reading the committed sources from
-// grpcview.json and the resolved-schema cache from .grpcview/. It returns
-// ErrNotFound if the collection has not been created.
+// Load assembles the whole collection as a wire Workspace.
 func (c *Collection) Load(ctx context.Context) (*grpcviewv1.Workspace, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -49,11 +46,8 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The committed manifest is authoritative for the source list, its identities
-	// and its priority order; the cache only supplies each source's derived
-	// contribution summary. Overlaying by id (rather than trusting the cache's own
-	// list) keeps a hand-edited or git-pulled manifest correct — an unknown source
-	// simply shows no summary until it is resolved.
+	// The manifest owns the source list and its order; the cache only adds each
+	// source's derived summary, so it is overlaid by id.
 	overlayResolved(sources, merged.GetSources())
 	scripts, err := c.loadScripts(col.GetScripts())
 	if err != nil {
@@ -74,8 +68,6 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 	}, nil
 }
 
-// overlayResolved copies each cached source's derived contribution summary onto
-// the matching committed source, by id.
 func overlayResolved(sources, cached []*grpcviewv1.DescriptorSource) {
 	byID := make(map[string]*grpcviewv1.DescriptorSource, len(cached))
 	for _, s := range cached {
@@ -88,10 +80,7 @@ func overlayResolved(sources, cached []*grpcviewv1.DescriptorSource) {
 	}
 }
 
-// Sources returns just the committed descriptor sources from the manifest,
-// without walking the request tree or reading the schema cache — the cheap read
-// Invoke's target resolution needs. It returns ErrNotFound if the collection has
-// not been created.
+// Sources returns just the committed descriptor sources from the manifest.
 func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -105,12 +94,7 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 	return diskToWireSources(col.GetSources())
 }
 
-// Services returns just the resolved-schema cache's services, without walking the
-// request tree or reading the committed manifest — the cheap read Invoke's target
-// resolution needs to find a service's attributed source (Service.source, see
-// resolveTarget), mirroring Sources. An absent cache (no source resolved yet, or a
-// collection that predates it) yields an empty slice, not an error, so a request
-// with no cached service simply falls back to the first reflection source.
+// Services returns the resolved-schema cache's services; an absent cache is not an error.
 func (c *Collection) Services(_ context.Context) ([]*grpcviewv1.Service, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -118,10 +102,6 @@ func (c *Collection) Services(_ context.Context) ([]*grpcviewv1.Service, error) 
 	return merged.GetServices(), err
 }
 
-// Scripts returns just the collection's ordered scripts (manifest order + the
-// scripts/ directory), without walking the request tree or reading the schema
-// cache — the cheap read the invoke path's script loading needs, mirroring
-// Sources. It returns ErrNotFound if the collection has not been created.
 func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -135,8 +115,7 @@ func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	return c.loadScripts(col.GetScripts())
 }
 
-// EnsureCreated creates an empty collection (grpcview.json, tree/, .gitignore)
-// if one does not already exist. Used by the Get RPC, which auto-creates.
+// EnsureCreated creates an empty collection (manifest, tree/, .gitignore) if absent.
 func (c *Collection) EnsureCreated(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -152,8 +131,7 @@ func (c *Collection) EnsureCreated(_ context.Context) error {
 	return c.writeCollection(&grpcviewstorev1.Collection{})
 }
 
-// CreateFolder creates a folder named name inside the folder addressed by the
-// display-name path parent.
+// CreateFolder creates a folder inside the folder addressed by the display-name path parent.
 func (c *Collection) CreateFolder(_ context.Context, parent []string, name string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
 		return writeMessage(filepath.Join(itemDir, folderFileName), &grpcviewstorev1.Folder{
@@ -162,8 +140,7 @@ func (c *Collection) CreateFolder(_ context.Context, parent []string, name strin
 	})
 }
 
-// CreateRequest creates a request named name (with the given service/method and
-// an empty body) inside the folder addressed by parent.
+// CreateRequest creates a request with an empty body inside the folder addressed by parent.
 func (c *Collection) CreateRequest(_ context.Context, parent []string, name, service, method string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
 		return writeMessage(filepath.Join(itemDir, requestFileName), &grpcviewstorev1.Request{
@@ -174,10 +151,6 @@ func (c *Collection) CreateRequest(_ context.Context, parent []string, name, ser
 	})
 }
 
-// createItem is the shared body of CreateFolder/CreateRequest: it resolves the
-// parent, rejects a duplicate display name, allocates a unique slug + directory,
-// calls write to lay down the item's files, and records the slug in the parent's
-// order.
 func (c *Collection) createItem(parent []string, name string, write func(itemDir string) error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -211,8 +184,6 @@ func (c *Collection) createItem(parent []string, name string, write func(itemDir
 	return c.writeOrder(parentDir, append(base, slug))
 }
 
-// UpdateRequest applies a partial update to the request named name inside parent.
-// Only the files a patch actually touches are rewritten.
 func (c *Collection) UpdateRequest(_ context.Context, parent []string, name string, patch RequestPatch) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -239,14 +210,10 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware && !patch.SetTarget {
 		return nil
 	}
-	// Reuse the request.json readChildren already decoded (ch.request) rather
-	// than re-opening and re-decoding the same file.
 	p := filepath.Join(itemDir, requestFileName)
 	dr := ch.request
-	// Rename follows the slug-identity model: only meta.name changes; the
-	// slug/dir is stable so open tabs/history keyed by slug survive. A collision
-	// with a different sibling is rejected (ErrAlreadyExists); a no-op rename to
-	// the current name is skipped so it doesn't self-collide.
+	// A rename rewrites only meta.name; the slug/dir is stable, so slug-keyed state
+	// (tabs, history) survives.
 	if patch.Name != nil && *patch.Name != name {
 		if _, exists := findByName(present, *patch.Name); exists {
 			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
@@ -266,26 +233,17 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 		dr.DraftBody = *patch.DraftBody
 	}
 	if patch.DraftMetadataScript != nil {
-		dr.DraftMetadataScript = *patch.DraftMetadataScript // plain string, like DraftBody
+		dr.DraftMetadataScript = *patch.DraftMetadataScript
 	}
-	// SetMiddleware gates the repeated middleware list (it has no nil "unset"):
-	// replace it (nil/empty clears; protojson then omits it).
 	if patch.SetMiddleware {
 		dr.Middleware = patch.Middleware
 	}
-	// SetTarget gates the per-request target message (no nil "unset"): replace it
-	// (a nil Server clears it, so protojson omits it and it reads back as the
-	// reflection default).
 	if patch.SetTarget {
 		dr.Target = serverToTarget(patch.Target)
 	}
 	return writeMessage(p, dr)
 }
 
-// UpdateFolder applies a partial update to the folder named name inside parent.
-// Mirrors UpdateRequest: only the files a patch actually touches are rewritten,
-// and the folder.json readChildren already decoded (ch.folder) is reused so the
-// child ordering (Items) it also carries is preserved untouched.
 func (c *Collection) UpdateFolder(_ context.Context, parent []string, name string, patch FolderPatch) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -311,15 +269,8 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 	if patch.Name == nil && patch.DraftMetadataScript == nil {
 		return nil
 	}
-	// Reuse the folder.json readChildren already decoded (ch.folder) rather than
-	// re-opening and re-decoding the same file.
 	p := filepath.Join(parentDir, ch.slug, folderFileName)
 	ff := ch.folder
-	// Rename mirrors UpdateRequest's: only meta.name changes, so the slug/dir —
-	// and therefore every descendant's path and this folder's recorded child order
-	// — is untouched. A collision with a different sibling (of either kind) is
-	// rejected; a no-op rename to the current name is skipped so it doesn't
-	// self-collide.
 	if patch.Name != nil && *patch.Name != name {
 		if _, exists := findByName(present, *patch.Name); exists {
 			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
@@ -330,27 +281,13 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 		ff.Meta.Name = *patch.Name
 	}
 	if patch.DraftMetadataScript != nil {
-		ff.DraftMetadataScript = *patch.DraftMetadataScript // plain string, like Request.DraftMetadataScript
+		ff.DraftMetadataScript = *patch.DraftMetadataScript
 	}
 	return writeMessage(p, ff)
 }
 
-// FolderMetadataChain returns the ordered ancestor folder metadata scripts
-// (draft_metadata_script, root→leaf) for a node whose PARENT-folder path is path
-// — the folders gv.metadata.inherit() folds over. path is a request's (or a
-// folder's) parent path, the same display-name path CreateRequest/CreateFolder
-// take, NOT including the node's own name: FolderMetadataChain(["a","b"]) walks
-// folder "a" then folder "a/b" and returns their two scripts in that order. A
-// root-level node (empty path) has no ancestor folders and returns an empty,
-// non-nil slice — the v1 "folder-only" root (D3): the collection root is not
-// itself a Folder message and carries no metadata script of its own.
-//
-// It propagates ErrItemNotFound/ErrNotAFolder exactly like resolveFolder (a path
-// segment that no longer resolves, e.g. after a rename/delete of a folder a stale
-// caller still references) rather than swallowing them — mirroring
-// RequestMiddleware's contract, whose own ErrItemNotFound is tolerated by its
-// caller (applyRequestMiddleware), not by the store. A future caller here should
-// do the same: treat the error as "no inheritance", not a hard failure.
+// FolderMetadataChain returns the ancestor folder metadata scripts (root→leaf) for
+// the node whose PARENT-folder path is path; path excludes the node's own name.
 func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -377,13 +314,7 @@ func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]st
 	return scripts, nil
 }
 
-// resolveChild resolves name inside the folder addressed by parent (a
-// display-name path), returning that folder's directory, its full child listing
-// (for a caller that needs to rewrite the sibling order, e.g. Delete), and the
-// matched child (ok false when there is no such child — not an error). It is the
-// shared "resolveFolder + readChildren + findByName" preamble behind Delete,
-// ResolveRequest, RequestMiddleware, and AppendHistory. Callers must hold c.mu
-// and have already called c.ensureExists.
+// resolveChild's callers must hold c.mu and have already called c.ensureExists.
 func (c *Collection) resolveChild(parent []string, name string) (parentDir string, present []childEntry, ch childEntry, ok bool, err error) {
 	parentDir, err = c.resolveFolder(parent)
 	if err != nil {
@@ -397,13 +328,6 @@ func (c *Collection) resolveChild(parent []string, name string) (parentDir strin
 	return parentDir, present, ch, ok, nil
 }
 
-// resolveRequestChild layers the kind-check + not-found handling shared by
-// ResolveRequest, RequestMiddleware, and AppendHistory on top of resolveChild:
-// unlike Delete (which addresses an item of either kind and treats a missing name
-// as a no-op), these three all need "this path names an existing request" before
-// doing their own thing with it. It returns ErrItemNotFound if there is no such
-// item and ErrNotARequest if name resolves to a folder. Callers must hold c.mu
-// and have already called c.ensureExists.
 func (c *Collection) resolveRequestChild(parent []string, name string) (parentDir string, ch childEntry, err error) {
 	parentDir, _, ch, ok, err := c.resolveChild(parent, name)
 	if err != nil {
@@ -418,12 +342,6 @@ func (c *Collection) resolveRequestChild(parent []string, name string) (parentDi
 	return parentDir, ch, nil
 }
 
-// ResolveRequest resolves name inside parent to the request it names, converted
-// to its wire shape (service/method/draft body/draft metadata
-// script/middleware/target) — the lookup a caller addressing a saved request by
-// display-name path needs (e.g. gv.invoke()'s path resolution) without loading
-// the whole workspace. It returns ErrItemNotFound if there is no such item and
-// ErrNotARequest if name resolves to a folder.
 func (c *Collection) ResolveRequest(_ context.Context, parent []string, name string) (*grpcviewv1.Request, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -437,11 +355,6 @@ func (c *Collection) ResolveRequest(_ context.Context, parent []string, name str
 	return diskToWireRequest(ch.name, ch.request), nil
 }
 
-// RequestMiddleware returns the ordered attached-middleware display names for the
-// request named name inside parent — the cheap read the invoke path's middleware
-// step needs, without loading the whole tree (mirroring Sources/Scripts). It
-// returns ErrItemNotFound when there is no such request (an ad-hoc or just-deleted
-// target), which the invoke path treats as "no middleware".
 func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name string) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -455,13 +368,7 @@ func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name 
 	return ch.request.GetMiddleware(), nil
 }
 
-// AppendHistory records one completed invoke in the run history of the request
-// named name inside parent, retaining the newest max entries (max <= 0 keeps all)
-// and logging when older entries are dropped. Run history is gitignored local
-// state (storage.md §4): it lives under .grpcview/history/ keyed by the request's
-// stable slug path — so it survives a rename and never hits git — and is loaded
-// back into Request.history on Load. A missing target request returns
-// ErrItemNotFound; Invoke persists history best-effort and does not fail on it.
+// AppendHistory records one completed invoke, keeping the newest max entries (max <= 0 keeps all).
 func (c *Collection) AppendHistory(_ context.Context, parent []string, name string, entry *grpcviewv1.History, max int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -490,8 +397,7 @@ func (c *Collection) AppendHistory(_ context.Context, parent []string, name stri
 	return writeHistoryFile(histPath, entries)
 }
 
-// Delete removes the item named name from parent. It is idempotent: deleting a
-// missing item is a no-op (matching the previous blob behavior).
+// Delete is idempotent: deleting a missing item is a no-op.
 func (c *Collection) Delete(_ context.Context, parent []string, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -515,34 +421,8 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	return c.writeOrder(parentDir, slices.DeleteFunc(base, func(s string) bool { return s == ch.slug }))
 }
 
-// Move reparents and/or reorders the item named name in parent, placing it in the
-// folder addressed by newParent (empty = the tree root) ahead of the sibling named
-// before there (nil appends). It handles items of either kind; a folder brings its
-// whole subtree with it, since the move is a single directory rename.
-//
-// Unlike Delete, a missing source item is an ERROR (ErrItemNotFound), not a no-op:
-// deleting something already gone is a benign repeat of the caller's intent, but
-// moving something that isn't there cannot be what the caller meant.
-//
-// When newParent resolves to the item's CURRENT parent this is a pure reorder: the
-// on-disk directory is not touched at all, only the parent's recorded slug order.
-// "Same parent" is decided on the resolved directory rather than by comparing the
-// two display-name paths, since two differently-spelled paths can address the same
-// folder and the directory identity is the definitionally correct test.
-//
-// A `before` that does not name a child of the destination appends instead of
-// failing — a drop target the client resolved against a tree snapshot that has
-// since changed is a UI race, not a corrupt request. (`before` naming the moved
-// item itself lands in the same bucket and appends.)
-//
-// Moving an item into itself or into its own descendant returns
-// ErrMoveIntoDescendant; a destination that already holds a different item with the
-// same display name returns ErrAlreadyExists (the store has no rename-on-move).
-//
-// Note the reparent does not carry the item's gitignored run history along: history
-// is keyed by tree-relative slug path (see historyFilePath), so a moved request
-// starts fresh at its new location. That is the same trade the slug-path keying
-// already makes and is local, regenerable state either way.
+// Move places the item named name in parent into newParent (empty = the tree root)
+// ahead of the sibling named before there; a nil or no-longer-present before appends.
 func (c *Collection) Move(_ context.Context, parent []string, name string, newParent []string, before *string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -556,21 +436,13 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrItemNotFound, name)
 	}
-	// A bad destination path propagates resolveFolder's ErrItemNotFound/ErrNotAFolder
-	// untouched: those are exactly the codes the caller wants for "you dropped onto
-	// something that is gone, or onto a request".
 	destDir, err := c.resolveFolder(newParent)
 	if err != nil {
 		return err
 	}
 
 	srcDir := filepath.Join(parentDir, ch.slug)
-	// Reject into-self / into-own-descendant on the resolved directories (both come
-	// from the same treeRoot walk, so they are directly comparable). The test is
-	// filepath.Rel and not a string prefix check: ".../foo" IS a string prefix of
-	// ".../foobar", which is a perfectly legal sibling folder. A rel of "." means the
-	// destination IS the item; a rel that does not begin by stepping OUT of srcDir
-	// (".." / "../…") means the destination is nested inside it.
+	// filepath.Rel, not a string prefix: ".../foo" is a prefix of ".../foobar", a legal sibling.
 	rel, err := filepath.Rel(srcDir, destDir)
 	if err != nil {
 		return err
@@ -579,8 +451,6 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 		return fmt.Errorf("%w: %q", ErrMoveIntoDescendant, name)
 	}
 
-	// Same parent: a pure reorder. No rename, no new slug — just the recorded order
-	// with this item's slug lifted out and reinserted at the requested position.
 	if destDir == parentDir {
 		base, err := c.reconciledSlugsFrom(parentDir, present)
 		if err != nil {
@@ -597,10 +467,7 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	if _, exists := findByName(destChildren, ch.name); exists {
 		return fmt.Errorf("%w: %q", ErrAlreadyExists, ch.name)
 	}
-	// The slug is only unique WITHIN a folder, so it cannot be assumed to survive a
-	// reparent: two items with the same slugified name in different folders is
-	// entirely normal, and renaming onto an existing directory would merge or destroy
-	// it. Allocate a fresh slug against the destination's siblings instead.
+	// A slug is unique only WITHIN a folder, so a reparent must allocate a fresh one.
 	newSlug := uniqueSlug(ch.name, slugSet(destChildren))
 
 	srcBase, err := c.reconciledSlugsFrom(parentDir, present)
@@ -611,10 +478,8 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	if err != nil {
 		return err
 	}
-	// The directory moves FIRST: writeOrder re-reads the folder's own config, and of
-	// the two possible half-applied states ("order updated, directory not" vs
-	// "directory moved, order not"), the latter is the one reconcileOrder already
-	// self-heals on the next load.
+	// The directory must move FIRST: "moved, order not" is the half-applied state
+	// reconcileOrder self-heals on the next load.
 	if err := os.Rename(srcDir, filepath.Join(destDir, newSlug)); err != nil {
 		return err
 	}
@@ -624,9 +489,6 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	return c.writeOrder(destDir, insertSlug(destBase, newSlug, before, destChildren))
 }
 
-// insertSlug places slug in slugs ahead of the sibling whose DISPLAY name is
-// *before, resolved against the siblings snapshot; it appends when before is unset
-// or no longer names one of them (see Move on why a stale target appends).
 func insertSlug(slugs []string, slug string, before *string, siblings []childEntry) []string {
 	if before != nil {
 		if ch, ok := findByName(siblings, *before); ok {
@@ -638,32 +500,21 @@ func insertSlug(slugs []string, slug string, before *string, siblings []childEnt
 	return append(slugs, slug)
 }
 
-// DescriptorState is the whole descriptor configuration of a collection, written
-// in one shot by PutDescriptorState.
+// DescriptorState is a collection's whole descriptor configuration.
 type DescriptorState struct {
-	// Sources is the committed source list in PRIORITY order (earlier wins).
+	// Sources is in PRIORITY order (earlier wins).
 	Sources []*grpcviewv1.DescriptorSource
-	// Uploads holds the descriptors of the upload-kind sources, keyed by source id.
-	// An upload's descriptors are its only copy (they cannot be re-fetched), so they
-	// are committed with the manifest rather than cached; an id absent here keeps
-	// whatever the manifest already stores, which is how a mutation that does not
-	// touch an upload (a reorder, removing something else) avoids resending
-	// megabytes of descriptors.
+	// Keyed by source id; an absent id keeps whatever the manifest already stores.
 	Uploads map[string]*descriptorpb.FileDescriptorSet
-	// Resolves is the per-source resolve cache to write, keyed by source id. As with
-	// Uploads, an absent id leaves the existing cache entry alone.
+	// Keyed by source id; an absent id leaves the existing cache entry alone.
 	Resolves map[string]*grpcviewstorev1.ResolvedSource
-	// Services and DescriptorSet are the DERIVED merged view.
+
 	Services      []*grpcviewv1.Service
 	DescriptorSet []byte
 }
 
-// PutDescriptorState persists a collection's whole descriptor state under one
-// lock: the committed, priority-ordered source list (grpcview.json), each
-// source's resolve cache, and the derived merged view (gitignored
-// .grpcview/cache/). Cache entries for sources no longer listed are pruned, so a
-// removed source leaves nothing behind. Writing it all together means a reader
-// never observes a source list and a merged view that disagree.
+// PutDescriptorState writes the whole state under one lock — so a reader never sees a
+// source list and a merged view that disagree — and prunes caches of dropped sources.
 func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -675,7 +526,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 	if err != nil {
 		return err
 	}
-	// Carry forward the descriptors of any upload the caller didn't resend.
 	existing := make(map[string]*descriptorpb.FileDescriptorSet, len(col.GetSources()))
 	for _, ds := range col.GetSources() {
 		if up := ds.GetUpload(); up != nil {
@@ -711,8 +561,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 	return c.writeMergedCache(state.Sources, state.Services, state.DescriptorSet)
 }
 
-// resolveFolder walks the display-name path from the tree root and returns the
-// addressed folder's on-disk directory. Every segment must be a folder.
 func (c *Collection) resolveFolder(namePath []string) (string, error) {
 	dir := c.treeRoot()
 	for _, name := range namePath {
@@ -732,9 +580,6 @@ func (c *Collection) resolveFolder(namePath []string) (string, error) {
 	return dir, nil
 }
 
-// readChildren classifies the immediate item subdirectories of dir (those
-// containing a folder.json or request.json), reading each display name.
-// Non-item entries, hidden/state dirs, and reserved names are skipped.
 func (c *Collection) readChildren(dir string) ([]childEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -771,8 +616,6 @@ func (c *Collection) readChildren(dir string) ([]childEntry, error) {
 	return children, nil
 }
 
-// reconcile orders present against the parent's recorded slug list and logs any
-// listed-but-absent slugs that get dropped (see reconcileOrder).
 func (c *Collection) reconcile(dir string, listed []string, present []childEntry) []childEntry {
 	ordered, dropped := reconcileOrder(listed, present)
 	for _, slug := range dropped {
@@ -781,7 +624,6 @@ func (c *Collection) reconcile(dir string, listed []string, present []childEntry
 	return ordered
 }
 
-// walkFolder assembles the ordered child (wire) Items of the folder at dir.
 func (c *Collection) walkFolder(dir string, listed []string) ([]*grpcviewv1.Item, error) {
 	present, err := c.readChildren(dir)
 	if err != nil {
@@ -799,9 +641,6 @@ func (c *Collection) walkFolder(dir string, listed []string) ([]*grpcviewv1.Item
 	return items, nil
 }
 
-// readItem builds the (wire) Item for a single classified child, reusing the
-// config readChildren already decoded (ch.folder/ch.request) instead of
-// re-reading it.
 func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item, error) {
 	dir := filepath.Join(parentDir, ch.slug)
 	switch ch.kind {
@@ -819,7 +658,7 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 		}, nil
 	case kindRequest:
 		req := diskToWireRequest(ch.name, ch.request)
-		req.History = c.readHistory(dir) // gitignored sidecar; nil when absent
+		req.History = c.readHistory(dir)
 		return &grpcviewv1.Item{
 			Name:    ch.name,
 			Content: &grpcviewv1.Item_Request{Request: req},
@@ -828,8 +667,6 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 	return nil, fmt.Errorf("unknown item kind")
 }
 
-// readOrder returns the recorded child-slug order for the folder at dir (from
-// grpcview.json for the tree root, folder.json otherwise).
 func (c *Collection) readOrder(dir string) ([]string, error) {
 	if dir == c.treeRoot() {
 		col, err := c.readCollection()
@@ -845,8 +682,6 @@ func (c *Collection) readOrder(dir string) ([]string, error) {
 	return ff.GetItems(), nil
 }
 
-// writeOrder rewrites the child-slug order for the folder at dir, preserving the
-// folder's other config (e.g. meta.name).
 func (c *Collection) writeOrder(dir string, slugs []string) error {
 	if slugs == nil {
 		slugs = []string{}
@@ -868,9 +703,7 @@ func (c *Collection) writeOrder(dir string, slugs []string) error {
 	return writeMessage(p, ff)
 }
 
-// reconciledSlugsFrom returns dir's recorded order reconciled against the given
-// present-children snapshot (no disk re-read), so a caller that has already
-// listed the directory can update the order without racing its own new writes.
+// reconciledSlugsFrom uses an already-read children snapshot, so a caller cannot race its own writes.
 func (c *Collection) reconciledSlugsFrom(dir string, present []childEntry) ([]string, error) {
 	listed, err := c.readOrder(dir)
 	if err != nil {
@@ -897,9 +730,6 @@ func (c *Collection) readCollection() (*grpcviewstorev1.Collection, error) {
 	if err := readMessage(c.collectionFilePath(), col); err != nil {
 		return nil, err
 	}
-	// Every read goes through here, so this is where a manifest older than source
-	// identities (or a hand-edited one) is brought up to schema — no caller has to
-	// wonder whether the sources it got have usable ids. See normalizeSources.
 	col.Sources = normalizeSources(col.GetSources(), c.logger)
 	return col, nil
 }
@@ -923,13 +753,6 @@ func (c *Collection) ensureGitignore() error {
 	return writeFileAtomic(p, []byte(content), 0o644)
 }
 
-// writeMergedCache persists the DERIVED merged schema view to the gitignored
-// state dir: the flat services list, the merged FileDescriptorSet, and each
-// source's contribution summary (which of its services it won). The cache is a
-// snapshot of wire messages (a genuine 1:1), so it reuses the wire Workspace as
-// its carrier rather than a disk-specific one; being gitignored and fully
-// regenerable from the per-source resolves, it is not part of the committed
-// on-disk schema.
 func (c *Collection) writeMergedCache(sources []*grpcviewv1.DescriptorSource, services []*grpcviewv1.Service, descriptorSet []byte) error {
 	if err := os.MkdirAll(filepath.Dir(c.servicesCachePath()), 0o755); err != nil {
 		return err
@@ -942,8 +765,6 @@ func (c *Collection) writeMergedCache(sources []*grpcviewv1.DescriptorSource, se
 	return writeFileAtomic(c.servicesCachePath(), append(data, '\n'), 0o644)
 }
 
-// readMergedCache reads the derived merged view. An absent cache is not an error
-// (no source resolved yet), just an empty snapshot.
 func (c *Collection) readMergedCache() (*grpcviewv1.Workspace, error) {
 	wrapper := &grpcviewv1.Workspace{}
 	data, err := os.ReadFile(c.servicesCachePath())
@@ -959,11 +780,7 @@ func (c *Collection) readMergedCache() (*grpcviewv1.Workspace, error) {
 	return wrapper, nil
 }
 
-// SourceResolves reads every cached per-source resolve, keyed by source id. A
-// source with no cache entry is simply absent from the map — the caller resolves
-// it (for reflection, by dialing) or, for an upload, re-parses the committed
-// descriptors. Cache files for ids no longer configured are ignored here and
-// pruned by the next PutDescriptorState.
+// SourceResolves reads every cached per-source resolve, keyed by source id.
 func (c *Collection) SourceResolves(_ context.Context) (map[string]*grpcviewstorev1.ResolvedSource, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -986,8 +803,6 @@ func (c *Collection) SourceResolves(_ context.Context) (map[string]*grpcviewstor
 		}
 		r := &grpcviewstorev1.ResolvedSource{}
 		if err := proto.Unmarshal(data, r); err != nil {
-			// A corrupt cache entry is disposable: drop it and let the source be
-			// re-resolved rather than failing every read of the workspace.
 			c.logger.Warn("dropping unreadable source cache entry", "file", e.Name(), "error", err)
 			_ = os.Remove(path)
 			continue
@@ -997,9 +812,7 @@ func (c *Collection) SourceResolves(_ context.Context) (map[string]*grpcviewstor
 	return out, nil
 }
 
-// writeSourceResolve caches one source's resolve as binary proto (disposable
-// cache — nothing reads or diffs it, and a FileDescriptorSet is far cheaper this
-// way than as protojson).
+// writeSourceResolve uses binary proto: nothing diffs this cache, and protojson would cost far more.
 func (c *Collection) writeSourceResolve(r *grpcviewstorev1.ResolvedSource) error {
 	if err := os.MkdirAll(c.sourcesCacheRoot(), 0o755); err != nil {
 		return err
@@ -1011,8 +824,6 @@ func (c *Collection) writeSourceResolve(r *grpcviewstorev1.ResolvedSource) error
 	return writeFileAtomic(c.sourceCachePath(r.GetId()), data, 0o644)
 }
 
-// pruneSourceResolves deletes cache files for sources no longer configured, so a
-// removed source's descriptors don't linger and reappear if it is re-added.
 func (c *Collection) pruneSourceResolves(keep []string) error {
 	wanted := make(map[string]bool, len(keep))
 	for _, id := range keep {
@@ -1036,11 +847,7 @@ func (c *Collection) pruneSourceResolves(keep []string) error {
 	return nil
 }
 
-// historyFilePath returns the run-history file for the request whose on-disk
-// directory is itemDir. History is keyed by the request's tree-relative slug path
-// under .grpcview/history/ (e.g. tree/users/get-user -> history/users/get-user/
-// history.json), so it stays attached across a rename (the slug is stable) and
-// out of the committed tree.
+// historyFilePath keys history by tree-relative SLUG path, so it survives a rename and stays out of git.
 func (c *Collection) historyFilePath(itemDir string) (string, error) {
 	rel, err := filepath.Rel(c.treeRoot(), itemDir)
 	if err != nil {
@@ -1049,10 +856,7 @@ func (c *Collection) historyFilePath(itemDir string) (string, error) {
 	return filepath.Join(c.historyRoot(), rel, historyFileName), nil
 }
 
-// readHistory returns the persisted run history for the request at itemDir, or
-// nil if there is none. A path or decode error is logged and swallowed (returning
-// nil) so a corrupt local history file can never block loading the workspace —
-// history is regenerable local state, not committed data.
+// readHistory swallows errors: a corrupt local history file must never block a load.
 func (c *Collection) readHistory(itemDir string) []*grpcviewv1.History {
 	histPath, err := c.historyFilePath(itemDir)
 	if err != nil {
@@ -1067,16 +871,9 @@ func (c *Collection) readHistory(itemDir string) []*grpcviewv1.History {
 	return entries
 }
 
-// historyMarshal renders the history file without emitting default values (unlike
-// managed committed files): a successful run's OK (code 0) status and a stream's
-// empty response bytes then cost nothing on disk.
+// historyMarshal omits default values, unlike the managed committed files.
 var historyMarshal = protojson.MarshalOptions{Multiline: true, Indent: "  "}
 
-// readHistoryFile / writeHistoryFile reuse the wire Request as a carrier for its
-// repeated History — mirroring how the services cache reuses the wire Workspace.
-// The payload is a genuine snapshot of wire messages, so no disk-specific schema
-// is needed, and being gitignored/regenerable it is not part of the committed
-// on-disk format.
 func readHistoryFile(path string) ([]*grpcviewv1.History, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

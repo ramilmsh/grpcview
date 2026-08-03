@@ -10,11 +10,8 @@ import (
 	"time"
 )
 
-// generousPages is a high per-instance memory ceiling used by tests that are not
-// exercising the outer cap (32 MiB). QuickJS boots + evals trivial scripts well under it.
-const generousPages = 512 // 512 * 64 KiB = 32 MiB
+const generousPages = 512
 
-// newRuntime builds a Runtime for a test and closes it on cleanup.
 func newRuntime(t *testing.T, maxPages uint32) *Runtime {
 	t.Helper()
 	rt, err := New(context.Background(), maxPages)
@@ -25,8 +22,6 @@ func newRuntime(t *testing.T, maxPages uint32) *Runtime {
 	return rt
 }
 
-// newEngine builds an Engine for a test with the generous outer ceiling and tears it
-// down on cleanup.
 func newEngine(t *testing.T, opts ...EngineOption) *Engine {
 	t.Helper()
 	e, err := NewEngine(context.Background(), generousPages, opts...)
@@ -37,8 +32,6 @@ func newEngine(t *testing.T, opts ...EngineOption) *Engine {
 	return e
 }
 
-// TestStructuredOutput: the structured path returns the script's value as JSON — for
-// scalars, objects, arrays, null, and a top-level awaited promise.
 func TestStructuredOutput(t *testing.T) {
 	e := newEngine(t)
 	cases := []struct{ name, src, want string }{
@@ -64,10 +57,6 @@ func TestStructuredOutput(t *testing.T) {
 	}
 }
 
-// TestUndefinedResult: a script whose value is undefined comes back as a nil Value,
-// distinct from a JSON `null` return. (NB: a script that ends in a *statement* rather
-// than an expression — e.g. `let x = 1;` — yields `{}` under QuickJS async eval, its
-// representation of an empty completion; only a genuine undefined value maps to nil.)
 func TestUndefinedResult(t *testing.T) {
 	e := newEngine(t)
 
@@ -81,7 +70,6 @@ func TestUndefinedResult(t *testing.T) {
 		}
 	}
 
-	// A `null` return, by contrast, is the JSON literal null — not nil.
 	res, err := e.RunScenario(context.Background(), "null", Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("run null: %v", err)
@@ -91,8 +79,6 @@ func TestUndefinedResult(t *testing.T) {
 	}
 }
 
-// TestConsoleCaptured: console.* output is buffered host-side and returned alongside
-// the value, in order, with levels and non-string args JSON-formatted.
 func TestConsoleCaptured(t *testing.T) {
 	e := newEngine(t)
 	src := `console.log("hello", 42);
@@ -115,9 +101,6 @@ console.error({code: 1});
 	}
 }
 
-// TestConsoleFormatting: the console formatter renders non-string args honestly —
-// NaN/Infinity/undefined/functions must not collapse to "null"/"" (the JSON.stringify
-// trap), objects/arrays are JSON, null is "null".
 func TestConsoleFormatting(t *testing.T) {
 	e := newEngine(t)
 	res, err := e.RunScenario(context.Background(),
@@ -132,9 +115,6 @@ func TestConsoleFormatting(t *testing.T) {
 	}
 }
 
-// TestSettledResultSurvivesFireAndForget: a script that settles to a value but leaves a
-// hostile fire-and-forget microtask behind must still return that value — the engine
-// must not run the detached microtask and lose the result to a spurious interrupt.
 func TestSettledResultSurvivesFireAndForget(t *testing.T) {
 	e := newEngine(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -153,8 +133,6 @@ func TestSettledResultSurvivesFireAndForget(t *testing.T) {
 	}
 }
 
-// TestInputInjection: the frozen inert globals (request/vars/secrets/env) are readable
-// by the script exactly as supplied.
 func TestInputInjection(t *testing.T) {
 	e := newEngine(t)
 	in := Input{
@@ -179,12 +157,9 @@ request.metadata.authorization, secrets.token, env.stage].join("|")`
 	}
 }
 
-// TestInputsAreFrozen: a script cannot mutate its inputs — the injected objects are
-// deep-frozen, so writes are dropped (non-strict) and the value is unchanged.
 func TestInputsAreFrozen(t *testing.T) {
 	e := newEngine(t)
 	in := Input{Vars: map[string]any{"a": float64(1)}}
-	// Attempt to add and overwrite keys, then return vars.
 	res, err := e.RunScenario(context.Background(), `vars.a = 999; vars.b = 2; vars`, Grant{}, in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -194,7 +169,6 @@ func TestInputsAreFrozen(t *testing.T) {
 	}
 }
 
-// TestAsyncJobPump: a chain of awaited microtasks settles under the host-driven pump.
 func TestAsyncJobPump(t *testing.T) {
 	e := newEngine(t)
 	src := `let total = 0;
@@ -204,13 +178,11 @@ await Promise.resolve().then(() => total * 2)`
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if string(res.Value) != "30" { // (1+2+3+4+5)=15, *2=30
+	if string(res.Value) != "30" {
 		t.Fatalf("value = %s, want 30", res.Value)
 	}
 }
 
-// TestUnsettledPromise: a top-level promise that can never settle (no host work will
-// advance it) is reported promptly as ErrUnsettled rather than burning the deadline.
 func TestUnsettledPromise(t *testing.T) {
 	e := newEngine(t)
 	start := time.Now()
@@ -223,11 +195,8 @@ func TestUnsettledPromise(t *testing.T) {
 	}
 }
 
-// TestErrorLineInfo: a thrown Error surfaces as *JSError carrying the message and a
-// parsed source line, remapped through the source map back to the author's line.
 func TestErrorLineInfo(t *testing.T) {
 	e := newEngine(t)
-	// throw is on line 2 (after one leading newline).
 	_, err := e.RunScenario(context.Background(), "\nthrow new Error('boom')", Grant{}, Input{})
 	var je *JSError
 	if !errors.As(err, &je) {
@@ -242,8 +211,6 @@ func TestErrorLineInfo(t *testing.T) {
 	}
 }
 
-// TestErrorSurfacesLogs: console output emitted before a throw is still returned, so a
-// failing script's logs are not lost.
 func TestErrorSurfacesLogs(t *testing.T) {
 	e := newEngine(t)
 	res, err := e.RunScenario(context.Background(),
@@ -257,9 +224,6 @@ func TestErrorSurfacesLogs(t *testing.T) {
 	}
 }
 
-// TestThrowWithFailingToString: a rejection reason whose toString() itself throws must
-// still produce a non-empty *JSError message (not the empty string) and must not leave a
-// pending exception that breaks a later run in the same runtime.
 func TestThrowWithFailingToString(t *testing.T) {
 	e := newEngine(t)
 	_, err := e.RunScenario(context.Background(),
@@ -273,16 +237,12 @@ func TestThrowWithFailingToString(t *testing.T) {
 	}
 	t.Logf("fallback message: %q", je.Message)
 
-	// The runtime must stay healthy for a subsequent run (no lingering pending exception).
 	res, err := e.RunScenario(context.Background(), "1 + 1", Grant{}, Input{})
 	if err != nil || string(res.Value) != "2" {
 		t.Fatalf("run after throwing-toString: value=%s err=%v, want 2", res.Value, err)
 	}
 }
 
-// TestProfilesBounded: every profile enforces the memory ceiling (a huge allocation is
-// a catchable OOM) and the wall-clock deadline (a tight loop is interrupted). This is
-// the milestone's exit criterion — all three run bounded with clean error propagation.
 func TestProfilesBounded(t *testing.T) {
 	e := newEngine(t)
 	profiles := []struct {
@@ -319,16 +279,12 @@ func TestProfilesBounded(t *testing.T) {
 	}
 }
 
-// TestGeneratorCacheHit: a generator's result is served from the config-digest cache on
-// a repeat call. Proven by pre-seeding the cache with a sentinel — a re-execution would
-// return the script's real value, not the sentinel.
 func TestGeneratorCacheHit(t *testing.T) {
 	e := newEngine(t)
 	src := `({generated: true})`
 	grant := Grant{}
 	in := Input{Vars: map[string]any{"seed": "abc"}}
 
-	// Pre-seed the exact key this call will compute.
 	key, err := configDigest(Generator.Name, src, grant, in)
 	if err != nil {
 		t.Fatalf("configDigest: %v", err)
@@ -343,7 +299,6 @@ func TestGeneratorCacheHit(t *testing.T) {
 		t.Fatalf("cache miss: value = %s, want the pre-seeded sentinel (cache not consulted)", res.Value)
 	}
 
-	// A different input must NOT hit that entry — it runs the script for real.
 	res, err = e.RunGenerator(context.Background(), src, grant, Input{Vars: map[string]any{"seed": "xyz"}})
 	if err != nil {
 		t.Fatalf("run (different input): %v", err)
@@ -353,8 +308,6 @@ func TestGeneratorCacheHit(t *testing.T) {
 	}
 }
 
-// TestGeneratorCachePopulates: a first real run populates the cache, and a second
-// identical call returns byte-identical output.
 func TestGeneratorCachePopulates(t *testing.T) {
 	e := newEngine(t)
 	src := `({v: 1 + 1})`
@@ -378,14 +331,11 @@ func TestGeneratorCachePopulates(t *testing.T) {
 	}
 }
 
-// TestPoolInterruptDiscard: an interrupted (dead) instance is discarded by the pool,
-// never pooled for reuse, and the pool self-heals on the next run.
 func TestPoolInterruptDiscard(t *testing.T) {
 	rt := newRuntime(t, generousPages)
 	pool := NewPool(rt, Middleware.MemLimit)
 	defer pool.Close(context.Background())
 
-	// A normal run returns its instance to the idle set.
 	if _, err := pool.Run(context.Background(), "1 + 1", Grant{}, Input{}); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
@@ -393,7 +343,6 @@ func TestPoolInterruptDiscard(t *testing.T) {
 		t.Fatalf("after a normal run, idle = %d, want 1", got)
 	}
 
-	// An interrupted run kills its instance; it must be discarded, not pooled.
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	if _, err := pool.Run(ctx, "while (true) {}", Grant{}, Input{}); !errors.Is(err, ErrInterrupted) {
@@ -403,7 +352,6 @@ func TestPoolInterruptDiscard(t *testing.T) {
 		t.Fatalf("after an interrupt, idle = %d, want 0 (dead instance discarded)", got)
 	}
 
-	// The pool self-heals: a fresh instance is created and the run succeeds.
 	res, err := pool.Run(context.Background(), "2 + 3", Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("post-interrupt run: %v", err)
@@ -413,8 +361,6 @@ func TestPoolInterruptDiscard(t *testing.T) {
 	}
 }
 
-// TestCapabilityGrantStructured: the structured path enforces the same two capability
-// gates as RunScript — a granted, in-scope fs read succeeds and reaches the script.
 func TestCapabilityGrantStructured(t *testing.T) {
 	e := newEngine(t)
 	dir := t.TempDir()
@@ -433,21 +379,14 @@ func TestCapabilityGrantStructured(t *testing.T) {
 		t.Fatalf("value = %s, want the file contents", res.Value)
 	}
 
-	// Ungranted: Gate 1 refuses to resolve the import at bundle time.
 	if _, err := e.RunScenario(context.Background(), src, Grant{}, in); err == nil ||
 		!strings.Contains(err.Error(), "capability not granted") {
 		t.Fatalf("ungranted fs: got %v, want a Gate 1 denial", err)
 	}
 }
 
-// BenchmarkMiddleware records the milestone's key open number: per-invoke middleware
-// latency for the warm pool with a fresh context per run (full isolation) versus a
-// long-lived reused context (the ~800 µs QuickJS bootstrap paid once). The script is
-// re-eval-safe (no top-level declarations) so the long-lived context can reuse it.
 func BenchmarkMiddleware(b *testing.B) {
 	const src = `({status: 200, ok: true})`
-	// A far-future deadline so RunMiddleware doesn't allocate a per-call timeout timer;
-	// we want to measure execution, not context plumbing.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 
@@ -457,7 +396,7 @@ func BenchmarkMiddleware(b *testing.B) {
 			b.Fatalf("NewEngine: %v", err)
 		}
 		defer e.Close(context.Background())
-		if _, err := e.RunMiddleware(ctx, src, Grant{}, Input{}); err != nil { // prime the pool
+		if _, err := e.RunMiddleware(ctx, src, Grant{}, Input{}); err != nil {
 			b.Fatalf("prime: %v", err)
 		}
 		b.ReportAllocs()

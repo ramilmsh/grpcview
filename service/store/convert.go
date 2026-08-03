@@ -12,11 +12,8 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// This file maps between the on-disk schema (grpcview.store.v1) and the wire
-// schema (grpcview.v1). The two are intentionally decoupled; conversions here
-// are the single place that knows both.
+// The only place that knows both the on-disk schema (grpcview.store.v1) and the wire one.
 
-// diskToWireRequest builds a wire Request from a disk Request.
 func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Request {
 	return &grpcviewv1.Request{
 		Name:                name,
@@ -29,8 +26,6 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 	}
 }
 
-// diskToWireScript builds a wire Script from a disk Script (name carried
-// separately, like requests: the display name lives in meta on disk).
 func diskToWireScript(name string, ds *grpcviewstorev1.Script) *grpcviewv1.Script {
 	return &grpcviewv1.Script{
 		Name:   name,
@@ -39,9 +34,6 @@ func diskToWireScript(name string, ds *grpcviewstorev1.Script) *grpcviewv1.Scrip
 	}
 }
 
-// diskToWireScriptKind / wireToDiskScriptKind bridge the two mirrored enums. The
-// ordinals match, but the mapping is explicit so a future divergence is a compile
-// error here rather than a silent misread.
 func diskToWireScriptKind(k grpcviewstorev1.ScriptKind) grpcviewv1.ScriptKind {
 	switch k {
 	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_GENERATOR:
@@ -68,10 +60,7 @@ func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
 	}
 }
 
-// diskToWireSources converts the committed descriptor sources for the wire,
-// preserving priority order. An upload's descriptors stay on disk — the wire form
-// carries only its file name (see grpcview.v1.Upload) — and its Resolved summary
-// is overlaid separately from the derived cache.
+// diskToWireSources preserves priority order; an upload's descriptors stay on disk.
 func diskToWireSources(in []*grpcviewstorev1.DescriptorSource) ([]*grpcviewv1.DescriptorSource, error) {
 	if len(in) == 0 {
 		return nil, nil
@@ -96,10 +85,7 @@ func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) *grpcviewv1.Descript
 	return out
 }
 
-// wireToDiskSources converts wire descriptor sources for on-disk storage,
-// preserving priority order. Since the wire form omits an upload's descriptors,
-// uploadFor supplies them per source id — either freshly uploaded bytes or the
-// copy already committed (see DescriptorState.Uploads).
+// wireToDiskSources takes uploadFor because the wire form omits an upload's descriptors.
 func wireToDiskSources(in []*grpcviewv1.DescriptorSource, uploadFor func(id string) *descriptorpb.FileDescriptorSet) ([]*grpcviewstorev1.DescriptorSource, error) {
 	if len(in) == 0 {
 		return nil, nil
@@ -121,8 +107,6 @@ func wireToDiskSource(ws *grpcviewv1.DescriptorSource, uploadFor func(id string)
 	case *grpcviewv1.DescriptorSource_Reflection:
 		out.Source = &grpcviewstorev1.DescriptorSource_Reflection{Reflection: serverToReflection(src.Reflection)}
 	case *grpcviewv1.DescriptorSource_Upload:
-		// Store the descriptor set typed so it round-trips as readable protojson
-		// rather than a base64 blob.
 		fds := uploadFor(ws.GetId())
 		if fds == nil {
 			return nil, fmt.Errorf("upload source %q has no descriptors to store", ws.GetId())
@@ -137,9 +121,7 @@ func wireToDiskSource(ws *grpcviewv1.DescriptorSource, uploadFor func(id string)
 	return out, nil
 }
 
-// UploadDescriptors returns an upload source's committed FileDescriptorSet, or
-// nil when the id is not an upload. It is how the merge re-parses an upload's
-// definitions (they live in the manifest, not the resolve cache).
+// UploadDescriptors returns an upload's committed FileDescriptorSet, or nil for a non-upload.
 func (c *Collection) UploadDescriptors(_ context.Context, id string) (*descriptorpb.FileDescriptorSet, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -158,9 +140,7 @@ func (c *Collection) UploadDescriptors(_ context.Context, id string) (*descripto
 	return nil, nil
 }
 
-// serverFromAddressTLS builds a wire Server from the address/tls pair every
-// on-disk server-shaped message carries (a source's Reflection, a request's
-// Target). tls=true carries an empty TLS block; false leaves it nil.
+// serverFromAddressTLS builds a wire Server from the address/tls pair on-disk messages carry.
 func serverFromAddressTLS(address string, tls bool) *grpcviewv1.Server {
 	s := &grpcviewv1.Server{Address: address}
 	if tls {
@@ -169,8 +149,6 @@ func serverFromAddressTLS(address string, tls bool) *grpcviewv1.Server {
 	return s
 }
 
-// addressTLSFromServer decomposes a wire Server into the address/tls pair the
-// on-disk server-shaped messages store.
 func addressTLSFromServer(s *grpcviewv1.Server) (address string, tls bool) {
 	return s.GetAddress(), s.GetTls() != nil
 }

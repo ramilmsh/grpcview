@@ -9,7 +9,6 @@ export const Input = forwardRef<
 ));
 Input.displayName = "Input";
 
-// Field is a label + control pair (Nocturne .field).
 export function Field({
   label,
   children,

@@ -3,19 +3,6 @@ import type { Item } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
 import { deleteConfirmCopy } from "./delete-confirm";
 
-// deleteConfirmCopy is the pure message-builder behind CollectionPanel's
-// delete-confirm dialog — extracted into its own file specifically so
-// tree-rewrite-plan.md's T2 line ("Make delete multi-aware (confirm dialog
-// pluralizes)") is testable with no rendering at all AND with no transitive
-// pull-in of `monaco-editor` (see delete-confirm.ts's own header for why that
-// second constraint is real, not theoretical: a version of this test that
-// imported straight from ./CollectionPanel failed the whole suite on
-// "Failed to resolve entry for package 'monaco-editor'", purely from
-// evaluating CollectionPanel.tsx's module graph under this repo's
-// Bazel-sandboxed vitest run). Fixtures built structurally rather than with
-// the generated proto constructor, exactly like lib/format.test.ts and
-// request-tree.test.tsx (both explain why: the runtime _pb modules are
-// Bazel-generated and this module only imports Item as a TYPE).
 const folder = (name: string): ItemWithPath => ({
   item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
   path: [],
@@ -72,8 +59,6 @@ describe("deleteConfirmCopy: N > 1, mixed folder + request selection", () => {
   });
 
   it("the folder-warning sentence appears even with just ONE folder among many requests", () => {
-    // The whole point of the mixed case: a bare "and everything inside them?"
-    // would misleadingly imply EVERY selected row is a folder.
     const copy = deleteConfirmCopy([request("A"), request("B"), request("C"), folder("D")]);
     expect(copy.suffix).toContain("Folders in the selection will be deleted");
   });
@@ -81,11 +66,6 @@ describe("deleteConfirmCopy: N > 1, mixed folder + request selection", () => {
 
 describe("deleteConfirmCopy: defensive n===0 (never actually shown — confirm.length > 0 gates the dialog)", () => {
   it("says nothing it cannot back up: no count, no folder/request kind, no 'everything inside' claim", () => {
-    // The previous behavior here was "Delete 0 folders … and everything inside
-    // them?", which fell out of the plural branch treating an empty list as
-    // vacuously all-folders. Unreachable either way, but this asserts the empty
-    // case is now an explicit, honest branch rather than an accident of
-    // 0 === 0.
     expect(deleteConfirmCopy([])).toEqual({
       title: "Delete",
       emphasis: "nothing",

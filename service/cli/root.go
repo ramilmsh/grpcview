@@ -1,9 +1,5 @@
 // Package cli is the argv surface of the grpcview binary: the cobra command
 // tree, the exit-code contract, and the two client bindings.
-//
-// It deliberately does not import //service. The UI embed (26.9 MB of
-// embedsrcs) lives in //service/cmd, and a cli -> service edge would drag it
-// into every CLI test. Serving is injected into [Main] as a closure instead.
 package cli
 
 import (
@@ -16,31 +12,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is stamped at link time by the go_binary's x_defs. It keeps this
-// default on an unstamped build: rules_go resolves {VAR} against the stamp map
-// and, finding no key, omits the -X flag entirely rather than embedding the
-// literal placeholder (measured both ways, and with a fake status command
-// proving the x_defs symbol is wired to this variable).
+// version is stamped at link time by the go_binary's x_defs; an untagged --stamp build links it empty.
 var version = "dev"
 
-// defaultPort is the port both the bare invocation and `serve` listen on.
 const defaultPort = 10000
 
-// Streams are the process's stdio, injected so every verb is table-testable
-// without touching os.Stdout.
+// Streams are the process's stdio, injected so every verb is table-testable.
 type Streams struct {
 	In  io.Reader
 	Out io.Writer
 	Err io.Writer
 }
 
-// ServeOptions is what the serve verb (and the bare, subcommand-less invocation)
-// hands back to the caller that owns the HTTP server and the UI embed.
 type ServeOptions struct{ Port int }
 
-// statusError carries an explicit process exit code out of a verb's RunE. A
-// non-OK gRPC status from the workspace is a statusError with code 1; every
-// other failure — including cobra's own flag-parse errors — maps to 2.
+// statusError carries an explicit process exit code out of a verb's RunE.
 type statusError struct {
 	code int
 	err  error
@@ -55,8 +41,6 @@ func (e statusError) Error() string {
 
 func (e statusError) Unwrap() error { return e.err }
 
-// exitCode maps an error returned by the command tree to a process exit code:
-// nil is 0, a statusError carries its own, anything else is 2.
 func exitCode(err error) int {
 	if err == nil {
 		return 0
@@ -68,17 +52,10 @@ func exitCode(err error) int {
 	return 2
 }
 
-// globalFlags holds the root's persistent flags. They are bound exactly once,
-// by registerGlobalFlags, and verbs read this struct instead of re-declaring
-// flag names or defaults of their own.
 type globalFlags struct {
-	// Workspace names the collection to operate on.
 	Workspace string
-	// Server, when non-empty, is the base URL of a running grpcview server to
-	// talk to instead of doing the work in-process.
-	Server string
-	// Timeout bounds every RPC; verbs apply it as a context.WithTimeout.
-	Timeout time.Duration
+	Server    string
+	Timeout   time.Duration
 }
 
 func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
@@ -90,10 +67,6 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	return g
 }
 
-// releaseVersion is the string the version verb prints. The empty check is the
-// load-bearing one: this repo has no v* tags yet, so tools/workspace_status.sh
-// emits an empty STABLE_VERSION_TAG and a --stamp build links -X …version= with
-// nothing after it. Once a tag exists, a stamped build prints it.
 func releaseVersion() string {
 	if version == "" {
 		return "dev"
@@ -101,10 +74,6 @@ func releaseVersion() string {
 	return version
 }
 
-// newRootCmd builds the whole command tree. serve is the closure that owns the
-// HTTP server and the UI embed. open is the client factory every verb closes
-// over — a factory, not a live client, so unit tests never construct a
-// workspace (which compiles the ~660 KiB QuickJS module).
 func newRootCmd(
 	s Streams,
 	serve func(context.Context, ServeOptions) error,
@@ -117,10 +86,7 @@ func newRootCmd(
 		Short: "grpcview — a gRPC request client",
 		Long: "grpcview serves its own UI and API, and exposes the same workspace as\n" +
 			"command-line verbs. Invoked with no subcommand, it serves.",
-		// The root both dispatches subcommands and has its own RunE, so cobra
-		// has to be told leftover args are acceptable. ArbitraryArgs on its own
-		// would make `grpcview typoe` serve the UI, hence the explicit
-		// unknown-verb check in RunE.
+		// ArbitraryArgs alone would make `grpcview typoe` serve the UI, hence RunE's check.
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -133,10 +99,6 @@ func newRootCmd(
 	}
 	root.Flags().IntVar(&rootPort, "port", defaultPort, "port to serve on")
 
-	// Persistent flags are declared here and nowhere else, and verbs read the
-	// returned struct rather than re-declaring names or defaults. `-o` is
-	// deliberately not among them: each verb registers its own, with a disjoint
-	// set of accepted values.
 	globals := registerGlobalFlags(root)
 
 	root.AddCommand(newInvokeCmd(s, globals, open))
@@ -144,9 +106,6 @@ func newRootCmd(
 	root.AddCommand(newLsCmd(s, globals, open))
 	root.AddCommand(newGetCmd(s, globals, open))
 	root.AddCommand(newSourcesCmd(s, globals, open))
-	// The write verbs. Each takes only what it needs: only `request create` and
-	// `script` read stdin or write output, so the other parents have no Streams to
-	// be handed.
 	root.AddCommand(newRequestCmd(s, globals, open))
 	root.AddCommand(newFolderCmd(globals, open))
 	root.AddCommand(newScriptCmd(s, globals, open))
@@ -160,11 +119,8 @@ func newRootCmd(
 	return root
 }
 
-// unknownCommand dumps cobra's usage on stderr — never stdout — and reports
-// exit 2.
 func unknownCommand(cmd *cobra.Command, arg string) error {
-	// Usage writes to OutOrStderr, which is stdout here because Streams.Out is
-	// set; point it at stderr for the duration of the dump.
+	// cobra's Usage writes to OutOrStdout, which is stdout here.
 	out := cmd.OutOrStdout()
 	cmd.SetOut(cmd.ErrOrStderr())
 	defer cmd.SetOut(out)
@@ -203,9 +159,6 @@ func Main(ctx context.Context, args []string, s Streams, serve func(context.Cont
 	return execute(ctx, newRootCmd(s, serve, openClient), args, s)
 }
 
-// execute runs an already-built tree and applies the error contract: one line
-// on stderr, always prefixed "grpcview: ", and the mapped exit code. Tests call
-// it with a tree carrying a fake verb to exercise the mapping.
 func execute(ctx context.Context, root *cobra.Command, args []string, s Streams) int {
 	root.SetArgs(args)
 

@@ -2,19 +2,13 @@ import { create } from "@bufbuild/protobuf";
 import { HardDrives, LockSimple, LockSimpleOpen } from "@/components/ui/icons";
 import { ServerSchema, Server_TLSSchema, type Server } from "@grpcview/v1/workspace_pb";
 
-// TargetBar shows and edits the request's invoke target (a host:port address +
-// TLS). The displayed value is the per-request override when set, otherwise
-// `reflection` — the source backing THIS request (its service's origin, else the
-// first reflection source), a live fallback. Editing either field emits a full
-// Server override (seeded from the currently-displayed value) via onChange; the
-// empty state shows only when there is neither an override nor a reflection source.
+// TargetBar shows and edits the request's invoke target (host:port + TLS).
 export function TargetBar({
   reflection,
   override,
   onChange,
 }: {
-  // reflection is the source backing THIS request (its service's origin, else the
-  // first reflection source) — the live default shown when there is no override.
+  // The source backing this request; the live default shown when there is no override.
   reflection: Server | null;
   override?: Server;
   onChange: (t: Server) => void;
@@ -22,9 +16,7 @@ export function TargetBar({
   const cur = override ?? reflection;
   const tls = cur?.tls != null;
 
-  // Build a full Server from the currently-displayed values with the one edited
-  // field changed, so an edit never drops the other (a message field has no
-  // partial patch).
+  // A message field has no partial patch, so every edit emits a whole Server.
   const emit = (patch: { address?: string; tls?: boolean }) => {
     const nextTls = patch.tls ?? tls;
     onChange(

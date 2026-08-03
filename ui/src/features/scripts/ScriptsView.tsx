@@ -48,33 +48,18 @@ import {
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
-// Side-effect import (configures the TS language service for the editor buffer)
-// plus the model path it hands the editor — the file:// scratch URI that lets the
-// bare `import dayjs` resolve to the virtual node_modules. See monaco-scripts.ts.
 import { SCRATCH_PATH } from "./monaco-scripts";
 import { ScriptKind, type Script } from "@grpcview/v1/workspace_pb";
 import type { RunScriptResponse } from "@grpcview/v1/service_pb";
 
-// ScriptsView is the S1 authoring surface (plan §S1): a left sidebar that lists
-// the collection's saved scripts by kind and a detail pane to edit, test-run,
-// rename, save, and delete the selected one — fully sandboxed (no capabilities, no
-// workspace inputs; the Dependencies/Capabilities tabs are the sandboxed empty
-// states). Scripts are server data (they ride the Get snapshot); the editor buffer
-// is UI state (ui-store scriptDrafts). Test run evaluates the CURRENT buffer under
-// the script's kind via RunScript — a generator's `export default`, a middleware's
-// `handle`, or (scenario) last-expression scratchpad eval — and shows its value /
-// console output / error in the collapsible output panel.
-
-// ── kind metadata ──────────────────────────────────────────────────────────────
-
 type IconComp = ComponentType<IconProps>;
 
 interface KindMeta {
-  label: string; // singular — the header tag + new-script picker
-  section: string; // plural — the sidebar section heading
+  label: string;
+  section: string;
   Icon: IconComp;
-  color: string; // the kind's accent, for its icon
-  tag: "accent" | "accent-2" | "neutral"; // the header tag's variant
+  color: string;
+  tag: "accent" | "accent-2" | "neutral";
 }
 
 const SCENARIO_META: KindMeta = {
@@ -105,8 +90,6 @@ const KIND_META: Partial<Record<ScriptKind, KindMeta>> = {
 
 const kindMeta = (kind: ScriptKind): KindMeta => KIND_META[kind] ?? SCENARIO_META;
 
-// Sidebar section order matches the mockup (Middleware first); the new-script
-// picker leads with Generator (the most common kind authored in S1/S2).
 const SIDEBAR_ORDER: ScriptKind[] = [
   ScriptKind.MIDDLEWARE,
   ScriptKind.GENERATOR,
@@ -118,9 +101,6 @@ const NEW_KIND_ORDER: ScriptKind[] = [
   ScriptKind.SCENARIO,
 ];
 
-// starterSource seeds a new (empty) script's buffer with a skeleton in the kind's
-// calling convention (plan §2.5), so a freshly created script is test-runnable and
-// teaches the contract. Persisted only when the user hits Save.
 function starterSource(kind: ScriptKind): string {
   switch (kind) {
     case ScriptKind.GENERATOR:
@@ -138,7 +118,7 @@ export function handle(ctx) {
   return ctx;
 }
 `;
-    default: // SCENARIO (and the ad-hoc scratchpad) — last-expression eval.
+    default:
       return `// Scenario — runs as a scratchpad: the value is the last expression. dayjs is
 // available; there are no capabilities or workspace inputs.
 import dayjs from "dayjs";
@@ -150,9 +130,6 @@ console.log("running in QuickJS (wasm)");
   }
 }
 
-// configDigest is a short, display-only hash of the source — the header `cfg:…`
-// chip, for orientation only. The real config digest a capability grant binds to
-// is S4 (plan §2.7); this is FNV-1a truncated to four hex chars.
 function configDigest(source: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < source.length; i++) {
@@ -162,15 +139,12 @@ function configDigest(source: string): string {
   return `cfg:${(h >>> 0).toString(16).padStart(8, "0").slice(0, 4)}`;
 }
 
-// Console level -> text color. log/info fall through to the default text color.
 const LEVEL_COLOR: Record<string, string | undefined> = {
   error: "var(--err-fg)",
   warn: "var(--warn)",
   debug: "var(--color-neutral-500)",
 };
 
-// prettyValue re-indents the returned JSON text; the raw string is a safe fallback
-// if it somehow isn't JSON (the backend always sends valid JSON).
 function prettyValue(value: string): string {
   try {
     return JSON.stringify(JSON.parse(value), null, 2);
@@ -178,8 +152,6 @@ function prettyValue(value: string): string {
     return value;
   }
 }
-
-// ── view ─────────────────────────────────────────────────────────────────────
 
 export function ScriptsView() {
   const { workspace } = useWorkspace();
@@ -232,8 +204,6 @@ export function ScriptsView() {
   );
 }
 
-// ── sidebar ────────────────────────────────────────────────────────────────────
-
 function ScriptSidebar({
   scripts,
   selectedName,
@@ -262,7 +232,6 @@ function ScriptSidebar({
       className="bg-panel flex flex-col"
       style={{ width: 280, flex: "none", borderRight: "1px solid var(--line)", minHeight: 0 }}
     >
-      {/* header: filter + new */}
       <div
         className="flex items-center gap-[8px]"
         style={{ height: 40, flex: "none", padding: "0 12px", borderBottom: "1px solid var(--line)" }}
@@ -280,7 +249,6 @@ function ScriptSidebar({
         </IconButton>
       </div>
 
-      {/* sections */}
       <div style={{ flex: 1, overflow: "auto", padding: "10px 8px" }}>
         {scripts.length === 0 ? (
           <div
@@ -337,7 +305,6 @@ function ScriptSidebar({
         )}
       </div>
 
-      {/* footer chip */}
       <div
         className="flex items-center gap-[7px] font-mono"
         style={{
@@ -355,8 +322,6 @@ function ScriptSidebar({
     </div>
   );
 }
-
-// ── detail ─────────────────────────────────────────────────────────────────────
 
 function ScriptDetail({ script }: { script: Script }) {
   const meta = kindMeta(script.kind);
@@ -381,8 +346,6 @@ function ScriptDetail({ script }: { script: Script }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [outputOpen, setOutputOpen] = useState(false);
 
-  // Seed the buffer from the server source (or a per-kind skeleton for a new,
-  // empty script) once per script — idempotent, then the draft is authoritative.
   useEffect(() => {
     seedScriptDraft(script.name, script.source || starterSource(script.kind));
   }, [script.name, script.source, script.kind, seedScriptDraft]);
@@ -417,25 +380,17 @@ function ScriptDetail({ script }: { script: Script }) {
     );
   };
 
-  // Monaco commands capture their closure once at mount, so route ⌘↵ / ⌘S through
-  // refs that always point at the latest handlers (fresh source / pending state).
+  // Monaco commands capture their closure once at mount, hence the refs.
   const testRunRef = useRef(testRun);
   testRunRef.current = testRun;
   const saveRef = useRef(save);
   saveRef.current = save;
 
   const onMount: OnMount = (editor, m) => {
-    // ⌘↵ / Ctrl+↵ = Test run; ⌘S / Ctrl+S = Save (plan §S1).
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => testRunRef.current());
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => saveRef.current());
   };
 
-  // Generators can call each other, so a generator author gets the SAME ambient-global
-  // autocomplete for the OTHER saved generators that the body/metadata editors get. The live
-  // buffer owns its own name, so exclude the script being edited (its saved source may be stale
-  // relative to the buffer, and it must not shadow itself). Memoized on a stable string of the
-  // set so the effect below only re-runs when the set actually changes (mirrors
-  // RequestWorkspace.tsx's generators memo).
   const otherGenerators = useMemo<GeneratorDef[]>(() => {
     const gens = (workspace?.scripts ?? [])
       .filter((s) => s.kind === ScriptKind.GENERATOR && s.name !== script.name)
@@ -449,9 +404,6 @@ function ScriptDetail({ script }: { script: Script }) {
       .join("|"),
   ]);
 
-  // Register the other generators as ambient globals on the (global) typescriptDefaults, disposing
-  // the previous set first — same dispose-before-add lifecycle as Editor.tsx's genLibs effect, with
-  // scope="scripts" namespacing the module + globals URIs away from the body/metadata editors'.
   const genLibs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
     if (!monaco) return;
@@ -466,7 +418,6 @@ function ScriptDetail({ script }: { script: Script }) {
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-      {/* header: kind tag + editable name + digest + actions */}
       <div
         className="flex items-center gap-[11px]"
         style={{ flex: "none", padding: "12px 18px", borderBottom: "1px solid var(--line)" }}
@@ -539,7 +490,6 @@ function ScriptDetail({ script }: { script: Script }) {
         </div>
       </div>
 
-      {/* subtabs */}
       <div
         className="flex items-center"
         style={{ flex: "none", padding: "0 10px", borderBottom: "1px solid var(--line)", background: "var(--color-bg)" }}
@@ -567,7 +517,6 @@ function ScriptDetail({ script }: { script: Script }) {
         </span>
       </div>
 
-      {/* subtab content */}
       <div className="flex flex-col" style={{ flex: 1, minHeight: 0 }}>
         {subtab === "code" ? (
           <MonacoEditor
@@ -578,9 +527,7 @@ function ScriptDetail({ script }: { script: Script }) {
             onChange={(v: string | undefined) => setScriptDraft(script.name, v ?? "")}
             onMount={onMount}
             options={{
-              // Auto-trigger completions inside string literals too (monaco defaults
-              // quickSuggestions.strings=false — microsoft/monaco-editor#2883), so a
-              // script gets in-quote suggestions instead of only manual Ctrl+Space.
+              // monaco defaults quickSuggestions.strings=false (monaco-editor#2883).
               quickSuggestions: { other: true, comments: false, strings: true },
               automaticLayout: true,
               minimap: { enabled: false },
@@ -598,7 +545,6 @@ function ScriptDetail({ script }: { script: Script }) {
         )}
       </div>
 
-      {/* test-run output (collapsible) */}
       <OutputRegion
         open={outputOpen}
         onToggle={() => setOutputOpen((o) => !o)}
@@ -607,7 +553,6 @@ function ScriptDetail({ script }: { script: Script }) {
         pending={runScript.isPending}
       />
 
-      {/* delete confirm */}
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
@@ -627,8 +572,6 @@ function ScriptDetail({ script }: { script: Script }) {
     </div>
   );
 }
-
-// ── output region ────────────────────────────────────────────────────────────
 
 function OutputRegion({
   open,
@@ -793,8 +736,6 @@ function OutputPane({
   );
 }
 
-// ── empty states ───────────────────────────────────────────────────────────────
-
 function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
   return (
     <div
@@ -883,8 +824,6 @@ function FullySandboxed() {
   );
 }
 
-// ── new-script dialog ────────────────────────────────────────────────────────
-
 function NewScriptDialog({
   open,
   onClose,
@@ -903,7 +842,6 @@ function NewScriptDialog({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ScriptKind>(ScriptKind.GENERATOR);
 
-  // Reset the form each time the dialog opens.
   useEffect(() => {
     if (open) {
       setName("");

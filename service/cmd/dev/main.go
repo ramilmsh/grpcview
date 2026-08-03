@@ -10,9 +10,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service"
 )
 
-// The dev binary stays serve-only — no cobra, no verbs. It used to inherit
-// -port from service.Run's own flag.Parse; now that argv belongs to the callers,
-// it parses its own so the Vite workflow keeps working.
 func run(ctx context.Context) error {
 	var port int
 	flag.IntVar(&port, "port", 10000, "port to start the server at")

@@ -41,9 +41,6 @@ func TestReadBody(t *testing.T) {
 	}
 }
 
-// isPiped treats anything that is not an *os.File as piped, which is what makes
-// a bytes.Buffer in a table test count as input. A character device — the stand-in
-// for a terminal here — is not.
 func TestIsPiped(t *testing.T) {
 	if !isPiped(&bytes.Buffer{}) {
 		t.Error("a bytes.Buffer must count as piped so tests can feed stdin")
@@ -86,8 +83,6 @@ func TestBodyMessages(t *testing.T) {
 			want: []string{`{"a":1}`},
 		},
 		{
-			// The sharpest trap in this verb: splitting here would corrupt every
-			// TypeScript body.
 			name: "a multi-line body on a non-client-streaming method is NOT split",
 			raw:  multiline,
 			kind: methodKind{},

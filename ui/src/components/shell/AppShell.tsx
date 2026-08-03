@@ -3,8 +3,6 @@ import { TopBar } from "./TopBar";
 import { Rail } from "./Rail";
 import { StatusBar } from "./StatusBar";
 
-// AppShell is the outer chrome: TopBar / (Rail + content) / StatusBar. The active
-// view is rendered as children by App.tsx.
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div

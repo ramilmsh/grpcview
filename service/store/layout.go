@@ -10,26 +10,24 @@ import (
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 )
 
-// Managed file and directory names within a collection.
 const (
-	collectionFileName = "grpcview.json" // root manifest + root folder ordering + sources
-	folderFileName     = "folder.json"   // per-folder config (meta + child ordering)
-	requestFileName    = "request.json"  // per-request config (meta + service/method/body/metadata)
-	scriptFileName     = "script.json"   // per-script config (meta + kind + source)
-	historyFileName    = "history.json"  // per-request run history (gitignored; under stateDir)
+	collectionFileName = "grpcview.json"
+	folderFileName     = "folder.json"
+	requestFileName    = "request.json"
+	scriptFileName     = "script.json"
+	historyFileName    = "history.json"
 	gitignoreFileName  = ".gitignore"
 
-	treeDir               = "tree"      // committed request tree
-	scriptsDir            = "scripts"   // committed script directory (sibling of tree/)
-	stateDir              = ".grpcview" // gitignored local state
-	cacheSubdir           = "cache"     // resolved-schema cache under stateDir
-	historyDir            = "history"   // run history under stateDir, keyed by request slug path
+	treeDir               = "tree"
+	scriptsDir            = "scripts"
+	stateDir              = ".grpcview"
+	cacheSubdir           = "cache"
+	historyDir            = "history"
 	servicesCacheFileName = "services.json"
-	sourcesCacheSubdir    = "sources" // per-source resolve cache under cacheSubdir
-	sourceCacheFileExt    = ".binpb"  // per-source resolve cache files (binary proto)
+	sourcesCacheSubdir    = "sources"
+	sourceCacheFileExt    = ".binpb"
 )
 
-// itemKind distinguishes the two kinds of tree items.
 type itemKind int
 
 const (
@@ -37,16 +35,12 @@ const (
 	kindRequest
 )
 
-// childEntry is a classified on-disk item directory: its stable slug (dir name),
-// its display name (from the config's meta), and its kind.
 type childEntry struct {
 	slug string
 	name string
 	kind itemKind
 
-	// The decoded on-disk config, populated by readChildren so a later read of
-	// the same item (e.g. Load's readItem) reuses it instead of re-opening and
-	// re-decoding the file. Exactly one is non-nil, matching kind.
+	// Exactly one is non-nil, matching kind; readChildren fills it so later reads need no re-decode.
 	folder  *grpcviewstorev1.Folder
 	request *grpcviewstorev1.Request
 }
@@ -54,18 +48,13 @@ type childEntry struct {
 func (c childEntry) orderSlug() string { return c.slug }
 func (c childEntry) orderName() string { return c.name }
 
-// slugNamed is anything with a stable slug and a display name — the shape
-// reconcileOrder needs to order a directory's children against a recorded slug
-// list. Both tree items (childEntry) and scripts (scriptEntry) satisfy it, so
-// they share the one reconciliation routine.
 type slugNamed interface {
 	orderSlug() string
 	orderName() string
 }
 
-// reservedSlugs cannot be used as item directory names: they would collide with
-// managed files, the local-state dir, or (case-insensitively) Windows device
-// names that are illegal as directory names on that platform.
+// reservedSlugs collide with managed files, the local-state dir, or (case-insensitively)
+// Windows device names, which are illegal as directory names on that platform.
 var reservedSlugs = func() map[string]bool {
 	m := map[string]bool{
 		collectionFileName: true,
@@ -89,9 +78,6 @@ func isReserved(slug string) bool {
 	return reservedSlugs[strings.ToLower(slug)]
 }
 
-// slugify turns a display name into a lowercase, filesystem-safe slug. Runs of
-// non-alphanumeric characters collapse to a single hyphen; letters and digits
-// (including non-ASCII) are kept, lowercased.
 func slugify(name string) string {
 	var b strings.Builder
 	prevDash := false
@@ -114,9 +100,8 @@ func slugify(name string) string {
 	return slug
 }
 
-// uniqueSlug derives a slug from name that is neither reserved nor already used
-// by a sibling. Comparison is case-insensitive so the result is safe on
-// case-insensitive filesystems (macOS/Windows). used holds lowercased slugs.
+// uniqueSlug derives a slug that is neither reserved nor in used, which holds LOWERCASED
+// slugs: the comparison must stay case-insensitive for macOS/Windows filesystems.
 func uniqueSlug(name string, used map[string]bool) string {
 	base := slugify(name)
 	candidate := base
@@ -126,7 +111,6 @@ func uniqueSlug(name string, used map[string]bool) string {
 	return candidate
 }
 
-// slugSet returns the lowercased slugs of the given children.
 func slugSet(children []childEntry) map[string]bool {
 	set := make(map[string]bool, len(children))
 	for _, c := range children {
@@ -135,7 +119,6 @@ func slugSet(children []childEntry) map[string]bool {
 	return set
 }
 
-// findByName returns the child with the given display name (first match).
 func findByName(children []childEntry, name string) (childEntry, bool) {
 	for _, c := range children {
 		if c.name == name {
@@ -145,10 +128,8 @@ func findByName(children []childEntry, name string) (childEntry, bool) {
 	return childEntry{}, false
 }
 
-// reconcileOrder orders children by the parent's recorded slug list, then
-// self-heals drift: slugs listed but absent on disk are dropped (returned in
-// dropped for the caller to log), and on-disk items missing from the list are
-// appended in display-name order (tie-broken by slug for determinism).
+// reconcileOrder orders present by listed, returning slugs absent on disk in dropped and
+// appending unlisted items in display-name order (tie-broken by slug for determinism).
 func reconcileOrder[T slugNamed](listed []string, present []T) (ordered []T, dropped []string) {
 	bySlug := make(map[string]T, len(present))
 	for _, c := range present {

@@ -8,8 +8,6 @@ import (
 	"connectrpc.com/connect"
 )
 
-// TestGet pins the two things `get` promises: the whole GetResponse, and exactly
-// one line of it, so `grpcview get | jq` works.
 func TestGet(t *testing.T) {
 	fc := newFake()
 
@@ -37,8 +35,6 @@ func TestGet(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
 		t.Fatalf("stdout does not parse as JSON: %v\n%s", err, out)
 	}
-	// The envelope, not a bare workspace: a script written against `get` and one
-	// written against the RPC must read the same paths.
 	if resp.Workspace.Name != "default" {
 		t.Errorf("workspace.name = %q, want the GetResponse envelope around the workspace", resp.Workspace.Name)
 	}
@@ -57,9 +53,6 @@ func TestGet(t *testing.T) {
 	}
 }
 
-// TestGetTakesNoOutputFlag holds the D8 line that -o is per verb: a whole
-// workspace has one shape, so `get` registers no -o at all and a stray one is a
-// flag error on stderr with exit 2.
 func TestGetTakesNoOutputFlag(t *testing.T) {
 	out, errOut, code := runCLI(newFake(), "", "get", "-o", "json")
 
@@ -86,8 +79,6 @@ func TestGetWorkspaceReadFailure(t *testing.T) {
 	if !strings.Contains(errOut, `grpcview: failed to read workspace "default"`) {
 		t.Errorf("stderr = %q, want the prefixed one-liner", errOut)
 	}
-	// A read verb cannot produce exit 1: nothing was invoked, so there is no gRPC
-	// status to report (D9).
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}

@@ -1,9 +1,7 @@
 package scripting
 
-// gv_test.go — Phase 0 (the shared `gv` foundation) and Feature 3 Phase 1 (the gv.invoke
-// host bridge) from docs/design/gv-features-plan.md. Exercised through the production
-// Engine.RunScenario/RunGenerator paths, the same way capabilities_test.go and
-// engine_core_test.go exercise fs/fetch and the generator cache.
+// Tests for the shared gv global and the gv.invoke host bridge, exercised through
+// Engine.RunScenario/RunGenerator.
 
 import (
 	"context"
@@ -12,9 +10,6 @@ import (
 	"testing"
 )
 
-// TestGvFrozenEmpty: with an empty Input, gv (and every container it hangs off) comes
-// back frozen, and gv.request.params / gv.metadata.inherit() are both {} — the documented
-// graceful-degradation defaults for a run with no gv.invoke/inheritance context.
 func TestGvFrozenEmpty(t *testing.T) {
 	e := newEngine(t)
 	src := `({
@@ -37,9 +32,6 @@ func TestGvFrozenEmpty(t *testing.T) {
 	}
 }
 
-// TestGvFreezeBlocksMemberAddition: gv is frozen at the top level (and gv.metadata one
-// level down) — adding a new member or reassigning an existing one is a silent no-op in
-// sloppy mode, and gv.invoke stays exactly the function it was installed as.
 func TestGvFreezeBlocksMemberAddition(t *testing.T) {
 	e := newEngine(t)
 	src := `gv.newMember = "should not stick";
@@ -60,9 +52,6 @@ gv.metadata.inherit = null;
 	}
 }
 
-// TestGvInvokeNoInvokerRejects: without an Invoker on ctx (the default — nothing calls
-// WithInvoker in this test), gv.invoke's returned promise rejects with the fixed message,
-// never a synchronous throw — matching fetch's "always hand back a promise" contract.
 func TestGvInvokeNoInvokerRejects(t *testing.T) {
 	e := newEngine(t)
 	src := `await gv.invoke('a/b', {x:1})
@@ -78,8 +67,6 @@ func TestGvInvokeNoInvokerRejects(t *testing.T) {
 	}
 }
 
-// TestGvRequestParamsAndInheritedMetadata: a populated Input.Params/InheritedMetadata
-// surfaces exactly as gv.request.params / gv.metadata.inherit(), and both stay frozen.
 func TestGvRequestParamsAndInheritedMetadata(t *testing.T) {
 	e := newEngine(t)
 	in := Input{
@@ -103,11 +90,6 @@ func TestGvRequestParamsAndInheritedMetadata(t *testing.T) {
 	}
 }
 
-// TestGvInvokeStubRoundTrip: end-to-end through the whole seam — JS gvInvokeShim ->
-// __grpcview_invoke -> js_host_invoke (qjs_wasm.c) -> Go hostInvoke -> the ctx-carried
-// Invoker -> back. await gv.invoke(path, params) resolves to exactly what the stub
-// Invoker returns (proving the sync-host-call + Promise.resolve round trip), and the
-// stub's captured request bytes prove the {path, params} envelope the shim sent.
 func TestGvInvokeStubRoundTrip(t *testing.T) {
 	e := newEngine(t)
 
@@ -149,8 +131,6 @@ func TestGvInvokeStubRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGvInvokeStubDefaultsParams: gv.invoke(path) with no second argument sends params:{}
-// (the shim's `params == null ? {} : params` default), not null/undefined.
 func TestGvInvokeStubDefaultsParams(t *testing.T) {
 	e := newEngine(t)
 	var gotReq []byte
@@ -164,8 +144,6 @@ func TestGvInvokeStubDefaultsParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// Decode and compare structurally rather than byte-for-byte: only the shape (path
-	// carried through, params defaulted to {}) is the contract, not JSON key order.
 	var envelope struct {
 		Path   string         `json:"path"`
 		Params map[string]any `json:"params"`
@@ -178,8 +156,6 @@ func TestGvInvokeStubDefaultsParams(t *testing.T) {
 	}
 }
 
-// TestGvInvokeStubRejects: an Invoker error becomes a rejected gv.invoke promise carrying
-// the error's message, not a Go error out of RunScenario and not a silently-lost failure.
 func TestGvInvokeStubRejects(t *testing.T) {
 	e := newEngine(t)
 	stub := Invoker(func(_ context.Context, _ []byte) ([]byte, error) {
@@ -199,11 +175,6 @@ func TestGvInvokeStubRejects(t *testing.T) {
 	}
 }
 
-// TestInvokeDepthContextSeam: WithInvokeDepth/invokeDepthFromContext round-trip the gv.invoke
-// nesting counter, and an untouched context defaults to depth 0 (the top-level request,
-// which has not yet recursed through gv.invoke at all). This is pure ctx-seam plumbing for
-// the workspace-side Invoker to build the depth cap (D5: 8) on top of — this leaf package
-// only carries the counter, the same way it carries Grant without deciding policy.
 func TestInvokeDepthContextSeam(t *testing.T) {
 	if got := invokeDepthFromContext(context.Background()); got != 0 {
 		t.Fatalf("depth on a bare context = %d, want 0", got)
@@ -212,19 +183,12 @@ func TestInvokeDepthContextSeam(t *testing.T) {
 	if got := invokeDepthFromContext(ctx); got != 3 {
 		t.Fatalf("depth after WithInvokeDepth(3) = %d, want 3", got)
 	}
-	// A second WithInvokeDepth further down the chain overrides, mirroring WithGrant.
 	nested := WithInvokeDepth(ctx, 4)
 	if got := invokeDepthFromContext(nested); got != 4 {
 		t.Fatalf("depth after a second WithInvokeDepth(4) = %d, want 4", got)
 	}
 }
 
-// TestConfigDigestIgnoresGvFields: Params/InheritedMetadata must NEVER perturb the
-// generator cache key (docs/design/gv-features-plan.md "Cache-soundness invariant") — the
-// RunGenerator path is cache-served by configDigest, so if these fields leaked into the
-// digest a cache hit could serve one caller's params/inherited-metadata to another.
-// configDigest only ever reads Vars/Secrets/Env/Args off Input; this pins that by
-// construction rather than trusting it stays that way.
 func TestConfigDigestIgnoresGvFields(t *testing.T) {
 	base := Input{Vars: map[string]any{"a": 1}}
 	withGv := base
@@ -245,10 +209,6 @@ func TestConfigDigestIgnoresGvFields(t *testing.T) {
 	}
 }
 
-// TestRunGeneratorCacheIgnoresParams: the cache-soundness invariant proven end-to-end
-// (not just at the digest layer) — a generator that echoes gv.request.params run twice
-// with DIFFERENT Params must return the identical (first, cached) value, because the
-// cached RunGenerator path must always behave as if params were {}.
 func TestRunGeneratorCacheIgnoresParams(t *testing.T) {
 	e := newEngine(t)
 	src := `gv.request.params`

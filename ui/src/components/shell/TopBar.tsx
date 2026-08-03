@@ -3,15 +3,9 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { useWorkspace, hostLabel, WORKSPACE_NAME } from "@/lib/workspace-query";
 
-// TopBar: brand, the (single, display-only) collection control, and a connection
-// indicator sourced from the first reflection source. Search/gear are rendered
-// disabled — they need backend that doesn't exist in Phase 1 (plan §8/§11).
 export function TopBar() {
   const { reflection, sources } = useWorkspace();
   const connected = !!reflection;
-  // A workspace can have definition sources and still nothing to connect to (every
-  // source an uploaded descriptor set), so "no source" would be a lie — count them
-  // instead and leave the dot grey, since there is still no live server.
   const sourceCount = `${sources.length} source${sources.length === 1 ? "" : "s"}`;
 
   return (
@@ -43,7 +37,6 @@ export function TopBar() {
 
       <div style={{ width: 1, height: 20, background: "var(--line)" }} />
 
-      {/* single-workspace, display-only (plan §3) */}
       <Button
         className="text-neutral-200"
         style={{ padding: "4px 9px", fontSize: 13, gap: 7, cursor: "default" }}

@@ -7,7 +7,7 @@ import { WorkspaceView } from "@/features/workspace/WorkspaceView";
 import { SourcesView } from "@/features/sources/SourcesView";
 import { ScriptsView } from "@/features/scripts/ScriptsView";
 
-// TransportProvider OUTSIDE QueryClientProvider (verified pattern — plan §13).
+// TransportProvider must sit OUTSIDE QueryClientProvider.
 const queryClient = new QueryClient();
 
 function CurrentView() {

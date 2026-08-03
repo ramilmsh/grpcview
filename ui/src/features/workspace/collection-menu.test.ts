@@ -3,17 +3,6 @@ import type { Item } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
 import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
 
-// "Driven off the current selection" is the substance of the T5 spec line
-// (docs/design/tree-rewrite-plan.md), and this is where it is checked: what the
-// menu OFFERS for an empty/single/multi selection, and that each item fires the
-// handler it claims. Nothing here renders — vitest runs `environment: "node"` with
-// no jsdom, so there is no menu to click; collection-menu.ts exists as its own
-// module for exactly that reason (and to stay out of CollectionPanel's
-// monaco-importing module graph — see its header, and delete-confirm.ts's).
-//
-// Fixtures built structurally rather than with the generated proto constructor,
-// like delete-confirm.test.ts / lib/format.test.ts / request-tree.test.tsx — this
-// module only imports Item as a TYPE.
 const folder = (name: string, path: string[] = []): ItemWithPath => ({
   item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
   path,
@@ -52,10 +41,6 @@ describe("collectionMenuItems: empty space / the collection root", () => {
   });
 
   it("disables — never omits — New request when there are no services yet", () => {
-    // Mirrors the header + button's own `disabled={services.length === 0}`: the
-    // action exists and is blocked by a fixable condition (add a definition
-    // source), which is precisely the case a greyed row communicates better than
-    // an absent one.
     const items = collectionMenuItems([], spies(), { canCreateRequest: false });
     expect(labels(items)).toEqual(["New request", "New folder"]);
     expect(items[0].disabled).toBe(true);
@@ -101,16 +86,15 @@ describe("collectionMenuItems: a single FOLDER row", () => {
   it("separates the creation group, the metadata group and rename/delete", () => {
     const items = collectionMenuItems([folder("Alpha")], spies(), CAN_CREATE);
     expect(items.map((i) => i.separatorBefore ?? false)).toEqual([
-      false, // New request — nothing above it
-      false, // New folder — same group
-      true, // Folder metadata
-      true, // Rename
-      false, // Delete — deliberately grouped WITH rename, not separated from it
+      false,
+      false,
+      true,
+      true,
+      false,
     ]);
   });
 
   it("creates INSIDE the clicked folder, not at the root", () => {
-    // The whole reason submitFolder stopped hardcoding `path: []` (T5).
     const actions = spies();
     const alpha = folder("Alpha");
     const items = collectionMenuItems([alpha], actions, CAN_CREATE);
@@ -154,9 +138,6 @@ describe("collectionMenuItems: a MULTI-row selection", () => {
   });
 
   it("counts the PRUNED batch in the label, so a folder plus its own child reads as one delete", () => {
-    // pruneNestedSelections drops the descendant (lib/format.ts). The label must
-    // agree with the confirm dialog that follows, and the dialog runs against the
-    // same pruned list.
     const alpha = folder("Alpha");
     const child = request("Ping", ["Alpha"]);
     const items = collectionMenuItems([alpha, child], spies(), CAN_CREATE);
@@ -172,9 +153,6 @@ describe("collectionMenuItems: a MULTI-row selection", () => {
   });
 
   it("narrows on the RAW selection length, so two rows never offer Rename even when pruning leaves one", () => {
-    // Deliberate: the user sees two rows highlighted, so the menu describes two
-    // rows. Pruning is a delete-time honesty measure about redundant operations,
-    // not a claim that the descendant row is unselected.
     const items = collectionMenuItems(
       [folder("Alpha"), request("Ping", ["Alpha"])],
       spies(),

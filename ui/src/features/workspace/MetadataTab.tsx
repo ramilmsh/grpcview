@@ -3,11 +3,7 @@ import { CheckCircle, Warning } from "@/components/ui/icons";
 import { MetadataEditor } from "./MetadataEditor";
 import type { GeneratorDef } from "./generator-libs";
 
-// MetadataTab is the request-metadata editor (Monaco) plus a footer that reports the module's
-// validity from Monaco's TS markers. Metadata is authored as TypeScript — a single hidden-wrapper
-// module whose returned `{ [key: string]: string[] }` object becomes the outgoing gRPC metadata
-// (multi-valued) — replacing the old key/value grid and the metadata `{{ }}` tokens (chips,
-// enable toggles, add/remove, and the binding editor are all gone). Mirrors MessageTab.
+// MetadataTab is the request-metadata editor plus a footer reporting Monaco's TS marker count.
 export function MetadataTab({
   metadata,
   onChange,
@@ -17,8 +13,6 @@ export function MetadataTab({
   metadata: string;
   onChange: (value: string) => void;
   currentKey: string;
-  // Workspace generators (name + source), forwarded to MetadataEditor for ambient autocomplete
-  // with inferred signatures (§P5).
   generators: GeneratorDef[];
 }) {
   const [errors, setErrors] = useState(0);

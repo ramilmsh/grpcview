@@ -26,11 +26,8 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// Options configures the server. argv parsing lives in the callers (the CLI
-// command tree in //service/cli, or dev's own flag set), never here: Run cannot
-// own argv once the binary dispatches subcommands.
+// Options configures the server. argv parsing lives in the callers, never here.
 type Options struct {
-	// Port is the TCP port to listen on.
 	Port int
 }
 

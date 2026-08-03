@@ -13,15 +13,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// folder_metadata_test.go covers gv-features-plan.md Feature 1 Phase 3, "Inheritance fold in
-// invoke": resolveInvokeMetadata's path/params plumbing, the mentionsInherit efficiency gate,
-// and foldAncestorMetadata's D2 "spread-driven replace" semantics (additive spread, nested
-// transitive inheritance, the non-spread barrier, key override, the gate itself, per-folder
-// error naming, the depth cap, and store-error tolerance).
-
-// createFolder creates a folder named name inside parent and sets its draft metadata script —
-// the workspace-test-package analogue of createMiddleware/createGenerator, built on the
-// already-landed store.Collection.CreateFolder + UpdateFolder(FolderPatch).
 func createFolder(t *testing.T, w Workspace, ctx context.Context, parent []string, name, metadataScript string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -36,9 +27,6 @@ func createFolder(t *testing.T, w Workspace, ctx context.Context, parent []strin
 	}
 }
 
-// mdValues returns the string values a resolveInvokeMetadata Struct carries for key, via the
-// same valueToStrings invoke.go itself uses to flatten a Struct field (a scalar collapses to a
-// single-element slice, a ListValue to its elements); a missing field returns nil.
 func mdValues(md *structpb.Struct, key string) []string {
 	v, ok := md.GetFields()[key]
 	if !ok {
@@ -47,10 +35,6 @@ func mdValues(md *structpb.Struct, key string) []string {
 	return valueToStrings(v)
 }
 
-// TestResolveInvokeMetadataInheritanceAdditive is the additive-spread case: a root folder's
-// script spreads gv.metadata.inherit() (a no-op — it has no ancestors) and adds its own key; the
-// request living inside it also spreads inherit() and adds a key of its own. Both keys are
-// present in the final result.
 func TestResolveInvokeMetadataInheritanceAdditive(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -70,10 +54,6 @@ func TestResolveInvokeMetadataInheritanceAdditive(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceNestedTransitive covers 3 levels of ancestor folders
-// (a -> a/b -> a/b/c), each additively spreading gv.metadata.inherit() and contributing its own
-// key, plus the request's own script at path ["a","b","c"] doing the same: all four keys must
-// survive the fold, proving transitivity compounds correctly across more than one hop.
 func TestResolveInvokeMetadataInheritanceNestedTransitive(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -94,16 +74,12 @@ func TestResolveInvokeMetadataInheritanceNestedTransitive(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceBarrier is the required barrier case (D2's stated
-// footgun): folder "a" contributes fromA; folder "a/b" is NON-EMPTY but deliberately omits the
-// `...gv.metadata.inherit()` spread, so it whole-replaces rather than carrying "a"'s key
-// forward — fromA must be absent from the final result even though "a" is a real ancestor.
 func TestResolveInvokeMetadataInheritanceBarrier(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 	createFolder(t, w, ctx, nil, "a", `export default () => ({ ...gv.metadata.inherit(), fromA: ["1"] })`)
-	createFolder(t, w, ctx, []string{"a"}, "b", `export default () => ({ fromB: ["2"] })`) // no spread: a barrier
+	createFolder(t, w, ctx, []string{"a"}, "b", `export default () => ({ fromB: ["2"] })`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a", "b"},
 		`export default () => ({ ...gv.metadata.inherit(), own: ["3"] })`, nil, nil)
@@ -121,10 +97,6 @@ func TestResolveInvokeMetadataInheritanceBarrier(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceOverride is the required override case: folder "a" sets
-// a multi-valued "shared" key; folder "a/b" spreads inherit() (so it is NOT a barrier) but
-// redefines "shared" — standard JS spread means the later key wins outright, not a merge/append
-// of the two arrays.
 func TestResolveInvokeMetadataInheritanceOverride(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -142,18 +114,14 @@ func TestResolveInvokeMetadataInheritanceOverride(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceGateSkipsFold is the required gate case: the request's own
-// metadata script never calls inherit(...), so mentionsInherit must prevent foldAncestorMetadata
-// from ever running — proven OBSERVABLY by giving the ancestor folder a script that would fail
-// to even compile if it were evaluated. A passing (non-erroring) resolve proves the gate held.
 func TestResolveInvokeMetadataInheritanceGateSkipsFold(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createFolder(t, w, ctx, nil, "a", `export default () => ({ unterminated`) // would fail if evaluated
+	createFolder(t, w, ctx, nil, "a", `export default () => ({ unterminated`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"},
-		`export default () => ({ plain: ["x"] })`, nil, nil) // no inherit( call anywhere
+		`export default () => ({ plain: ["x"] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v (the gate should have skipped the broken folder script entirely)", err)
 	}
@@ -162,10 +130,6 @@ func TestResolveInvokeMetadataInheritanceGateSkipsFold(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceBrokenFolderNamesItself is the required broken-folder
-// case: when the gate DOES fire (the request's script calls inherit()), a folder script that
-// fails to evaluate must surface as FailedPrecondition and the error text must name the
-// offending folder's path — otherwise a broken ancestor script is unactionable to debug.
 func TestResolveInvokeMetadataInheritanceBrokenFolderNamesItself(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -182,10 +146,6 @@ func TestResolveInvokeMetadataInheritanceBrokenFolderNamesItself(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceDepthCap is the required depth-cap case: a parent-folder
-// path longer than MaxFolderMetadataDepth is rejected as FailedPrecondition before any store I/O
-// or QuickJS instantiation happens (none of the named folders even exist) — a Connect error,
-// never a hang.
 func TestResolveInvokeMetadataInheritanceDepthCap(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -202,14 +162,10 @@ func TestResolveInvokeMetadataInheritanceDepthCap(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceMissingFolderTolerated is the required stale-path case: a
-// renamed/deleted folder segment (FolderMetadataChain propagates ErrItemNotFound rather than
-// swallowing it) must degrade to "no inheritance" — an empty accumulator, no error — exactly
-// like applyRequestMiddleware tolerates a missing target request, NOT fail the invoke.
 func TestResolveInvokeMetadataInheritanceMissingFolderTolerated(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
-	ensureWorkspace(t, w, ctx) // the collection exists; folder "ghost" inside it does not
+	ensureWorkspace(t, w, ctx)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"ghost"},
 		`export default () => ({ ...gv.metadata.inherit(), x: ["1"] })`, nil, nil)
@@ -221,11 +177,6 @@ func TestResolveInvokeMetadataInheritanceMissingFolderTolerated(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataInheritanceNotAFolderTolerated covers the fold's OTHER tolerated
-// sentinel: a path segment that resolves to a REQUEST rather than a folder (FolderMetadataChain
-// propagates ErrNotAFolder). It must be tolerated identically to a missing path — "no
-// inheritance", not a failure — so both halves of the errors.Is(...) || errors.Is(...) gate in
-// foldAncestorMetadata are actually exercised.
 func TestResolveInvokeMetadataInheritanceNotAFolderTolerated(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -248,12 +199,6 @@ func TestResolveInvokeMetadataInheritanceNotAFolderTolerated(t *testing.T) {
 	}
 }
 
-// TestInvokeFolderMetadataInheritanceEndToEnd is the end-to-end must-pass: a saved request
-// living inside a folder is invoked against the echo server, and the actually-sent request
-// metadata carries BOTH the folder-provided header and the request's own — proving the whole
-// pipeline (store -> foldAncestorMetadata -> gv.metadata.inherit() -> RunRequestBody ->
-// structFromMetadataLists -> structToMetadata -> the wire) works together, not just at the
-// resolveInvokeMetadata unit level.
 func TestInvokeFolderMetadataInheritanceEndToEnd(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

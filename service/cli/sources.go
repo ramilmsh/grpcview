@@ -16,8 +16,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// newSourcesCmd builds the `sources` parent: the listing and the four mutations,
-// which all address a source by the id `sources ls` prints.
 func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sources",
@@ -28,10 +26,7 @@ func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command
 			"Order is precedence and only order: the outcome is a pure function of the\n" +
 			"list, never of which source was added or refreshed last. So `add` appends at\n" +
 			"lowest priority and `reorder` is the switch that changes who wins.",
-		// ArbitraryArgs, not NoArgs: cobra dispatches a known subcommand before RunE
-		// ever runs, so anything that reaches RunE is either a typo'd subcommand or
-		// no subcommand at all, and both are exit 2 with usage on stderr. Without an
-		// explicit RunE, cobra would print help on STDOUT and exit 0 (D8).
+		// ArbitraryArgs plus an explicit RunE: without one, cobra prints help on stdout and exits 0.
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -50,8 +45,6 @@ func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command
 	return cmd
 }
 
-// missingSubcommand is unknownCommand for a parent command invoked bare: usage
-// on stderr, never stdout, and exit 2.
 func missingSubcommand(cmd *cobra.Command, subcommands ...string) error {
 	out := cmd.OutOrStdout()
 	cmd.SetOut(cmd.ErrOrStderr())
@@ -91,13 +84,9 @@ func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFac
 	if err != nil {
 		return err
 	}
-	// Workspace.sources is already in priority order — the order IS the precedence
-	// — so this verb must never sort it.
+	// Workspace.sources is already in priority order; never sort it.
 	return renderSources(s.Out, snapshot.GetWorkspace().GetSources())
 }
-
-// The four mutations. Every one of them follows write.go's contract: silence is
-// success, and a failure is one stderr line with exit 2.
 
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	var tls bool
@@ -148,14 +137,6 @@ func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg 
 	})
 }
 
-// buildAddSource discriminates `sources add`'s two forms, which is the whole of
-// the verb's logic and therefore the whole of what its test needs to reach.
-//
-// The discriminator is os.Stat, not a host:port pattern match. A pattern would
-// have to decide what "localhost", "example.com:443" and "./echo.binpb" are by
-// guessing at their shape; the filesystem answers the only question that matters
-// without guessing, and an argument that IS a file is never a plausible dial
-// address.
 func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
 	if arg == "" {
 		return nil, errors.New("no definition source given: `sources add` takes a reflection address or the path of a descriptor-set file")
@@ -179,16 +160,13 @@ func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescrip
 		return &grpcviewv1.AddDescriptorSourceRequest{
 			WorkspaceName: workspaceName,
 			Source:        &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
-			// The BASENAME, deliberately: file_name is the source's identity, so the
-			// same image rebuilt into a different directory has to be the same source.
+			// The basename, deliberately: file_name is the source's identity.
 			FileName: filepath.Base(arg),
 		}, nil
 
 	default:
 		server := &grpcviewv1.Server{Address: arg}
 		if tls {
-			// Server.TLS is an empty message, so the flag is one bool mapped by hand
-			// — the same mapping invoke's buildTarget does.
 			server.Tls = &grpcviewv1.Server_TLS{}
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
@@ -228,9 +206,6 @@ func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, 
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		ids := []string{id}
 		if id == "" {
-			// Read the list rather than inventing an order: Workspace.sources IS the
-			// priority order, and refreshing in it means a caller watching the
-			// merged view see the same intermediate states the UI would.
 			ws, err := workspaceSnapshot(ctx, sess, g)
 			if err != nil {
 				return err
@@ -309,10 +284,7 @@ func newSourcesReorderCmd(g *globalFlags, open clientFactory) *cobra.Command {
 
 func runSourcesReorder(ctx context.Context, g *globalFlags, open clientFactory, ids []string) error {
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
-		// The ids go through verbatim — no dedupe, no sort, no completion from the
-		// snapshot. The RPC validates that they are a permutation of the current
-		// list, and a CLI that "helpfully" completed a partial order would defeat
-		// exactly the check that protects a stale caller.
+		// Verbatim: the RPC's permutation check is what protects a stale caller.
 		_, err := sess.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
 			WorkspaceName: g.Workspace,
 			Ids:           ids,
@@ -324,9 +296,6 @@ func runSourcesReorder(ctx context.Context, g *globalFlags, open clientFactory, 
 	})
 }
 
-// sourceRow is one line of `sources ls`, every column already rendered as the
-// string it prints. The numeric columns carry their own labels instead of relying
-// on a header row: one self-describing line per source is what survives a grep.
 type sourceRow struct {
 	priority string
 	id       string
@@ -354,9 +323,6 @@ func sourceRows(sources []*grpcviewv1.DescriptorSource) []sourceRow {
 	return rows
 }
 
-// sourceKind reads the oneof through its getters rather than a type switch: an
-// unset oneof is a source a manifest edit can produce, and "unknown" listing is
-// better than a row that omits its kind.
 func sourceKind(src *grpcviewv1.DescriptorSource) string {
 	switch {
 	case src.GetReflection() != nil:
@@ -368,15 +334,7 @@ func sourceKind(src *grpcviewv1.DescriptorSource) string {
 	}
 }
 
-// sourceStatus is the load-bearing column, and the reason this verb is not a
-// `jq` one-liner over `get`.
-//
-// A source that serves services and wins none is SHADOWED: it resolved fine, and
-// higher-priority sources simply describe the same protos. A source that serves
-// nothing at all is empty. Printing only the won count would render the two
-// identically, which is exactly what the UI's Sources view does not do. A partial
-// shadow gets its count, since "won 1 of 3" is the state that explains why one
-// request shows doc comments and its neighbour does not.
+// sourceStatus distinguishes shadowed — resolved, but outranked — from serving nothing.
 func sourceStatus(resolved *grpcviewv1.Resolved) string {
 	if err := resolved.GetError(); err != "" {
 		return "error: " + oneLine(err)
@@ -401,13 +359,9 @@ func fileCount(n int32) string {
 	return fmt.Sprintf("%d files", n)
 }
 
-// oneLine collapses whitespace runs. A resolve error is often multi-line — a
-// failed link check reports one line per conflicting file — and one line per
-// source is the contract a grep depends on.
+// oneLine collapses whitespace runs: a resolve error is often multi-line.
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// renderSources writes the aligned listing, every column width computed from the
-// widest entry so the same source list always produces the same columns.
 func renderSources(w io.Writer, sources []*grpcviewv1.DescriptorSource) error {
 	rows := sourceRows(sources)
 

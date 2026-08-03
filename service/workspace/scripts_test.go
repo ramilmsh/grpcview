@@ -9,9 +9,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// TestScriptCRUDHandlers drives CreateScript/UpdateScript/DeleteScript through the RPC
-// surface and asserts each returns the fresh Workspace with the expected scripts. Get is
-// called first to auto-create the collection (the engine is not needed for CRUD).
 func TestScriptCRUDHandlers(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -20,7 +17,6 @@ func TestScriptCRUDHandlers(t *testing.T) {
 		t.Fatalf("Get (auto-create): %v", err)
 	}
 
-	// Create a generator and a middleware.
 	resp, err := w.CreateScript(ctx, connect.NewRequest(&grpcviewv1.CreateScriptRequest{
 		WorkspaceName: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
 	}))
@@ -41,14 +37,12 @@ func TestScriptCRUDHandlers(t *testing.T) {
 		t.Fatalf("scripts = %+v, want [uuid(gen) sign(mw)]", scripts)
 	}
 
-	// A duplicate name is a FailedPrecondition (store's ErrAlreadyExists).
 	if _, err := w.CreateScript(ctx, connect.NewRequest(&grpcviewv1.CreateScriptRequest{
 		WorkspaceName: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("duplicate create code = %v, want FailedPrecondition", connect.CodeOf(err))
 	}
 
-	// Update source + rename.
 	src := `export default () => crypto.randomUUID?.() ?? "x"`
 	newName := "uuidv4"
 	upd, err := w.UpdateScript(ctx, connect.NewRequest(&grpcviewv1.UpdateScriptRequest{
@@ -62,7 +56,6 @@ func TestScriptCRUDHandlers(t *testing.T) {
 		t.Fatalf("rename+source not applied: %+v", upd.Msg.GetWorkspace().GetScripts())
 	}
 
-	// Delete.
 	del, err := w.DeleteScript(ctx, connect.NewRequest(&grpcviewv1.DeleteScriptRequest{
 		WorkspaceName: testWorkspace, Name: "sign",
 	}))

@@ -3,13 +3,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input, Field } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-// AddSourceModal adds a definition source: either a server-reflection target
-// (host:port + optional TLS) or an uploaded protobuf FileDescriptorSet. Both are
-// wired to the backend (the reflection and descriptor-set branches of
-// AddDescriptorSource). A descriptor set is what `protoc --include_imports
-// --descriptor_set_out` or `buf build -o` emits; uploading one reads the file to
-// bytes and sends them with the file's name, which becomes the source's identity —
-// so re-uploading a rebuilt file refreshes that source instead of adding another.
+// AddSourceModal adds a reflection target or an uploaded FileDescriptorSet.
 export function AddSourceModal({
   open,
   onClose,
@@ -23,10 +17,7 @@ export function AddSourceModal({
   onAddDescriptorSet: (bytes: Uint8Array, fileName: string) => void;
   pending?: boolean;
 }) {
-  // The address starts empty (a placeholder hints the host:port form) rather than
-  // pre-filled: pre-seeding grpcview's own listen port baked that misleading value
-  // into every added source, so a request then defaulted its target to grpcview
-  // itself instead of the reflected service.
+  // Must stay empty: a pre-filled default becomes the added source's real address.
   const [address, setAddress] = useState("");
   const [tls, setTls] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -71,7 +62,6 @@ export function AddSourceModal({
         Use TLS
       </label>
 
-      {/* descriptor-set upload — an alternative to reflection */}
       <div style={{ borderTop: "1px solid var(--line)" }} />
       <Field label="Descriptor set">
         <input

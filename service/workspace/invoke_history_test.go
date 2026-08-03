@@ -15,10 +15,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// workspaceAt returns a handler backed by a store rooted at base, so a test can
-// reopen the same on-disk collection from a fresh store to prove persistence. It
-// carries a real scripting engine because the invoke path now evaluates every body
-// as a TypeScript module; the engine is torn down on cleanup.
 func workspaceAt(t *testing.T, base string) Workspace {
 	t.Helper()
 	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
@@ -32,9 +28,6 @@ func workspaceAt(t *testing.T, base string) Workspace {
 	}
 }
 
-// loadHistory reopens base with a fresh store and returns the named root
-// request's persisted run history — the "reload from disk" the milestone asks to
-// verify (no in-memory caches shared with the invoking handler).
 func loadHistory(t *testing.T, base, name string) []*grpcviewv1.History {
 	t.Helper()
 	ctx := context.Background()
@@ -55,19 +48,12 @@ func loadHistory(t *testing.T, base, name string) []*grpcviewv1.History {
 	return nil
 }
 
-// TestInvokeRecordsHistory drives several real unary invokes through the Invoke
-// RPC against an in-process echo server and asserts each run is appended (in
-// order) to the target request's history and persists across a fresh reload,
-// capturing status/latency/timestamp + the request the user sent. An ad-hoc
-// invoke (no item_name) records nothing.
 func TestInvokeRecordsHistory(t *testing.T) {
 	base := t.TempDir()
 	w := workspaceAt(t, base)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	// A saved request is the history target; its stored service/method are
-	// irrelevant to the call (Target + the fields on InvokeRequest drive that).
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -99,7 +85,6 @@ func TestInvokeRecordsHistory(t *testing.T) {
 		}
 	}
 
-	// An ad-hoc invoke (empty item_name) must not touch any request's history.
 	if _, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		WorkspaceName: testWorkspace,
 		Service:       echoService,
@@ -137,9 +122,6 @@ func TestInvokeRecordsHistory(t *testing.T) {
 	}
 }
 
-// TestStreamInvokeRecordsHistory proves the streaming completion point records
-// history too — with the terminal status/latency/timestamp but, by design, no
-// streamed payloads (the terminal frame's response bytes are empty for streams).
 func TestStreamInvokeRecordsHistory(t *testing.T) {
 	base := t.TempDir()
 	w := workspaceAt(t, base)
@@ -172,8 +154,6 @@ func TestStreamInvokeRecordsHistory(t *testing.T) {
 	if res.GetTimestamp() == nil || res.GetLatency() == nil {
 		t.Errorf("missing latency/timestamp")
 	}
-	// Documented limitation: streamed payloads are NOT recorded (they were the
-	// message frames), so the terminal response body stays empty.
 	if len(res.GetResponse()) != 0 {
 		t.Errorf("streaming history response should be empty, got %d bytes", len(res.GetResponse()))
 	}

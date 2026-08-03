@@ -19,14 +19,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// invoke_saved_test.go covers cli-generator-exploration.md C1a: the addressed invoke
-// (InvokeSaved / InvokeSavedStreaming), which resolves the SAVED body/metadata/middleware/target
-// server-side from a display-name path instead of taking the caller's editor buffers.
-
-// saveRequest saves a request named name inside parent, pointed at addr (an explicit per-request
-// target, so resolveMethod can dial+reflect it with no workspace reflection source configured)
-// with method and a TS body. It is the general form of gvinvoke_test.go's gvTarget: an arbitrary
-// method (so a streaming saved request can be built) and a raw address (so a DEAD one can be).
 func saveRequest(t *testing.T, w Workspace, ctx context.Context, parent []string, name, method, body, addr string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -43,12 +35,8 @@ func saveRequest(t *testing.T, w Workspace, ctx context.Context, parent []string
 	}
 }
 
-// loopback renders a loopback address for a port the tests stood a server up on.
 func loopback(port int) string { return fmt.Sprintf("127.0.0.1:%d", port) }
 
-// deadPort returns a loopback port with nothing listening on it: a listener is opened to have
-// the OS pick a free port, then closed immediately. Pointing a dry run here is what proves the
-// dry run never dials — a real call to this address fails.
 func deadPort(t *testing.T) int {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -62,8 +50,6 @@ func deadPort(t *testing.T) int {
 	return port
 }
 
-// failingEchoServer serves the reflectable EchoService but fails every Unary call with a non-OK
-// gRPC status — the target behavior the (response, nil) invariant below is about.
 type failingEchoServer struct {
 	echov1.UnimplementedEchoServiceServer
 }
@@ -72,8 +58,6 @@ func (failingEchoServer) Unary(context.Context, *echov1.EchoRequest) (*echov1.Ec
 	return nil, status.Error(codes.PermissionDenied, "denied by test")
 }
 
-// startFailingEchoServer stands up an in-process EchoService (plus reflection, which the invoke
-// path needs to resolve the method) whose Unary always returns PermissionDenied.
 func startFailingEchoServer(t *testing.T) int {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -88,7 +72,6 @@ func startFailingEchoServer(t *testing.T) int {
 	return lis.Addr().(*net.TCPAddr).Port
 }
 
-// invokeSaved calls the RPC with the given request and returns the response message.
 func invokeSaved(t *testing.T, w Workspace, ctx context.Context, msg *grpcviewv1.InvokeSavedRequest) (*grpcviewv1.InvokeSavedResponse, error) {
 	t.Helper()
 	resp, err := w.InvokeSaved(ctx, connect.NewRequest(msg))
@@ -98,7 +81,6 @@ func invokeSaved(t *testing.T, w Workspace, ctx context.Context, msg *grpcviewv1
 	return resp.Msg, nil
 }
 
-// decodeEchoMessage decodes an echo response payload's `message` field.
 func decodeEchoMessage(t *testing.T, payload []byte) string {
 	t.Helper()
 	var got struct {
@@ -110,7 +92,6 @@ func decodeEchoMessage(t *testing.T, payload []byte) string {
 	return got.Message
 }
 
-// paramsStruct builds the params Struct a caller sends on the wire.
 func paramsStruct(t *testing.T, m map[string]any) *structpb.Struct {
 	t.Helper()
 	s, err := structpb.NewStruct(m)
@@ -120,10 +101,6 @@ func paramsStruct(t *testing.T, m map[string]any) *structpb.Struct {
 	return s
 }
 
-// TestInvokeSavedRunsTheSavedRequest is the headline case: nothing about the request is sent —
-// only its path — and the run uses the request's OWN saved body, method and target. The echo
-// server's "echo: " prefix on the saved body's message proves the saved body reached a real
-// call.
 func TestInvokeSavedRunsTheSavedRequest(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -151,8 +128,6 @@ func TestInvokeSavedRunsTheSavedRequest(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedNestedPath: the address is a parent-folder display-name path plus an item name,
-// the same split gv.invoke's paths produce — a request inside a folder is reachable.
 func TestInvokeSavedNestedPath(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -182,11 +157,6 @@ func TestInvokeSavedNestedPath(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedParamsReachTheBody: params is the reason this RPC exists as more than a
-// convenience — InvokeRequest has no such field, so before C1a only gv.invoke could
-// parameterize a run. The assertion is on a field the SERVER echoed back, so the value must have
-// travelled through the QuickJS body evaluation into a real call. A generator in the mix proves
-// params and generator composition coexist.
 func TestInvokeSavedParamsReachTheBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -210,9 +180,6 @@ func TestInvokeSavedParamsReachTheBody(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedOverrides: target and messages override the saved request for ONE run. The
-// saved request points at a dead port with a body of its own, so an echoed reply can only mean
-// both overrides took effect.
 func TestInvokeSavedOverrides(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -236,10 +203,6 @@ func TestInvokeSavedOverrides(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedAddressErrors maps the store's addressing sentinels onto Connect codes, which
-// nothing did before C1a (both ResolveRequest sentinels used to reach the caller unwrapped, so
-// connect.CodeOf read Unknown). The CLI turns a Connect error into exit 2 and needs the code to
-// tell "no such request" from "that path is a folder".
 func TestInvokeSavedAddressErrors(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -277,11 +240,6 @@ func TestInvokeSavedAddressErrors(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedTargetStatusIsInThePayload is the invariant the CLI's exit-code split depends
-// on (D9: a Connect error → exit 2, a non-OK status in the payload → exit 1). A target that
-// rejects the call is NOT a failure of this RPC: the call reached the server and answered, so
-// the status rides INSIDE the response and the RPC error is nil. Getting this wrong collapses
-// "the target said no" into "grpcview broke".
 func TestInvokeSavedTargetStatusIsInThePayload(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -308,9 +266,6 @@ func TestInvokeSavedTargetStatusIsInThePayload(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedRecordHistory: record_history defaults to TRUE (D7 — an addressed run is a real
-// user-initiated one, unlike gv.invoke's fan-out), and an explicit false opts out. Both are
-// asserted against the same freshly saved request so the counts cannot come from anywhere else.
 func TestInvokeSavedRecordHistory(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -363,10 +318,6 @@ func TestInvokeSavedRecordHistory(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedDryRun: a dry run reports the request as it would have been SENT — bodies
-// evaluated (the stored source is TypeScript; only the server can produce the JSON), metadata
-// evaluated, middleware applied — and dials nothing. The target is a DEAD port, so any dial
-// would fail the RPC: that is what makes "never dials" an assertion rather than a claim.
 func TestInvokeSavedDryRun(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -415,10 +366,6 @@ func TestInvokeSavedDryRun(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedStreamingSendsEveryMessage: a client-streaming saved request receives every
-// message of the per-run override, in order, composed up-front (D13 — the existing convention,
-// which the CLI inherits rather than replacing). The echo server's reply names the count and the
-// messages it actually received, so order and completeness are the server's testimony.
 func TestInvokeSavedStreamingSendsEveryMessage(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -458,8 +405,6 @@ func TestInvokeSavedStreamingSendsEveryMessage(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedStreamingParamsReachTheBody: the streaming form threads params through the same
-// pre-send evaluation the unary one does (streamInvoke used to hard-code nil there).
 func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -493,9 +438,6 @@ func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedStreamingRejectsDryRun: the streaming response has no frame that could carry a
-// resolved request, and the unary form dry-runs a saved request of any streaming kind without
-// dialing — so this is an explicit InvalidArgument rather than a silently ignored flag.
 func TestInvokeSavedStreamingRejectsDryRun(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -516,10 +458,6 @@ func TestInvokeSavedStreamingRejectsDryRun(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedStreamingMethodViaUnary: the unary form against a streaming saved request
-// reuses invokeUnary's existing streaming guard verbatim (Unimplemented), rather than inventing
-// a second code for the same condition. The CLI picks the right RPC from the resolved method
-// kind, so this is a fallback, not a normal path.
 func TestInvokeSavedStreamingMethodViaUnary(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -538,9 +476,6 @@ func TestInvokeSavedStreamingMethodViaUnary(t *testing.T) {
 	}
 }
 
-// TestInvokeSavedEmptyBodyRuns: a saved request whose body was never authored still runs — the
-// blank source becomes the empty object instead of reaching the engine as an unparseable empty
-// expression.
 func TestInvokeSavedEmptyBodyRuns(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

@@ -12,31 +12,11 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// gvinvoke_test.go covers gv-features-plan.md Feature 3 Phase 2, "Workspace re-entry,
-// addressing, depth guard": scriptInvoker's addressing/depth-guard/reject-vs-resolve policy,
-// and the load-bearing headline case — a nested gv.invoke actually running a fresh child
-// wazero instance to completion inside the parent's suspended host call, on one goroutine.
-
-// gvTarget saves a request named name pointed at the loopback echo server, so it is a valid
-// gv.invoke target: a TS body (defaulting to a trivial one) and an explicit per-request Target
-// (so resolveMethod can dial+reflect it without a workspace reflection source configured).
 func gvTarget(t *testing.T, w Workspace, ctx context.Context, parent []string, name, body string, port int) {
 	t.Helper()
 	saveRequest(t, w, ctx, parent, name, "Unary", body, loopback(port))
 }
 
-// TestGvInvokeNestedReentrancy is the headline test (gv-features-plan.md Feature 3 Phase 2's
-// load-bearing risk): request A's body does `await gv.invoke("B", {id:7})` from INSIDE the
-// scripting engine — a nested wazero instance for B must run to completion inside A's
-// suspended host call, on the same goroutine, and A must consume B's real result.
-//
-// B's body reads gv.request.params.id and folds it into the message it sends to the REAL echo
-// server; the server's own "echo: " prefix can only appear if B actually dialed and called it
-// (not a faked/short-circuited result), so B's reply proves BOTH that gv.request.params.id was
-// visible to B (===7, spliced into "id-7") and that B genuinely ran end to end. A's body then
-// folds gv.invoke's whole resolved InvokeResult (ok + body.message) into its OWN outgoing
-// message, so A's own echoed reply proves A consumed B's actual settled value, not a stale,
-// default, or dropped one.
 func TestGvInvokeNestedReentrancy(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -76,9 +56,6 @@ func TestGvInvokeNestedReentrancy(t *testing.T) {
 	}
 }
 
-// TestGvInvokeSuppressesNestedHistory is the required D6 case: a nested gv.invoke must record
-// NOTHING to its target's history (a script fan-out must not spam N requests' histories), while
-// the outer, publicly-invoked request still records its own single entry as usual.
 func TestGvInvokeSuppressesNestedHistory(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -131,10 +108,6 @@ func TestGvInvokeSuppressesNestedHistory(t *testing.T) {
 	}
 }
 
-// TestScriptInvokerAddressingSplitsOnSlash exercises scriptInvoker directly (bytes in, bytes
-// out — the documented scripting.Invoker contract) against a request nested inside a folder,
-// proving gv.invoke's addressing: the path splits on "/" into the parent folder's display-name
-// path (leading segments) and the item name (last segment), e.g. "Users/GetUser".
 func TestScriptInvokerAddressingSplitsOnSlash(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -169,8 +142,6 @@ func TestScriptInvokerAddressingSplitsOnSlash(t *testing.T) {
 	}
 }
 
-// TestScriptInvokerUnknownPathRejects: a path that resolves to nothing must reject (a Go error
-// out of the Invoker), not panic or silently resolve.
 func TestScriptInvokerUnknownPathRejects(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -182,8 +153,6 @@ func TestScriptInvokerUnknownPathRejects(t *testing.T) {
 	}
 }
 
-// TestScriptInvokerNotARequestRejects: a path naming a FOLDER (not a request) must also reject
-// — gv.invoke only addresses requests.
 func TestScriptInvokerNotARequestRejects(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -202,9 +171,6 @@ func TestScriptInvokerNotARequestRejects(t *testing.T) {
 	}
 }
 
-// TestScriptInvokerStreamingTargetRejects: gv.invoke is unary-only in v1 (plan §"Return
-// shape"); a path resolving to a streaming method must reject via invokeUnary's shared
-// streaming guard — the same check the public Invoke RPC uses.
 func TestScriptInvokerStreamingTargetRejects(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -229,13 +195,6 @@ func TestScriptInvokerStreamingTargetRejects(t *testing.T) {
 	}
 }
 
-// TestScriptInvokerDepthCapRejects drives scriptInvoker directly with a ctx pre-seeded at (and
-// just below) the depth cap via withGvInvokeDepth — the exact ctx seam a real N-level-deep
-// gv.invoke chain would have threaded — proving the boundary itself: one below the cap
-// proceeds, AT the cap rejects. (A real 9-level-deep recursive chain would exercise the same
-// comparison after 8 real hops; short-circuiting the "getting there" is a deliberate,
-// deterministic test of the policy invokeUnary's caller enforces, not a numerical coincidence —
-// withGvInvokeDepth is the very function that threads the counter across a real hop.)
 func TestScriptInvokerDepthCapRejects(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

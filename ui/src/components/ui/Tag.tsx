@@ -15,9 +15,7 @@ export function Tag({
   return <span className={clsx("tag", `tag-${variant}`, className)}>{children}</span>;
 }
 
-// Method kind. Phase 1 is unary-only ("u"); the streaming kinds (server/client/
-// bidi) arrive with the streaming backend (plan §5, Phase 3) but the labels are
-// defined here so the tree/tabs can adopt them without a rename.
+// Unary, server-stream, client-stream, bidi.
 export type MethodKind = "u" | "ss" | "cs" | "bd";
 
 const KIND_LABEL: Record<MethodKind, string> = {

@@ -4,19 +4,6 @@ import { flatten } from "./flatten";
 import { TreeRow } from "./TreeRow";
 import type { TreeAdapter, TreeRowState } from "./types";
 
-// The MARKUP half of T6b, which is all this suite can reach: vitest runs with no
-// jsdom (vitest.config.ts, `environment: "node"`), so nothing here dispatches a real
-// DragEvent, measures a row's box, or reads getComputedStyle — the geometry and
-// validity decisions are covered directly in dnd.test.ts, and the gesture itself
-// needs the browser pass. What IS worth pinning is the contract between TreeRow and
-// app-tokens.css: the class names and the custom property the indicator rules key
-// off. Those are coupled across two files with nothing but convention holding them
-// together, and a renamed class fails silently — a drag with no visible indicator.
-//
-// TreeRow is driven directly rather than through <Tree>, for the same reason the
-// rename markup tests are (request-tree.test.tsx): "which row is the drop target" is
-// internal drag state a server render has no way to set from outside.
-
 interface Node {
   id: string;
   folder?: boolean;
@@ -117,8 +104,6 @@ describe("TreeRow: drag and drop chrome", () => {
   });
 
   it("a `before`/`after` drop draws a line at that edge, indented to the drop depth", () => {
-    // --drop-depth, not a px value: app-tokens.css multiplies it by --tree-indent, so
-    // the indicator's pitch stays the one the indent guides use.
     expect(render("r", { dropTarget: "before", dropDepth: 1 })).toContain(
       '<span class="dropline before" style="--drop-depth:1"></span>'
     );

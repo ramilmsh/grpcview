@@ -11,17 +11,11 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// TestResolveInvokeMetadata covers the metadata-as-JavaScript pre-send step: a TypeScript
-// module returning {[key]: string[]} is evaluated to a Struct (a string → single-element
-// list, an array → a multi-valued list), an empty script is a no-op that returns the
-// fallback Struct verbatim, and the eval/shape error modes map to the documented Connect
-// codes (eval failure → FailedPrecondition, bad value shape → InvalidArgument).
 func TestResolveInvokeMetadata(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 
 	t.Run("evaluates a metadata module to a multi-valued Struct", func(t *testing.T) {
-		// A computed value proves real evaluation; an array value proves multi-valued headers.
 		md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil,
 			`export default () => ({ authorization: ["Bearer " + (1 + 1)], "x-multi": ["a", "b"] })`,
 			nil, nil)
@@ -66,10 +60,6 @@ func TestResolveInvokeMetadata(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeMetadataComposition proves a metadata module composes the workspace's
-// saved generators as ambient globals, exactly like the TS body (pillar C on the metadata
-// path): the module calls a generator saved via the store and the produced Struct reflects
-// the composed call.
 func TestResolveInvokeMetadataComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -86,10 +76,6 @@ func TestResolveInvokeMetadataComposition(t *testing.T) {
 	}
 }
 
-// TestInvokeMetadataScript is the end-to-end unary must-pass: a metadata module that composes
-// a generator and emits a multi-valued header is evaluated, and the echo server confirms the
-// resolved values were actually sent — reflected in RequestMetadata, with the multi-valued key
-// carried as a ListValue (structToMetadata expanded string[] into repeated headers).
 func TestInvokeMetadataScript(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -112,11 +98,9 @@ func TestInvokeMetadataScript(t *testing.T) {
 		t.Fatalf("status = %d (%s)", code, resp.Msg.GetResponse().GetStatus().GetMessage())
 	}
 	fields := resp.Msg.GetResponse().GetRequestMetadata().GetFields()
-	// A single-valued header collapses to a scalar string in the reflected Struct.
 	if got := fields["authorization"].GetStringValue(); got != "Bearer tok" {
 		t.Fatalf("authorization = %q, want Bearer tok", got)
 	}
-	// The multi-valued header is carried as a ListValue.
 	scope := fields["x-scope"].GetListValue().GetValues()
 	if len(scope) != 2 || scope[0].GetStringValue() != "read" || scope[1].GetStringValue() != "write" {
 		t.Fatalf("x-scope = %v, want multi-valued [read write]", scope)

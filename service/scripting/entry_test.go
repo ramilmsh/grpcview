@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// TestGeneratorEntryPoint: a generator that declares `export default` is CALLED with the
-// run's positional args (sync and async), and its return value is the result — a JSON
-// round-trip for object args/returns. A generator without an export falls back to
-// last-expression eval (unchanged).
 func TestGeneratorEntryPoint(t *testing.T) {
 	e := newEngine(t)
 	cases := []struct {
@@ -21,7 +17,6 @@ func TestGeneratorEntryPoint(t *testing.T) {
 		{"no-args", `export default () => ({ ok: true })`, nil, `{"ok":true}`},
 		{"json-round-trip", `export default (o) => ({ echo: o, n: o.a + 1 })`, []any{map[string]any{"a": 1}}, `{"echo":{"a":1},"n":2}`},
 		{"const-default", `const gen = () => "hi"; export default gen`, nil, `"hi"`},
-		// No export default: falls back to last-expression eval (existing behavior).
 		{"fallback-expr", `1 + 1`, nil, "2"},
 	}
 	for _, c := range cases {
@@ -37,8 +32,6 @@ func TestGeneratorEntryPoint(t *testing.T) {
 	}
 }
 
-// TestGeneratorArgsVaryCache: two calls of the same generator source with different args
-// return different values (the args are part of the cache key, not collapsed to one entry).
 func TestGeneratorArgsVaryCache(t *testing.T) {
 	e := newEngine(t)
 	const src = `export default (x) => x * 10`
@@ -55,10 +48,6 @@ func TestGeneratorArgsVaryCache(t *testing.T) {
 	}
 }
 
-// TestMiddlewareEntryPoint: a middleware's `handle`/default export is called with a ctx
-// built from the request Input; the returned ctx is the result (sync + async + in-place
-// mutation), and a JSON round-trip preserves body. A middleware without an export falls
-// back to last-expression eval.
 func TestMiddlewareEntryPoint(t *testing.T) {
 	e := newEngine(t)
 	in := Input{Request: RequestInput{
@@ -75,8 +64,6 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 			`{"body":{"n":1},"metadata":{"authorization":"Bearer t","x-signature":"sig"},"target":"localhost:10000"}`,
 		},
 		{
-			// ctx.body is a deep copy of the (frozen) input, so a middleware can mutate its
-			// fields in place — the request-rewriting use case (scripting-ui-plan §S3).
 			"handle-mutates-body-field",
 			`export function handle(ctx) { ctx.body.n = 2; return ctx; }`,
 			`{"body":{"n":2},"metadata":{"authorization":"Bearer t"},"target":"localhost:10000"}`,
@@ -104,7 +91,6 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 		})
 	}
 
-	// A middleware source with no handle/default export keeps last-expression eval.
 	res, err := e.RunMiddleware(context.Background(), `({ passthrough: true })`, Grant{}, in)
 	if err != nil {
 		t.Fatalf("fallback run: %v", err)
@@ -114,8 +100,6 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 	}
 }
 
-// TestEntryExportDetection unit-tests the source scan that decides whether the entry-point
-// convention applies.
 func TestEntryExportDetection(t *testing.T) {
 	defaults := []string{
 		`export default () => 1`,

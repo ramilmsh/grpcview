@@ -9,21 +9,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// schemaVersion is stamped into grpcview.json so future layout changes are
-// detectable. It versions the on-disk schema (grpcview.store.v1), independently
-// of the wire API. Bump when the on-disk shape changes incompatibly.
+// schemaVersion is stamped into grpcview.json; bump it on an incompatible on-disk change.
 const schemaVersion = 1
 
-// marshalOpts renders managed files as indented protojson: deterministic field
-// order and diff-friendly. Empty/default fields are omitted so a file costs
-// bytes only for what it actually sets.
 var marshalOpts = protojson.MarshalOptions{Multiline: true, Indent: "  ", EmitDefaultValues: true}
 
-// unmarshalOpts tolerates unknown fields so a file written by a newer grpcview
-// (with fields this build doesn't know) still loads instead of hard-failing.
+// DiscardUnknown so a file written by a newer grpcview still loads.
 var unmarshalOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 
-// writeMessage atomically writes m as protojson to path.
 func writeMessage(path string, m proto.Message) error {
 	data, err := marshalOpts.Marshal(m)
 	if err != nil {
@@ -32,8 +25,7 @@ func writeMessage(path string, m proto.Message) error {
 	return writeFileAtomic(path, append(data, '\n'), 0o644)
 }
 
-// readMessage reads and decodes a protojson file into m. The read error is
-// returned unwrapped so callers can test it with errors.Is(err, os.ErrNotExist).
+// readMessage returns the read error unwrapped, so callers can test os.ErrNotExist.
 func readMessage(path string, m proto.Message) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -45,8 +37,7 @@ func readMessage(path string, m proto.Message) error {
 	return nil
 }
 
-// writeFileAtomic writes data to path via a temp file in the same directory
-// followed by a rename, so a concurrent reader never observes a torn write.
+// writeFileAtomic writes via a temp file + rename, so a reader never sees a torn write.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
 	if err != nil {

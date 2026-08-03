@@ -24,17 +24,8 @@ import (
 
 const testWorkspace = "default"
 
-// tsBody wraps a JSON/JS object literal as a canonical TypeScript request-body module. Every
-// request body is evaluated as a TS module on invoke now (the frontend migrates legacy JSON to
-// this form before sending), so a test that wants to send a plain object writes tsBody(`{…}`)
-// to drive the real path; the module's returned object is the literal.
 func tsBody(obj string) string { return "export default () => (" + obj + ")" }
 
-// startReflectionServer starts an in-process gRPC server on a loopback port with
-// server reflection enabled. When withHealth is set it also registers the health
-// service, so the server exposes a grpc.health.v1.Health service that a
-// reflection-only peer does not — letting a remove test observe that the removed
-// source's unique services actually disappear on re-resolution.
 func startReflectionServer(t *testing.T, withHealth bool) int {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -56,9 +47,6 @@ func newTestWorkspace(t *testing.T) Workspace {
 	return Workspace{store: store.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))}
 }
 
-// newTestWorkspaceWithEngine is newTestWorkspace plus a real scripting engine, needed by the
-// tests that evaluate TS bodies/metadata (the engine compile is the expensive step, so a test
-// builds one and reuses it across its subtests). The engine is torn down on cleanup.
 func newTestWorkspaceWithEngine(t *testing.T) Workspace {
 	t.Helper()
 	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
@@ -72,8 +60,6 @@ func newTestWorkspaceWithEngine(t *testing.T) Workspace {
 	}
 }
 
-// createGenerator saves a GENERATOR script through the store, the way the other workspace
-// tests set up requests (create then patch source).
 func createGenerator(t *testing.T, w Workspace, ctx context.Context, name, source string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -101,8 +87,6 @@ func removeReq(id string) *grpcviewv1.RemoveDescriptorSourceRequest {
 	return &grpcviewv1.RemoveDescriptorSourceRequest{WorkspaceName: testWorkspace, Id: id}
 }
 
-// testUploadName is the descriptor-set upload's file name in tests, which is also
-// its source identity ("upload:<file name>").
 const testUploadName = "test.binpb"
 
 func descriptorSetAddReq(set []byte) *grpcviewv1.AddDescriptorSourceRequest {
@@ -113,9 +97,6 @@ func descriptorSetAddReq(set []byte) *grpcviewv1.AddDescriptorSourceRequest {
 	}
 }
 
-// fileDescriptorSet marshals a self-contained FileDescriptorSet (the named
-// registered proto file plus its transitive dependencies) to wire bytes,
-// standing in for what `protoc --include_imports` emits and the UI uploads.
 func fileDescriptorSet(t *testing.T, path string) []byte {
 	t.Helper()
 	fd, err := protoregistry.GlobalFiles.FindFileByPath(path)
@@ -149,17 +130,13 @@ func hasService(services []*grpcviewv1.Service, name string) bool {
 	return false
 }
 
-// TestRemoveDescriptorSourceReResolves adds two reflection sources and removes
-// one, asserting the flat services list is re-resolved from the source that
-// remains (the removed source's unique service disappears), the removal
-// persists, and clearing the last source empties services.
 func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	portA := startReflectionServer(t, true)  // reflection + Health
-	portB := startReflectionServer(t, false) // reflection only
+	portA := startReflectionServer(t, true)
+	portB := startReflectionServer(t, false)
 
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(reflectionAddReq(portA))); err != nil {
 		t.Fatalf("AddDescriptorSource A: %v", err)
@@ -176,8 +153,6 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 		t.Fatalf("Health service missing after adding source A")
 	}
 
-	// Remove source A. The merged view must be re-derived from B alone, so Health
-	// (which only A exposed) disappears while B's reflection services remain.
 	idA := ws.GetSources()[0].GetId()
 	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(idA)))
 	if err != nil {
@@ -194,7 +169,6 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 		t.Fatalf("expected B's reflection services to remain after remove")
 	}
 
-	// The removal (and re-resolved services) must survive a reload.
 	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after remove: %v", err)
@@ -204,7 +178,6 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 			len(got.GetSources()), hasService(got.GetServices(), "Health"))
 	}
 
-	// Removing the last source clears services entirely.
 	idB := ws.GetSources()[0].GetId()
 	if _, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(idB))); err != nil {
 		t.Fatalf("RemoveDescriptorSource (last): %v", err)
@@ -219,10 +192,6 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	}
 }
 
-// TestAddDescriptorSetSource uploads a descriptor set, asserting its services load
-// and that both the source (identified by its file name) and the resolved services
-// survive a reload. The descriptor bytes stay on disk — the wire form carries only
-// the file name — so the assertion is on the upload's identity, not its bytes.
 func TestAddDescriptorSetSource(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -257,17 +226,11 @@ func TestAddDescriptorSetSource(t *testing.T) {
 	}
 }
 
-// TestRemoveReResolvesDescriptorSetSource combines a reflection source with a
-// descriptor-set source, then removes the reflection source. The merged view must
-// be re-derived from the remaining upload's cached resolve, so its services survive
-// while the removed reflection source's services disappear.
 func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	// Source 0: reflection-only server (exposes ServerReflection, not Health).
-	// Source 1: a descriptor set that defines grpc.health.v1.Health.
 	port := startReflectionServer(t, false)
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(reflectionAddReq(port))); err != nil {
 		t.Fatalf("AddDescriptorSource (reflection): %v", err)
@@ -285,8 +248,6 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 		t.Fatalf("want both Health (descriptor set) and ServerReflection (reflection): %v", ws.GetServices())
 	}
 
-	// Remove the reflection source. The remaining upload's cached resolve must
-	// carry the merge, so Health survives while ServerReflection is gone.
 	remResp, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(ws.GetSources()[0].GetId())))
 	if err != nil {
 		t.Fatalf("RemoveDescriptorSource: %v", err)
@@ -302,7 +263,6 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 		t.Fatalf("ServerReflection should be gone after removing the reflection source")
 	}
 
-	// The re-resolved state must persist.
 	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after remove: %v", err)
@@ -313,8 +273,6 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 	}
 }
 
-// TestRemoveDescriptorSourceUnknownID asserts an id that names no configured
-// source is rejected with NotFound rather than mutating state.
 func TestRemoveDescriptorSourceUnknownID(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -331,15 +289,6 @@ func TestRemoveDescriptorSourceUnknownID(t *testing.T) {
 	}
 }
 
-// TestMutateCreatesTheCollection pins that a mutation against a workspace nobody
-// has read yet WORKS. Creation used to be a side effect of Get alone, which was
-// invisible while the browser was the only client (it always loads the workspace
-// before it can mutate anything) and made the first mutation against a fresh
-// directory fail with "collection not found" — which a shell hits immediately,
-// since `grpcview sources add` is a plausible first-ever command.
-//
-// Deliberately NO ensureWorkspace call: that helper is exactly the read this test
-// must not perform.
 func TestMutateCreatesTheCollection(t *testing.T) {
 	ctx := context.Background()
 
@@ -362,8 +311,6 @@ func TestMutateCreatesTheCollection(t *testing.T) {
 
 	t.Run("a source mutation", func(t *testing.T) {
 		w := newTestWorkspace(t)
-		// Reorder over an empty list is the cheapest source mutation that touches no
-		// network at all, so this asserts the create-on-demand seam and nothing else.
 		if _, err := w.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
 			WorkspaceName: testWorkspace,
 		})); err != nil {
@@ -372,9 +319,6 @@ func TestMutateCreatesTheCollection(t *testing.T) {
 	})
 }
 
-// folderNamed returns the named top-level folder from a Workspace snapshot,
-// failing the test if it is missing or not a folder — the lookup
-// TestUpdateFolderRPC needs to inspect the RPC's response/reload shape.
 func folderNamed(t *testing.T, ws *grpcviewv1.Workspace, name string) *grpcviewv1.Folder {
 	t.Helper()
 	for _, it := range ws.GetItem().GetFolder().GetItems() {
@@ -389,12 +333,6 @@ func folderNamed(t *testing.T, ws *grpcviewv1.Workspace, name string) *grpcviewv
 	return nil
 }
 
-// TestUpdateFolderRPC covers gv-features-plan.md Feature 1 Phase 4: the
-// UpdateFolder RPC patches a folder's draft_metadata_script, the change is
-// visible on a fresh Get (persisted, not just echoed in the mutate response), an
-// empty-but-present value clears it (mirroring UpdateRequest's
-// DraftMetadataScript semantics), and an unknown item name/a non-folder item
-// surface the same Connect codes UpdateRequest's mirror checks do.
 func TestUpdateFolderRPC(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -428,7 +366,6 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("folder script in mutate response = %q, want %q", got, script)
 	}
 
-	// The change is visible on a fresh Get (persisted, not just the mutate response).
 	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -437,7 +374,6 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("folder script after Get = %q, want %q", got, script)
 	}
 
-	// An empty-but-present value clears it.
 	empty := ""
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
 		WorkspaceName:       testWorkspace,
@@ -454,8 +390,6 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("folder script after clear = %q, want empty", got)
 	}
 
-	// An unknown item name surfaces NotFound (store.ErrItemNotFound mapped by
-	// toConnectError).
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
 		WorkspaceName:       testWorkspace,
 		ItemName:            "Ghost",
@@ -464,8 +398,6 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("UpdateFolder missing item = %v, want NotFound", err)
 	}
 
-	// An item that isn't a folder (a request) surfaces FailedPrecondition
-	// (store.ErrNotAFolder mapped by toConnectError).
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
 		WorkspaceName:       testWorkspace,
 		ItemName:            "Leaf",
@@ -475,10 +407,6 @@ func TestUpdateFolderRPC(t *testing.T) {
 	}
 }
 
-// TestUpdateFolderRenameRPC covers tree-rewrite-plan.md T4a at the RPC seam: the
-// optional `name` field reaches store.FolderPatch, the returned Workspace already
-// carries the new name, and a collision surfaces as FailedPrecondition
-// (store.ErrAlreadyExists via toConnectError, same as UpdateRequest's rename).
 func TestUpdateFolderRenameRPC(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -504,7 +432,6 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 	}
 	folderNamed(t, updResp.Msg.GetWorkspace(), newName)
 
-	// Persisted, not just echoed.
 	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -516,7 +443,6 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 		}
 	}
 
-	// A collision with a sibling folder is FailedPrecondition.
 	collide := "Admin"
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
 		WorkspaceName: testWorkspace,
@@ -527,7 +453,6 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 	}
 }
 
-// itemNames returns the display names of a folder's ordered children.
 func itemNames(items []*grpcviewv1.Item) []string {
 	out := make([]string, len(items))
 	for i, it := range items {
@@ -536,11 +461,6 @@ func itemNames(items []*grpcviewv1.Item) []string {
 	return out
 }
 
-// TestMoveItemRPC covers tree-rewrite-plan.md T6a at the RPC seam: MoveItem
-// reparents an item and the Workspace it returns already reflects the new tree
-// (persisted, not just echoed), and an into-own-descendant move surfaces as
-// FailedPrecondition — store.ErrMoveIntoDescendant via toConnectError — so the
-// drag-and-drop UI can tell an illegal drop apart from a real server fault.
 func TestMoveItemRPC(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -580,7 +500,6 @@ func TestMoveItemRPC(t *testing.T) {
 		t.Fatalf("Src in mutate response = %v, want empty", got)
 	}
 
-	// Persisted, not just echoed.
 	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -589,7 +508,6 @@ func TestMoveItemRPC(t *testing.T) {
 		t.Fatalf("Dst after Get = %v, want [Leaf]", got)
 	}
 
-	// Moving a folder into its own child is FailedPrecondition, not an opaque Internal.
 	if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
 		WorkspaceName: testWorkspace,
 		Path:          []string{"Dst"},

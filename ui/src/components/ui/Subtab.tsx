@@ -1,7 +1,6 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 
-// Subtab is the underline tab used in the request/response panes (.subtab).
 export function Subtab({
   active,
   onClick,

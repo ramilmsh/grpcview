@@ -1,26 +1,13 @@
-// Monaco: make it offline-safe, then theme it. Imported for side effects from
-// main.tsx BEFORE anything mounts an editor.
-//
-// Offline-safe: @monaco-editor/react loads Monaco (and its language workers)
-// from a CDN by default. We instead point its `loader` at the bundled
-// `monaco-editor` and construct the workers from Vite `?worker&inline` imports —
-// `&inline` embeds each worker as a base64 blob, so nothing is fetched at
-// runtime and it survives the vite-plugin-singlefile release bundle.
+// Imported for side effects from main.tsx before any editor mounts: points
+// @monaco-editor/react at the bundled monaco, with `?worker&inline` workers (no CDN).
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker&inline";
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker&inline";
-// The TypeScript language service runs in its OWN worker (autocomplete, hover,
-// signature help, diagnostics). Without it bundled, `language="typescript"`
-// silently gives syntax highlighting but no IntelliSense in the offline build.
-// Same `?worker&inline` treatment as the editor/json workers above so it, too,
-// is embedded (no runtime fetch) and survives vite-plugin-singlefile. Powers the
-// Scripts scratchpad (see features/scripts/monaco-scripts.ts).
 import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline";
 
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string) {
-    // "typescript" and "javascript" both dispatch to the TS worker.
     if (label === "typescript" || label === "javascript") return new TsWorker();
     if (label === "json") return new JsonWorker();
     return new EditorWorker();
@@ -29,8 +16,6 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco });
 
-// Nocturne editor theme — a dark theme tuned to the panel ground and the
-// blurple accent, shared by the request editor and the response viewer.
 export const NOCTURNE_MONACO_THEME = "nocturne";
 
 monaco.editor.defineTheme(NOCTURNE_MONACO_THEME, {
@@ -38,11 +23,11 @@ monaco.editor.defineTheme(NOCTURNE_MONACO_THEME, {
   inherit: true,
   rules: [
     { token: "", foreground: "cfd3e5", background: "1b1d2b" },
-    { token: "string.key.json", foreground: "b9b2ee" }, // keys — accent-ish
-    { token: "string.value.json", foreground: "c9cbd6" }, // string values
+    { token: "string.key.json", foreground: "b9b2ee" },
+    { token: "string.value.json", foreground: "c9cbd6" },
     { token: "string", foreground: "c9cbd6" },
     { token: "number", foreground: "c7bdf7" },
-    { token: "keyword", foreground: "b9b2ee" }, // true/false/null
+    { token: "keyword", foreground: "b9b2ee" },
     { token: "delimiter", foreground: "75798c" },
     { token: "comment", foreground: "75798c", fontStyle: "italic" },
   ],

@@ -1,27 +1,15 @@
-/* Nocturne — design-system tokens and component classes. Vendored verbatim from
-   the "gRPC Request Client Design" project's _ds/nocturne-<id> styles.css, with
-   two edits for the offline build:
-     1. the Google-Fonts @import is removed — faces come from ./fonts.css (bundled woff2);
-     2. --font-heading/--font-body point at "Inter Variable" (the bundled family) first.
-   Everything else is the source of truth for the system's look; retune upstream. */
+/* Nocturne — design-system tokens and component classes, vendored from the design
+   project with the fonts repointed at ./fonts.css. Retune upstream, not here. */
 
 :root {
   --color-bg: #161826;
   --color-surface: #232532;
   --color-text: #e9e9ed;
-  --color-accent: #9184d9; /* review round 7 (Barron): the accent moves to
-     the product's blurple — OKLCH hue 289.2, the hue of the app's own Pro
-     accent (#9a8fe0, --om-accent-pro) — at the same lightness the steel
-     accent held (L 0.660, so the documented ratios survive) and chroma
-     in the product blurple's own range (its token sits at C 0.118; the
-     accent takes 0.125, from the old steel's 0.030):
-     the accent now reads as an accent rather than another neutral. */
-  --color-accent-2: #a7a1db; /* the machine-derived stand-in follows: same
-     hue, same L 0.734, chroma at the same 2:3 proportion it held */
+  --color-accent: #9184d9;
+  --color-accent-2: #a7a1db;
   --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
 
-  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
-     same step of any role matches the others in visual value. */
+  /* Tonal ramps */
   --color-neutral-100: #f3f5fe;
   --color-neutral-200: #e4e7f5;
   --color-neutral-300: #cfd3e5;
@@ -52,12 +40,7 @@
   --color-accent-2-800: #423e5d;
   --color-accent-2-900: #2b293a;
 
-  /* Deck section-divider ground — review round 3: saturation as presence.
-     Dividers take a saturated deep indigo (hue 277, the neutral ramp's own
-     family; C 0.094 — written when the accent held C 0.030, before the
-     round-7 blurple raised it past the ground's) with a lighter bloom and
-     a ghost tint of the same hue, while the slide grounds stay
-     desaturated. Deck-scale fills only — not interface colors. */
+  /* Deck section-divider ground — deck-scale fills only, not interface colors. */
   --color-section: #262a60;
   --color-section-glow: #353b80;
   --color-section-ghost: #4c5397;
@@ -77,8 +60,7 @@
   --radius-md: 8px;
   --radius-lg: 14px;
 
-  /* Elevation — derived from the ground: soft ink-tinted shadows on a
-     light theme, a hairline edge + ambient darkness on a dark one. */
+  /* Elevation */
   --shadow-sm: 0 0 0 1px #3f424d;
   --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,0.55);
   --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0,0,0,0.65);
@@ -94,9 +76,7 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-headi
 .lighten{mix-blend-mode:lighten;background-color:transparent}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Components — built with the tokens above. Plain CSS
-   on plain HTML: no JavaScript, no build step. Each class is documented in
-   readme.md and demonstrated in foundations/ and components/.
+   Components
    ══════════════════════════════════════════════════════════════════════ */
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -126,10 +106,6 @@ figcaption {
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
 
 /* — rules — */
-/* Rules fade to transparent at both ends instead of stopping cleanly — a
-   Nocturne signature. The ramp is 48px an end (one deck baseline unit),
-   painted from the same divider token. Freestanding rules fade; box
-   outlines, in-control separators, and short accent marks stay solid. */
 .hr {
   height: 1px; border: 0; margin: var(--space-4) 0;
   background: linear-gradient(to right,
@@ -142,8 +118,7 @@ figcaption {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   cursor: pointer; text-decoration: none;
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: 14px; line-height: 1.2; color: var(--color-text); /* matches the .input's 14px —
-     the pair sits side by side in sign-up rows */
+  font-size: 14px; line-height: 1.2; color: var(--color-text);
   background: transparent; border: 1px solid transparent;
   padding: var(--space-2) calc(var(--space-3) * 1.2);
   border-radius: var(--radius-md);
@@ -246,13 +221,12 @@ textarea.input { min-height: 90px; resize: vertical; }
 .table th {
   text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: color-mix(in srgb, var(--color-text) 60%, transparent);
-  padding: var(--space-2); border-bottom: 1px solid transparent; /* keeps layout; the row paints the fading rule */
+  padding: var(--space-2); border-bottom: 1px solid transparent;
 }
 .table td {
   padding: var(--space-2);
   border-bottom: 1px solid transparent;
 }
-/* Row rules as row-level strips so the end-fade spans the row, not each cell. */
 .table thead tr {
   background: linear-gradient(to right,
     transparent, var(--color-divider) 48px,
@@ -264,7 +238,6 @@ textarea.input { min-height: 90px; resize: vertical; }
     color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px;
 }
 .table tbody tr:hover {
-  /* the hover tint layers over the row rule, which keeps painting */
   background:
     linear-gradient(color-mix(in srgb, var(--color-text) 4%, transparent),
                     color-mix(in srgb, var(--color-text) 4%, transparent)) no-repeat 0 0 / 100% 100%,

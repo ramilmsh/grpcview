@@ -12,7 +12,7 @@ import type { Any, Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 export declare const file_proto_grpcview_v1_workspace: GenFile;
 
 /**
- * Status is a copy of google.rpc.Status, this is a hack, because we can't import google/rpc/status.proto for rules_ts
+ * Copy of google.rpc.Status: rules_ts cannot import google/rpc/status.proto.
  *
  * @generated from message grpcview.v1.Status
  */
@@ -44,9 +44,7 @@ export declare const StatusSchema: GenMessage<Status>;
  */
 export declare type Server = Message$1<"grpcview.v1.Server"> & {
   /**
-   * address is the target's dial string — a host:port (grpc.NewClient accepts it
-   * verbatim). It is both a reflection source's address and a request's invoke
-   * target.
+   * Dial string, host:port.
    *
    * @generated from field: string address = 1;
    */
@@ -91,10 +89,7 @@ export declare type Message = Message$1<"grpcview.v1.Message"> & {
   name: string;
 
   /**
-   * file is the proto file path that defines this message (e.g.
-   * proto/foo/v1/foo.proto). It is the protoc-gen-es fileToGenerate selector and
-   * identifies which generated _pb.ts exports this message's Json type
-   * (ts-request-body-plan §T2/§4.4). Derived from the resolved descriptor.
+   * Proto file path defining this message, e.g. proto/foo/v1/foo.proto.
    *
    * @generated from field: string file = 4;
    */
@@ -127,11 +122,6 @@ export declare type Method = Message$1<"grpcview.v1.Method"> & {
   output?: Message | undefined;
 
   /**
-   * client_streaming / server_streaming carry the method's real streaming kind,
-   * populated from reflection's IsClientStreaming/IsServerStreaming. The four
-   * combinations map to unary (both false), server-streaming, client-streaming,
-   * and bidi (both true).
-   *
    * @generated from field: bool client_streaming = 4;
    */
   clientStreaming: boolean;
@@ -168,14 +158,7 @@ export declare type Service = Message$1<"grpcview.v1.Service"> & {
   methods: Method[];
 
   /**
-   * source is the dial target for this service: the FIRST reflection source (in
-   * priority order) that serves it — the natural default invoke target for a
-   * request against it (see resolveTarget in invoke.go, and sourceForService in
-   * the UI). It is deliberately independent of which source won the service's
-   * DESCRIPTORS: an upload placed first for its doc comments still dials the
-   * reflection source that actually serves the method. Unset only when no
-   * reflection source serves the service at all (upload-only); such requests fall
-   * back to the workspace's first reflection source.
+   * First reflection source serving it — the default invoke target; unset if none.
    *
    * @generated from field: optional grpcview.v1.Server source = 4;
    */
@@ -189,27 +172,14 @@ export declare type Service = Message$1<"grpcview.v1.Service"> & {
 export declare const ServiceSchema: GenMessage<Service>;
 
 /**
- * DescriptorSource is one configured origin of schema definitions.
- *
- * Sources are PRIORITY-ORDERED: walking Workspace.sources front to back, the
- * first source to define a proto file (by file name) or to serve a service (by
- * full name) wins, and later sources only fill the gaps. The displayed order IS
- * the precedence — reordering the list (ReorderDescriptorSources) is how you
- * switch which source's definitions take effect when two sources describe the
- * same protos. That matters because the two kinds are not interchangeable: gRPC
- * reflection strips source_code_info, so a buf-built upload of the same files
- * carries doc comments the live server cannot, and whichever wins decides
- * whether the editor shows them.
+ * Priority-ordered: the first source to define a file, or serve a service, wins.
  *
  * @generated from message grpcview.v1.DescriptorSource
  */
 export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource"> & {
   /**
-   * id is this source's stable identity within the workspace, derived from its
-   * config: "reflection:<address>" (plus a "+tls" suffix under TLS) or
-   * "upload:<file name>". Adding a source whose id already exists REFRESHES it
-   * in place rather than appending a duplicate, so re-uploading a rebuilt
-   * descriptor set replaces the old one instead of accumulating rows.
+   * "reflection:<address>" (+"+tls") or "upload:<file name>"; adding an existing
+   * id refreshes that source in place.
    *
    * @generated from field: string id = 3;
    */
@@ -233,9 +203,6 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
   } | { case: undefined; value?: undefined };
 
   /**
-   * resolved summarizes what this source contributed on its last resolve, so the
-   * sources list can show which definitions actually come from where.
-   *
    * @generated from field: grpcview.v1.Resolved resolved = 4;
    */
   resolved?: Resolved | undefined;
@@ -248,10 +215,7 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
 export declare const DescriptorSourceSchema: GenMessage<DescriptorSource>;
 
 /**
- * Upload names an uploaded FileDescriptorSet source. The descriptor bytes
- * themselves are never sent to the client — they are large and the client needs
- * only the merged Workspace.descriptor_set — so this carries just the identifying
- * file name.
+ * The descriptor bytes are never sent to the client, only this file name.
  *
  * @generated from message grpcview.v1.Upload
  */
@@ -269,11 +233,6 @@ export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
 export declare const UploadSchema: GenMessage<Upload>;
 
 /**
- * Resolved is a source's last-resolve summary. service_names is everything the
- * source provides; won_service_names is the subset whose descriptors the
- * workspace actually takes from it, so a source fully shadowed by a
- * higher-priority one is visible as such instead of silently doing nothing.
- *
  * @generated from message grpcview.v1.Resolved
  */
 export declare type Resolved = Message$1<"grpcview.v1.Resolved"> & {
@@ -288,15 +247,14 @@ export declare type Resolved = Message$1<"grpcview.v1.Resolved"> & {
   serviceNames: string[];
 
   /**
+   * Subset of service_names whose descriptors the workspace takes from here.
+   *
    * @generated from field: repeated string won_service_names = 3;
    */
   wonServiceNames: string[];
 
   /**
-   * error is why the last resolve failed, empty when it succeeded. A reflection
-   * target that has gone away contributes nothing but is NOT dropped and never
-   * blocks a mutation on its siblings — it stays listed with the reason showing,
-   * so it can be refreshed once it is back.
+   * Why the last resolve failed; empty when it succeeded.
    *
    * @generated from field: string error = 4;
    */
@@ -319,13 +277,7 @@ export declare type Folder = Message$1<"grpcview.v1.Folder"> & {
   items: Item[];
 
   /**
-   * draft_metadata_script is the folder's metadata authored as a TypeScript
-   * module (`export default (): Metadata => ({ ... })`), mirroring
-   * Request.draft_metadata_script. It feeds the ancestor-folder metadata chain
-   * gv.metadata.inherit() folds over (gv-features-plan.md Feature 1): a request
-   * (or a descendant folder) that spreads `{ ...gv.metadata.inherit() }` picks up
-   * every non-empty ancestor folder script root-to-leaf. Empty means this folder
-   * contributes nothing of its own (a transparent passthrough in the fold).
+   * TypeScript module feeding the gv.metadata.inherit() ancestor chain.
    *
    * @generated from field: string draft_metadata_script = 2;
    */
@@ -456,31 +408,21 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
   history: History[];
 
   /**
-   * middleware is the ordered display names of the MIDDLEWARE-kind scripts
-   * attached to this request; each runs (in this order) before the call to
-   * rewrite the outgoing body/metadata (scripting-ui-plan §S3).
+   * Ordered display names of the MIDDLEWARE scripts run before the call.
    *
    * @generated from field: repeated string middleware = 7;
    */
   middleware: string[];
 
   /**
-   * draft_metadata_script is the request's metadata authored as a TypeScript
-   * module (`export default (): Metadata => ({ ... })`) whose returned
-   * {[key: string]: string[]} object is evaluated on invoke to build the
-   * outgoing metadata. It replaces the old key/value metadata grid. Mirrors
-   * draft_body — a plain UTF-8 string.
+   * TypeScript module returning {[key: string]: string[]}, evaluated on invoke.
    *
    * @generated from field: string draft_metadata_script = 9;
    */
   draftMetadataScript: string;
 
   /**
-   * target overrides where this request's invoke is sent (host:port + TLS).
-   * Unset means "use the workspace's first reflection source" (see
-   * resolveTarget in invoke.go). The first slice of the storage.md §6
-   * target-vs-source split: a plain per-request inline target — no
-   * refs/inheritance yet.
+   * Unset means "use the workspace's first reflection source".
    *
    * @generated from field: optional grpcview.v1.Server target = 10;
    */
@@ -535,8 +477,6 @@ export declare type Request_Response = Message$1<"grpcview.v1.Request.Response">
 export declare const Request_ResponseSchema: GenMessage<Request_Response>;
 
 /**
- * Item is a single element in the treeview
- *
  * @generated from message grpcview.v1.Item
  */
 export declare type Item = Message$1<"grpcview.v1.Item"> & {
@@ -570,9 +510,6 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
 export declare const ItemSchema: GenMessage<Item>;
 
 /**
- * Script is a saved script in the collection: a kind, a display name, and the
- * authored source. Persisted under scripts/<slug>/script.json.
- *
  * @generated from message grpcview.v1.Script
  */
 export declare type Script = Message$1<"grpcview.v1.Script"> & {
@@ -599,8 +536,6 @@ export declare type Script = Message$1<"grpcview.v1.Script"> & {
 export declare const ScriptSchema: GenMessage<Script>;
 
 /**
- * Workspace is a state of the workspace
- *
  * @generated from message grpcview.v1.Workspace
  */
 export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
@@ -615,16 +550,12 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
   item?: Item | undefined;
 
   /**
-   * sources is the priority-ordered descriptor-source list; see DescriptorSource.
-   *
    * @generated from field: repeated grpcview.v1.DescriptorSource sources = 3;
    */
   sources: DescriptorSource[];
 
   /**
-   * services is the flat service list DERIVED by merging the sources in priority
-   * order — one entry per fully-qualified service, resolved from the winning
-   * source's descriptors.
+   * Derived by the priority merge: one entry per fully-qualified service.
    *
    * @generated from field: repeated grpcview.v1.Service services = 4;
    */
@@ -636,11 +567,7 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
   scripts: Script[];
 
   /**
-   * descriptor_set is the merged, deduped FileDescriptorSet (transitive deps
-   * incl. WKTs, topo-sorted) that protoc-gen-es needs to type request bodies
-   * client-side (ts-request-body-plan §T2/§4.4). Like services it is DERIVED by
-   * the priority merge and cached alongside them (gitignored services.json),
-   * never committed to grpcview.json and not part of grpcview.store.v1.
+   * Merged, deduped FileDescriptorSet; derived and cached, never persisted.
    *
    * @generated from field: bytes descriptor_set = 6;
    */
@@ -654,9 +581,6 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
 export declare const WorkspaceSchema: GenMessage<Workspace>;
 
 /**
- * ScriptKind classifies a saved script by how it is invoked. Mirrors the on-disk
- * grpcview.store.v1.ScriptKind.
- *
  * @generated from enum grpcview.v1.ScriptKind
  */
 export enum ScriptKind {

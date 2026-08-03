@@ -7,20 +7,9 @@ import { MetadataEditor } from "./MetadataEditor";
 import { defaultMetadataModule } from "./metadata-wrapper";
 import type { GeneratorDef } from "./generator-libs";
 
-// FolderMetadataDialog (gv-features-plan.md Feature 1 §"Frontend changes", third bullet) hosts
-// the existing request <MetadataEditor> to author a FOLDER's metadata script — the same
-// canonical `export default (): Metadata => ({ ... })` TS module a request authors, but folded
-// into every descendant's `gv.metadata.inherit()` (service/workspace/invoke.go's ancestor-chain
-// fold). Opened from a gear button on a folder row (TreeView.tsx).
-//
-// CollectionPanel renders this component KEYED by the open folder's itemKey (or "none" while
-// closed) so a BRAND NEW instance mounts every time a different folder opens, and `draft`'s
-// useState initializer re-seeds fresh on that very first render. This sidesteps a stale-seed race
-// a same-instance reseed (an effect calling setState after the fact) would hit: MetadataEditor
-// only reloads its buffer when ITS OWN `currentKey` prop changes, and that prop changes in the
-// SAME render this component mounts in — one render later is already too late. The dialog can
-// only be reopened after being closed (its Backdrop blocks clicks on the tree behind it), so a
-// fresh mount per open is always correct, never redundant.
+// Authors a folder's metadata script, which descendants pick up via gv.metadata.inherit().
+// CollectionPanel must render this KEYED by the folder so a fresh instance re-seeds `draft` on
+// mount — MetadataEditor reloads its buffer in the same render, so a later reseed is too late.
 export function FolderMetadataDialog({
   folder,
   onClose,
@@ -29,9 +18,6 @@ export function FolderMetadataDialog({
   // The folder row being edited, or null when the dialog is closed.
   folder: ItemWithPath | null;
   onClose: () => void;
-  // Workspace generators, forwarded to MetadataEditor for the same ambient autocomplete the
-  // request metadata editor gets (folder scripts run through the same eval path — D4: uniform
-  // capabilities). Optional; defaults to [].
   generators?: GeneratorDef[];
 }) {
   const { updateFolder } = useWorkspaceMutations();
@@ -39,9 +25,6 @@ export function FolderMetadataDialog({
   const savedScript =
     folder?.item.content.case === "folder" ? folder.item.content.value.draftMetadataScript : "";
 
-  // The editor's live buffer, seeded from the folder's persisted script — falling back to the
-  // transparent-by-default `{ ...gv.metadata.inherit() }` module so an as-yet-unedited folder is
-  // transparent-by-default, same as a new request.
   const [draft, setDraft] = useState(() => savedScript || defaultMetadataModule());
 
   const onSave = () => {

@@ -23,12 +23,6 @@ import {
 } from "@/lib/format";
 import { JsonViewer } from "./JsonViewer";
 
-// ResponsePane renders the Invoke result. Unary calls show a single status bar +
-// body (unchanged). Streaming calls (server/client/bidi) show the same status bar
-// augmented with a live streaming indicator, message count, and Stop, plus a loop
-// of response-message cards. The backend merges header+trailer metadata, so there
-// is no separate Trailers tab (plan §1.5). A gRPC-status failure arrives as the
-// terminal result's status; only grpcview-internal failures surface via `error`.
 export function ResponsePane({
   invoke,
   kind = "u",
@@ -40,8 +34,7 @@ export function ResponsePane({
   invoke?: InvokeState;
   kind?: MethodKind;
   onStop?: () => void;
-  // Persisted run history for the active request (rides along on the Get
-  // snapshot). Newest-last from the store; the Timeline renders it newest-first.
+  // Newest-last from the store; the Timeline renders it newest-first.
   history?: History[];
   onSelectHistory?: (entry: History) => void;
   onRerunHistory?: (entry: History) => void;
@@ -50,9 +43,8 @@ export function ResponsePane({
   const setSubtab = useUIStore((s) => s.setResponseSubtab);
 
   const hasHistory = history.length > 0;
-  const response = invoke?.response; // terminal result (undefined while streaming)
-  // A stream having started is the discriminator: `messages` is set (even empty)
-  // for the streaming path and undefined for the unary path.
+  const response = invoke?.response;
+  // `messages` is set (even when empty) on the streaming path, undefined on unary.
   const streamMode = invoke?.messages !== undefined;
   const streaming = !!invoke?.streaming;
   const streamMsgs = invoke?.messages ?? [];
@@ -62,14 +54,11 @@ export function ResponsePane({
     [response]
   );
 
-  // Unary in-flight (streaming never sets `loading`).
+  // Streaming never sets `loading`.
   if (invoke?.loading) {
     return <Centered>Invoking…</Centered>;
   }
 
-  // grpcview-side error (unreachable schema, bad body, no target) — distinct from
-  // a gRPC status failure, which arrives as response data below. For streams this
-  // only fires on an open failure (before any message), so no cards are lost.
   if (invoke?.error) {
     return (
       <div style={{ padding: 16, overflow: "auto" }}>
@@ -97,9 +86,6 @@ export function ResponsePane({
     );
   }
 
-  // Nothing invoked this session AND no persisted history: the only truly-empty
-  // case. When history exists (e.g. right after a reload) we fall through to the
-  // pane so the Timeline subtab is reachable without invoking first.
   if (!streamMode && !response && !hasHistory) {
     return (
       <Centered>
@@ -108,12 +94,9 @@ export function ResponsePane({
     );
   }
 
-  // A live result/stream drives the status bar + Messages/Metadata tabs; without
-  // one (history-only browsing) those are hidden and the Timeline leads.
   const hasResult = !!response || streamMode;
 
-  // code is defined whenever a terminal result exists (always so for unary here);
-  // undefined means a stream is still open before its result frame → "pending".
+  // undefined means a stream is still open before its result frame.
   const code = response ? response.status?.code ?? 0 : undefined;
   const ok = code === 0;
   const reqMd = metadataEntries(response?.requestMetadata as Record<string, unknown> | undefined);
@@ -133,7 +116,6 @@ export function ResponsePane({
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-      {/* status bar — hidden when browsing history with no live result */}
       {hasResult && (
       <div
         className="flex items-center gap-[10px]"
@@ -221,7 +203,6 @@ export function ResponsePane({
       </div>
       )}
 
-      {/* gRPC status message, if the call failed */}
       {!ok && response?.status?.message && (
         <div
           style={{
@@ -237,7 +218,6 @@ export function ResponsePane({
         </div>
       )}
 
-      {/* subtabs */}
       <div
         className="flex items-center"
         style={{ flex: "none", padding: "0 6px", borderBottom: "1px solid var(--line)" }}
@@ -266,7 +246,6 @@ export function ResponsePane({
         </Subtab>
       </div>
 
-      {/* content */}
       {subtab === "history" ? (
         <HistoryTimeline
           history={history}
@@ -295,9 +274,6 @@ export function ResponsePane({
   );
 }
 
-// StreamMessagesView renders one card per received payload, and — while the
-// stream is open — an "awaiting next message…" row (pulsing dot). Payload bodies
-// are pretty-printed JSON shown mono with wrapping preserved.
 function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; streaming: boolean }) {
   return (
     <div
@@ -308,7 +284,7 @@ function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; stream
         <div
           key={i}
           style={{
-            flex: "none", // don't shrink; shrinking + overflow:hidden would clip the card
+            flex: "none", // shrinking + overflow:hidden would clip the card
             border: "1px solid var(--line)",
             borderRadius: 8,
             background: "var(--panel-2)",
@@ -360,10 +336,6 @@ function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; stream
   );
 }
 
-// HistoryTimeline lists past runs newest-first: a status chip, latency, the
-// method invoked, and the run's timestamp. Clicking a row loads that run back
-// into the editor (draft + metadata); the re-run button loads it AND fires it
-// again. The store appends newest-last, so the list is reversed here.
 function HistoryTimeline({
   history,
   onSelect,

@@ -2,59 +2,22 @@ import { useEffect, useRef } from "react";
 import { Editor as MonacoEditor, useMonaco, type OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
-// Side-effect import: configure the GLOBAL TypeScript defaults (compiler options,
-// eager model sync, diagnostics ON) the same way the Scripts editor does, so the TS
-// body model below gets sane options + live error markers. We deliberately mount on
-// our OWN file:// URI (TS_MODEL_URI), distinct from that module's SCRATCH_PATH, so
-// the body editor never shares a model with the Scripts / binding editors.
+// Side-effect import: global TS defaults. Our own TS_MODEL_URI keeps this model distinct.
 import "@/features/scripts/monaco-scripts";
-// Side-effect import (T2): the fixed virtual `@bufbuild/protobuf{,/wkt,/codegenv2}` d.ts
-// stubs the generated proto `_pb.ts` files import from. Added once; the per-method generated
-// files + RequestMessage alias are injected by the effect below.
+// Side-effect import: virtual `@bufbuild/protobuf` d.ts the generated `_pb.ts` files need.
 import "./vendor/bufbuild-stubs";
-// T4 hidden-wrapper: the canonical `export default (): RequestMessage => (\n<body>\n)` module
-// shape + helpers. We HIDE the prefix/suffix lines so the user edits a bare object.
 import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
-// §P5 typed generator signatures: the shared GeneratorDef shape (name + source) + the helper that
-// registers each generator's source as an isolated module and declares it as an ambient global
-// with its INFERRED signature. Centralizes the name-safety / failure-isolation / body-vs-metadata
-// URI invariants so the body + metadata editors can't diverge on them.
 import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
-// Dev/verification hook: register this editor by its model URI on window.__grpcviewEditors (there
-// is no single global monaco). App code never reads it.
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
-// The request body is ALWAYS authored as TypeScript (ts-request-body-plan §T1–§T4 + the all-JS
-// phase): the body is a TS/JS generator whose returned object becomes the message. It mounts
-// language="typescript" on a DISTINCT file:// URI (Node-style resolution; never collides with the
-// Scripts sandbox's SCRATCH_PATH). The model text is the canonical hidden-wrapper module
-// (body-wrapper.ts); we HIDE the wrapper's prefix/suffix lines via setHiddenAreas so the user sees
-// only a bare object. The body types against the input message's generated `<Message>Json` (T2)
-// and can call the workspace's saved generators as ambient globals (T3). Every persisted body is
-// migrated to this canonical shape on load (migrateBodyToTs in RequestWorkspace), so the editor
-// only ever hosts a canonical module — there is no JSON authoring mode anymore.
-// Ported from the previous Editor.tsx (plan §7), on the bundled Monaco + Nocturne theme.
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
 
-// --- Hidden-wrapper geometry (ts-request-body-plan §T4) ---------------------------------------
-// The model text is the canonical `export default (): RequestMessage => (\n<body>\n)` module
-// (body-wrapper.ts). We hide the prefix line(s) and suffix line(s) via the editor's internal
-// setHiddenAreas so only the bare <body> shows. Positions stay NATIVE model coordinates, so
-// completions + squiggles need no translation — only the footer error COUNT filters out the
-// (normally empty) markers that fall wholly on a hidden line.
-
-// setHiddenAreas is real in monaco-editor 0.52.2 (codeEditorWidget.js) but stripped from the
-// public monaco.d.ts. Cast through this narrow interface + optional-call so a future monaco bump
-// degrades gracefully (bare object stays visible, just unhidden) rather than throwing.
+// setHiddenAreas exists in monaco 0.52.2 but is stripped from the public monaco.d.ts.
 type HasHiddenAreas = { setHiddenAreas?(ranges: Monaco.IRange[], source?: unknown): void };
 
-// The source tag under which we register our hidden areas. monaco merges hidden areas across
-// sources (folding uses its own), so keeping a stable, private tag lets us clear/replace ONLY
-// ours. The clear+set force path (applyHidden) keys on this exact tag.
+// monaco merges hidden areas across sources; a private tag lets us replace only ours.
 const HIDDEN_SOURCE = "grpcview-body-wrapper";
 
-// The visible body line span [first, last] + total, derived from line COUNT only. Robust to an
-// empty body: `last` is clamped to be >= `first`.
 function bodyBounds(model: Monaco.editor.ITextModel) {
   const total = model.getLineCount();
   const first = PREFIX_LINES + 1;
@@ -70,19 +33,7 @@ function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
   ];
 }
 
-// Hide the wrapper lines (idempotent; re-call after setValue, after any body line-count change,
-// and on relayout — hidden areas live on the editor, not the model, so a visibility/size
-// transition drops them). Also nudges the cursor off a hidden prefix line if it landed there.
-//
-// `force` re-applies the hiding even when the ranges are UNCHANGED. A full-buffer replace
-// (setValue on a request switch, or the Layer-3 restore below) resets the editor's VIEW
-// line-projections to all-visible but leaves monaco's internal HiddenAreasModel cache intact — so
-// a following setHiddenAreas with the SAME geometry (switching between two bodies of equal line
-// count → the byte-identical [prefix, suffix] ranges) is judged "unchanged" (HiddenAreasModel
-// short-circuits on rangeArraysEqual; viewModel then on reference-equal merged ranges) and skipped
-// entirely, leaving the wrapper visible. force clears OUR source's ranges first, so the re-set is
-// always a real change that re-projects. Layout / incremental-content callers stay UNFORCED so the
-// idempotent short-circuit still suppresses needless re-projection (no churn, no layout loop).
+// force: an identical re-set is skipped by monaco's cache, even after setValue reset the view.
 function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor, force = false) {
   const model = editor.getModel();
   const ha = editor as unknown as HasHiddenAreas;
@@ -99,16 +50,10 @@ interface EditorProps {
   data: string;
   onChange: (value: string) => void;
   currentKey: string; // request identity — reload the buffer when it changes
-  // T2 typed-body inputs (all optional). descriptorSet is the workspace-global merged
-  // FileDescriptorSet; the input triple identifies the active method's request message so the
-  // body types against its generated `<Message>Json`.
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
-  // Composition (T3 + §P5): the workspace's saved GENERATORS (name + source). Each emittable
-  // generator is declared as an ambient global with its INFERRED signature so the body can call it
-  // with autocomplete + real param/return typing. Optional; defaults to [].
   generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
@@ -125,22 +70,11 @@ export function Editor({
   onErrorsChange,
 }: EditorProps) {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
-  // Set while we reload the buffer programmatically, so the resulting
-  // onDidChangeModelContent isn't reported as a user edit. @monaco-editor/react
-  // only suppresses onChange for its own controlled `value` prop, not for an
-  // external editor.setValue() — without this guard, a tab switch looks like a
-  // keystroke and schedules a spurious save (which cancels the previous
-  // request's pending debounced save). Also used by the hidden-wrapper Layer-3
-  // backstop so its repair edit isn't reported as a user edit.
+  // @monaco-editor/react only suppresses onChange for its own controlled `value` prop.
   const suppressChange = useRef(false);
-  // The last known-canonical model text. The hidden-wrapper structural backstop
-  // (onMount Layer 3) restores this if an exotic edit corrupts the wrapper. Seeded on mount
-  // and on every programmatic reload.
   const lastGood = useRef<string>("");
   const monaco = useMonaco();
 
-  // Load the active request's draft when the request identity changes. Guarded so
-  // it never clobbers the buffer mid-typing (onChange keeps `data` === buffer).
   useEffect(() => {
     const ed = editorRef.current;
     if (!ed) return;
@@ -148,33 +82,19 @@ export function Editor({
       suppressChange.current = true;
       ed.setValue(data);
       suppressChange.current = false;
-      // Hidden areas do NOT survive setValue — reset the structural backstop's
-      // last-good snapshot to the freshly loaded body.
       lastGood.current = data;
     }
-    // Re-hide, FORCED. On a view/subtab REMOUNT the model is cached by path so getValue() already
-    // equals data (the setValue branch is skipped), yet the fresh editor instance starts with NO
-    // hidden areas — re-hiding here covers that remount case. The setValue branch above needs the
-    // force: replacing the buffer resets the VIEW to all-visible but not monaco's HiddenAreasModel
-    // cache, so switching between two SAME-line-count bodies would otherwise short-circuit the
-    // re-hide and leave the wrapper visible (see applyHidden). force is a harmless no-op on the
-    // fresh-remount path (our source has no prior ranges to clear).
+    // Forced: a remount has no hidden areas yet, and setValue may not change the geometry.
     applyHidden(ed, /* force */ true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey]);
 
-  // Report TS/schema error count for the footer validity line.
   useEffect(() => {
     if (!monaco || !onErrorsChange) return;
     const sub = monaco.editor.onDidChangeMarkers(() => {
       const model = editorRef.current?.getModel();
       if (!model) return;
-      // In hidden-wrapper mode, drop error markers that lie WHOLLY on a hidden prefix/suffix
-      // line so they don't inflate the footer count. A canonical wrapper is valid, but a
-      // mid-edit transient can briefly flash a marker on the `=> (` prefix. Markers touching a
-      // visible line are kept and land on the correct visible line (native model coordinates).
-      // Gated on isCanonical(getValue()) so the effect stays self-contained; a (transient) non-
-      // canonical body counts all markers.
+      // Markers wholly on a hidden wrapper line must not inflate the footer count.
       const canonical = isCanonical(model.getValue());
       const bounds = canonical ? bodyBounds(model) : null;
       const errors = monaco.editor
@@ -192,21 +112,10 @@ export function Editor({
     return () => sub.dispose();
   }, [monaco, onErrorsChange]);
 
-  // T2 — type the TS body against the input message's generated `<Message>Json` type.
-  // With a descriptor set + a known input file: dynamically import the client-side generator
-  // (keeps protoc-gen-es + typescript off the main chunk), run it over the workspace descriptor
-  // set (memoized by reference), then addExtraLib each generated `_pb.ts` under
-  // file:///grpcview/request/gen/<protopath> (extensionless relative imports in the generated
-  // files resolve to these) plus a RequestMessage alias d.ts at a constant path. typescriptDefaults
-  // is GLOBAL with no per-URI fileMatch, but only one body editor is live, so we track the libs in
-  // a ref and DISPOSE-BEFORE-ADD on every re-run (method change / descriptor change) — same-path
-  // replace can throw "Duplicate definition". Cleanup disposes all libs so no stale `declare
-  // global` survives.
+  // typescriptDefaults is global and a same-path re-add throws "Duplicate definition".
   const typeLibs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
-    // descriptorSet is best-effort on the backend (empty when a reflection source is
-    // unreachable) — an empty set has no files to generate, so skip and let the body stay
-    // untyped rather than aliasing RequestMessage to a missing import.
+    // descriptorSet is best-effort on the backend (empty when a source is unreachable).
     if (!monaco || !descriptorSet?.length || !inputFile) return;
     let cancelled = false;
     void (async () => {
@@ -233,17 +142,7 @@ export function Editor({
     };
   }, [monaco, descriptorSet, inputPackage, inputName, inputFile]);
 
-  // Composition (T3 + §P5) — ambient autocomplete for the workspace's saved GENERATORS WITH their
-  // inferred signatures. The backend injects each referenced generator as `globalThis.<name>` and
-  // the body calls it directly (e.g. `mkid()`); we mirror that here so those names autocomplete +
-  // type-check (instead of erroring "Cannot find name") AND carry each generator's real params +
-  // return type. registerGeneratorLibs registers, per emittable generator, its source as an
-  // isolated module plus one ambient-globals .d.ts declaring `const <name>: typeof
-  // import(...).default` (see generator-libs.ts for the mechanism + the name-safety / failure-
-  // isolation invariants). scope="body" namespaces the module + globals URIs away from the metadata
-  // editor's. It returns MULTIPLE disposables (one per module + the globals .d.ts); we dispose them
-  // ALL before re-adding on any change, and on unmount — typescriptDefaults is global with no
-  // per-URI fileMatch, and same-path re-add can throw "Duplicate definition".
+  // Same dispose-before-add rule; scope="body" namespaces the URIs away from metadata.
   const genLibs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
     if (!monaco) return;
@@ -259,14 +158,10 @@ export function Editor({
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
     registerEditorForDebug(TS_MODEL_URI, editor);
-    // ⌘S / Ctrl+S formats. Format only the visible BODY range, then dedent one level and re-hide.
-    // (A full-document format reflows the wrapper across the hidden boundary; a range format of the
-    // body over-indents it — see the outdent step below.)
+    // A full-document format would reflow the wrapper across the hidden boundary.
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
       const model = editor.getModel();
       if (!model) return;
-      // Select the visible body range [first, last], recomputed each call (formatting can change
-      // the line count).
       const selectBody = () => {
         const { first, last } = bodyBounds(model);
         editor.setSelection({
@@ -279,33 +174,20 @@ export function Editor({
       selectBody();
       void Promise.resolve(editor.getAction("editor.action.formatSelection")?.run())
         .then(() => {
-          // formatSelection reindents the body to match its nesting one level inside the hidden
-          // `=> (` wrapper, shifting the whole visible region right by one indent. Re-select and
-          // OUTDENT once to pull the base back to column 0 (relative nesting preserved; outdent
-          // clamps at column 0, so repeated ⌘S is stable and the empty seed stays put). The wrapper
-          // lines stay outside the selection, so the model remains canonical (Layer 3 no-ops).
+          // formatSelection indents one level inside the hidden `=> (`; outdent clamps at 0.
           selectBody();
           return Promise.resolve(editor.getAction("editor.action.outdentLines")?.run());
         })
         .then(() => applyHidden(editor));
     });
 
-    // Hide the wrapper lines + guard their integrity. onMount is captured at mount; the body is
-    // always a canonical hidden-wrapper module (migrated on load), so this always applies.
     lastGood.current = editor.getValue();
     applyHidden(editor);
 
-    // Re-hide on relayout. setHiddenAreas state lives on the EDITOR (viewModel), not the model,
-    // so when this editor mounts inside a hidden/zero-size container (a view or subtab switch
-    // remounts it) and the container later becomes visible, monaco's first real layout re-projects
-    // the lines and DROPS the hidden areas set just above — leaving the wrapper prefix/suffix
-    // visible until the next edit. Re-hiding on every layout change closes that window. Idempotent:
-    // monaco short-circuits an identical setHiddenAreas (no re-projection, no view events), so this
-    // never re-triggers a layout — no loop. Tied to the editor, so disposed when it is.
+    // Hidden areas live on the editor's viewModel: the first real layout drops them.
     editor.onDidLayoutChange(() => applyHidden(editor));
 
-    // Layer 1 (proactive) — swallow the two boundary keystrokes that would merge a visible
-    // body line into a hidden wrapper line (Backspace at body start, Delete at body end).
+    // Swallow the boundary keystrokes that would merge a body line into a hidden one.
     editor.onKeyDown((e) => {
       const model = editor.getModel();
       const sel = editor.getSelection();
@@ -324,9 +206,7 @@ export function Editor({
       }
     });
 
-    // Layer 2 (proactive) — ⌘/Ctrl+A selects the BODY region only (shadows the built-in
-    // select-all for this editor), so "select-all + type / delete / paste" can't touch the
-    // wrapper.
+    // Shadow select-all for this editor so it covers the body region only.
     editor.addAction({
       id: "grpcview.selectBody",
       label: "Select Body",
@@ -344,10 +224,7 @@ export function Editor({
       },
     });
 
-    // Layer 3 (fail-safe) — after ANY change the model must stay canonical; if an exotic
-    // vector (IME, drag-drop, replace-all) breaks the wrapper, restore last-good via an
-    // undo-coherent executeEdits (not setValue). Also re-hides after body line-count changes
-    // (Enter at end, paste). suppressChange keeps the repair from being reported as an edit.
+    // Fail-safe: undo an exotic edit (IME, drag-drop, replace-all) that broke the wrapper.
     editor.onDidChangeModelContent(() => {
       if (suppressChange.current) return;
       const model = editor.getModel();
@@ -365,8 +242,6 @@ export function Editor({
       ]);
       if (sel) editor.setSelection(sel);
       suppressChange.current = false;
-      // FORCED: the full-range replace above is the same "reset the view, keep the cache" desync
-      // as setValue, so restoring identical-geometry last-good must force the re-hide.
       applyHidden(editor, /* force */ true);
     });
   };
@@ -382,19 +257,12 @@ export function Editor({
         if (!suppressChange.current) onChange(v ?? "");
       }}
       options={{
-        // Hidden-wrapper mode: disable format-on-type/paste (they reflow across the hidden
-        // wrapper boundary), disable folding (its controller contends over the hidden-area
-        // buckets), and remap the gutter so the first VISIBLE body line reads "1".
+        // These all reflow or contend across the hidden wrapper boundary.
         formatOnType: false,
         formatOnPaste: false,
         folding: false,
         lineNumbers: (n: number) => (n <= PREFIX_LINES ? "" : String(n - PREFIX_LINES)),
-        // Auto-trigger completions INSIDE string literals too. Monaco defaults
-        // quickSuggestions.strings=false, so it stays silent between quotes
-        // (microsoft/monaco-editor#2883) — which hid the body's most useful completion:
-        // a proto enum field typed as a string-literal union (`"FOO" | "BAR"`) offers
-        // its values only when the caret is in the quotes. Manual Ctrl+Space always
-        // worked; this makes it pop automatically like it does outside strings.
+        // monaco defaults quickSuggestions.strings=false (microsoft/monaco-editor#2883).
         quickSuggestions: { other: true, comments: false, strings: true },
         automaticLayout: true,
         minimap: { enabled: false },

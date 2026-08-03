@@ -10,15 +10,10 @@ option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1
 message AddDescriptorSourceRequest {
   string workspace_name = 1;
   oneof source {
-    // descriptor_set is an uploaded FileDescriptorSet's raw bytes; file_name
-    // names it and gives the source its identity.
     bytes  descriptor_set = 2;
     Server reflection     = 3;
   }
-  // file_name identifies a descriptor_set upload (e.g. "buf_image.binpb"). It is
-  // the upload's identity, so re-uploading a rebuilt file of the same name
-  // REFRESHES that source in place instead of adding a second, indistinguishable
-  // row. Ignored for the reflection case, which is identified by its address.
+  // Identity of a descriptor_set upload; re-uploading the same name refreshes it.
   string file_name = 4;
 }
 
@@ -28,7 +23,6 @@ message AddDescriptorSourceResponse {
 
 message RemoveDescriptorSourceRequest {
   string workspace_name = 1;
-  // id selects the source to remove (DescriptorSource.id).
   string id = 2;
 }
 
@@ -38,7 +32,6 @@ message RemoveDescriptorSourceResponse {
 
 message RefreshDescriptorSourceRequest {
   string workspace_name = 1;
-  // id selects the source to re-resolve (DescriptorSource.id).
   string id = 2;
 }
 
@@ -48,10 +41,7 @@ message RefreshDescriptorSourceResponse {
 
 message ReorderDescriptorSourcesRequest {
   string workspace_name = 1;
-  // ids is the full set of DescriptorSource.id values in the desired priority
-  // order — earlier wins. It must be a permutation of the workspace's current
-  // source ids; a missing or unknown id is an error rather than a partial
-  // reorder, so a stale client can never silently drop a source.
+  // Every DescriptorSource.id in priority order — earlier wins; must be a permutation.
   repeated string ids = 2;
 }
 
@@ -98,27 +88,13 @@ message UpdateRequestRequest {
   optional string service = 4;
   optional string method = 5;
   optional string draft_body = 6;
-  // name renames the request (its display name). Unset leaves the name unchanged;
-  // a rename that collides with a sibling fails with FailedPrecondition.
   optional string name = 8;
-  // middleware patches the request's attached-middleware list (ordered MIDDLEWARE
-  // script display names). proto3 repeated can't be `optional`, so update_middleware
-  // is the set-flag that distinguishes "leave unchanged" from "set": when
-  // update_middleware is true the list is replaced by `middleware` (an empty list
-  // clears it); when false/unset the list is left as-is.
+  // Set-flag: true replaces `middleware` (empty clears it), false/unset leaves it.
   optional bool update_middleware = 9;
   repeated string middleware = 10;
-  // draft_metadata_script patches the request's metadata source: a TypeScript
-  // module (`export default (): Metadata => ({ ... })`) whose returned
-  // {[key: string]: string[]} object is evaluated on invoke to build the
-  // outgoing metadata. It mirrors draft_body's plumbing (a plain string patched
-  // like draft_body). Unset leaves it unchanged, an empty-but-present value clears it.
+  // TypeScript module; empty-but-present clears it.
   optional string draft_metadata_script = 12;
-  // target patches the request's per-request invoke destination (host:port +
-  // TLS). Like update_middleware, it needs a set-flag to distinguish "leave
-  // unchanged" from "clear": when update_target is true the target is replaced
-  // by `target` (a nil `target` clears it, reverting to the reflection-source
-  // default); when false/unset it is left unchanged.
+  // Set-flag: true replaces `target` (nil clears it), false/unset leaves it.
   optional bool update_target = 13;
   optional Server target = 14;
 }
@@ -127,24 +103,12 @@ message UpdateRequestResponse {
   Workspace workspace = 1;
 }
 
-// UpdateFolderRequest patches a folder's name and metadata script. Mirrors
-// UpdateRequestRequest's plumbing but carries only the fields a folder has:
-// folders have no service/method/body/middleware/target of their own.
 message UpdateFolderRequest {
   string workspace_name = 1;
   repeated string path = 2;
   string item_name = 3;
-  // draft_metadata_script patches the folder's metadata source: a TypeScript
-  // module (`export default (): Metadata => ({ ... })`) whose returned
-  // {[key: string]: string[]} object contributes to the ancestor-folder
-  // metadata chain gv.metadata.inherit() folds over. Mirrors
-  // UpdateRequestRequest.draft_metadata_script: unset leaves it unchanged, an
-  // empty-but-present value clears it.
+  // TypeScript module feeding the gv.metadata.inherit() chain; empty clears it.
   optional string draft_metadata_script = 4;
-  // name renames the folder (its display name). Unset leaves the name unchanged;
-  // a rename that collides with a sibling fails with FailedPrecondition. Mirrors
-  // UpdateRequestRequest.name, including the slug-identity model: the folder's
-  // on-disk directory (and every descendant's) stays put.
   optional string name = 5;
 }
 
@@ -152,33 +116,14 @@ message UpdateFolderResponse {
   Workspace workspace = 1;
 }
 
-// MoveItemRequest reparents and/or reorders one tree item (of either kind). It is
-// the one mutation the Update* RPCs deliberately cannot express: their `path` +
-// `item_name` are pure ADDRESSING and `name` only rewrites the display name, per
-// the slug-identity model — nothing there moves an item between folders.
-//
-// Moving a folder into itself, or into any of its own descendants, is rejected
-// with FailedPrecondition (store.ErrMoveIntoDescendant): the drop would detach
-// the subtree from the tree entirely. The check is enforced in the store, not
-// just in the dragging UI, so a stale or hand-written request cannot corrupt the
-// collection. A destination that already holds an item with the same DISPLAY name
-// is likewise FailedPrecondition (store.ErrAlreadyExists) — a move never silently
-// renames what it moves.
+// A move into the moved folder's own subtree, or onto an existing name, fails.
 message MoveItemRequest {
   string workspace_name = 1;
-  // path + item_name address the item to move, exactly like every other item RPC.
   repeated string path = 2;
   string item_name = 3;
-  // new_path is the DESTINATION parent folder's display-name path (empty = the
-  // collection root). Resolving to the item's CURRENT parent means a pure reorder
-  // within that parent: the item's on-disk directory is left untouched and only
-  // the recorded sibling order changes.
+  // Destination parent; empty is the root, the current parent means a pure reorder.
   repeated string new_path = 4;
-  // before names a sibling in the destination parent to insert this item ahead of;
-  // unset appends to the end. This is what makes a drop BETWEEN two rows
-  // expressible and not just a drop INTO a folder. A `before` that no longer names
-  // a child of the destination appends rather than failing — a stale drop target is
-  // a UI race, not a corrupt request.
+  // Sibling in the destination to insert ahead of; unset (or stale) appends.
   optional string before = 5;
 }
 
@@ -194,11 +139,7 @@ message GetResponse {
   Workspace workspace = 1;
 }
 
-// InvokeRequest executes a single unary RPC against a target server. The
-// service/method/body/metadata carry the (possibly unsaved) editor state, so a
-// send never depends on a prior UpdateRequest landing first. workspace_name
-// identifies the collection (used to default the target from its reflection
-// source and, later, to key run history by path/item_name).
+// Executes a unary RPC carrying the caller's own, possibly unsaved, body.
 message InvokeRequest {
   string                 workspace_name = 1;
   repeated string        path           = 2;
@@ -207,16 +148,9 @@ message InvokeRequest {
   string                 method         = 5;
   string                 body           = 6;
   google.protobuf.Struct metadata       = 7;
-  // target overrides where the call is sent; when unset it defaults to the
-  // workspace's first reflection source.
+  // Unset defaults to the workspace's first reflection source.
   optional Server        target         = 8;
-  // metadata_script, when non-empty, is a TypeScript module
-  // (`export default (): Metadata => ({ ... })`) whose returned
-  // {[key: string]: string[]} object is evaluated on the backend (same engine as
-  // the TS body, generators composable as ambient globals) to build the outgoing
-  // metadata — superseding the `metadata` Struct above. Empty means "use
-  // `metadata` as-is" (today's path). Carries the editor's current source, like
-  // `body`, so a send never depends on a prior UpdateRequest landing first.
+  // TypeScript module; supersedes `metadata` when non-empty.
   string                 metadata_script = 10;
 }
 
@@ -224,44 +158,24 @@ message InvokeResponse {
   Request.Response response = 1;
 }
 
-// InvokeStreamRequest opens a streaming invoke. The browser transport
-// (@connectrpc/connect-web) cannot stream a request body, so the entire call is
-// modeled as a single server-streaming RPC: every client message is supplied
-// up-front in `messages`, and the backend maps them onto the target method's
-// real streaming kind (unary / server / client / bidi over full gRPC). The
-// service/method/messages/metadata carry the (possibly unsaved) editor state,
-// mirroring InvokeRequest.
+// All client messages are supplied up-front: connect-web cannot stream a body.
 message InvokeStreamRequest {
   string                 workspace_name = 1;
   repeated string        path           = 2;
   string                 item_name      = 3;
   string                 service        = 4;
   string                 method         = 5;
-  // messages are the client request bodies as JSON text, in send order. Unary
-  // and server-streaming targets expect exactly one; client-streaming and bidi
-  // targets receive all of them composed up-front — there is no live interleave,
-  // a deliberate v1 limit of the browser transport. Empty defaults to one "{}".
+  // Client bodies as JSON text, in send order; empty defaults to one "{}".
   repeated string        messages       = 6;
   google.protobuf.Struct metadata       = 7;
-  // target overrides where the call is sent; unset defaults to the workspace's
-  // first reflection source (same as Invoke).
+  // Unset defaults to the workspace's first reflection source.
   optional Server        target         = 8;
-  // metadata_script mirrors InvokeRequest.metadata_script: a TypeScript module
-  // whose returned {[key: string]: string[]} object is evaluated on the backend
-  // to build the outgoing metadata, superseding the `metadata` Struct when
-  // non-empty. Empty means "use `metadata` as-is".
+  // TypeScript module; supersedes `metadata` when non-empty.
   string                 metadata_script = 10;
 }
 
-// InvokeStreamResponse is one frame of a streaming invoke. Zero or more `message`
-// frames carry response payloads as the target emits them; exactly one terminal
-// `result` frame closes the stream, carrying the final gRPC status, request +
-// response metadata, latency and timestamp — the same Request.Response shape
-// unary Invoke returns (its `response` bytes are left empty; payloads arrived as
-// message frames). A gRPC-status failure of the invoked call is reported in the
-// terminal frame's status, NOT as a Connect stream error; only grpcview-internal
-// failures (no target, unreachable schema, a body that doesn't parse) surface as
-// Connect errors.
+// Zero or more `message` frames, then exactly one terminal `result`. The invoked
+// call's gRPC status is reported in `result`, not as a Connect stream error.
 message InvokeStreamResponse {
   oneof event {
     bytes            message = 1;
@@ -269,96 +183,57 @@ message InvokeStreamResponse {
   }
 }
 
-// InvokeSavedRequest runs the request SAVED at path/item_name, resolving its body,
-// metadata script, attached middleware and target server-side — the addressed
-// counterpart to InvokeRequest, which carries the caller's own (possibly unsaved)
-// body. It backs both InvokeSaved and InvokeSavedStreaming.
+// Runs the request SAVED at path/item_name, resolved server-side.
 message InvokeSavedRequest {
   string                 workspace_name = 1;
-  // path is the saved request's PARENT-folder display-name path, outermost first;
-  // empty for a request at the top level.
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string        path           = 2;
-  // item_name is the saved request's own display name.
   string                 item_name      = 3;
-  // params is this run's gv.request.params: the object the request's body, metadata
-  // script, ancestor folder metadata scripts and middleware all read it from.
+  // This run's gv.request.params.
   google.protobuf.Struct params         = 4;
-  // target overrides the saved request's target for this run; unset uses the saved
-  // one (and, when that is unset too, the same default Invoke applies).
+  // Unset uses the saved request's own target.
   optional Server        target         = 5;
-  // messages, when non-empty, override the saved body for this run only — the
-  // request bodies as JSON (or TypeScript) text, in send order. The rule matches
-  // InvokeStreamRequest.messages: unary and server-streaming targets expect exactly
-  // one; client-streaming and bidi targets receive all of them composed up-front.
+  // Overrides the saved body for this run only.
   repeated string        messages       = 6;
-  // record_history gates whether this run is appended to the saved request's run
-  // history. It defaults to TRUE (an explicit false opts out) because an addressed
-  // run is a real user-initiated one, unlike a script's fan-out.
+  // Whether to append this run to the request's history. Defaults to TRUE.
   optional bool          record_history = 7;
-  // dry_run resolves and evaluates everything the call needs and then sends
-  // nothing, reporting the outcome in InvokeSavedResponse.resolved. Nothing is
-  // dialed, so a dry run works with the target down. Rejected by the streaming form,
-  // which has no frame to carry the result — dry-run any request, of any streaming
-  // kind, through the unary one.
+  // Resolve and evaluate everything, send nothing. Rejected by the streaming form.
   bool                   dry_run        = 8;
 }
 
-// InvokeSavedResponse carries a saved request's run: response for a real call,
-// resolved for a dry run. Exactly one of the two is ever set.
+// Exactly one of `response` (a real call) and `resolved` (a dry run) is set.
 message InvokeSavedResponse {
   Request.Response         response = 1;
   optional ResolvedRequest resolved = 2;
 }
 
-// ResolvedRequest is what a dry run reports: everything the server would have sent,
-// post-evaluation and post-middleware, with nothing dialed.
+// What a dry run reports: what would have been sent, post-middleware, nothing dialed.
 message ResolvedRequest {
   string                 service  = 1;
   string                 method   = 2;
-  // target is the server the call would have been sent to, after the saved
-  // request's own target and the per-run override are applied.
   Server                 target   = 3;
-  // messages are the evaluated request bodies as JSON, post-middleware, in send
-  // order — one entry for a unary or server-streaming target, all of them for a
-  // client-streaming or bidi one.
   repeated string        messages = 4;
-  // metadata is the evaluated outgoing metadata, post-middleware, as
-  // {[key]: string[]}.
   google.protobuf.Struct metadata = 5;
 }
 
-// DescribeMethodRequest asks for one method's schema, read from the workspace's
-// already-resolved definitions. Nothing is dialed, so it answers from a box that
-// cannot reach the target.
 message DescribeMethodRequest {
   string workspace_name = 1;
-  // service is the fully-qualified service name, e.g. "echo.v1.EchoService".
+  // Fully qualified, e.g. "echo.v1.EchoService"; method is its own name, "Unary".
   string service        = 2;
-  // method is the method's own name, e.g. "Unary" — not qualified by the service.
   string method         = 3;
 }
 
-// DescribeMethodResponse carries the same schema twice: once rendered for a human
-// to read, once as descriptors for a program to parse.
 message DescribeMethodResponse {
-  // proto_text is the rendered .proto view: the method, its input and output
-  // messages, and every type they transitively reference. Doc comments appear only
-  // when the winning source carried them.
+  // The method, its input and output messages, and every type they reference.
   string proto_text        = 1;
-  // descriptor_set is a serialized FileDescriptorSet covering the same closure,
-  // self-contained (transitive imports included) so it links on its own.
+  // The same closure, transitive imports included so it links on its own.
   bytes  descriptor_set    = 2;
-  // source_id names the definition source the schema was read from, e.g.
-  // "reflection:localhost:9000" or "upload:api.binpb".
+  // The source it was read from, e.g. "reflection:localhost:9000".
   string source_id         = 3;
-  // client_streaming is true when the caller sends a stream of request messages.
   bool   client_streaming  = 4;
-  // server_streaming is true when the target replies with a stream of messages.
   bool   server_streaming  = 5;
 }
 
-// CreateScriptRequest creates a new, empty script of the given kind in the
-// collection. The name must be unique among scripts.
 message CreateScriptRequest {
   string     workspace_name = 1;
   string     name           = 2;
@@ -369,10 +244,7 @@ message CreateScriptResponse {
   Workspace workspace = 1;
 }
 
-// UpdateScriptRequest applies a partial update to the script named `name`. An
-// unset field is left unchanged; source replaces the authored source, and new_name
-// renames the script (a collision with another script fails FailedPrecondition —
-// like UpdateRequest's rename).
+// Partial update: `name` addresses the script, `new_name` renames it.
 message UpdateScriptRequest {
   string          workspace_name = 1;
   string          name           = 2;
@@ -393,135 +265,65 @@ message DeleteScriptResponse {
   Workspace workspace = 1;
 }
 
-// RunScriptRequest evaluates a script through the scripting engine (fresh isolated
-// instance, no capabilities granted, no workspace state touched). kind selects the
-// execution profile and calling convention: a generator's `export default` is called,
-// a middleware's `handle`/default export is called with a ctx; unset (or scenario)
-// evaluates the buffer as an ad-hoc scratchpad (last-expression value) — the surface
-// that validates the engine end to end from the UI.
 message RunScriptRequest {
   string              workspace_name = 1;
   string              source         = 2;
+  // Unset evaluates `source` as a scratchpad, yielding its last-expression value.
   optional ScriptKind kind           = 3;
 }
 
-// ScriptLog is one buffered console.* call captured during a run.
 message ScriptLog {
   string level = 1;   // debug | log | warn | error
   string message = 2;
 }
 
-// ScriptError is a JavaScript exception (or an execution failure like a timeout)
-// that propagated out of a run. line is the source line parsed from the guest
-// backtrace (0 when unknown).
 message ScriptError {
   string message = 1;
   string stack = 2;
+  // Source line parsed from the guest backtrace; 0 when unknown.
   int32  line = 3;
 }
 
-// RunScriptResponse carries a run's outcome. A script that throws or times out is
-// reported here (error set), NOT as a Connect-level failure — only grpcview's own
-// inability to run the engine surfaces as a Connect error.
+// A script that throws or times out is reported in `error`, not as a Connect failure.
 message RunScriptResponse {
-  // value is the script's return value as JSON text; unset when the script
-  // returned undefined (a JSON `null` return is the literal string "null").
+  // JSON text; unset when the script returned undefined.
   optional string       value = 1;
   repeated ScriptLog     logs  = 2;
   optional ScriptError   error = 3;
 }
 
-// WorkspaceService is a gRPC service that provides access to the workspace
 service WorkspaceService {
-  // AddDescriptorSource adds a descriptor source to the workspace — where its
-  // definitions come from. A source whose id already exists is refreshed in place
-  // (see AddDescriptorSourceRequest.file_name); a new one is appended at LOWEST
-  // priority, so adding never changes which source an existing service resolves
-  // from. Only the added/refreshed source is resolved (one network round-trip for
-  // reflection); the merged view is rebuilt from every source's cached resolve.
+  // AddDescriptorSource appends at LOWEST priority, or refreshes in place when
+  // the source's id already exists.
   rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
-  // RemoveDescriptorSource drops the source with the given id and rebuilds the
-  // merged view from the cached resolves of those that remain — no network, so
-  // an unreachable sibling source can never block a removal.
   rpc RemoveDescriptorSource(RemoveDescriptorSourceRequest) returns (RemoveDescriptorSourceResponse);
-  // RefreshDescriptorSource re-resolves exactly one source (re-dialing a
-  // reflection target, re-parsing an upload) and rebuilds the merged view.
   rpc RefreshDescriptorSource(RefreshDescriptorSourceRequest) returns (RefreshDescriptorSourceResponse);
-  // ReorderDescriptorSources sets the source priority order and rebuilds the
-  // merged view from the cached resolves — no network. This is how you switch
-  // which source's definitions win when several describe the same protos.
+  // ReorderDescriptorSources sets which source wins when several describe the
+  // same protos.
   rpc ReorderDescriptorSources(ReorderDescriptorSourcesRequest) returns (ReorderDescriptorSourcesResponse);
-  // Get returns the workspace snapshot
   rpc Get(GetRequest) returns (GetResponse);
-  // CreateFolder creates a new folder in the workspace
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
-  // CreateRequest creates a new request in the workspace
   rpc CreateRequest(CreateRequestRequest) returns (CreateRequestResponse);
-  // DeleteRequest deletes a request from the workspace
   rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);
-  // UpdateRequest updates a request in the workspace
   rpc UpdateRequest(UpdateRequestRequest) returns (UpdateRequestResponse);
-  // UpdateFolder updates a folder's metadata script in the workspace
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
-  // MoveItem reparents and/or reorders an item; a drop into the moved folder's own
-  // subtree is rejected server-side.
   rpc MoveItem(MoveItemRequest) returns (MoveItemResponse);
-  // Invoke executes a unary RPC against a target server and returns the result
-  // (status, response body, request/response metadata, latency).
+  // Invoke returns the status, response body, request/response metadata and latency.
   rpc Invoke(InvokeRequest) returns (InvokeResponse);
-  // InvokeStreaming executes an RPC of any kind (unary, server-, client-, or
-  // bidi-streaming) against the target and streams the responses back. Modeled
-  // as server-streaming — not the bidi the design sketch suggested — because the
-  // browser transport (connect-web) cannot stream a request body; see
-  // InvokeStreamRequest for how client messages are supplied.
+  // InvokeStreaming handles any streaming kind, modeled as server-streaming.
   rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamResponse);
-  // Runs the request saved at a collection path and returns the result of the call.
-  //
-  // Requires workspace_name, item_name (the request's display name) and path (its
-  // parent folders, outermost first; empty at the top level). The saved request's own
-  // body, metadata, middleware and target are used, so the caller supplies no body of
-  // its own. params is a free-form object its body and metadata read values from. For one
-  // run only: target overrides where the call goes, messages override the request
-  // bodies as JSON text, record_history defaults to true, and dry_run evaluates
-  // everything but sends nothing.
-  //
-  // Returns the response message, the call's gRPC status, request and response
-  // metadata and the latency — or, for a dry run, only the resolved request. A status
-  // the target returned is reported in the response, never as an error. A streaming
-  // method needs the streaming form of this call.
+  // InvokeSaved reports a status the target returned in the response, never as
+  // an error.
   rpc InvokeSaved(InvokeSavedRequest) returns (InvokeSavedResponse);
-  // Runs the request saved at a collection path and streams every response message back.
-  //
-  // Takes the same arguments as the unary form except dry_run, which is rejected here.
-  // Handles a method of any kind: a client-streaming or bidi method is sent every entry
-  // of messages up-front, in order, since there is no live interleave.
-  //
-  // Returns zero or more message frames as the target emits them, then one final frame
-  // carrying the gRPC status, request and response metadata and the latency. A status
-  // the target returned is reported in that final frame, never as an error.
+  // InvokeSavedStreaming is InvokeSaved for any streaming kind; dry_run is rejected.
   rpc InvokeSavedStreaming(InvokeSavedRequest) returns (stream InvokeStreamResponse);
-  // Describes the input and output shape of one method, without calling anything.
-  //
-  // Requires workspace_name, service (fully qualified, e.g. "echo.v1.EchoService") and
-  // method (its own name, e.g. "Unary"). The shape comes from definitions the workspace
-  // has already resolved, so this answers even when the target is unreachable.
-  //
-  // Returns the method's input and output messages plus every type they reference —
-  // twice: as rendered .proto text to read, and as serialized FileDescriptorSet bytes to
-  // parse — with the id of the source they were read from and whether either side of the
-  // call streams.
-  //
-  // Doc comments come through only if that source carried them: a server answering by
-  // reflection strips them, an uploaded descriptor set built with them keeps them.
+  // DescribeMethod answers from already-resolved definitions, so it works with
+  // the target down. Doc comments survive only if the winning source carried
+  // them — reflection strips them, an uploaded descriptor set keeps them.
   rpc DescribeMethod(DescribeMethodRequest) returns (DescribeMethodResponse);
-  // RunScript evaluates a script through the scripting engine and returns its
-  // value, console output, and any error — the scratchpad and the per-kind
-  // test-run surface that validates the engine end to end.
+  // RunScript uses a fresh isolated instance: no capabilities, no workspace state.
   rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
-  // CreateScript creates a new, empty script of a given kind in the workspace.
   rpc CreateScript(CreateScriptRequest) returns (CreateScriptResponse);
-  // UpdateScript edits a script's source and/or renames it.
   rpc UpdateScript(UpdateScriptRequest) returns (UpdateScriptResponse);
-  // DeleteScript removes a script from the workspace.
   rpc DeleteScript(DeleteScriptRequest) returns (DeleteScriptResponse);
 }

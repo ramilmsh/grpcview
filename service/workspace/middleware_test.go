@@ -13,8 +13,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// createMiddleware saves a MIDDLEWARE script through the store (create then patch source),
-// the middleware analogue of createGenerator.
 func createMiddleware(t *testing.T, w Workspace, ctx context.Context, name, source string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -29,9 +27,6 @@ func createMiddleware(t *testing.T, w Workspace, ctx context.Context, name, sour
 	}
 }
 
-// saveRequestWithMiddleware creates a saved request named name and attaches the given ordered
-// middleware to it (via the same RequestPatch the UpdateRequest RPC maps to). The stored
-// service/method are irrelevant to the call — the Invoke/stream request carries its own.
 func saveRequestWithMiddleware(t *testing.T, w Workspace, ctx context.Context, name string, mw []string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -46,8 +41,6 @@ func saveRequestWithMiddleware(t *testing.T, w Workspace, ctx context.Context, n
 	}
 }
 
-// echoInvoke runs a unary Invoke against the loopback echo server for the saved request
-// itemName and returns the response, failing on a transport error.
 func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemName, body string) *connect.Response[grpcviewv1.InvokeResponse] {
 	t.Helper()
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
@@ -55,7 +48,7 @@ func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemNa
 		ItemName:      itemName,
 		Service:       echoService,
 		Method:        "Unary",
-		Body:          tsBody(body), // body is evaluated as a canonical TS module on invoke
+		Body:          tsBody(body),
 		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 	}))
 	if err != nil {
@@ -64,7 +57,6 @@ func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemNa
 	return resp
 }
 
-// echoedMessage unmarshals the echo server's reply and returns its "message" field.
 func echoedMessage(t *testing.T, resp *connect.Response[grpcviewv1.InvokeResponse]) string {
 	t.Helper()
 	if code := resp.Msg.GetResponse().GetStatus().GetCode(); code != int32(codeOK) {
@@ -79,9 +71,6 @@ func echoedMessage(t *testing.T, resp *connect.Response[grpcviewv1.InvokeRespons
 	return payload.Message
 }
 
-// TestInvokeMiddlewareInjectsMetadata is the required end-to-end metadata case: an attached
-// middleware adds a header, and the outgoing request metadata carries it (RequestMetadata is
-// exactly what grpcview sent).
 func TestInvokeMiddlewareInjectsMetadata(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -99,8 +88,6 @@ func TestInvokeMiddlewareInjectsMetadata(t *testing.T) {
 	}
 }
 
-// TestInvokeMiddlewareRewritesBody is the required body-rewrite case: an attached middleware
-// mutates ctx.body and the target receives the rewritten message.
 func TestInvokeMiddlewareRewritesBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -115,9 +102,6 @@ func TestInvokeMiddlewareRewritesBody(t *testing.T) {
 	}
 }
 
-// TestInvokeMiddlewareChainOrdered is the required ordered-chain case: two middleware run in
-// order and the second observes the first's change (first sets "A", second appends "B" => "AB";
-// the reverse order could not produce "AB").
 func TestInvokeMiddlewareChainOrdered(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -133,28 +117,21 @@ func TestInvokeMiddlewareChainOrdered(t *testing.T) {
 	}
 }
 
-// TestInvokeMiddlewareNoOp is the required no-op case: a saved request with a detached (empty)
-// middleware list, and an ad-hoc invoke with no saved request, both pass the body through
-// unchanged.
 func TestInvokeMiddlewareNoOp(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	saveRequestWithMiddleware(t, w, ctx, "Plain", nil) // empty list = detached
+	saveRequestWithMiddleware(t, w, ctx, "Plain", nil)
 
 	port := startEchoServer(t)
 	if got := echoedMessage(t, echoInvoke(t, w, ctx, port, "Plain", `{"message":"orig"}`)); got != "echo: orig" {
 		t.Fatalf("detached middleware changed body: %q", got)
 	}
-	// An ad-hoc invoke (no item_name) has no saved request, so the chain never loads.
 	if got := echoedMessage(t, echoInvoke(t, w, ctx, port, "", `{"message":"adhoc"}`)); got != "echo: adhoc" {
 		t.Fatalf("ad-hoc invoke ran middleware: %q", got)
 	}
 }
 
-// TestInvokeMiddlewareErrors is the required error case: a throwing middleware — and, for
-// robustness, one returning a malformed ctx — surface as FailedPrecondition (not a silent
-// send), and an attachment naming a script that doesn't exist likewise fails.
 func TestInvokeMiddlewareErrors(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -181,8 +158,6 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 	}
 }
 
-// TestStreamInvokeRunsMiddleware is the required streaming-parity case: the same chain runs
-// pre-send for InvokeStreaming, so a body rewrite reaches every streamed response.
 func TestStreamInvokeRunsMiddleware(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

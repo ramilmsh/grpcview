@@ -5,26 +5,8 @@ import (
 	"sync"
 )
 
-// Pool is a warm pool of QuickJS instances for latency-sensitive reuse (the middleware
-// profile). Reusing an instance skips the ~100 µs Instantiate. Two context policies:
-//
-//   - fresh context per run (default): each Run creates a JSContext, evaluates, and
-//     disposes it. The wasm instance is warm but every run is fully isolated — no JS
-//     state leaks between invokes. Cost per run ≈ the ~800 µs QuickJS context bootstrap.
-//   - long-lived context (WithLongLivedContext): the instance keeps one JSContext across
-//     runs, so the bootstrap is paid once and warm runs are far cheaper — at the cost of
-//     SHARED JS GLOBAL STATE. Re-evaluating a script in the same context throws a
-//     redeclaration error whenever the compiled blob has a top-level `const`/`let` — which
-//     the esbuild output has (user lexical declarations, and esbuild names inlined
-//     dependencies). So this mode still only suits scripts that are re-entrant by
-//     construction; making it generally usable needs the bundler to emit a re-callable
-//     entry (wrap the blob in one reusable function) rather than a fresh top-level
-//     program per run. Measure the trade-off, then choose per the design's warm-pool
-//     decision.
-//
-// An instance left dead by an interrupt or trap (its module closed) is discarded on
-// return, never reused — the pool self-heals by instantiating a fresh one on demand.
-// A Pool is safe for concurrent use.
+// Pool is a warm pool of QuickJS instances for the middleware profile. An instance left dead
+// by an interrupt or trap is discarded on return, never reused. Safe for concurrent use.
 type Pool struct {
 	rt        *Runtime
 	memLimit  uint64
@@ -40,12 +22,11 @@ type Pool struct {
 // PoolOption configures a Pool.
 type PoolOption func(*Pool)
 
-// WithLongLivedContext makes pooled instances reuse one JSContext across runs (warm
-// latency, shared JS globals). See the Pool doc for the trade-off.
+// WithLongLivedContext makes pooled instances reuse one JSContext across runs. Re-evaluating
+// a blob with top-level `const`/`let` — which esbuild output has — then throws.
 func WithLongLivedContext() PoolOption { return func(p *Pool) { p.longLived = true } }
 
-// WithMaxIdle caps how many idle instances the pool retains (default 8). Excess
-// returned instances are closed rather than pooled.
+// WithMaxIdle caps how many idle instances the pool retains (default 8).
 func WithMaxIdle(n int) PoolOption {
 	return func(p *Pool) {
 		if n > 0 {
@@ -54,13 +35,10 @@ func WithMaxIdle(n int) PoolOption {
 	}
 }
 
-// WithBundler gives the pool the shared bundler used to compile scripts (so a middleware
-// run shares its compile cache with generator/scenario runs). If unset, the pool builds a
-// default bundler with no module resolution — fine for import-free scripts.
+// WithBundler gives the pool the shared bundler, so its compile cache is shared.
 func WithBundler(b *bundler) PoolOption { return func(p *Pool) { p.bundler = b } }
 
-// NewPool builds a warm pool over rt. memLimit is the inner QuickJS heap cap applied to
-// each context (0 => only the outer wazero page ceiling).
+// NewPool builds a warm pool over rt. memLimit 0 => only the outer wazero page ceiling.
 func NewPool(rt *Runtime, memLimit uint64, opts ...PoolOption) *Pool {
 	p := &Pool{rt: rt, memLimit: memLimit, maxIdle: 8}
 	for _, o := range opts {
@@ -72,8 +50,6 @@ func NewPool(rt *Runtime, memLimit uint64, opts ...PoolOption) *Pool {
 	return p
 }
 
-// get checks out a ready instance. For a long-lived pool the returned instance already
-// holds a live context; for a fresh pool the caller creates the context per run.
 func (p *Pool) get(ctx context.Context) (*Instance, error) {
 	p.mu.Lock()
 	if n := len(p.idle); n > 0 {
@@ -97,8 +73,6 @@ func (p *Pool) get(ctx context.Context) (*Instance, error) {
 	return inst, nil
 }
 
-// put returns inst to the pool, or closes it if it is dead, the pool is full, or the
-// pool has been closed (a run that finishes after Close must not re-populate idle).
 func (p *Pool) put(inst *Instance) {
 	if inst.Dead() {
 		_ = inst.Close(context.WithoutCancel(context.Background()))
@@ -114,9 +88,8 @@ func (p *Pool) put(inst *Instance) {
 	p.mu.Unlock()
 }
 
-// Close closes every idle instance and marks the pool closed, so any run still in
-// flight closes its instance on return (put) instead of re-pooling it. Callers should
-// still quiesce in-flight runs before Close; this only prevents the leak if they don't.
+// Close closes every idle instance and marks the pool closed, so an in-flight run closes its
+// instance on return instead of re-pooling it.
 func (p *Pool) Close(ctx context.Context) {
 	p.mu.Lock()
 	p.closed = true
@@ -128,10 +101,7 @@ func (p *Pool) Close(ctx context.Context) {
 	}
 }
 
-// Run executes one invoke through the pool: compile the script (Gate 1, TS, dependency
-// inlining — cached, so the warm path recompiles nothing after the first time), check out
-// an instance, run the compiled blob (async, JSON result), and check it back in
-// (discarding it if the run left it dead). A compile failure never checks out an instance.
+// Run compiles source and executes one invoke through the pool.
 func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Result, error) {
 	c, err := p.bundler.compile(source, g)
 	if err != nil {
@@ -140,9 +110,7 @@ func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Resul
 	return p.RunCompiled(ctx, c, g, in, "")
 }
 
-// RunCompiled is Run for an already-compiled blob plus an optional entry-point postlude
-// (the middleware calling convention appends the call site). The Engine compiles with the
-// shared bundler before calling in, so a compile failure never checks out an instance.
+// RunCompiled is Run for an already-compiled blob plus an optional entry-point postlude.
 func (p *Pool) RunCompiled(ctx context.Context, c compiled, g Grant, in Input, postlude string) (Result, error) {
 	inst, err := p.get(ctx)
 	if err != nil {
@@ -150,19 +118,15 @@ func (p *Pool) RunCompiled(ctx context.Context, c compiled, g Grant, in Input, p
 	}
 
 	if p.longLived {
-		// Reuse the live context; do NOT dispose between runs. defer so a panic in the
-		// script path still returns the instance (or discards it if it died).
 		defer p.put(inst)
 		return inst.runCompiled(ctx, c, g, in, postlude)
 	}
 
-	// Fresh context per run: create, run, dispose. If newContext fails the instance is
-	// marked dead, so put discards it. The defers (LIFO: dispose then put) keep the
-	// instance from leaking even if runCompiled panics.
 	if err := inst.newContext(ctx, p.memLimit); err != nil {
 		p.put(inst)
 		return Result{}, err
 	}
+	// LIFO: dispose the context before the instance goes back to the pool.
 	defer p.put(inst)
 	defer inst.disposeContext(context.WithoutCancel(ctx))
 	return inst.runCompiled(ctx, c, g, in, postlude)

@@ -8,12 +8,6 @@ import { serviceName } from "@/lib/format";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { TargetBar } from "./TargetBar";
 
-// MethodHeader: request name (click to rename inline; persists via UpdateRequest),
-// the service/method selector (opens the picker; persists via UpdateRequest), the
-// schema-source chip (read-only), and Invoke. `reflection` is the source backing
-// THIS request (its service's origin, else the first reflection source) — it is both
-// the default invoke target (when there is no override) and the enable/disable signal.
-// `schemaSource` is a separate question — see schemaSourceFor.
 export function MethodHeader({
   request,
   services,
@@ -31,12 +25,9 @@ export function MethodHeader({
   request: Request;
   services: Service[];
   kind: MethodKind;
-  // reflection is the source backing THIS request (its service's origin, else the
-  // first reflection source), the live default target when there's no override.
+  // The source backing this request; the default invoke target when there's no override.
   reflection: Server | null;
-  // schemaSource is the definition source the method's schema was resolved from
-  // (id + whether it is a dialable reflection source), or null when no source
-  // defines the service. Independent of the target: see schemaSourceFor.
+  // Where the method's schema was resolved from — independent of the invoke target.
   schemaSource: { id: string; live: boolean } | null;
   targetOverride?: Server;
   invoking: boolean;
@@ -44,17 +35,11 @@ export function MethodHeader({
   onRename: (name: string) => void;
   onInvoke: () => void;
   onTargetChange: (t: Server) => void;
-  // message-shape-visibility plan §Feature 2: opens the read-only request/response types
-  // modal (TypesModal). Gated below on a selected service + method.
   onShowTypes: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  // An explicit per-request target lets you invoke even without a saved source
-  // (the schema still reflects off that target — resolveMethod handles it).
   const canInvoke = !!(targetOverride ?? reflection);
-  // message-shape-visibility plan §Feature 2: the types viewer needs a resolved method
-  // (service + method name) to look up input/output coordinates from.
   const hasMethod = !!(request.service && request.method);
 
   const onPick = (service: Service, method: Method) => {
@@ -98,7 +83,6 @@ export function MethodHeader({
         />
         <MethodKindTag kind={kind} />
 
-        {/* service / method selector — both open the same picker */}
         <div
           className="flex items-center font-mono"
           style={{
@@ -138,7 +122,6 @@ export function MethodHeader({
         </div>
 
         <div className="ml-auto flex items-center gap-[9px]">
-          {/* message-shape-visibility: request/response TS shape viewer (TypesModal) */}
           <IconButton
             onClick={onShowTypes}
             disabled={!hasMethod}
@@ -147,9 +130,6 @@ export function MethodHeader({
           >
             <Code size={15} />
           </IconButton>
-          {/* schema-source chip (read-only in Phase 1) — which definition source this
-              method's schema was resolved from, NOT where the request is sent: an
-              upload can win the protos while the target bar below points at a server. */}
           <Button
             variant="secondary"
             className="font-mono"

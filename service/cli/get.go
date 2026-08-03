@@ -10,11 +10,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// newGetCmd builds `grpcview get`.
-//
-// There is no -o (D8): a whole workspace has exactly one shape, and the point of
-// the verb is that `grpcview get | jq` reaches every field the UI reads —
-// including the ones ls and `sources ls` deliberately summarize.
 func newGetCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get",
@@ -38,9 +33,7 @@ func runGet(ctx context.Context, s Streams, g *globalFlags, open clientFactory) 
 	if err != nil {
 		return err
 	}
-	// The whole GetResponse, not just its workspace: the envelope is what the RPC
-	// returns, so a script written against `get` output and one written against
-	// the RPC read the same paths.
+	// The whole GetResponse, so `get` output and the RPC read the same paths.
 	line, err := marshalOneLine(snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to render workspace %q: %w", g.Workspace, err)
@@ -48,12 +41,7 @@ func runGet(ctx context.Context, s Streams, g *globalFlags, open clientFactory) 
 	return writeLine(s.Out, line)
 }
 
-// readWorkspace is the one snapshot read the three read verbs share: ls, get and
-// `sources ls` all render fields of a single Get and mutate nothing, so none of
-// them needs the session to outlive the call.
-//
-// --timeout bounds the Get, exactly as it bounds an invoke: a hung snapshot read
-// is the only way these verbs can hang.
+// readWorkspace is the one snapshot read ls, get and `sources ls` share.
 func readWorkspace(ctx context.Context, g *globalFlags, open clientFactory) (*grpcviewv1.GetResponse, error) {
 	if g.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -69,8 +57,6 @@ func readWorkspace(ctx context.Context, g *globalFlags, open clientFactory) (*gr
 
 	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: g.Workspace}))
 	if err != nil {
-		// A Connect error is grpcview's own failure, and nothing was invoked: exit
-		// 2 by the default mapping (D9). A read verb cannot produce exit 1.
 		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Workspace, err)
 	}
 	return resp.Msg, nil

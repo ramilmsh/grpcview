@@ -2,11 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { TreeRowModel } from "./types";
 import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./selection";
 
-// selection.ts never looks past `.id`, so a bare string node keeps these fixtures
-// down to what the functions under test actually read (same reasoning as
-// format.test.ts's structural fixtures, one door over). posInSet/setSize are
-// likewise never read here — 1/1 is a placeholder, not a claim about any real
-// sibling set (flatten.test.ts is what actually pins their values).
 const row = (id: string): TreeRowModel<string> => ({
   node: id,
   id,
@@ -64,7 +59,6 @@ describe("rangeSelection", () => {
   });
 
   it("degenerates to just the focus row when the anchor id is missing from rows", () => {
-    // "Z" isn't in `rows` — as if the anchor's row got filtered out from under it.
     expect(rangeSelection(rows, "Z", "C")).toEqual(["C"]);
   });
 

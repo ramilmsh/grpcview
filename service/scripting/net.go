@@ -1,22 +1,7 @@
 package scripting
 
-// net.go — the network capability: a browser-style global `fetch` for every script.
-//
-// Network access is UNCONDITIONAL. Every script (request body, generator, middleware,
-// scenario) gets a global `fetch` and it always works — there is no per-run grant and
-// no capability manager (a deliberate, temporary simplification). `fetch` is injected as
-// an ambient global by the prelude (netFetchPrelude), not imported, so no `import` and no
-// Gate-1 wiring is involved; the only host boundary is the __grpcview_net_fetch bridge
-// qjs_wasm.c registers, backed by hostNetFetch below.
-//
-// The bridge is SYNCHRONOUS: the JS shim marshals a request envelope to one string,
-// hostNetFetch performs the whole HTTP round trip on the calling goroutine, and the
-// response envelope comes back as the call's value (a rejected request comes back as a
-// throw the guest re-raises). Blocking is safe here because each run owns its instance +
-// goroutine and the run's context deadline (the profile wall-clock budget) is threaded
-// into the request, so a slow endpoint is cut off rather than hanging the process. This
-// trades the async ticket design (see the capabilities spike doc) for far less machinery;
-// the guest never observes the difference because the shim hands back a resolved Promise.
+// The network capability: an unconditional browser-style global `fetch` for every script,
+// bridged to Go by a SYNCHRONOUS host call bounded by the run's context deadline.
 
 import (
 	"context"
@@ -29,43 +14,29 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
-// maxNetResponseBytes caps how much of a response body is read into memory, so a hostile
-// or accidental huge response cannot balloon host (and then guest) memory. 10 MiB is ample
-// for the token/JSON endpoints scripts realistically call; a larger body fails the fetch.
 const maxNetResponseBytes = 10 << 20
 
-// netClient is the shared HTTP client for script fetch(). It carries NO client-level
-// timeout on purpose: each request is bounded by the run's context deadline (threaded in
-// via http.NewRequestWithContext), so the profile's wall-clock budget is the single source
-// of truth for how long a fetch may take.
+// No client-level timeout on purpose: each request is bounded by the run's ctx deadline.
 var netClient = &http.Client{}
 
-// netRequest is the fetch() request envelope the JS shim (netFetchPrelude) marshals into
-// the single string argument of __grpcview_net_fetch.
 type netRequest struct {
 	Method  string            `json:"method"`
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
-	Body    *string           `json:"body"` // nil => no request body
+	Body    *string           `json:"body"`
 }
 
-// netResponse is the envelope returned to the JS shim, which reconstructs a Response-like
-// object from it. Header keys are lowercased and multi-valued headers comma-joined to match
-// the Fetch API's case-insensitive, comma-joined Headers.get.
+// Header keys are lowercased and multi-valued headers comma-joined, as Headers.get expects.
 type netResponse struct {
 	Status     int               `json:"status"`
 	StatusText string            `json:"statusText"`
 	Headers    map[string]string `json:"headers"`
 	Body       string            `json:"body"`
-	URL        string            `json:"url"` // final URL after redirects
+	URL        string            `json:"url"`
 }
 
-// netFetchPrelude installs the global `fetch`. It is prepended to every run (buildInputPrelude)
-// and written with a globalThis assignment so re-evaluating it in a reused (long-lived)
-// context cannot raise a redeclaration error. fetch marshals a netRequest, makes the one
-// synchronous host call, and hands back a resolved Promise<Response>; any failure (bad input,
-// transport error, host throw) becomes a REJECTED promise — fetch never throws synchronously,
-// matching the Fetch API so `.catch` works.
+// netFetchPrelude installs the global `fetch` as a globalThis assignment, so re-evaluating it
+// in a reused context cannot raise a redeclaration error. It never throws synchronously.
 const netFetchPrelude = `globalThis.fetch=(function(){
 function headersOf(h){var out={};if(!h)return out;
 if(typeof h.forEach==="function"&&!Array.isArray(h)){h.forEach(function(v,k){out[String(k)]=String(v);});return out;}
@@ -87,10 +58,6 @@ return Promise.resolve(makeResponse(JSON.parse(globalThis.__grpcview_net_fetch(J
 }catch(e){return Promise.reject(e);}};})();
 ` + "\n"
 
-// hostNetFetch is the Go end of the __grpcview_net_fetch bridge: read the request envelope
-// out of guest memory, perform the request, and write the response envelope back — or write
-// a throw the guest re-raises as a catchable JS exception (a rejected fetch promise). See the
-// file header for why the blocking round trip is safe.
 func hostNetFetch(ctx context.Context, mod api.Module, stack []uint64) {
 	raw, ok := mod.Memory().Read(uint32(stack[0]), uint32(stack[1]))
 	if !ok {
@@ -105,10 +72,7 @@ func hostNetFetch(ctx context.Context, mod api.Module, stack []uint64) {
 	stack[0] = uint64(writeResult(ctx, mod, tagValue, payload))
 }
 
-// doNetFetch parses the request envelope, performs the request under ctx, and marshals the
-// response envelope. It is split from hostNetFetch so it is unit-testable without a wasm
-// module. reqJSON aliases guest memory, so it is unmarshalled before any call that could
-// grow/move that memory.
+// reqJSON aliases guest memory, so it is unmarshalled before anything can move that memory.
 func doNetFetch(ctx context.Context, reqJSON []byte) ([]byte, error) {
 	var r netRequest
 	if err := json.Unmarshal(reqJSON, &r); err != nil {
@@ -134,8 +98,7 @@ func doNetFetch(ctx context.Context, reqJSON []byte) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	// Read one byte past the cap so an at-the-limit body is distinguishable from an
-	// over-limit one, then reject the latter rather than silently truncating.
+	// One byte past the cap, so an at-the-limit body is distinguishable from an over-limit one.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxNetResponseBytes+1))
 	if err != nil {
 		return nil, err
@@ -158,7 +121,6 @@ func doNetFetch(ctx context.Context, reqJSON []byte) ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// statusText extracts the reason phrase from an http.Response.Status ("200 OK" -> "OK").
 func statusText(status string) string {
 	if i := strings.IndexByte(status, ' '); i >= 0 {
 		return status[i+1:]

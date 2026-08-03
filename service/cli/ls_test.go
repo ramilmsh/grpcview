@@ -10,8 +10,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// lsWorkspace is testWorkspace's tree plus the two things ls specifically has to
-// render: a folder nested two deep, and a request carrying middleware.
 func lsWorkspace() *grpcviewv1.Workspace {
 	return &grpcviewv1.Workspace{
 		Name: "default",
@@ -31,8 +29,6 @@ func withMiddleware(item *grpcviewv1.Item, names ...string) *grpcviewv1.Item {
 	return item
 }
 
-// The golden listings. Written out as literals, columns included: the format IS
-// the contract here, and a test that recomputed the padding would assert nothing.
 const (
 	lsGoldenRoot = `Auth/             folder
 Auth/Login        auth.v1.AuthService/Login
@@ -48,9 +44,8 @@ Auth/Admin/Grant  auth.v1.AuthService/Grant  [2 middleware]
 
 func TestLs(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		args []string
-		// fake mutates the default fake before the run.
+		name       string
+		args       []string
 		fake       func(*fakeClient)
 		wantOut    string
 		wantErrHas string
@@ -157,8 +152,6 @@ func TestLs(t *testing.T) {
 	}
 }
 
-// TestLsOutputJSON pins the -o json shape: one line, valid JSON, and protojson's
-// own field names — the Item as the wire carries it, not a shape ls invented.
 func TestLsOutputJSON(t *testing.T) {
 	fc := newFake()
 	fc.snapshot = lsWorkspace()
@@ -198,8 +191,6 @@ func TestLsOutputJSON(t *testing.T) {
 	}
 }
 
-// TestLsRootJSON checks the no-argument -o json case addresses the collection
-// root rather than erroring on the empty path.
 func TestLsRootJSON(t *testing.T) {
 	fc := newFake()
 	fc.snapshot = lsWorkspace()

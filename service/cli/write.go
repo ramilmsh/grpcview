@@ -1,23 +1,7 @@
 package cli
 
-// write.go holds the collection and script write verbs — `request`, `folder` and
-// `script` — plus the session helper the `sources` mutations in sources.go share.
-// One output contract covers every mutation in both files.
-//
-// SILENCE IS SUCCESS. A mutation that worked prints NOTHING, on either stream, and
-// exits 0. That is the unix convention and the only one that composes: a script
-// creating fifty requests in a loop wants fifty silent successes, and `set -e` plus
-// an empty stdout is the whole interface. In particular the Workspace that every
-// mutation RPC returns is deliberately dropped — a caller who wants the resulting
-// state pipes `grpcview get` into jq, and printing 26 MB of workspace after a
-// one-field patch would make stdout useless for anything else (D8).
-//
-// A failure is one "grpcview: "-prefixed line on stderr and exit 2. These verbs
-// cannot produce exit 1: nothing was invoked in D9's sense, so there is no gRPC
-// status of a target call to inherit.
-//
-// `script run` is the one exception, and a deliberate one — it produces data. See
-// renderScriptRun for the mapping and why its failure is exit 1.
+// The collection and script write verbs. A mutation that succeeds prints
+// nothing on either stream and exits 0; `script run` is the one that prints.
 
 import (
 	"context"
@@ -34,18 +18,7 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
 )
 
-// withSession opens one session, runs fn inside it, and closes it.
-//
-// It is readWorkspace's sibling rather than a caller of it, because a mutating
-// verb can make more than one call: `request create -f` creates and then patches,
-// and `sources refresh` with no id reads the source list and then refreshes each
-// source. Those calls have to share one session — reopening the in-process
-// binding between two halves of one logical mutation would recompile the QuickJS
-// module and reread the store, and readWorkspace opens and closes a session per
-// call by design.
-//
-// --timeout bounds the whole verb rather than each individual call, which is what
-// a script means by it: "this command finishes within 30s or fails".
+// withSession opens one session for the whole verb; a verb making several calls must share one.
 func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn func(context.Context, session) error) error {
 	if g.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -61,9 +34,6 @@ func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn fun
 	return fn(ctx, sess)
 }
 
-// workspaceSnapshot is the Get a mutating verb makes inside its own session, for
-// the two cases that need to read before they write: refreshing every source in
-// priority order, and resolving a saved script's name to its source.
 func workspaceSnapshot(ctx context.Context, sess session, g *globalFlags) (*grpcviewv1.Workspace, error) {
 	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: g.Workspace}))
 	if err != nil {
@@ -72,13 +42,6 @@ func workspaceSnapshot(ctx context.Context, sess session, g *globalFlags) (*grpc
 	return resp.Msg.GetWorkspace(), nil
 }
 
-// splitItemPath parses a <path> argument that addresses one tree item: the last
-// segment is the item's own display name and the leading ones are its parent
-// folders, which is exactly the `path` + `item_name` pair every item RPC takes.
-//
-// It is workspace.SplitInvokePath — the parser gv.invoke and `invoke` already use,
-// so every surface agrees on what "Auth/Login" addresses — with the error
-// rephrased, since SplitInvokePath's own message names gv.invoke.
 func splitItemPath(arg string) ([]string, string, error) {
 	parent, name, err := workspace.SplitInvokePath(arg)
 	if err != nil {
@@ -88,11 +51,7 @@ func splitItemPath(arg string) ([]string, string, error) {
 	return parent, name, nil
 }
 
-// splitFolderPath parses a DESTINATION folder path, which is the whole segment
-// list: unlike an item path there is no trailing name to peel off. The empty path
-// and "/" both address the collection root, which is a legitimate destination for
-// a move rather than an error — moving something back out to the top level is the
-// most ordinary move there is.
+// splitFolderPath parses a destination folder path; "" and "/" are the collection root.
 func splitFolderPath(arg string) ([]string, error) {
 	if arg == "" || arg == "/" {
 		return nil, nil
@@ -103,8 +62,6 @@ func splitFolderPath(arg string) ([]string, error) {
 	}
 	return append(parent, name), nil
 }
-
-// ---------------------------------------------------------------- folder ------
 
 func newFolderCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	cmd := &cobra.Command{
@@ -164,8 +121,6 @@ func runFolderCreate(ctx context.Context, g *globalFlags, open clientFactory, ar
 	})
 }
 
-// --------------------------------------------------------------- request ------
-
 func newRequestCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "request",
@@ -190,9 +145,6 @@ func newRequestCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command
 	return cmd
 }
 
-// requestCreateFlags are `request create`'s own flags. There is deliberately no
-// --draft-body or --draft-metadata-script inline-string flag and no per-field
-// flag of any kind (D12): structured input arrives as a file.
 type requestCreateFlags struct {
 	service string
 	method  string
@@ -225,9 +177,6 @@ func newRequestCreateCmd(s Streams, g *globalFlags, open clientFactory) *cobra.C
 	flags.StringVar(&f.service, "service", "", "full name of the service to call (required)")
 	flags.StringVar(&f.method, "method", "", "name of the method to call (required)")
 	flags.StringVarP(&f.file, "file", "f", "", "seed the request's body from this file; - reads stdin. Without it, stdin is read when piped")
-	// A missing required flag is cobra's own error, which the root's
-	// SilenceErrors/SilenceUsage turn into one "grpcview: " line on stderr and
-	// exit 2 with no usage dump — the same shape as every other exit-2 failure.
 	_ = cmd.MarkFlagRequired("service")
 	_ = cmd.MarkFlagRequired("method")
 
@@ -240,8 +189,7 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 		return err
 	}
 
-	// The body is read BEFORE anything is created: an unreadable -f must not leave
-	// a bodyless request behind for the caller to clean up.
+	// Read the body first: an unreadable -f must not leave a bodyless request behind.
 	raw, err := readBody(s, f.file)
 	if err != nil {
 		return err
@@ -262,9 +210,6 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 			return nil
 		}
 
-		// The bytes go through unchanged, exactly as -f does for invoke: the
-		// backend normalizes protojson and TypeScript at one seam, and reformatting
-		// here would fork that contract.
 		_, err = sess.UpdateRequest(ctx, connect.NewRequest(&grpcviewv1.UpdateRequestRequest{
 			WorkspaceName: g.Workspace,
 			Path:          parent,
@@ -339,8 +284,7 @@ func newRequestMvCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Changed, not the empty string: "unset" means append, and an item
-			// literally named "" is not a thing the flag should be unable to say.
+			// Changed, not the empty string: unset means append.
 			var beforeArg *string
 			if cmd.Flags().Changed("before") {
 				beforeArg = proto.String(before)
@@ -376,8 +320,6 @@ func runRequestMv(ctx context.Context, g *globalFlags, open clientFactory, arg, 
 		return nil
 	})
 }
-
-// ---------------------------------------------------------------- script ------
 
 func newScriptCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	cmd := &cobra.Command{
@@ -423,8 +365,6 @@ func newScriptLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comman
 	}
 }
 
-// renderScripts writes one line per script, the name column padded to the widest
-// name so the same script list always produces the same columns.
 func renderScripts(w io.Writer, scripts []*grpcviewv1.Script) error {
 	var nameWidth int
 	for _, script := range scripts {
@@ -439,8 +379,6 @@ func renderScripts(w io.Writer, scripts []*grpcviewv1.Script) error {
 	return nil
 }
 
-// The --kind values, which are also the words `script ls` prints: one vocabulary,
-// so a name read out of a listing can be typed back into a flag.
 const (
 	kindGenerator  = "generator"
 	kindMiddleware = "middleware"
@@ -456,14 +394,10 @@ func scriptKindName(kind grpcviewv1.ScriptKind) string {
 	case grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO:
 		return kindScenario
 	default:
-		// A kind a manifest edit can produce, or one a newer grpcview wrote. It is
-		// listed rather than hidden.
 		return "unspecified"
 	}
 }
 
-// parseScriptKind maps the flag to the enum. An empty flag is "unset", which the
-// engine reads as the scratchpad profile — not a fourth value to spell.
 func parseScriptKind(flag string) (*grpcviewv1.ScriptKind, error) {
 	switch flag {
 	case "":
@@ -531,10 +465,6 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 		}
 		stdinSource = string(raw)
 	} else if kind != nil {
-		// Silently ignoring the flag would be worse than refusing it: a saved
-		// script carries the kind it was authored for, and running it under
-		// another profile calls it by a different convention, which is not
-		// "running that script" in any sense the caller meant.
 		return fmt.Errorf(
 			"--kind does not apply to the saved script %q: it carries its own kind, and the flag selects the profile for a script read from stdin",
 			arg)
@@ -550,8 +480,6 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			}
 			script := scriptNamed(ws.GetScripts(), arg)
 			if script == nil {
-				// Returning here is the point: RunScript is never called, so a
-				// typo'd name cannot evaluate anything at all.
 				return fmt.Errorf(
 					"unknown script %q: workspace %q has %d saved script(s), and `grpcview script ls` lists them",
 					arg, g.Workspace, len(ws.GetScripts()))
@@ -582,34 +510,14 @@ func scriptNamed(scripts []*grpcviewv1.Script, name string) *grpcviewv1.Script {
 	return nil
 }
 
-// renderScriptRun applies D8 and D9 to a completed run. It is the one write verb
-// that prints, because it is the one that produces data: the returned value is the
-// entire reason to run a script.
-//
-// The value is stdout, as the one line of JSON text the engine produced, so
-// `script run x | jq` works. The captured console.* calls are stderr, prefixed
-// with their level, because a log is a diagnostic no matter how interesting.
-//
-// A ScriptError is exit 1, not 2, and that is the same line D9 already draws
-// everywhere else: a script that threw RAN, and its outcome failed — grpcview
-// itself worked. That is structurally identical to a target returning a non-OK
-// gRPC status, and the backend agrees, deliberately: a thrown exception comes back
-// inside RunScriptResponse.error with a nil Connect error, while grpcview's own
-// inability to run the engine is a Connect error. Exit 2 stays reserved for the
-// run not happening at all.
+// renderScriptRun writes the value on stdout and the logs on stderr; a script that threw is exit 1.
 func renderScriptRun(s Streams, label string, resp *grpcviewv1.RunScriptResponse) error {
-	// Logs first, and whatever the outcome: they were emitted before the thing that
-	// ended the run, and a console.log is often the only clue why it ended.
+	// Logs first, whatever the outcome: they were emitted before the run ended.
 	for _, log := range resp.GetLogs() {
 		fmt.Fprintf(s.Err, "%s: %s\n", log.GetLevel(), log.GetMessage())
 	}
 
 	if failure := resp.GetError(); failure != nil {
-		// stdout stays EMPTY: a script that threw produced no value, and a caller
-		// piping into jq must not receive one. The stack is dropped from the line
-		// and the parsed line number kept — one line per failure is the contract a
-		// script's error handling depends on, and `get`-style JSON is not on offer
-		// here because a run leaves nothing behind to read.
 		message := oneLine(failure.GetMessage())
 		if line := failure.GetLine(); line > 0 {
 			message = fmt.Sprintf("%s (line %d)", message, line)
@@ -617,9 +525,7 @@ func renderScriptRun(s Streams, label string, resp *grpcviewv1.RunScriptResponse
 		return statusError{code: 1, err: fmt.Errorf("%s threw: %s", label, message)}
 	}
 
-	// An unset value is a script that returned undefined. Printing nothing is the
-	// honest rendering: "null" would claim it returned the JSON null, which the
-	// response distinguishes from undefined on purpose.
+	// An unset value is a script that returned undefined, not the JSON null.
 	if resp.Value == nil {
 		return nil
 	}

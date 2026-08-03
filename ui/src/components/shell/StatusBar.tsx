@@ -2,8 +2,6 @@ import { useWorkspace } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { latencyLabel } from "@/lib/format";
 
-// StatusBar: real bits only (plan §8) — source count and the active request's
-// last-invoke latency. Git/versions/QuickJS indicators wait for their backends.
 export function StatusBar() {
   const { sources, reflection } = useWorkspace();
   const activeKey = useUIStore((s) => s.activeKey);
@@ -23,9 +21,6 @@ export function StatusBar() {
         color: "var(--color-neutral-500)",
       }}
     >
-      {/* Connectivity, which is not the same as having definitions: a workspace of
-          uploaded descriptor sets has schemas but no server to reflect from, so
-          "no source" next to a source count would contradict itself. */}
       <span
         className="inline-flex items-center gap-[5px]"
         style={{ color: reflection ? "var(--ok)" : undefined }}

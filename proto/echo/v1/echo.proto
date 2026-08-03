@@ -15,12 +15,8 @@ message EchoResponse {
 }
 
 service EchoService {
-  // Unary: single request, single response.
   rpc Unary(EchoRequest) returns (EchoResponse);
-  // ServerStream: single request, stream of responses.
   rpc ServerStream(EchoRequest) returns (stream EchoResponse);
-  // ClientStream: stream of requests, single response.
   rpc ClientStream(stream EchoRequest) returns (EchoResponse);
-  // BidiStream: stream of requests, stream of responses.
   rpc BidiStream(stream EchoRequest) returns (stream EchoResponse);
 }

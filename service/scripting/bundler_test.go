@@ -1,17 +1,7 @@
 package scripting
 
-// bundler_test.go — validation of the esbuild front end (engine Phase 2). It proves the
-// three things the bundler adds over the raw evaluator, end to end through RunScenario:
-//
-//   - TypeScript transpiles and the last-expression result contract survives it;
-//   - real npm libraries (dayjs, mustache, ms) and relative TS modules resolve, inline,
-//     and run — with the frozen input globals still visible to the bundled code;
-//   - a runtime error's line maps back to the AUTHOR's line through the assembled source
-//     (prelude + banner + inlined dependencies), via the emitted source map.
-//
-// The npm libraries are vendored under testdata/npm and embedded into the test binary, so
-// the validation is hermetic: no node_modules, no registry, no network. esbuild resolves
-// them from a NodePaths root pointed at the materialized tree.
+// Validates the esbuild front end: TypeScript transpilation, npm/relative-module
+// bundling, and error-line remapping back to the author's source through source maps.
 
 import (
 	"context"
@@ -27,8 +17,6 @@ import (
 //go:embed testdata/npm
 var npmFixtures embed.FS
 
-// materializeNpm writes the embedded testdata/npm tree to a temp dir and returns its path,
-// preserving structure so esbuild's node resolver finds each package by `<root>/<pkg>`.
 func materializeNpm(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -56,8 +44,6 @@ func materializeNpm(t *testing.T) string {
 	return root
 }
 
-// npmEngine builds an Engine whose bundler resolves the vendored npm tree: NodePaths for
-// bare imports (`ms`), ResolveDir for relative imports (`./helper`) written into root.
 func npmEngine(t *testing.T) (*Engine, string) {
 	t.Helper()
 	root := materializeNpm(t)
@@ -81,27 +67,20 @@ func assertValue(t *testing.T, res Result, want string) {
 	}
 }
 
-// TestBundleNpmLibraries is the headline validation: popular npm libraries a scripting
-// agent would reach for — duration parsing (ms), date math (dayjs), templating (mustache)
-// — bundle from a vendored tree and run, with results asserted byte-for-byte.
 func TestBundleNpmLibraries(t *testing.T) {
 	e, _ := npmEngine(t)
 
 	t.Run("ms/parse", func(t *testing.T) {
-		// CommonJS default export: `module.exports = fn`.
 		assertValue(t, mustRun(t, e, `import ms from "ms"; ms("2 days")`, Input{}), "172800000")
 		assertValue(t, mustRun(t, e, `import ms from "ms"; ms("1h")`, Input{}), "3600000")
 	})
 
 	t.Run("dayjs/date-math", func(t *testing.T) {
-		// UMD default export; calendar add is TZ-independent for these tokens.
 		src := `import dayjs from "dayjs"; dayjs("2024-03-14").add(1, "day").format("YYYY-MM-DD")`
 		assertValue(t, mustRun(t, e, src, Input{}), `"2024-03-15"`)
 	})
 
 	t.Run("mustache/render-with-input", func(t *testing.T) {
-		// ESM default export, fed the frozen `request` global — proving injected inputs
-		// and a bundled dependency compose.
 		src := `import Mustache from "mustache";
 Mustache.render("Hello {{name}}!", { name: request.body.who })`
 		in := Input{Request: RequestInput{Body: map[string]any{"who": "gRPC"}}}
@@ -109,7 +88,6 @@ Mustache.render("Hello {{name}}!", { name: request.body.who })`
 	})
 
 	t.Run("combined/two-deps-and-vars", func(t *testing.T) {
-		// Two dependencies in one graph, reading a var; object result keeps insertion order.
 		src := `import dayjs from "dayjs";
 import ms from "ms";
 ({ ttlMs: ms(vars.ttl), day: dayjs("2024-01-01").add(1, "month").format("YYYY-MM") })`
@@ -118,14 +96,8 @@ import ms from "ms";
 	})
 }
 
-// TestProductionEngineBundlesEmbeddedNpm is the PRODUCTION analogue of TestBundleNpmLibraries:
-// it proves that the default Engine — constructed exactly as workspace.go does, with NO
-// WithNodePaths/WithResolveDir — resolves and runs a bare npm import from the registry the
-// Engine embeds and self-provisions (npm.go). This is the path the RunScript RPC drives;
-// before the embedded registry it failed because production left NodePaths empty. (newEngine
-// differs from workspace.go only in the outer page ceiling, which is immaterial to resolution.)
 func TestProductionEngineBundlesEmbeddedNpm(t *testing.T) {
-	e := newEngine(t) // no npm wiring — the production construction
+	e := newEngine(t)
 
 	t.Run("vendored-dayjs-resolves-and-runs", func(t *testing.T) {
 		src := `import dayjs from "dayjs"; dayjs("2024-03-14").add(1, "day").format("YYYY-MM-DD")`
@@ -133,9 +105,6 @@ func TestProductionEngineBundlesEmbeddedNpm(t *testing.T) {
 	})
 
 	t.Run("non-vendored-package-still-fails", func(t *testing.T) {
-		// A package NOT in the embedded registry must still fail cleanly. This proves the
-		// registry is a closed allowlist and the host's node_modules was never opened — a
-		// bare import can reach only what we vendored, not arbitrary host code.
 		_, err := e.RunScenario(context.Background(), `import _ from "lodash"; _`, Grant{}, Input{})
 		if err == nil {
 			t.Fatal("importing a non-vendored package: got nil error, want a bundle failure")
@@ -146,8 +115,6 @@ func TestProductionEngineBundlesEmbeddedNpm(t *testing.T) {
 	})
 }
 
-// TestBundleRelativeTypeScriptModule: a relative import of a .ts helper resolves against
-// ResolveDir, transpiles, inlines, and runs — the local-module story for scenarios.
 func TestBundleRelativeTypeScriptModule(t *testing.T) {
 	e, root := npmEngine(t)
 	writeFile(t, filepath.Join(root, "helper.ts"),
@@ -158,9 +125,6 @@ func TestBundleRelativeTypeScriptModule(t *testing.T) {
 	assertValue(t, mustRun(t, e, src, in), `"hello world"`)
 }
 
-// TestBundleTypeScript: an import-free TS script goes through the transpile-only path;
-// type annotations, interfaces, and arrow generics are stripped and the last expression
-// remains the value (the result contract survives transpilation).
 func TestBundleTypeScript(t *testing.T) {
 	e := newEngine(t)
 	cases := []struct{ name, src, want string }{
@@ -175,9 +139,6 @@ func TestBundleTypeScript(t *testing.T) {
 	}
 }
 
-// TestBundleUnknownPackageErrors: a bare import that resolves to nothing fails the bundle
-// (no instance is ever created — see runFresh), and the error preserves both our wrapper
-// and esbuild's diagnostic so callers can tell what was missing.
 func TestBundleUnknownPackageErrors(t *testing.T) {
 	e, _ := npmEngine(t)
 	_, err := e.RunScenario(context.Background(),
@@ -191,14 +152,11 @@ func TestBundleUnknownPackageErrors(t *testing.T) {
 	}
 }
 
-// TestBundleErrorLineRemapped: a runtime throw surfaces at the AUTHOR's line, not the
-// offset line in the assembled source. Two paths, both of which shift the line before the
-// map corrects it: transpile-only (esbuild drops leading blank lines) and bundling (a
-// whole inlined dependency precedes the user's code).
 func TestBundleErrorLineRemapped(t *testing.T) {
 	t.Run("transform-path", func(t *testing.T) {
 		e := newEngine(t)
-		// Three leading blank lines esbuild strips; the throw the user wrote is on line 4.
+		// esbuild strips leading blank lines, shifting generated positions; the map must
+		// still land on the author's line 4.
 		_, err := e.RunScenario(context.Background(),
 			"\n\n\nthrow new Error(\"boom\")", Grant{}, Input{})
 		var je *JSError
@@ -212,8 +170,6 @@ func TestBundleErrorLineRemapped(t *testing.T) {
 
 	t.Run("bundle-path", func(t *testing.T) {
 		e, _ := npmEngine(t)
-		// dayjs is inlined above the user code, so the throw's generated line is deep in
-		// the bundle; the source map must still map it back to author line 3.
 		src := `import dayjs from "dayjs";
 const now = dayjs("2024-01-01");
 throw new Error("boom after dep");`
@@ -231,9 +187,6 @@ throw new Error("boom after dep");`
 	})
 }
 
-// TestBundleCacheReuse: compiling the same (source, grant) twice serves the second from
-// the content-hash cache — the property the middleware hot path relies on to keep esbuild
-// off every invoke. Proven by seeding the cache slot with a sentinel and observing it back.
 func TestBundleCacheReuse(t *testing.T) {
 	b := newBundler("", nil, "")
 	const src = `6 * 7`
@@ -250,8 +203,6 @@ func TestBundleCacheReuse(t *testing.T) {
 		t.Fatal("cache not populated after first compile")
 	}
 
-	// Overwrite the slot with a sentinel; a cached second compile returns it verbatim,
-	// a re-compile would return the real transpiled code instead.
 	b.cache.Store(key, compiled{code: "SENTINEL"})
 	c2, err := b.compile(src, Grant{})
 	if err != nil {
@@ -265,9 +216,6 @@ func TestBundleCacheReuse(t *testing.T) {
 	}
 }
 
-// TestDecodeVLQ exercises the base64-VLQ decoder that underpins source-map remapping:
-// zero, a positive multi-group value, a negative value, a full 4-field segment, and a
-// rejected non-alphabet byte.
 func TestDecodeVLQ(t *testing.T) {
 	cases := []struct {
 		in   string

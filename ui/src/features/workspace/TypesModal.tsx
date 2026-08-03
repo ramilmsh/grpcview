@@ -2,20 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Message } from "@grpcview/v1/workspace_pb";
 import { Dialog } from "@/components/ui/Dialog";
 
-// Type-only reference to proto-types.ts's exports. proto-types.ts statically imports
-// @bufbuild/protoc-gen-es (a heavy, otherwise-lazy dependency — see Editor.tsx's own T2 effect),
-// so this module must never import it eagerly; `typeof import(...)` is erased at compile time
-// and costs nothing at runtime, letting us type the dynamically-imported members below.
+// Type-only: proto-types.ts pulls in the heavy protoc-gen-es, so it must stay a lazy import.
 type ProtoTypes = typeof import("./proto-types");
 
-// TypesModal (message-shape-visibility plan §Feature 2/Phase 2) is a read-only viewer for the
-// concrete generated `<Message>Json` protojson TypeScript shape of the active method's request
-// (input) and response (output) messages — exactly what the body is authored as (Editor.tsx/T2)
-// and the response is decoded as. It dynamically imports the SAME client-side protoc-gen-es
-// generator the body editor's typing uses (proto-types.ts), memoized by descriptorSet identity —
-// in practice the body editor has almost always already warmed that cache by the time this
-// opens, so the "Generating types…" state below is mostly a first-open safety net, not the
-// common case. Fully decoupled from the `gv` scripting work: no backend/proto/store changes.
 export function TypesModal({
   open,
   onClose,
@@ -25,10 +14,7 @@ export function TypesModal({
 }: {
   open: boolean;
   onClose: () => void;
-  // The workspace-global merged FileDescriptorSet (the same prop Editor.tsx types the body
-  // against); absent/empty when no reflection source has resolved yet.
   descriptorSet?: Uint8Array;
-  // The active method's input/output coordinates (Method.input / Method.output).
   input?: Message;
   output?: Message;
 }) {
@@ -38,10 +24,6 @@ export function TypesModal({
     messageTypeText: ProtoTypes["messageTypeText"];
   } | null>(null);
 
-  // (Re)generate only while open, so closed tabs never pay for a stale descriptorSet. Re-runs
-  // whenever `open` flips true OR the descriptorSet reference changes (a fresh reflect/refresh) —
-  // `generateWorkspaceTypes`'s own WeakMap memo makes every call beyond the very first, for a
-  // given descriptorSet, effectively instant.
   useEffect(() => {
     if (!open || !descriptorSet?.length) return;
     let cancelled = false;
@@ -73,9 +55,6 @@ export function TypesModal({
   );
 }
 
-// A per-message-slot render state: no message resolved at all, a well-known type (excluded from
-// local generation — see proto-types.ts), or generated text (the sliced single block, or —
-// rarely — the whole-file fallback when a balanced block can't be found).
 type SectionState =
   | { kind: "unavailable" }
   | { kind: "wkt"; fullName: string }
@@ -94,8 +73,6 @@ function resolveSection(
   }
   const result = gen.messageTypeText(gen.files, message.package, message.name, message.file);
   if (!result) return { kind: "unavailable" };
-  // A successful slice always starts with the declaration itself; the whole-file fallback
-  // starts with the generated preamble comment / imports instead — a cheap, reliable tell.
   const wholeFile = !result.text.trimStart().startsWith("export type");
   return { kind: "text", symbol: result.symbol, text: result.text, wholeFile };
 }

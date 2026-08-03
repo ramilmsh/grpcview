@@ -12,16 +12,11 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// TestResolveInvokeBody covers the §T1 pre-send body-evaluation step: the happy path (a body
-// is run as a generator and its returned object replaces the body, for one and for many
-// bodies) and the error modes (throw / non-object / undefined return → FailedPrecondition).
 func TestResolveInvokeBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 
 	t.Run("typescript body evaluates to its returned object", func(t *testing.T) {
-		// `export default` fires the entry-point convention; the returned object literal
-		// (with a computed field, to prove real evaluation) becomes the JSON body.
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
 			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`}, nil)
 		if err != nil {
@@ -59,11 +54,6 @@ func TestResolveInvokeBody(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeBodyExpressionBody covers the OTHER accepted body form: an EXPRESSION (most
-// importantly plain protojson) that resolveInvokeBody wraps into the module form itself, so a
-// client that never runs browser code still gets its body evaluated. It also pins IDEMPOTENCE —
-// a body that already is a module must be untouched, which is what protects the UI's Send path
-// from the wrap — and that a non-object result still fails the same way after wrapping.
 func TestResolveInvokeBodyExpressionBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -101,11 +91,6 @@ func TestResolveInvokeBodyExpressionBody(t *testing.T) {
 	}
 }
 
-// TestResolveInvokeBodyComposition covers pillar C on the invoke path (ts-request-body-plan
-// T3): a TYPESCRIPT body calls a generator saved in the workspace (via the store), and the
-// produced JSON reflects the composed call. It also proves FAILURE ISOLATION — a broken
-// generator the body does NOT reference cannot break the body — because transitiveGenerators
-// bounds each per-invoke bundle to the generators the body actually reaches.
 func TestResolveInvokeBodyComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -124,9 +109,6 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	})
 
 	t.Run("an expression body composes a saved generator", func(t *testing.T) {
-		// The ordering proof: the wrap has to happen before transitiveGenerators scans the
-		// source, and both have to see the SAME string, or the bare object's mkid() call site
-		// is never found and the generator is left out of the bundle.
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
 			[]string{`{ "id": mkid() }`}, nil)
 		if err != nil {
@@ -138,8 +120,6 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	})
 
 	t.Run("an unreferenced broken generator does not break the body", func(t *testing.T) {
-		// A generator whose source does not compile lives in the workspace, but the body never
-		// names it — so transitiveGenerators excludes it and the body still bundles and runs.
 		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
 			[]string{`export default () => ({ id: mkid() })`}, nil)
@@ -152,11 +132,6 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	})
 
 	t.Run("a broken generator whose name collides with a key or method does not break the body", func(t *testing.T) {
-		// The regression the call-site scan closes: a broken generator named like a common object
-		// key (id) or method (toString) must NOT be folded into the bundle when the body only USES
-		// those as a key / method — it calls mkid(), never id() or toString(). A bare-identifier
-		// scan matched the key/method tokens, pulled the broken generators in, and failed the whole
-		// (valid) body; the call-site scan excludes a non-call occurrence, so the body still runs.
 		createGenerator(t, w, ctx, "id", `export default () => "unterminated`)
 		createGenerator(t, w, ctx, "toString", `export default () => "also broken`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
@@ -170,11 +145,6 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	})
 }
 
-// TestResolveInvokeBodyTransitiveComposition proves TRANSITIVE composition end-to-end on the
-// invoke path: a body that calls only `outer()` resolves even though `outer` itself calls
-// `inner` — transitiveGenerators folds in `inner` by following outer's own call sites to a
-// fixpoint. It also proves failure isolation still holds at the transitive frontier: an
-// UNRELATED broken generator that nothing reachable calls does not break the body.
 func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -206,10 +176,6 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 	})
 }
 
-// TestInvokeTypeScriptBody is the §T1 must-pass end-to-end: a unary Invoke whose
-// TypeScript body (the plan's example) runs as a generator,
-// the returned object unmarshals into the request message, and the echo server sees
-// it — proving the produced JSON flows through UnmarshalJSON and the send unchanged.
 func TestInvokeTypeScriptBody(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -229,7 +195,6 @@ func TestInvokeTypeScriptBody(t *testing.T) {
 	if code := resp.Msg.GetResponse().GetStatus().GetCode(); code != int32(codeOK) {
 		t.Fatalf("status = %d (%s)", code, resp.Msg.GetResponse().GetStatus().GetMessage())
 	}
-	// Echo replies "echo: " + message; the TS body produced {"message":"hi-<random>"}.
 	var payload struct {
 		Message string `json:"message"`
 	}

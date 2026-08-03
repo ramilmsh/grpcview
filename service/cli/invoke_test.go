@@ -19,9 +19,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// fakeClient is the whole test seam: it serves one Get snapshot, records the
-// exact request message every invoke RPC received — argument-to-field mapping is
-// where the bugs live — and returns canned outcomes.
 type fakeClient struct {
 	snapshot *grpcviewv1.Workspace
 	getErr   error
@@ -31,12 +28,8 @@ type fakeClient struct {
 	frames    []*grpcviewv1.InvokeStreamResponse
 	invokeErr error
 
-	// writes is the mutating half of the fake, defined in write_test.go next to
-	// the verbs it serves.
 	writes writeCalls
 
-	// described and describeErr are the DescribeMethod half, served in
-	// describe_test.go next to the verb that reads them.
 	described   *grpcviewv1.DescribeMethodResponse
 	describeErr error
 	gotDescribe []*grpcviewv1.DescribeMethodRequest
@@ -95,8 +88,6 @@ func (f *fakeClient) pump(send func(*grpcviewv1.InvokeStreamResponse) error) err
 	return nil
 }
 
-// invokeCalls counts every invoke RPC, so a test can assert that NOTHING was
-// invoked — the invariant an ambiguous argument and a dry run both rest on.
 func (f *fakeClient) invokeCalls() int {
 	return len(f.gotSaved) + len(f.gotSavedStream) + len(f.gotAdhoc) + len(f.gotAdhocStream)
 }
@@ -120,9 +111,6 @@ func failedResponse(code int32, message string) *grpcviewv1.Request_Response {
 	}
 }
 
-// testWorkspace is the fixture every resolution case is decided against. Note
-// the folder deliberately named like a service's full name: it is what makes
-// "echo.v1.EchoService/Unary" resolve BOTH ways.
 func testWorkspace() *grpcviewv1.Workspace {
 	return &grpcviewv1.Workspace{
 		Name: "default",
@@ -169,8 +157,6 @@ func resultFrame(r *grpcviewv1.Request_Response) *grpcviewv1.InvokeStreamRespons
 	return &grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Result{Result: r}}
 }
 
-// runCLI drives the real command tree with the real exit-code mapping, so every
-// case asserts on the same three outputs a shell sees.
 func runCLI(fc *fakeClient, stdin string, args ...string) (stdout, stderr string, code int) {
 	var out, errBuf bytes.Buffer
 	s := Streams{In: strings.NewReader(stdin), Out: &out, Err: &errBuf}
@@ -183,13 +169,10 @@ func runCLI(fc *fakeClient, stdin string, args ...string) (stdout, stderr string
 
 func TestInvoke(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		args  []string
-		stdin string
-		// fake mutates the default fake before the run.
-		fake func(*fakeClient)
-		// wantOut and wantErr are exact; wantErrHas is a substring check used
-		// where the full sentence is not the thing under test.
+		name       string
+		args       []string
+		stdin      string
+		fake       func(*fakeClient)
 		wantOut    string
 		wantErr    string
 		wantErrHas string
@@ -560,8 +543,6 @@ func TestInvoke(t *testing.T) {
 	}
 }
 
-// tsBody is a body that must survive as one message: a TypeScript module is
-// multi-line, and splitting it on newlines would corrupt every line of it.
 const tsBody = "export default () => ({\n  user: \"a\",\n  tenant: \"acme\",\n})\n"
 
 func wantNothingInvoked(t *testing.T, fc *fakeClient) {
@@ -571,10 +552,8 @@ func wantNothingInvoked(t *testing.T, fc *fakeClient) {
 	}
 }
 
-// errNoTarget stands in for a grpcview-side failure, the exit-2 half of D9.
 var errNoTarget = errors.New("no target configured")
 
-// --params-file merges, and an explicit --param beats it.
 func TestInvokeParamsFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "params.json")
@@ -597,7 +576,6 @@ func TestInvokeParamsFile(t *testing.T) {
 	}
 }
 
-// -f <file> reads that file, byte for byte.
 func TestInvokeBodyFromFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "body.ts")
 	if err := os.WriteFile(path, []byte(tsBody), 0o600); err != nil {
@@ -614,7 +592,6 @@ func TestInvokeBodyFromFile(t *testing.T) {
 	}
 }
 
-// A missing -f file fails before anything is invoked.
 func TestInvokeMissingBodyFile(t *testing.T) {
 	fc := newFake()
 	out, errOut, code := runCLI(fc, "", "invoke", "Auth/Login", "-f", filepath.Join(t.TempDir(), "nope.json"))
@@ -630,7 +607,6 @@ func TestInvokeMissingBodyFile(t *testing.T) {
 	wantNothingInvoked(t, fc)
 }
 
-// --dry-run prints indented JSON, exits 0, and calls only the dry-run RPC.
 func TestInvokeDryRun(t *testing.T) {
 	fc := newFake()
 	fc.response = nil
@@ -671,8 +647,6 @@ func TestInvokeDryRun(t *testing.T) {
 	}
 }
 
-// A dry run of a streaming saved request still goes through the unary RPC: the
-// streaming form rejects dry_run, so routing on the method kind would break it.
 func TestInvokeDryRunOnAStreamingMethod(t *testing.T) {
 	fc := newFake()
 	fc.resolved = &grpcviewv1.ResolvedRequest{Service: "echo.v1.EchoService", Method: "ServerStream"}
@@ -686,7 +660,6 @@ func TestInvokeDryRunOnAStreamingMethod(t *testing.T) {
 	}
 }
 
-// -o json prints the whole Request.Response as one line, for jq.
 func TestInvokeOutputJSON(t *testing.T) {
 	fc := newFake()
 	out, errOut, code := runCLI(fc, "", "invoke", "Auth/Login", "-o", "json")
@@ -716,11 +689,6 @@ func TestInvokeOutputJSON(t *testing.T) {
 	}
 }
 
-// A FAILED call still prints its Request.Response under -o json, and still exits
-// 1. The status is part of the data there, which is the whole reason a script
-// asks for -o json; -o body and -o raw print nothing on failure instead. The
-// streaming form applies the same rule to its terminal frame, so the two cannot
-// disagree about what -o json means.
 func TestInvokeOutputJSONOnFailure(t *testing.T) {
 	fc := newFake()
 	fc.response = failedResponse(5, `tenant "nope" does not exist`)
@@ -744,7 +712,6 @@ func TestInvokeOutputJSONOnFailure(t *testing.T) {
 		t.Errorf("stderr = %q, want the one-line NOT_FOUND diagnostic", errOut)
 	}
 
-	// -o body, by contrast, prints nothing at all for the same failure.
 	fc2 := newFake()
 	fc2.response = failedResponse(5, "nope")
 	body, _, code2 := runCLI(fc2, "", "invoke", "Auth/Login")
@@ -753,7 +720,6 @@ func TestInvokeOutputJSONOnFailure(t *testing.T) {
 	}
 }
 
-// Under -o json a stream's terminal frame is the last STDOUT line, not stderr.
 func TestInvokeStreamOutputJSON(t *testing.T) {
 	fc := newFake()
 	fc.frames = []*grpcviewv1.InvokeStreamResponse{
@@ -780,7 +746,6 @@ func TestInvokeStreamOutputJSON(t *testing.T) {
 	}
 }
 
-// --timeout is inherited from the root and bounds the call.
 func TestInvokeAppliesTheGlobalTimeout(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	s := Streams{In: strings.NewReader(""), Out: &out, Err: &errBuf}

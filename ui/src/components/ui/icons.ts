@@ -1,12 +1,8 @@
 import type { ComponentType, SVGProps } from "react";
 import * as Ph from "@phosphor-icons/react";
 
-// Phosphor's published IconProps drops its inherited SVG props under pnpm's
-// isolated store (its bundled .d.ts can't resolve @types/react, so
-// `extends ComponentPropsWithoutRef<"svg">` collapses to nothing). The icon
-// components accept style/className/onClick/etc. at runtime — only the types are
-// wrong — so we re-export the icons we use with a correct prop type. Import
-// Phosphor icons from here, not from "@phosphor-icons/react" directly.
+// Phosphor's published IconProps drops its inherited SVG props under pnpm's isolated
+// store, so import icons from here rather than from "@phosphor-icons/react" directly.
 export interface IconProps extends SVGProps<SVGSVGElement> {
   size?: number | string;
   weight?: "thin" | "light" | "regular" | "bold" | "fill" | "duotone";

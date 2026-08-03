@@ -7,8 +7,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// The two forms resolve against one snapshot, and the resolved method kind is
-// what later picks the RPC — so it is asserted here rather than inferred.
 func TestResolveInvokeArg(t *testing.T) {
 	ws := testWorkspace()
 
@@ -81,15 +79,11 @@ func TestServiceFullName(t *testing.T) {
 	if got := serviceFullName(&grpcviewv1.Service{Package: "a.v1", Name: "S"}); got != "a.v1.S" {
 		t.Errorf("serviceFullName = %q, want %q", got, "a.v1.S")
 	}
-	// A package-less service must not gain a leading dot, or no argument could
-	// ever address it.
 	if got := serviceFullName(&grpcviewv1.Service{Name: "S"}); got != "S" {
 		t.Errorf("serviceFullName = %q, want %q", got, "S")
 	}
 }
 
-// Routing is on "does the method stream at all", because InvokeSaved rejects a
-// server-streaming method with Unimplemented.
 func TestMethodKindRouting(t *testing.T) {
 	for _, tc := range []struct {
 		kind          methodKind

@@ -2,12 +2,8 @@ import { Plus, Trash } from "@/components/ui/icons";
 import { Tag } from "@/components/ui/Tag";
 import { Button } from "@/components/ui/Button";
 
-// MessagesTab is the multi-message compose surface for client-streaming / bidi
-// requests (plan §5). The browser transport can't interleave, so the user
-// composes the whole request list up-front and Invoke sends it all at once, then
-// responses stream back. messages[0] is the persisted primary (mirrors the
-// request's single draft_body); messages[1..] are ephemeral compose extras. The
-// list is fully controlled — every edit/add/remove funnels through onChange.
+// The multi-message compose surface for client-streaming / bidi: the browser transport can't
+// interleave, so the whole list is composed up-front and sent at once. messages[0] is persisted.
 export function MessagesTab({
   messages,
   onChange,
@@ -21,7 +17,7 @@ export function MessagesTab({
     onChange(messages.map((m, idx) => (idx === i ? v : m)));
   const add = () => onChange([...messages, "{}"]);
   const removeAt = (i: number) => {
-    if (messages.length <= 1) return; // always keep the primary
+    if (messages.length <= 1) return;
     onChange(messages.filter((_, idx) => idx !== i));
   };
 
@@ -35,7 +31,7 @@ export function MessagesTab({
           <div
             key={i}
             style={{
-              flex: "none", // don't shrink; shrinking + overflow:hidden would clip the card
+              flex: "none",
               border: "1px solid var(--line)",
               borderRadius: 8,
               background: "var(--panel-2)",

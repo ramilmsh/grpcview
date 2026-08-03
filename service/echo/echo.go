@@ -1,7 +1,5 @@
-// Package echo provides a standard grpc-go EchoService implementation that
-// exposes one method of each streaming kind (unary, server-streaming,
-// client-streaming, bidi) plus server reflection. It exists to drive the
-// grpcview app's streaming invokes end-to-end against a real server.
+// Package echo implements a grpc-go EchoService with one method of each streaming
+// kind plus server reflection, to drive grpcview's invokes against a real server.
 package echo
 
 import (
@@ -18,34 +16,25 @@ import (
 	echov1 "codeberg.org/ramilmsh/grpcview/proto/echo/v1"
 )
 
-// streamDelay is the pause between streamed sends so streaming is visibly
-// observable in a browser client.
+// streamDelay paces streamed sends so streaming is observable in a browser client.
 const streamDelay = 120 * time.Millisecond
 
-// Server implements echov1.EchoServiceServer with simple, observable echo
-// semantics. The embedded UnimplementedEchoServiceServer (by value, per the
-// generated code's guidance) keeps it forward-compatible if new methods are
-// added to the service.
 type Server struct {
 	echov1.UnimplementedEchoServiceServer
 }
 
-// Compile-time assertion that *Server satisfies the generated server interface.
 var _ echov1.EchoServiceServer = (*Server)(nil)
 
-// NewServer returns a ready-to-register EchoService implementation.
 func NewServer() echov1.EchoServiceServer {
 	return &Server{}
 }
 
-// Register registers the echo service and gRPC server reflection on s, so a
-// caller can stand up a fully-reflectable echo server with a single call.
+// Register registers the echo service and gRPC server reflection on s.
 func Register(s *grpc.Server) {
 	echov1.RegisterEchoServiceServer(s, NewServer())
 	reflection.Register(s)
 }
 
-// Unary echoes the request in a single response.
 func (*Server) Unary(_ context.Context, req *echov1.EchoRequest) (*echov1.EchoResponse, error) {
 	return &echov1.EchoResponse{
 		Message: "echo: " + req.GetMessage(),
@@ -53,8 +42,7 @@ func (*Server) Unary(_ context.Context, req *echov1.EchoRequest) (*echov1.EchoRe
 	}, nil
 }
 
-// ServerStream emits N responses (N = req.Count when > 0, else 3), one every
-// streamDelay, so the stream is observable. It respects ctx cancellation.
+// ServerStream emits req.Count responses, or 3 when unset.
 func (*Server) ServerStream(req *echov1.EchoRequest, stream grpc.ServerStreamingServer[echov1.EchoResponse]) error {
 	ctx := stream.Context()
 
@@ -83,8 +71,6 @@ func (*Server) ServerStream(req *echov1.EchoRequest, stream grpc.ServerStreaming
 	return nil
 }
 
-// ClientStream drains every request until EOF, then replies once with a
-// summary of what it received.
 func (*Server) ClientStream(stream grpc.ClientStreamingServer[echov1.EchoRequest, echov1.EchoResponse]) error {
 	var msgs []string
 	for {
@@ -105,8 +91,6 @@ func (*Server) ClientStream(stream grpc.ClientStreamingServer[echov1.EchoRequest
 	})
 }
 
-// BidiStream echoes each received request back with an incrementing index,
-// pausing streamDelay between sends. It respects ctx cancellation.
 func (*Server) BidiStream(stream grpc.BidiStreamingServer[echov1.EchoRequest, echov1.EchoResponse]) error {
 	ctx := stream.Context()
 
@@ -132,7 +116,6 @@ func (*Server) BidiStream(stream grpc.BidiStreamingServer[echov1.EchoRequest, ec
 	}
 }
 
-// sleep waits for d, returning early with ctx.Err() if ctx is cancelled first.
 func sleep(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()

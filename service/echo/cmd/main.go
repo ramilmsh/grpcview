@@ -1,8 +1,4 @@
-// Command echo runs the standalone gRPC EchoService test server. It exposes
-// one method of each streaming kind plus server reflection, so the grpcview
-// app can drive unary/server/client/bidi invokes against a real server.
-//
-// Run it with: bazel run //service/echo/cmd -- -port 50055
+// Command echo runs the standalone gRPC EchoService test server.
 package main
 
 import (

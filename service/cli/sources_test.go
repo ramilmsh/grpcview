@@ -25,9 +25,6 @@ func uploadSource(fileName string, resolved *grpcviewv1.Resolved) *grpcviewv1.De
 	}
 }
 
-// sourcesWorkspace is the state the Sources view exists to explain: a winning
-// reflection target, an upload of the SAME protos that therefore wins nothing,
-// and a target that has gone away.
 func sourcesWorkspace() *grpcviewv1.Workspace {
 	ws := testWorkspace()
 	ws.Sources = []*grpcviewv1.DescriptorSource{
@@ -47,11 +44,6 @@ func sourcesWorkspace() *grpcviewv1.Workspace {
 	return ws
 }
 
-// The golden listing, columns included: the format is the contract.
-//
-// Row 2 is the load-bearing one. It resolved 3 files and serves a service, yet
-// wins none of it because row 1 describes the same protos — "shadowed", not
-// "empty", which is the distinction a text dump of the won count alone loses.
 const sourcesGolden = `1  reflection:localhost:50055    reflection  4 files  serves 2  wins 2
 2  upload:echo.binpb             upload      3 files  serves 1  wins 0  shadowed
 3  reflection:gone.example:9999  reflection  0 files  serves 0  wins 0  error: dial tcp 10.0.0.1:9999: connect: connection refused
@@ -77,8 +69,6 @@ func TestSourcesLs(t *testing.T) {
 	}
 }
 
-// TestSourcesLsShadowing walks the four states of the serves/wins pair on their
-// own, since the golden listing above can only show three of them.
 func TestSourcesLsShadowing(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

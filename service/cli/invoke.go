@@ -20,19 +20,12 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// The three -o shapes (D8). stdout is data in all three; latency, status text
-// and warnings are stderr in all three.
 const (
-	// outputBody prints the response message as one line of JSON.
 	outputBody = "body"
-	// outputJSON prints the whole Request.Response as one line of protojson, for jq.
 	outputJSON = "json"
-	// outputRaw prints the response bytes unchanged.
-	outputRaw = "raw"
+	outputRaw  = "raw"
 )
 
-// invokeFlags are invoke's own flags. --workspace, --server and --timeout are
-// inherited persistent flags read off globalFlags instead (D6).
 type invokeFlags struct {
 	file         string
 	params       []string
@@ -93,8 +86,6 @@ func runInvoke(ctx context.Context, s Streams, g *globalFlags, open clientFactor
 		return errors.New("--tls needs --target: it selects TLS for the target this run dials, and no target was given")
 	}
 
-	// --timeout bounds the whole verb, the resolving Get included: a hung
-	// snapshot read is as much a failure to invoke as a hung call.
 	if g.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
@@ -135,8 +126,6 @@ func runInvoke(ctx context.Context, s Streams, g *globalFlags, open clientFactor
 	return invokeAdhoc(ctx, s, sess, g, f, target, messages)
 }
 
-// checkFormFlags refuses the flag/form combinations that have no wire field to
-// land in. Silently dropping a --param would be worse than refusing it.
 func checkFormFlags(target invokeTarget, f *invokeFlags) error {
 	if target.saved {
 		if len(f.metadata) > 0 || f.metadataFile != "" {
@@ -221,8 +210,6 @@ func invokeAdhoc(ctx context.Context, s Streams, sess session, g *globalFlags, f
 		})
 	}
 
-	// A non-streaming ad-hoc call takes exactly one body, and bodyMessages did
-	// not split it: messages holds it whole or is empty.
 	var body string
 	if len(messages) > 0 {
 		body = messages[0]
@@ -242,8 +229,6 @@ func invokeAdhoc(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	return renderUnary(s, f.output, target.arg, resp.Msg.GetResponse())
 }
 
-// buildTarget maps --target/--tls onto the Server override. Server.TLS is an
-// empty message, so the flag is one bool mapped by hand.
 func buildTarget(f *invokeFlags) *grpcviewv1.Server {
 	if f.target == "" {
 		return nil
@@ -255,10 +240,6 @@ func buildTarget(f *invokeFlags) *grpcviewv1.Server {
 	return server
 }
 
-// buildParams merges --params-file and --param into this run's params object.
-// Each --param value is parsed as JSON and falls back to the literal string, so
-// `n=3` is a number and `n=three` is a string. An explicit --param wins over the
-// file.
 func buildParams(file string, kvs []string) (*structpb.Struct, error) {
 	values := map[string]any{}
 
@@ -290,9 +271,6 @@ func buildParams(file string, kvs []string) (*structpb.Struct, error) {
 	return params, nil
 }
 
-// paramValue parses a --param value as JSON, falling back to the literal string.
-// A shell has no types, and "3" meaning the number 3 is what a request body
-// almost always wants; a value that is not JSON at all is a plain string.
 func paramValue(value string) any {
 	var parsed any
 	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
@@ -301,10 +279,6 @@ func paramValue(value string) any {
 	return parsed
 }
 
-// buildMetadata merges --metadata-file and --metadata into the outgoing metadata
-// Struct. Every key is sent as a ListValue of strings: the backend flattens both
-// a bare string and a list, and a list is the unambiguous shape for a repeatable
-// flag. --metadata appends to whatever the file supplied for the same key.
 func buildMetadata(file string, kvs []string) (*structpb.Struct, error) {
 	values := map[string][]string{}
 
@@ -361,13 +335,7 @@ func buildMetadata(file string, kvs []string) (*structpb.Struct, error) {
 	return md, nil
 }
 
-// renderUnary applies D8 to a completed unary call and D9 to its status.
-//
-// Under -o body and -o raw a non-OK status writes NOTHING to stdout: a script
-// piping stdout into jq must not receive a payload for a call that failed. Under
-// -o json the whole Request.Response IS the data and the status is part of it, so
-// it is written either way — the same rule renderStream applies to its terminal
-// frame, so the two forms do not disagree about what -o json means.
+// Under -o body and -o raw a non-OK status writes nothing to stdout; -o json always writes.
 func renderUnary(s Streams, output, label string, response *grpcviewv1.Request_Response) error {
 	if output == outputJSON {
 		line, err := marshalOneLine(response)
@@ -391,9 +359,6 @@ func renderUnary(s Streams, output, label string, response *grpcviewv1.Request_R
 	return writeLine(s.Out, compactJSON(response.GetResponse()))
 }
 
-// renderStream renders a streaming invoke as NDJSON — one message per line on
-// stdout — and takes its exit code from the terminal frame's status. call is the
-// RPC, already bound to its request message.
 func renderStream(s Streams, output, label string, call func(send func(*grpcviewv1.InvokeStreamResponse) error) error) error {
 	var terminal *grpcviewv1.Request_Response
 
@@ -421,9 +386,6 @@ func renderStream(s Streams, output, label string, call func(send func(*grpcview
 		return fmt.Errorf("failed to invoke %s: the stream ended without a terminal frame", label)
 	}
 
-	// The terminal frame is a diagnostic, so it belongs on stderr — except under
-	// -o json, where the whole Request.Response IS the data and goes out as the
-	// last stdout line.
 	if output == outputJSON {
 		line, err := marshalOneLine(terminal)
 		if err != nil {
@@ -442,10 +404,7 @@ func renderStream(s Streams, output, label string, call func(send func(*grpcview
 	return nil
 }
 
-// statusFailure turns a non-OK gRPC status into the exit-1 error in D9's format.
-// The status arrives INSIDE Request.Response with a nil transport error, which is
-// the whole reason the 1-vs-2 split needs its own line of code. The "grpcview: "
-// prefix is added by execute.
+// A non-OK status arrives inside Request.Response with a nil transport error: exit 1, not 2.
 func statusFailure(label string, response *grpcviewv1.Request_Response) error {
 	code := response.GetStatus().GetCode()
 	if code == 0 {
@@ -456,10 +415,6 @@ func statusFailure(label string, response *grpcviewv1.Request_Response) error {
 		label, statusCodeName(code), response.GetStatus().GetMessage(), formatLatency(response))}
 }
 
-// renderDryRun prints the resolved request as indented JSON on stdout, exit 0.
-// It is deliberately json.Indent over compact protojson rather than protojson's
-// own Multiline: protojson randomizes indentation between runs, and a dry run is
-// output a script diffs.
 func renderDryRun(s Streams, label string, resolved *grpcviewv1.ResolvedRequest) error {
 	if resolved == nil {
 		return fmt.Errorf("failed to resolve %s: the dry run returned no resolved request", label)
@@ -471,12 +426,7 @@ func renderDryRun(s Streams, label string, resolved *grpcviewv1.ResolvedRequest)
 	return writeLine(s.Out, indentJSON(compact))
 }
 
-// indentJSON pretty-prints JSON for the two outputs a human reads as often as a
-// script parses them: a dry run and a described method. It is json.Indent rather
-// than protojson's own Multiline because protojson randomizes its indentation
-// between runs, and it returns the input unchanged if it does not parse — a
-// rendering helper is not the place to reject data that already came back
-// successfully.
+// json.Indent, not protojson's Multiline: protojson randomizes indentation between runs.
 func indentJSON(raw []byte) []byte {
 	var indented bytes.Buffer
 	if err := json.Indent(&indented, raw, "", "  "); err != nil {
@@ -485,10 +435,7 @@ func indentJSON(raw []byte) []byte {
 	return indented.Bytes()
 }
 
-// statusCodeName is the gRPC code's canonical SCREAMING_SNAKE name. connect's
-// Code.String is the same vocabulary in lower snake case, so upper-casing it
-// needs no second 17-entry table to drift out of sync — including its
-// "code_<n>" fallback for a code no version of this binary knows.
+// connect's Code.String is the same vocabulary in lower snake case.
 func statusCodeName(code int32) string {
 	if code == 0 {
 		return "OK"
@@ -496,10 +443,6 @@ func statusCodeName(code int32) string {
 	return strings.ToUpper(connect.Code(code).String())
 }
 
-// formatLatency renders the latency for the one-line error/status text. It rounds
-// to whole milliseconds, the unit the plan's error format shows, and falls back
-// to microseconds for a sub-millisecond call so a fast local run does not print
-// "0s".
 func formatLatency(response *grpcviewv1.Request_Response) string {
 	d := response.GetLatency().AsDuration()
 	if d == 0 {
@@ -511,10 +454,7 @@ func formatLatency(response *grpcviewv1.Request_Response) string {
 	return d.Round(time.Millisecond).String()
 }
 
-// marshalOneLine renders a proto message as one line of protojson. protojson
-// injects unstable whitespace by design, so the output goes through json.Compact
-// to become byte-stable — which a caller piping into jq, and a golden test,
-// both need.
+// protojson injects unstable whitespace by design, hence the json.Compact.
 func marshalOneLine(m proto.Message) ([]byte, error) {
 	raw, err := protojson.Marshal(m)
 	if err != nil {
@@ -527,14 +467,10 @@ func marshalOneLine(m proto.Message) ([]byte, error) {
 	return compact.Bytes(), nil
 }
 
-// compactJSON flattens a response body to one line. A body that does not parse
-// as JSON is passed through with its surrounding whitespace trimmed rather than
-// rejected: rendering is not the place to re-litigate what the target returned.
 func compactJSON(raw []byte) []byte {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
-		// Matches gv.invoke's own rendering, which reports a missing body as the
-		// JSON literal null so a consumer needs no "" special case.
+		// The JSON literal null, matching gv.invoke's rendering of a missing body.
 		return []byte("null")
 	}
 	var compact bytes.Buffer

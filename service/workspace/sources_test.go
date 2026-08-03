@@ -11,9 +11,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// setFor builds a self-contained FileDescriptorSet for a registered proto file
-// (the file plus its transitive dependencies), standing in for what a source
-// resolves to.
 func setFor(t *testing.T, path string) *descriptorpb.FileDescriptorSet {
 	t.Helper()
 	fd, err := protoregistry.GlobalFiles.FindFileByPath(path)
@@ -27,17 +24,11 @@ func setFor(t *testing.T, path string) *descriptorpb.FileDescriptorSet {
 	return desc.ToFileDescriptorSet(wrapped)
 }
 
-// withComments returns a copy of fds whose files all carry source_code_info,
-// standing in for a `buf build` image. Its counterpart — the same files WITHOUT
-// source_code_info — stands in for gRPC reflection output, which strips it. Which
-// of the two wins the merge is exactly what decides whether the editor can show
-// proto doc comments, so it is the observable the priority tests assert on.
 func withComments(fds *descriptorpb.FileDescriptorSet) *descriptorpb.FileDescriptorSet {
 	out := proto.CloneOf(fds)
 	for _, f := range out.GetFile() {
 		f.SourceCodeInfo = &descriptorpb.SourceCodeInfo{
-			// path [2] is FileDescriptorProto.package; span is {line, col, endCol}.
-			// Both must be well-formed or the linker rejects the file outright.
+			// path [2] is FileDescriptorProto.package; a well-formed span is required or the linker rejects the file.
 			Location: []*descriptorpb.SourceCodeInfo_Location{{
 				Path:            []int32{2},
 				Span:            []int32{0, 0, 10},
@@ -48,7 +39,6 @@ func withComments(fds *descriptorpb.FileDescriptorSet) *descriptorpb.FileDescrip
 	return out
 }
 
-// stripComments returns a copy of fds with source_code_info removed from every file.
 func stripComments(fds *descriptorpb.FileDescriptorSet) *descriptorpb.FileDescriptorSet {
 	out := proto.CloneOf(fds)
 	for _, f := range out.GetFile() {
@@ -57,8 +47,6 @@ func stripComments(fds *descriptorpb.FileDescriptorSet) *descriptorpb.FileDescri
 	return out
 }
 
-// commentedFiles counts the files in a marshaled FileDescriptorSet that carry
-// source_code_info.
 func commentedFiles(t *testing.T, raw []byte) int {
 	t.Helper()
 	fds := &descriptorpb.FileDescriptorSet{}
@@ -83,12 +71,6 @@ func hasServiceNamed(services []*grpcviewv1.Service, fq string) *grpcviewv1.Serv
 	return nil
 }
 
-// TestMergeSourcesPriorityDecidesDescriptors is the regression test for the bug
-// that made multiple sources unusable: two sources describing the SAME protos, one
-// of them richer. The merge must be decided by the source list's priority order
-// alone — so putting the descriptor-set upload first keeps its doc comments, and
-// putting the reflection source first does not — and it must be a pure function of
-// that order, never of which source happened to be added last.
 func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 	base := setFor(t, "grpc/health/v1/health.proto")
 	rich := withComments(base)
@@ -107,7 +89,6 @@ func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 		services: []string{"grpc.health.v1.Health"},
 	}
 
-	// Upload first: its commented copy of every shared file wins.
 	services, merged, summaries, err := mergeSources([]*resolvedSource{upload, reflection})
 	if err != nil {
 		t.Fatalf("mergeSources(upload, reflection): %v", err)
@@ -122,9 +103,6 @@ func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 		t.Errorf("upload first: want the reflection source shadowed, got %v", got)
 	}
 
-	// The dial target still comes from the reflection source, even though the upload
-	// won the descriptors — an upload has no address, so without that split the
-	// request would be stranded with no target.
 	health := hasServiceNamed(services, "grpc.health.v1.Health")
 	if health == nil {
 		t.Fatalf("Health missing from merged services: %v", services)
@@ -133,8 +111,6 @@ func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 		t.Errorf("want dial target localhost:50051 even with the upload winning, got %q", got)
 	}
 
-	// Reflection first: the stripped copy wins and the comments are gone. Same
-	// inputs, opposite order — the ONLY thing that changed.
 	_, merged, summaries, err = mergeSources([]*resolvedSource{reflection, upload})
 	if err != nil {
 		t.Fatalf("mergeSources(reflection, upload): %v", err)
@@ -147,8 +123,6 @@ func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 	}
 }
 
-// TestMergeSourcesFillsGaps asserts a lower-priority source still contributes what
-// no higher-priority source covers, so ordering a source down never means losing it.
 func TestMergeSourcesFillsGaps(t *testing.T) {
 	health := &resolvedSource{
 		id:       "upload:health.binpb",
@@ -179,10 +153,6 @@ func TestMergeSourcesFillsGaps(t *testing.T) {
 	}
 }
 
-// TestMergeSourcesUnresolvedSourceIsNotFatal asserts a source that failed to
-// resolve contributes nothing, records why, and does not stop the others from
-// merging — the property that keeps a removal or reorder working while some
-// unrelated reflection target is down.
 func TestMergeSourcesUnresolvedSourceIsNotFatal(t *testing.T) {
 	dead := &resolvedSource{id: "reflection:localhost:1", err: errAlwaysDown}
 	live := &resolvedSource{
@@ -247,10 +217,6 @@ func TestSourceID(t *testing.T) {
 	}
 }
 
-// TestUpsertSourceRefreshesInPlace asserts re-adding a source with the same id
-// replaces it AT ITS PRIORITY rather than appending a duplicate — so re-uploading a
-// rebuilt image refreshes the source it came from instead of accumulating
-// indistinguishable rows, and doesn't silently demote it either.
 func TestUpsertSourceRefreshesInPlace(t *testing.T) {
 	srcAt := func(id string) *grpcviewv1.DescriptorSource {
 		return &grpcviewv1.DescriptorSource{Id: id}
@@ -279,8 +245,6 @@ func TestReorderSources(t *testing.T) {
 		t.Errorf("reorderSources = %v, want [c a b]", ids)
 	}
 
-	// Anything that isn't a full permutation is rejected outright, so a client
-	// working from a stale list can never silently drop a source.
 	for _, bad := range [][]string{{"a", "b"}, {"a", "b", "d"}, {"a", "b", "b"}, nil} {
 		if _, err := reorderSources(sources, bad); err == nil {
 			t.Errorf("reorderSources(%v): want error, got nil", bad)

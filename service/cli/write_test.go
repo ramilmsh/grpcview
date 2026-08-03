@@ -13,12 +13,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// writeCalls is fakeClient's mutating half: the exact request message every
-// mutation RPC received, in call order, plus the canned RunScript outcome.
-//
-// The messages are the assertion target throughout this file. Every one of these
-// verbs is a pure argument-to-field mapping over an RPC that already works, so a
-// bug here IS a wrong field, and only comparing the built message finds it.
 type writeCalls struct {
 	addSource     []*grpcviewv1.AddDescriptorSourceRequest
 	refreshSource []*grpcviewv1.RefreshDescriptorSourceRequest
@@ -31,14 +25,9 @@ type writeCalls struct {
 	moveItem      []*grpcviewv1.MoveItemRequest
 	runScript     []*grpcviewv1.RunScriptRequest
 
-	// order names every mutation RPC in call order, so a test can assert that the
-	// create came BEFORE the body patch rather than merely that both happened.
 	order []string
 
-	// err, when set, is returned by every mutation RPC below.
-	err error
-	// script is the canned RunScript outcome; nil is an empty response, which is
-	// a script that returned undefined and logged nothing.
+	err    error
 	script *grpcviewv1.RunScriptResponse
 }
 
@@ -135,10 +124,6 @@ func (f *fakeClient) RunScript(_ context.Context, r *connect.Request[grpcviewv1.
 	return connect.NewResponse(f.writes.script), nil
 }
 
-// assertSilent is the mutation output contract in one place: a mutation that
-// worked prints NOTHING on either stream and exits 0. Every success case below
-// goes through it, because a verb that leaks a confirmation line — or the whole
-// Workspace the RPC returned — is exactly the bug the contract exists to prevent.
 func assertSilent(t *testing.T, out, errOut string, code int) {
 	t.Helper()
 	if out != "" {
@@ -153,8 +138,6 @@ func assertSilent(t *testing.T, out, errOut string, code int) {
 }
 
 func TestSourcesAdd(t *testing.T) {
-	// Arbitrary bytes: the CLI passes an upload through unparsed, so what they
-	// mean is the backend's business and "unchanged" is the whole assertion.
 	raw := []byte("\x00\x01a FileDescriptorSet as far as this verb knows")
 
 	dir := t.TempDir()
@@ -164,9 +147,7 @@ func TestSourcesAdd(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name string
-		// arg is the positional argument. The two sentinels are substituted with
-		// the fixture's real paths, which cannot be table literals.
+		name       string
 		arg        string
 		tls        bool
 		fake       func(*fakeClient)
@@ -279,8 +260,6 @@ func TestSourcesAdd(t *testing.T) {
 	}
 }
 
-// onlyAdd asserts exactly one AddDescriptorSource happened and returns it. The
-// "exactly one" half matters: the refused flag combinations must reach no RPC.
 func onlyAdd(t *testing.T, fc *fakeClient) *grpcviewv1.AddDescriptorSourceRequest {
 	t.Helper()
 	if len(fc.writes.addSource) != 1 {
@@ -293,8 +272,6 @@ func onlyAdd(t *testing.T, fc *fakeClient) *grpcviewv1.AddDescriptorSourceReques
 	return got
 }
 
-// TestSourcesAddFailuresReachNoRPC pins the half of the discrimination that is
-// easiest to get wrong by accident: a refused argument must not be sent anyway.
 func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "image.binpb")
@@ -329,9 +306,6 @@ func TestSourcesRefresh(t *testing.T) {
 		for _, msg := range fc.writes.refreshSource {
 			got = append(got, msg.GetId())
 		}
-		// Exactly the order sources ls prints, which is Workspace.sources's own
-		// order: the RPC refreshes one source, so "all" is N calls and the order
-		// they happen in is the contract.
 		want := []string{"reflection:localhost:50055", "upload:echo.binpb", "reflection:gone.example:9999"}
 		if !slices.Equal(got, want) {
 			t.Errorf("refreshed %v, want %v in that order", got, want)
@@ -411,9 +385,6 @@ func TestSourcesRmAndReorder(t *testing.T) {
 		if len(fc.writes.reorderSource) != 1 {
 			t.Fatalf("ReorderDescriptorSources called %d time(s), want 1", len(fc.writes.reorderSource))
 		}
-		// Verbatim: no sort, no dedupe, no completion from the snapshot. The RPC's
-		// full-permutation check is what protects a stale caller, and a CLI that
-		// helpfully filled in the gaps would defeat it.
 		if got := fc.writes.reorderSource[0].GetIds(); !slices.Equal(got, []string{"a", "b", "c"}) {
 			t.Errorf("ids = %v, want [a b c]", got)
 		}
@@ -504,8 +475,6 @@ func TestRequestCreate(t *testing.T) {
 			"request", "create", "A/B", "--service", "echo.v1.EchoService", "--method", "Unary", "-f", file)
 		assertSilent(t, out, errOut, code)
 
-		// The ORDER is the assertion, not just the pair: patching a request that
-		// does not exist yet fails, so create-then-update is the contract.
 		if want := []string{"CreateRequest", "UpdateRequest"}; !slices.Equal(fc.writes.order, want) {
 			t.Fatalf("calls = %v, want %v", fc.writes.order, want)
 		}
@@ -513,17 +482,12 @@ func TestRequestCreate(t *testing.T) {
 		if got.DraftBody == nil {
 			t.Fatal("draft_body is unset, want the file's bytes")
 		}
-		// Unchanged, whitespace and trailing newline included: the backend
-		// normalizes at one seam, and reformatting here would fork that contract.
 		if got.GetDraftBody() != body {
 			t.Errorf("draft_body = %q, want the file's bytes unchanged (%q)", got.GetDraftBody(), body)
 		}
 		if !slices.Equal(got.GetPath(), []string{"A"}) || got.GetItemName() != "B" {
 			t.Errorf("the patch addressed %v/%q, want [A]/%q", got.GetPath(), got.GetItemName(), "B")
 		}
-		// The patch carries the body and NOTHING else: service and method were
-		// already set by the create, and re-sending them would make this verb the
-		// second place that decides what a request calls.
 		if got.Service != nil || got.Method != nil || got.Name != nil || got.DraftMetadataScript != nil {
 			t.Errorf("the patch set a field other than draft_body: %+v", got)
 		}
@@ -582,8 +546,6 @@ func TestRequestRm(t *testing.T) {
 	if !slices.Equal(got.GetPath(), []string{"Auth"}) || got.GetItemName() != "Login" {
 		t.Errorf("addressed %v/%q, want [Auth]/%q", got.GetPath(), got.GetItemName(), "Login")
 	}
-	// Deliberately no snapshot read: the RPC treats a missing item as a silent
-	// success, so pre-checking existence would only add a way to disagree with it.
 	if len(fc.gotGet) != 0 {
 		t.Errorf("Get called %d time(s), want 0", len(fc.gotGet))
 	}
@@ -591,10 +553,8 @@ func TestRequestRm(t *testing.T) {
 
 func TestRequestMv(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		args []string
-		// wantNewPath is compared with slices.Equal, which treats nil and empty
-		// alike — the root is legitimately either.
+		name        string
+		args        []string
 		wantPath    []string
 		wantName    string
 		wantNewPath []string
@@ -663,8 +623,6 @@ func TestRequestMv(t *testing.T) {
 			if !slices.Equal(got.GetNewPath(), tc.wantNewPath) {
 				t.Errorf("new_path = %v, want %v", got.GetNewPath(), tc.wantNewPath)
 			}
-			// The pointer, not GetBefore(): unset means "append", and collapsing it
-			// to "" would ask the store to insert before an item named "".
 			switch {
 			case tc.wantBefore == nil && got.Before != nil:
 				t.Errorf("before = %q, want unset without --before", got.GetBefore())
@@ -679,9 +637,6 @@ func TestRequestMv(t *testing.T) {
 
 func strptr(s string) *string { return &s }
 
-// scriptsWorkspace adds the three script kinds a listing has to render, including
-// an unset one — a state a hand-edited manifest produces and a listing must not
-// hide.
 func scriptsWorkspace() *grpcviewv1.Workspace {
 	ws := testWorkspace()
 	ws.Scripts = []*grpcviewv1.Script{
@@ -692,7 +647,6 @@ func scriptsWorkspace() *grpcviewv1.Workspace {
 	return ws
 }
 
-// The golden listing: name and kind, and deliberately not the source.
 const scriptsGolden = `seed         generator
 auth-header  middleware
 scratch      unspecified
@@ -728,13 +682,10 @@ func TestScriptLsEmpty(t *testing.T) {
 
 func TestScriptRun(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		args  []string
-		stdin string
-		fake  func(*fakeClient)
-		// wantSource and wantKind describe the RunScriptRequest built; wantRuns is
-		// how many times RunScript was called, which is 0 for every failure that
-		// must not reach the engine.
+		name       string
+		args       []string
+		stdin      string
+		fake       func(*fakeClient)
 		wantSource string
 		wantKind   string
 		wantRuns   int
@@ -832,11 +783,9 @@ func TestScriptRun(t *testing.T) {
 			wantErr:  "log: starting\nwarn: slow\n",
 		},
 		{
-			name: "a script that returned undefined prints nothing at all",
-			args: []string{"script", "run", "seed"},
-			fake: func(fc *fakeClient) { fc.writes.script = &grpcviewv1.RunScriptResponse{} },
-			// Not "null": the response distinguishes undefined from a JSON null
-			// return, and so does this.
+			name:     "a script that returned undefined prints nothing at all",
+			args:     []string{"script", "run", "seed"},
+			fake:     func(fc *fakeClient) { fc.writes.script = &grpcviewv1.RunScriptResponse{} },
 			wantRuns: 1,
 			wantOut:  "",
 		},
@@ -891,8 +840,6 @@ func TestScriptRun(t *testing.T) {
 	}
 }
 
-// kindOf renders a RunScriptRequest's kind through the production namer, so the
-// test cannot disagree with `script ls` about what a kind is called.
 func kindOf(msg *grpcviewv1.RunScriptRequest) string {
 	if msg.Kind == nil {
 		return "<unset>"
@@ -900,8 +847,6 @@ func kindOf(msg *grpcviewv1.RunScriptRequest) string {
 	return scriptKindName(msg.GetKind())
 }
 
-// TestWriteParents covers the three new parent commands' bare and typo'd forms:
-// usage on stderr and exit 2, never cobra's default of help on stdout and exit 0.
 func TestWriteParents(t *testing.T) {
 	for _, tc := range []struct {
 		args       []string
@@ -938,8 +883,6 @@ func TestWriteParents(t *testing.T) {
 	}
 }
 
-// TestWritePathErrors pins the shared path parser's rejections: an empty final
-// segment names no item, and no RPC may be reached.
 func TestWritePathErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"folder", "create", "A/"},
@@ -966,9 +909,6 @@ func TestWritePathErrors(t *testing.T) {
 	}
 }
 
-// TestWriteRPCFailures walks every mutation's Connect-error path in one place:
-// exit 2 (never 1 — nothing was invoked in D9's sense), an empty stdout, and one
-// prefixed stderr line.
 func TestWriteRPCFailures(t *testing.T) {
 	for _, args := range [][]string{
 		{"sources", "add", "localhost:50055"},

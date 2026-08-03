@@ -5,9 +5,7 @@ import { MethodKindTag } from "@/components/ui/Tag";
 import { useWorkspace, useRootItems } from "@/lib/workspace-query";
 import { findByKey, methodKind, resolveMethod } from "@/lib/format";
 
-// RequestTabs is the client-side open-request tab strip (plan §1.2). Purely
-// frontend state; no persistence. Each tab's method-kind tag is resolved live
-// from the workspace tree (fallback unary when the request/method can't resolve).
+// RequestTabs is the open-request tab strip. Frontend-only state; no persistence.
 export function RequestTabs() {
   const { workspace, services } = useWorkspace();
   const rootItems = useRootItems(workspace);

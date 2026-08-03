@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// fakeServe records what the command tree hands the serve closure, and never
-// starts a server.
 type fakeServe struct {
 	calls []ServeOptions
 }
@@ -21,8 +19,6 @@ func (f *fakeServe) serve(_ context.Context, o ServeOptions) error {
 	return nil
 }
 
-// unusedFactory stands in for openClient. C0 has no verb that opens a client,
-// and calling this would mean a test built a workspace by accident.
 func unusedFactory(t *testing.T) clientFactory {
 	return func(context.Context, *globalFlags) (session, error) {
 		t.Fatal("the client factory must not be called: no C0 verb opens a client")
@@ -36,9 +32,8 @@ func TestMain_outputsAndExitCodes(t *testing.T) {
 		args       []string
 		wantCode   int
 		wantServed []ServeOptions
-		// checkOut and checkErr both run; a nil check means "must be empty".
-		checkOut func(t *testing.T, s string)
-		checkErr func(t *testing.T, s string)
+		checkOut   func(t *testing.T, s string)
+		checkErr   func(t *testing.T, s string)
 	}{
 		{
 			name:       "no args serves on the default port",
@@ -157,8 +152,6 @@ func TestMain_outputsAndExitCodes(t *testing.T) {
 	}
 }
 
-// The completion verb comes free from cobra (added lazily during Execute);
-// assert it is reachable and writes its script to stdout.
 func TestCompletion(t *testing.T) {
 	var out, errBuf bytes.Buffer
 	s := Streams{In: strings.NewReader(""), Out: &out, Err: &errBuf}
@@ -180,7 +173,6 @@ func TestCompletion(t *testing.T) {
 	}
 }
 
-// The persistent flags are declared once, on the root, with these defaults.
 func TestRootCmd_persistentFlags(t *testing.T) {
 	s := Streams{In: strings.NewReader(""), Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
 	root := newRootCmd(s, (&fakeServe{}).serve, unusedFactory(t))
@@ -205,8 +197,6 @@ func TestRootCmd_persistentFlags(t *testing.T) {
 	}
 }
 
-// A non-OK gRPC status is exit 1; everything else is exit 2. C0 has no verb that
-// can produce exit 1, so the mapping is exercised through a fake command.
 func TestExitCodeMapping(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

@@ -2,14 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import { childPathOf, findByKey, itemKey, keyOf, pruneNestedSelections, type ItemWithPath } from "./format";
 
-// The key convention is name-derived (see format.ts / the plan's "identity hazard"),
-// so these helpers are what open tabs, drafts and invoke results hang off. A silent
-// change here detaches a user's unsaved work from the request it belongs to — which
-// is why they get tests before the tree rewrite starts moving items around.
-//
-// Items are built structurally rather than with the generated proto constructor: the
-// runtime _pb modules are Bazel-generated and format.ts only imports Item as a TYPE,
-// so a plain object with the fields under test is both sufficient and honest.
 const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWithPath => ({
   item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
   path,
@@ -84,13 +76,6 @@ describe("childPathOf", () => {
   });
 });
 
-// pruneNestedSelections — the tree-rewrite T2 multi-select delete needs this
-// to keep a confirm dialog's count (and the actual delete loop) honest when a
-// folder AND one of its own descendants are both selected at once, reachable
-// via shift+click across an expanded folder's rows or ctrl+click picking both
-// individually. Reuses the SAME `tree` fixture as itemKey/findByKey above:
-// Ping (root request), Users (folder: GetUser + Admin), Admin (nested folder:
-// Ban).
 describe("pruneNestedSelections", () => {
   const [ping, users] = tree;
   const [getUser, admin] = users.children!;
@@ -105,8 +90,6 @@ describe("pruneNestedSelections", () => {
   });
 
   it("drops a GRANDCHILD when its top-level ancestor is also in the selection, even without the middle folder", () => {
-    // Users + Ban, WITHOUT Admin itself — proves the check walks the full
-    // path, not just an immediate parent/child relationship.
     expect(pruneNestedSelections([users, ban])).toEqual([users]);
   });
 
@@ -119,9 +102,6 @@ describe("pruneNestedSelections", () => {
   });
 
   it("preserves the original relative order of the SURVIVING items, not tree order", () => {
-    // GetUser is listed before Ping in the input, and before Users too —
-    // GetUser is pruned (Users is its ancestor and is also selected), leaving
-    // Ping then Users in exactly the order they appeared in the input.
     expect(pruneNestedSelections([getUser, ping, users])).toEqual([ping, users]);
   });
 
@@ -130,19 +110,10 @@ describe("pruneNestedSelections", () => {
   });
 
   it("collapses EXACT duplicates to one, keeping the first occurrence", () => {
-    // Ancestry alone never catches these: isStrictPrefix requires the prefix to
-    // be strictly shorter, so an entry is not its own ancestor and two equal
-    // entries each leave the other standing. Reachable via ui-store's
-    // moveSubtree, which remaps treeSelection id-for-id — renaming one selected
-    // row onto a name another selected row already has puts the same id in the
-    // list twice, and both copies resolve to the one surviving row.
     expect(pruneNestedSelections([getUser, getUser])).toEqual([getUser]);
   });
 
   it("de-duplicates two DISTINCT objects that name the same path (what a rename collision actually produces)", () => {
-    // Not the same object reference — the resolved-from-id path hands back
-    // whatever findByKey produced per lookup — so identity has to be decided on
-    // the path, not on ===.
     expect(pruneNestedSelections([request("GetUser", ["Users"]), request("GetUser", ["Users"])])).toEqual([
       request("GetUser", ["Users"]),
     ]);
@@ -153,9 +124,6 @@ describe("pruneNestedSelections", () => {
   });
 
   it("still distinguishes sibling names where one is a prefix STRING of the other", () => {
-    // Guards the segment-array comparison against a future 'join the path and
-    // compare strings' shortcut: "Users/Admin" is not an ancestor of
-    // "Users/AdminTools", and neither is a duplicate of the other.
     const adminTools = folder("AdminTools", ["Users"], []);
     expect(pruneNestedSelections([admin, adminTools])).toEqual([admin, adminTools]);
   });

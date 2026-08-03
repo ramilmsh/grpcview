@@ -6,9 +6,7 @@ import { Backdrop } from "@/components/ui/Backdrop";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { methodKind, serviceName } from "@/lib/format";
 
-// Two-pane service → method picker. Ported from RequestSelectorModal (plan §7),
-// restyled to Nocturne. Used both to create a request and to change a request's
-// service/method from the method header.
+// Two-pane service → method picker, for both creating a request and repointing one.
 export function MethodPickerModal({
   open,
   services,
@@ -23,9 +21,7 @@ export function MethodPickerModal({
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
 
-  // The picker component stays mounted while closed (it just renders null), so
-  // reset its search/selection each time it (re)opens — otherwise it reappears
-  // showing the previous session's query and highlighted service.
+  // The component stays mounted while closed, so reset per open.
   useEffect(() => {
     if (open) {
       setFilter("");
@@ -87,9 +83,7 @@ export function MethodPickerModal({
             placeholder="Search services or methods…"
             value={filter}
             onChange={(e) => {
-              // `selected` indexes into `filtered`; the list changes as the
-              // query changes, so drop the stale selection to avoid pointing at
-              // a different service than the user clicked.
+              // `selected` indexes into `filtered`, which the query reorders.
               setFilter(e.target.value);
               setSelected(null);
             }}
@@ -98,7 +92,6 @@ export function MethodPickerModal({
         </div>
 
         <div className="flex" style={{ flex: 1, minHeight: 0 }}>
-          {/* services */}
           <div style={{ width: "45%", overflowY: "auto", borderRight: "1px solid var(--line)" }}>
             {filtered.length === 0 && (
               <div
@@ -132,7 +125,6 @@ export function MethodPickerModal({
             ))}
           </div>
 
-          {/* methods */}
           <div style={{ width: "55%", overflowY: "auto" }}>
             {active ? (
               active.methods.map((m) => (

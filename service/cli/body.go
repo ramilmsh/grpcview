@@ -9,15 +9,8 @@ import (
 	"strings"
 )
 
-// readBody reads the request body a verb was handed: `-f <file>` reads that file,
-// `-f -` reads stdin, and with no -f stdin is read only when it is piped. It
-// returns nil when no body was supplied at all, which the caller must treat as
-// "do not override anything" rather than as an empty body.
-//
-// The bytes come back UNCHANGED — no parsing, wrapping or reformatting. The
-// backend's resolveInvokeBody normalizes protojson and TypeScript at one seam, so
-// -f behaves identically for body.json and body.ts; re-doing any of that here
-// would fork the contract.
+// readBody returns nil when no body was supplied at all, which is not an empty body.
+// The bytes come back unchanged; the backend normalizes protojson and TypeScript.
 func readBody(s Streams, file string) ([]byte, error) {
 	switch {
 	case file == "-":
@@ -46,9 +39,6 @@ func readBody(s Streams, file string) ([]byte, error) {
 	}
 }
 
-// blankToNil collapses whitespace-only input to "no body". A pipe that carries
-// nothing (a closed stdin in a script, `</dev/null`) must not override a saved
-// request's stored body with an empty string.
 func blankToNil(raw []byte) []byte {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
@@ -56,11 +46,7 @@ func blankToNil(raw []byte) []byte {
 	return raw
 }
 
-// isPiped reports whether stdin carries data rather than being a terminal.
-//
-// A reader that is not an *os.File — a bytes.Buffer or a strings.Reader in a
-// test — counts as piped, which is exactly what a table test wants: it feeds
-// stdin without a -f flag and expects it to be read.
+// A reader that is not an *os.File — a test's strings.Reader — counts as piped.
 func isPiped(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
@@ -73,13 +59,8 @@ func isPiped(r io.Reader) bool {
 	return info.Mode()&os.ModeCharDevice == 0
 }
 
-// bodyMessages turns the raw body input into the repeated `messages` a request
-// carries, which depends on the method's streaming kind and on nothing else.
-//
-// For a client-streaming or bidi method the input is NDJSON: one protojson
-// message per line, in send order (D13). For EVERY other kind it is one message
-// verbatim and must not be split on newlines — a multi-line TypeScript module is
-// a single body. That is the sharpest trap in this verb.
+// Client-streaming and bidi read the input as NDJSON; every other kind is one message
+// verbatim and must NOT be split on newlines, since a TypeScript body is multi-line.
 func bodyMessages(raw []byte, kind methodKind) ([]string, error) {
 	if len(raw) == 0 {
 		return nil, nil
@@ -102,9 +83,6 @@ func bodyMessages(raw []byte, kind methodKind) ([]string, error) {
 	return messages, nil
 }
 
-// checkJSONObject is the one validation the NDJSON path does. A client-streaming
-// run sends N messages, so a line that is not an object cannot be handed on as a
-// message and the line number is the only useful thing to report.
 func checkJSONObject(line string) error {
 	var value any
 	if err := json.Unmarshal([]byte(line), &value); err != nil {
