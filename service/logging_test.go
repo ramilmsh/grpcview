@@ -21,6 +21,42 @@ func (fakeStreamConn) Send(any) error               { return nil }
 func (fakeStreamConn) ResponseHeader() http.Header  { return http.Header{} }
 func (fakeStreamConn) ResponseTrailer() http.Header { return http.Header{} }
 
+// captureHandler records every attr by key so a duplicated one is visible as such.
+type captureHandler struct{ attrs map[string][]slog.Value }
+
+func (*captureHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
+	r.Attrs(func(a slog.Attr) bool {
+		h.attrs[a.Key] = append(h.attrs[a.Key], a.Value)
+		return true
+	})
+	return nil
+}
+func (h *captureHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *captureHandler) WithGroup(string) slog.Handler      { return h }
+
+func TestUnaryLogEmitsTheRealStatusOnce(t *testing.T) {
+	h := &captureHandler{attrs: map[string][]slog.Value{}}
+	l := loggingInterceptor{logger: slog.New(h)}
+
+	sentinel := connect.NewError(connect.CodePermissionDenied, errors.New("nope"))
+	wrapped := l.WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, sentinel
+	})
+	if _, err := wrapped(context.Background(), connect.NewRequest(&struct{}{})); !errors.Is(err, sentinel) {
+		t.Fatalf("want the sentinel error propagated, got %v", err)
+	}
+
+	got := h.attrs["status"]
+	if len(got) != 1 {
+		t.Fatalf("status attrs = %d %v, want exactly 1: a duplicate key lets the later value "+
+			"win, masking the typed error's real code", len(got), got)
+	}
+	if want := connect.CodePermissionDenied.String(); got[0].String() != want {
+		t.Fatalf("status = %q, want %q", got[0].String(), want)
+	}
+}
+
 func TestLoggingInterceptorWrapsStreaming(t *testing.T) {
 	l := loggingInterceptor{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 

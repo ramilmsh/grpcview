@@ -68,16 +68,14 @@ func (l loggingInterceptor) WrapUnary(handler connect.UnaryFunc) connect.UnaryFu
 			)
 			return response, nil
 		}
+		status := connect.CodeUnknown.String()
 		if connectErr := new(connect.Error); errors.As(responseErr, &connectErr) {
-			args = append(args,
-				"status", connectErr.Code(),
-			)
+			status = connectErr.Code().String()
 		}
-
 		l.logger.ErrorContext(
 			ctx, "request finished",
 			append(args,
-				"status", connect.CodeUnknown,
+				"status", status,
 				"error", responseErr,
 			)...,
 		)
