@@ -2,13 +2,10 @@ package store
 
 import (
 	"log/slog"
-	"strconv"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
-
-const legacyUploadFileName = "uploaded bytes"
 
 // SourceID derives a source's stable identity from its config, so re-adding it refreshes in place.
 func SourceID(src *grpcviewv1.DescriptorSource) string {
@@ -43,8 +40,8 @@ func reflectionSourceID(address string, tls bool) string {
 
 func uploadSourceID(fileName string) string { return "upload:" + fileName }
 
-// normalizeSources runs on every manifest read: it recovers legacy uploads, fills in
-// missing ids, and drops duplicate or contentless entries.
+// normalizeSources runs on every manifest read: it fills in missing ids and drops duplicate or
+// contentless entries.
 func normalizeSources(
 	in []*grpcviewstorev1.DescriptorSource,
 	logger *slog.Logger,
@@ -54,21 +51,7 @@ func normalizeSources(
 	}
 	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(in))
 	seen := make(map[string]bool, len(in))
-	legacy := 0
 	for _, ds := range in {
-		if fds := ds.GetLegacyDescriptorSet(); fds != nil && ds.GetUpload() == nil {
-			legacy++
-			name := legacyUploadFileName
-			if legacy > 1 {
-				name = legacyUploadFileName + " " + strconv.Itoa(legacy)
-			}
-			ds.Source = &grpcviewstorev1.DescriptorSource_Upload{
-				Upload: &grpcviewstorev1.Upload{FileName: name, DescriptorSet: fds},
-			}
-		}
-		// Migration-only field: never carried forward.
-		ds.LegacyDescriptorSet = nil
-
 		if ds.GetId() == "" {
 			ds.Id = diskSourceID(ds)
 		}

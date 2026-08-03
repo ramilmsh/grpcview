@@ -227,9 +227,8 @@ Consequences worth preserving, each of which was a bug before:
   (`store.normalizeSources`, run from `readCollection`). Refresh, remove and
   reorder all address a source *by id*, so two rows sharing one id — as a manifest
   written before ids existed produces — silently retarget those operations at the
-  first of them. Manifests older than identities get their ids derived, their
-  legacy inline upload (`legacy_descriptor_set`) folded into `Upload`, and
-  duplicate or contentless entries dropped.
+  first of them. A source with no id gets one derived; duplicate and contentless
+  entries are dropped.
 - **A service's dial target is independent of who won its descriptors**:
   `Service.source` is the first *reflection* source that serves it. An upload has
   no address, so without that split, placing one first for its comments would

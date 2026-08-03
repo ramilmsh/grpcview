@@ -114,14 +114,6 @@ message DescriptorSource {
     Upload upload = 1;
     Reflection reflection = 2;
   }
-  // legacy_descriptor_set is READ-ONLY MIGRATION: manifests written before
-  // uploads had a name and an identity stored the bytes directly on the source,
-  // as `{"descriptorSet": {...}}`. Its json_name is pinned to that old key so
-  // such a manifest still parses (the loader discards unknown fields, so without
-  // this the descriptors — the only committed copy — would vanish on upgrade).
-  // The loader folds it into Upload; nothing ever writes it. See
-  // store.normalizeSources.
-  google.protobuf.FileDescriptorSet legacy_descriptor_set = 4 [json_name = "descriptorSet"];
 }
 
 // Upload is an uploaded FileDescriptorSet: the descriptors plus the file name
