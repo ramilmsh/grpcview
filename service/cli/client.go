@@ -36,6 +36,8 @@ type Client interface {
 	// InvokeSavedStream is InvokeStream for a saved request, addressed by path.
 	InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error
 
+	DescribeMethod(context.Context, *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error)
+
 	// The mutations the write verbs use. Every one returns the whole Workspace,
 	// which the verbs deliberately discard (see write.go's contract), so the
 	// response type appears here only because the signature is the generated one.

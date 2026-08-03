@@ -35,6 +35,12 @@ type fakeClient struct {
 	// the verbs it serves.
 	writes writeCalls
 
+	// described and describeErr are the DescribeMethod half, served in
+	// describe_test.go next to the verb that reads them.
+	described   *grpcviewv1.DescribeMethodResponse
+	describeErr error
+	gotDescribe []*grpcviewv1.DescribeMethodRequest
+
 	gotGet         []*grpcviewv1.GetRequest
 	gotSaved       []*grpcviewv1.InvokeSavedRequest
 	gotSavedStream []*grpcviewv1.InvokeSavedRequest

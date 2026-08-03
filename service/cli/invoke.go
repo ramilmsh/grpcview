@@ -468,11 +468,21 @@ func renderDryRun(s Streams, label string, resolved *grpcviewv1.ResolvedRequest)
 	if err != nil {
 		return fmt.Errorf("failed to render the resolved request: %w", err)
 	}
+	return writeLine(s.Out, indentJSON(compact))
+}
+
+// indentJSON pretty-prints JSON for the two outputs a human reads as often as a
+// script parses them: a dry run and a described method. It is json.Indent rather
+// than protojson's own Multiline because protojson randomizes its indentation
+// between runs, and it returns the input unchanged if it does not parse — a
+// rendering helper is not the place to reject data that already came back
+// successfully.
+func indentJSON(raw []byte) []byte {
 	var indented bytes.Buffer
-	if err := json.Indent(&indented, compact, "", "  "); err != nil {
-		return fmt.Errorf("failed to render the resolved request: %w", err)
+	if err := json.Indent(&indented, raw, "", "  "); err != nil {
+		return raw
 	}
-	return writeLine(s.Out, indented.Bytes())
+	return indented.Bytes()
 }
 
 // statusCodeName is the gRPC code's canonical SCREAMING_SNAKE name. connect's
