@@ -314,7 +314,7 @@ function ScriptSidebar({
           fontSize: 11,
           color: "var(--color-neutral-500)",
         }}
-        title="QuickJS compiled to WASM, run in-process by wazero — hard memory + wall-clock bounds, default-deny host access"
+        title="QuickJS compiled to WASM, run in-process by wazero — hard memory + wall-clock bounds; filesystem and process denied, network open to every script"
       >
         <ShieldCheck size={14} style={{ color: "var(--ok)" }} />
         QuickJS·WASM<span style={{ color: "var(--color-neutral-700)" }}>·</span>sandboxed
@@ -541,7 +541,7 @@ function ScriptDetail({ script }: { script: Script }) {
         ) : subtab === "deps" ? (
           <NoDependencies />
         ) : (
-          <FullySandboxed />
+          <CapabilitiesPane />
         )}
       </div>
 
@@ -799,7 +799,7 @@ function NoDependencies() {
   );
 }
 
-function FullySandboxed() {
+function CapabilitiesPane() {
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "16px 18px" }}>
       <div
@@ -808,16 +808,26 @@ function FullySandboxed() {
       >
         <div
           className="flex items-center justify-center"
-          style={{ width: 48, height: 48, borderRadius: 13, background: "var(--ok-bg)", color: "var(--ok)" }}
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 13,
+            background: "var(--panel-2)",
+            border: "1px solid var(--line)",
+            color: "var(--color-neutral-500)",
+          }}
         >
-          <ShieldCheck size={24} weight="fill" />
+          <Shield size={24} />
         </div>
-        <div style={{ fontSize: 14, color: "var(--color-neutral-200)" }}>Fully sandboxed</div>
+        <div style={{ fontSize: 14, color: "var(--color-neutral-200)" }}>Bounded, network open</div>
         <p className="text-muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>
-          No capabilities requested. QuickJS·WASM enforces hard memory + wall-clock bounds;
-          this script has no filesystem, network, or process access. Importing{" "}
-          <span className="font-mono">node:fs</span>, <span className="font-mono">std/http</span>,
-          or <span className="font-mono">exec</span> would surface here for consent.
+          QuickJS·WASM enforces hard memory + wall-clock bounds on every run — that part is
+          real today. Network is not gated: a browser-style global{" "}
+          <span className="font-mono">fetch</span> is there for every script, with no grant to
+          ask for and no way to withhold it. Filesystem (<span className="font-mono">node:fs</span>)
+          and process access are denied, because nothing can grant them yet. Per-capability
+          grants — and this pane asking for consent — are planned; there is nothing to approve
+          here now.
         </p>
       </div>
     </div>
