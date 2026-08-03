@@ -18,8 +18,8 @@ type Client interface {
 	Invoke(context.Context, *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error)
 	InvokeSaved(context.Context, *connect.Request[grpcviewv1.InvokeSavedRequest]) (*connect.Response[grpcviewv1.InvokeSavedResponse], error)
 
-	InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error
-	InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error
+	InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error
+	InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error
 
 	DescribeMethod(context.Context, *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error)
 
@@ -46,7 +46,7 @@ type remote struct {
 	grpcviewv1.WorkspaceServiceClient
 }
 
-func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	stream, err := r.WorkspaceServiceClient.InvokeStreaming(ctx, connect.NewRequest(msg))
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRe
 	return drain(stream, send)
 }
 
-func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	stream, err := r.WorkspaceServiceClient.InvokeSavedStreaming(ctx, connect.NewRequest(msg))
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSav
 	return drain(stream, send)
 }
 
-func drain(stream *connect.ServerStreamForClient[grpcviewv1.InvokeStreamResponse], send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func drain(stream *connect.ServerStreamForClient[grpcviewv1.InvokeStreamingResponse], send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	defer stream.Close()
 	for stream.Receive() {
 		if err := send(stream.Msg()); err != nil {

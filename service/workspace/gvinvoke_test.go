@@ -31,11 +31,13 @@ func TestGvInvokeNestedReentrancy(t *testing.T) {
 }`
 
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        "Unary",
-		Body:          aBody,
-		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			Service:       echoService,
+			Method:        "Unary",
+			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+		Body: aBody,
 	}))
 	if err != nil {
 		t.Fatalf("Invoke A: %v", err)
@@ -72,11 +74,13 @@ func TestGvInvokeFromStreamingPath(t *testing.T) {
   return { message: "S-ok=" + b.ok + "-body=" + b.body.message, count: 1 };
 }`
 	frames, err := collectStream(ctx, w, &grpcviewv1.InvokeStreamRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        "ServerStream",
-		Messages:      []string{body},
-		Target:        &grpcviewv1.Server{Address: loopback(port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			Service:       echoService,
+			Method:        "ServerStream",
+			Target:        &grpcviewv1.Server{Address: loopback(port)},
+		},
+		Messages: []string{body},
 	})
 	if err != nil {
 		t.Fatalf("streamInvoke: %v (gv.invoke must be available on the streaming path)", err)
@@ -146,12 +150,14 @@ func TestGvInvokeSuppressesNestedHistory(t *testing.T) {
 	aBody := `export default async () => { await gv.invoke("B", {}); return { message: "a" }; }`
 
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      "A",
-		Service:       echoService,
-		Method:        "Unary",
-		Body:          aBody,
-		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			ItemName:      "A",
+			Service:       echoService,
+			Method:        "Unary",
+			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+		Body: aBody,
 	}))
 	if err != nil {
 		t.Fatalf("Invoke A: %v", err)

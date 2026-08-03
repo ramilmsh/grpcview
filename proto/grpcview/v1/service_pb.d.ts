@@ -554,17 +554,20 @@ export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
 export declare const GetResponseSchema: GenMessage<GetResponse>;
 
 /**
- * Executes a unary RPC carrying the caller's own, possibly unsaved, body.
+ * Everything an ad-hoc invoke needs except the client payload — the one thing
+ * the unary and streaming forms disagree about.
  *
- * @generated from message grpcview.v1.InvokeRequest
+ * @generated from message grpcview.v1.InvokeSpec
  */
-export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
+export declare type InvokeSpec = Message<"grpcview.v1.InvokeSpec"> & {
   /**
    * @generated from field: string workspace_name = 1;
    */
   workspaceName: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
@@ -585,28 +588,46 @@ export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
   method: string;
 
   /**
-   * @generated from field: string body = 6;
-   */
-  body: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct metadata = 7;
+   * @generated from field: google.protobuf.Struct metadata = 6;
    */
   metadata?: JsonObject | undefined;
 
   /**
    * Unset defaults to the workspace's first reflection source.
    *
-   * @generated from field: optional grpcview.v1.Server target = 8;
+   * @generated from field: optional grpcview.v1.Server target = 7;
    */
   target?: Server | undefined;
 
   /**
    * TypeScript module; supersedes `metadata` when non-empty.
    *
-   * @generated from field: string metadata_script = 10;
+   * @generated from field: string metadata_script = 8;
    */
   metadataScript: string;
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeSpec.
+ * Use `create(InvokeSpecSchema)` to create a new message.
+ */
+export declare const InvokeSpecSchema: GenMessage<InvokeSpec>;
+
+/**
+ * Executes a unary RPC carrying the caller's own, possibly unsaved, body.
+ *
+ * @generated from message grpcview.v1.InvokeRequest
+ */
+export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
+  /**
+   * @generated from field: grpcview.v1.InvokeSpec spec = 1;
+   */
+  spec?: InvokeSpec | undefined;
+
+  /**
+   * @generated from field: string body = 2;
+   */
+  body: string;
 };
 
 /**
@@ -638,55 +659,16 @@ export declare const InvokeResponseSchema: GenMessage<InvokeResponse>;
  */
 export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: grpcview.v1.InvokeSpec spec = 1;
    */
-  workspaceName: string;
-
-  /**
-   * @generated from field: repeated string path = 2;
-   */
-  path: string[];
-
-  /**
-   * @generated from field: string item_name = 3;
-   */
-  itemName: string;
-
-  /**
-   * @generated from field: string service = 4;
-   */
-  service: string;
-
-  /**
-   * @generated from field: string method = 5;
-   */
-  method: string;
+  spec?: InvokeSpec | undefined;
 
   /**
    * Client bodies as JSON text, in send order; empty defaults to one "{}".
    *
-   * @generated from field: repeated string messages = 6;
+   * @generated from field: repeated string messages = 2;
    */
   messages: string[];
-
-  /**
-   * @generated from field: google.protobuf.Struct metadata = 7;
-   */
-  metadata?: JsonObject | undefined;
-
-  /**
-   * Unset defaults to the workspace's first reflection source.
-   *
-   * @generated from field: optional grpcview.v1.Server target = 8;
-   */
-  target?: Server | undefined;
-
-  /**
-   * TypeScript module; supersedes `metadata` when non-empty.
-   *
-   * @generated from field: string metadata_script = 10;
-   */
-  metadataScript: string;
 };
 
 /**
@@ -699,11 +681,11 @@ export declare const InvokeStreamRequestSchema: GenMessage<InvokeStreamRequest>;
  * Zero or more `message` frames, then exactly one terminal `result`. The invoked
  * call's gRPC status is reported in `result`, not as a Connect stream error.
  *
- * @generated from message grpcview.v1.InvokeStreamResponse
+ * @generated from message grpcview.v1.InvokeStreamingResponse
  */
-export declare type InvokeStreamResponse = Message<"grpcview.v1.InvokeStreamResponse"> & {
+export declare type InvokeStreamingResponse = Message<"grpcview.v1.InvokeStreamingResponse"> & {
   /**
-   * @generated from oneof grpcview.v1.InvokeStreamResponse.event
+   * @generated from oneof grpcview.v1.InvokeStreamingResponse.event
    */
   event: {
     /**
@@ -721,10 +703,10 @@ export declare type InvokeStreamResponse = Message<"grpcview.v1.InvokeStreamResp
 };
 
 /**
- * Describes the message grpcview.v1.InvokeStreamResponse.
- * Use `create(InvokeStreamResponseSchema)` to create a new message.
+ * Describes the message grpcview.v1.InvokeStreamingResponse.
+ * Use `create(InvokeStreamingResponseSchema)` to create a new message.
  */
-export declare const InvokeStreamResponseSchema: GenMessage<InvokeStreamResponse>;
+export declare const InvokeStreamingResponseSchema: GenMessage<InvokeStreamingResponse>;
 
 /**
  * Runs the request SAVED at path/item_name, resolved server-side.
@@ -1275,7 +1257,7 @@ export declare const WorkspaceService: GenService<{
   invokeStreaming: {
     methodKind: "server_streaming";
     input: typeof InvokeStreamRequestSchema;
-    output: typeof InvokeStreamResponseSchema;
+    output: typeof InvokeStreamingResponseSchema;
   },
   /**
    * InvokeSaved reports a status the target returned in the response, never as
@@ -1296,7 +1278,7 @@ export declare const WorkspaceService: GenService<{
   invokeSavedStreaming: {
     methodKind: "server_streaming";
     input: typeof InvokeSavedRequestSchema;
-    output: typeof InvokeStreamResponseSchema;
+    output: typeof InvokeStreamingResponseSchema;
   },
   /**
    * DescribeMethod answers from already-resolved definitions, so it works with

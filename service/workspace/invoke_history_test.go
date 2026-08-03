@@ -69,13 +69,15 @@ func TestInvokeRecordsHistory(t *testing.T) {
 	for i := 0; i < runs; i++ {
 		md, _ := structpb.NewStruct(map[string]any{"x-run": fmt.Sprintf("%d", i)})
 		resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Echo",
-			Service:       echoService,
-			Method:        "Unary",
-			Body:          tsBody(fmt.Sprintf(`{"message":"hi-%d"}`, i)),
-			Metadata:      md,
-			Target:        target,
+			Spec: &grpcviewv1.InvokeSpec{
+				WorkspaceName: testWorkspace,
+				ItemName:      "Echo",
+				Service:       echoService,
+				Method:        "Unary",
+				Metadata:      md,
+				Target:        target,
+			},
+			Body: tsBody(fmt.Sprintf(`{"message":"hi-%d"}`, i)),
 		}))
 		if err != nil {
 			t.Fatalf("Invoke %d: %v", i, err)
@@ -86,11 +88,13 @@ func TestInvokeRecordsHistory(t *testing.T) {
 	}
 
 	if _, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        "Unary",
-		Body:          tsBody(`{"message":"ad-hoc"}`),
-		Target:        target,
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			Service:       echoService,
+			Method:        "Unary",
+			Target:        target,
+		},
+		Body: tsBody(`{"message":"ad-hoc"}`),
 	})); err != nil {
 		t.Fatalf("ad-hoc Invoke: %v", err)
 	}
@@ -138,7 +142,7 @@ func TestStreamInvokeRecordsHistory(t *testing.T) {
 
 	port := startEchoServer(t)
 	msg := echoStreamReq(port, "ServerStream", `{"message":"hi","count":3}`)
-	msg.ItemName = "Stream"
+	msg.Spec.ItemName = "Stream"
 	if _, err := collectStream(ctx, w, msg); err != nil {
 		t.Fatalf("streamInvoke: %v", err)
 	}

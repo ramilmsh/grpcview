@@ -25,7 +25,7 @@ type fakeClient struct {
 
 	response  *grpcviewv1.Request_Response
 	resolved  *grpcviewv1.ResolvedRequest
-	frames    []*grpcviewv1.InvokeStreamResponse
+	frames    []*grpcviewv1.InvokeStreamingResponse
 	invokeErr error
 
 	writes writeCalls
@@ -66,17 +66,17 @@ func (f *fakeClient) InvokeSaved(_ context.Context, r *connect.Request[grpcviewv
 	return connect.NewResponse(&grpcviewv1.InvokeSavedResponse{Response: f.response, Resolved: f.resolved}), nil
 }
 
-func (f *fakeClient) InvokeStream(_ context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (f *fakeClient) InvokeStream(_ context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	f.gotAdhocStream = append(f.gotAdhocStream, msg)
 	return f.pump(send)
 }
 
-func (f *fakeClient) InvokeSavedStream(_ context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (f *fakeClient) InvokeSavedStream(_ context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	f.gotSavedStream = append(f.gotSavedStream, msg)
 	return f.pump(send)
 }
 
-func (f *fakeClient) pump(send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (f *fakeClient) pump(send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	if f.invokeErr != nil {
 		return f.invokeErr
 	}
@@ -149,12 +149,12 @@ func testRequest(name, service, method string) *grpcviewv1.Item {
 	}
 }
 
-func messageFrame(body string) *grpcviewv1.InvokeStreamResponse {
-	return &grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Message{Message: []byte(body)}}
+func messageFrame(body string) *grpcviewv1.InvokeStreamingResponse {
+	return &grpcviewv1.InvokeStreamingResponse{Event: &grpcviewv1.InvokeStreamingResponse_Message{Message: []byte(body)}}
 }
 
-func resultFrame(r *grpcviewv1.Request_Response) *grpcviewv1.InvokeStreamResponse {
-	return &grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Result{Result: r}}
+func resultFrame(r *grpcviewv1.Request_Response) *grpcviewv1.InvokeStreamingResponse {
+	return &grpcviewv1.InvokeStreamingResponse{Event: &grpcviewv1.InvokeStreamingResponse_Result{Result: r}}
 }
 
 func runCLI(fc *fakeClient, stdin string, args ...string) (stdout, stderr string, code int) {
@@ -383,16 +383,17 @@ func TestInvoke(t *testing.T) {
 					t.Fatalf("Invoke called %d time(s), want 1", len(fc.gotAdhoc))
 				}
 				got := fc.gotAdhoc[0]
-				if got.GetService() != "auth.v1.AuthService" || got.GetMethod() != "Login" {
-					t.Errorf("service/method = %q/%q", got.GetService(), got.GetMethod())
+				spec := got.GetSpec()
+				if spec.GetService() != "auth.v1.AuthService" || spec.GetMethod() != "Login" {
+					t.Errorf("service/method = %q/%q", spec.GetService(), spec.GetMethod())
 				}
 				if got.GetBody() != "{\"user\":\"a\"}\n" {
 					t.Errorf("body = %q, want the piped bytes unchanged", got.GetBody())
 				}
-				if len(got.GetPath()) != 0 || got.GetItemName() != "" {
-					t.Errorf("an ad-hoc call addresses no saved item, got path=%v item=%q", got.GetPath(), got.GetItemName())
+				if len(spec.GetPath()) != 0 || spec.GetItemName() != "" {
+					t.Errorf("an ad-hoc call addresses no saved item, got path=%v item=%q", spec.GetPath(), spec.GetItemName())
 				}
-				values := got.GetMetadata().GetFields()["k"].GetListValue().GetValues()
+				values := spec.GetMetadata().GetFields()["k"].GetListValue().GetValues()
 				if len(values) != 2 || values[0].GetStringValue() != "v1" || values[1].GetStringValue() != "v2" {
 					t.Errorf("metadata[k] = %v, want the list [v1 v2]", values)
 				}
@@ -418,7 +419,7 @@ func TestInvoke(t *testing.T) {
 			name:     "three NDJSON lines on a client-streaming method become three ordered messages",
 			args:     []string{"invoke", "Upload", "-f", "-"},
 			stdin:    "{\"i\":1}\n\n{\"i\":2}\n{\"i\":3}\n",
-			fake:     func(fc *fakeClient) { fc.frames = []*grpcviewv1.InvokeStreamResponse{resultFrame(okResponse(""))} },
+			fake:     func(fc *fakeClient) { fc.frames = []*grpcviewv1.InvokeStreamingResponse{resultFrame(okResponse(""))} },
 			wantErr:  "Upload: OK   (12ms)\n",
 			wantCode: 0,
 			check: func(t *testing.T, fc *fakeClient) {
@@ -449,7 +450,7 @@ func TestInvoke(t *testing.T) {
 			name: "a server-streaming saved request streams NDJSON with the terminal frame on stderr",
 			args: []string{"invoke", "Stream"},
 			fake: func(fc *fakeClient) {
-				fc.frames = []*grpcviewv1.InvokeStreamResponse{
+				fc.frames = []*grpcviewv1.InvokeStreamingResponse{
 					messageFrame("{\n \"i\": 1\n}"),
 					messageFrame(`{"i":2}`),
 					resultFrame(okResponse("")),
@@ -468,7 +469,7 @@ func TestInvoke(t *testing.T) {
 			name: "a streaming non-OK terminal frame is exit 1 with the messages still on stdout",
 			args: []string{"invoke", "Stream"},
 			fake: func(fc *fakeClient) {
-				fc.frames = []*grpcviewv1.InvokeStreamResponse{
+				fc.frames = []*grpcviewv1.InvokeStreamingResponse{
 					messageFrame(`{"i":1}`),
 					resultFrame(failedResponse(13, "boom")),
 				}
@@ -481,7 +482,7 @@ func TestInvoke(t *testing.T) {
 			name: "a stream that ends without a terminal frame is exit 2",
 			args: []string{"invoke", "Stream"},
 			fake: func(fc *fakeClient) {
-				fc.frames = []*grpcviewv1.InvokeStreamResponse{messageFrame(`{"i":1}`)}
+				fc.frames = []*grpcviewv1.InvokeStreamingResponse{messageFrame(`{"i":1}`)}
 			},
 			wantOut:    "{\"i\":1}\n",
 			wantErrHas: "the stream ended without a terminal frame",
@@ -492,7 +493,7 @@ func TestInvoke(t *testing.T) {
 			args:  []string{"invoke", "echo.v1.EchoService/Bidi"},
 			stdin: "{\"i\":1}\n{\"i\":2}\n",
 			fake: func(fc *fakeClient) {
-				fc.frames = []*grpcviewv1.InvokeStreamResponse{resultFrame(okResponse(""))}
+				fc.frames = []*grpcviewv1.InvokeStreamingResponse{resultFrame(okResponse(""))}
 			},
 			wantErr:  "echo.v1.EchoService/Bidi: OK   (12ms)\n",
 			wantCode: 0,
@@ -722,7 +723,7 @@ func TestInvokeOutputJSONOnFailure(t *testing.T) {
 
 func TestInvokeStreamOutputJSON(t *testing.T) {
 	fc := newFake()
-	fc.frames = []*grpcviewv1.InvokeStreamResponse{
+	fc.frames = []*grpcviewv1.InvokeStreamingResponse{
 		messageFrame(`{"i":1}`),
 		resultFrame(okResponse("")),
 	}

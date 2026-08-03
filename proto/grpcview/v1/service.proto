@@ -139,19 +139,26 @@ message GetResponse {
   Workspace workspace = 1;
 }
 
+// Everything an ad-hoc invoke needs except the client payload — the one thing
+// the unary and streaming forms disagree about.
+message InvokeSpec {
+  string                 workspace_name  = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
+  repeated string        path            = 2;
+  string                 item_name       = 3;
+  string                 service         = 4;
+  string                 method          = 5;
+  google.protobuf.Struct metadata        = 6;
+  // Unset defaults to the workspace's first reflection source.
+  optional Server        target          = 7;
+  // TypeScript module; supersedes `metadata` when non-empty.
+  string                 metadata_script = 8;
+}
+
 // Executes a unary RPC carrying the caller's own, possibly unsaved, body.
 message InvokeRequest {
-  string                 workspace_name = 1;
-  repeated string        path           = 2;
-  string                 item_name      = 3;
-  string                 service        = 4;
-  string                 method         = 5;
-  string                 body           = 6;
-  google.protobuf.Struct metadata       = 7;
-  // Unset defaults to the workspace's first reflection source.
-  optional Server        target         = 8;
-  // TypeScript module; supersedes `metadata` when non-empty.
-  string                 metadata_script = 10;
+  InvokeSpec spec = 1;
+  string     body = 2;
 }
 
 message InvokeResponse {
@@ -160,23 +167,14 @@ message InvokeResponse {
 
 // All client messages are supplied up-front: connect-web cannot stream a body.
 message InvokeStreamRequest {
-  string                 workspace_name = 1;
-  repeated string        path           = 2;
-  string                 item_name      = 3;
-  string                 service        = 4;
-  string                 method         = 5;
+  InvokeSpec      spec     = 1;
   // Client bodies as JSON text, in send order; empty defaults to one "{}".
-  repeated string        messages       = 6;
-  google.protobuf.Struct metadata       = 7;
-  // Unset defaults to the workspace's first reflection source.
-  optional Server        target         = 8;
-  // TypeScript module; supersedes `metadata` when non-empty.
-  string                 metadata_script = 10;
+  repeated string messages = 2;
 }
 
 // Zero or more `message` frames, then exactly one terminal `result`. The invoked
 // call's gRPC status is reported in `result`, not as a Connect stream error.
-message InvokeStreamResponse {
+message InvokeStreamingResponse {
   oneof event {
     bytes            message = 1;
     Request.Response result  = 2;
@@ -311,12 +309,12 @@ service WorkspaceService {
   // Invoke returns the status, response body, request/response metadata and latency.
   rpc Invoke(InvokeRequest) returns (InvokeResponse);
   // InvokeStreaming handles any streaming kind, modeled as server-streaming.
-  rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamResponse);
+  rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamingResponse);
   // InvokeSaved reports a status the target returned in the response, never as
   // an error.
   rpc InvokeSaved(InvokeSavedRequest) returns (InvokeSavedResponse);
   // InvokeSavedStreaming is InvokeSaved for any streaming kind; dry_run is rejected.
-  rpc InvokeSavedStreaming(InvokeSavedRequest) returns (stream InvokeStreamResponse);
+  rpc InvokeSavedStreaming(InvokeSavedRequest) returns (stream InvokeStreamingResponse);
   // DescribeMethod answers from already-resolved definitions, so it works with
   // the target down. Doc comments survive only if the winning source carried
   // them — reflection strips them, an uploaded descriptor set keeps them.

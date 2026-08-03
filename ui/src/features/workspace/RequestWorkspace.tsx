@@ -188,14 +188,16 @@ export function RequestWorkspace() {
       setInvoke(key, { loading: true });
       invokeMut.mutate(
         {
-          workspaceName: WORKSPACE_NAME,
-          path,
-          itemName,
-          service: request.service,
-          method: request.method,
+          spec: {
+            workspaceName: WORKSPACE_NAME,
+            path,
+            itemName,
+            service: request.service,
+            method: request.method,
+            metadataScript: md,
+            target: targetOverride,
+          },
           body: b,
-          metadataScript: md,
-          target: targetOverride,
         },
         {
           // The server persists history before returning, so refresh on success.
@@ -215,14 +217,16 @@ export function RequestWorkspace() {
     // last-expression path; migrateBodyToTs is idempotent for the primary.
     const messagesToSend = (kind === "ss" ? [b] : msgs).map(migrateBodyToTs);
     const req = {
-      workspaceName: WORKSPACE_NAME,
-      path,
-      itemName,
-      service: request.service,
-      method: request.method,
+      spec: {
+        workspaceName: WORKSPACE_NAME,
+        path,
+        itemName,
+        service: request.service,
+        method: request.method,
+        metadataScript: md,
+        target: targetOverride,
+      },
       messages: messagesToSend,
-      metadataScript: md,
-      target: targetOverride,
     };
 
     aborters.current[key]?.abort(); // supersede any prior stream for this key

@@ -177,7 +177,7 @@ func invokeSaved(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	}
 
 	if target.kind.streaming() {
-		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamResponse) error) error {
+		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 			return sess.InvokeSavedStream(ctx, msg, send)
 		})
 	}
@@ -194,18 +194,17 @@ func invokeAdhoc(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	if err != nil {
 		return err
 	}
-	server := buildTarget(f)
+	spec := &grpcviewv1.InvokeSpec{
+		WorkspaceName: g.Workspace,
+		Service:       target.service,
+		Method:        target.method,
+		Metadata:      md,
+		Target:        buildTarget(f),
+	}
 
 	if target.kind.streaming() {
-		msg := &grpcviewv1.InvokeStreamRequest{
-			WorkspaceName: g.Workspace,
-			Service:       target.service,
-			Method:        target.method,
-			Messages:      messages,
-			Metadata:      md,
-			Target:        server,
-		}
-		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamResponse) error) error {
+		msg := &grpcviewv1.InvokeStreamRequest{Spec: spec, Messages: messages}
+		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 			return sess.InvokeStream(ctx, msg, send)
 		})
 	}
@@ -214,15 +213,7 @@ func invokeAdhoc(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	if len(messages) > 0 {
 		body = messages[0]
 	}
-	msg := &grpcviewv1.InvokeRequest{
-		WorkspaceName: g.Workspace,
-		Service:       target.service,
-		Method:        target.method,
-		Body:          body,
-		Metadata:      md,
-		Target:        server,
-	}
-	resp, err := sess.Invoke(ctx, connect.NewRequest(msg))
+	resp, err := sess.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{Spec: spec, Body: body}))
 	if err != nil {
 		return fmt.Errorf("failed to invoke %s: %w", target.arg, err)
 	}
@@ -359,15 +350,15 @@ func renderUnary(s Streams, output, label string, response *grpcviewv1.Request_R
 	return writeLine(s.Out, compactJSON(response.GetResponse()))
 }
 
-func renderStream(s Streams, output, label string, call func(send func(*grpcviewv1.InvokeStreamResponse) error) error) error {
+func renderStream(s Streams, output, label string, call func(send func(*grpcviewv1.InvokeStreamingResponse) error) error) error {
 	var terminal *grpcviewv1.Request_Response
 
-	err := call(func(frame *grpcviewv1.InvokeStreamResponse) error {
+	err := call(func(frame *grpcviewv1.InvokeStreamingResponse) error {
 		switch event := frame.GetEvent().(type) {
-		case *grpcviewv1.InvokeStreamResponse_Result:
+		case *grpcviewv1.InvokeStreamingResponse_Result:
 			terminal = event.Result
 			return nil
-		case *grpcviewv1.InvokeStreamResponse_Message:
+		case *grpcviewv1.InvokeStreamingResponse_Message:
 			if output == outputRaw {
 				if _, err := s.Out.Write(event.Message); err != nil {
 					return err

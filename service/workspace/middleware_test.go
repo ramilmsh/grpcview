@@ -44,12 +44,14 @@ func saveRequestWithMiddleware(t *testing.T, w Workspace, ctx context.Context, n
 func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemName, body string) *connect.Response[grpcviewv1.InvokeResponse] {
 	t.Helper()
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      itemName,
-		Service:       echoService,
-		Method:        "Unary",
-		Body:          tsBody(body),
-		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			ItemName:      itemName,
+			Service:       echoService,
+			Method:        "Unary",
+			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+		Body: tsBody(body),
 	}))
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -145,12 +147,14 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 	port := startEchoServer(t)
 	for _, item := range []string{"Boom", "Malformed", "Missing"} {
 		_, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-			WorkspaceName: testWorkspace,
-			ItemName:      item,
-			Service:       echoService,
-			Method:        "Unary",
-			Body:          tsBody(`{"message":"hi"}`),
-			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			Spec: &grpcviewv1.InvokeSpec{
+				WorkspaceName: testWorkspace,
+				ItemName:      item,
+				Service:       echoService,
+				Method:        "Unary",
+				Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			},
+			Body: tsBody(`{"message":"hi"}`),
 		}))
 		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 			t.Fatalf("%s: code = %v, want FailedPrecondition (err=%v)", item, connect.CodeOf(err), err)
@@ -167,7 +171,7 @@ func TestStreamInvokeRunsMiddleware(t *testing.T) {
 
 	port := startEchoServer(t)
 	msg := echoStreamReq(port, "ServerStream", `{"message":"orig","count":2}`)
-	msg.ItemName = "Stream"
+	msg.Spec.ItemName = "Stream"
 	frames, err := collectStream(ctx, w, msg)
 	if err != nil {
 		t.Fatalf("streamInvoke: %v", err)

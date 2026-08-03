@@ -101,22 +101,24 @@ func (w Workspace) InvokeSaved(ctx context.Context, request *connect.Request[grp
 }
 
 // InvokeSavedStreaming adapts the Connect server-streaming handler onto invokeSavedStream.
-func (w Workspace) InvokeSavedStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamResponse]) error {
+func (w Workspace) InvokeSavedStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
 	return w.invokeSavedStream(ctx, request.Msg, stream.Send)
 }
 
 // InvokeSavedStream is the send-func form of InvokeSavedStreaming, for an in-process caller:
 // connect exposes no way to build a *connect.ServerStream outside a served request.
-func (w Workspace) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (w Workspace) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	return w.invokeSavedStream(ctx, msg, send)
 }
 
 // InvokeStream is the send-func form of InvokeStreaming, for the same in-process reason.
-func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
-	return w.streamInvoke(ctx, msg, send, nil, true)
+func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+	spec := specFrom(msg.GetSpec())
+	spec.recordHistory = true
+	return w.streamInvoke(ctx, spec, msg.GetMessages(), send)
 }
 
-func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamResponse) error) error {
+func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	if msg.GetDryRun() {
 		return connect.NewError(connect.CodeInvalidArgument,
 			errors.New("dry_run is not supported by the streaming invoke: dry-run a saved request of any streaming kind through the unary one"))
@@ -125,16 +127,7 @@ func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.Invoke
 	if err != nil {
 		return err
 	}
-	return w.streamInvoke(ctx, &grpcviewv1.InvokeStreamRequest{
-		WorkspaceName:  run.spec.workspaceName,
-		Path:           run.spec.path,
-		ItemName:       run.spec.itemName,
-		Service:        run.spec.service,
-		Method:         run.spec.method,
-		Messages:       run.messages,
-		Target:         run.spec.target,
-		MetadataScript: run.spec.metadataScript,
-	}, send, run.spec.params, run.spec.recordHistory)
+	return w.streamInvoke(ctx, run.spec, run.messages, send)
 }
 
 func savedInvokeFrom(msg *grpcviewv1.InvokeSavedRequest) savedInvoke {

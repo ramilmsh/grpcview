@@ -44,6 +44,8 @@ const emptyBody = "{}"
 // MaxFolderMetadataDepth bounds the ancestor-folder metadata chain foldAncestorMetadata walks.
 const MaxFolderMetadataDepth = 16
 
+// invokeSpec is the internal twin of grpcviewv1.InvokeSpec, plus the three things no ad-hoc
+// caller supplies: the payload, this run's params, and whether to record history.
 type invokeSpec struct {
 	workspaceName  string
 	path           []string // parent-folder display-name path, NOT including itemName
@@ -56,6 +58,21 @@ type invokeSpec struct {
 	metadata       *structpb.Struct // fallback used when metadataScript is empty
 	params         map[string]any
 	recordHistory  bool
+}
+
+// specFrom is the one place the wire InvokeSpec becomes the internal one, shared by both
+// ad-hoc RPCs — which is the whole point of the two of them embedding the same message.
+func specFrom(in *grpcviewv1.InvokeSpec) invokeSpec {
+	return invokeSpec{
+		workspaceName:  in.GetWorkspaceName(),
+		path:           in.GetPath(),
+		itemName:       in.GetItemName(),
+		service:        in.GetService(),
+		method:         in.GetMethod(),
+		target:         in.GetTarget(),
+		metadataScript: in.GetMetadataScript(),
+		metadata:       in.GetMetadata(),
+	}
 }
 
 func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv1.Request_Response, error) {
@@ -151,19 +168,10 @@ func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies [
 // Invoke executes a single unary RPC against the target server. A gRPC-level failure of the
 // *invoked* call is reported in the response's Status, not as a Connect error.
 func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
-	msg := request.Msg
-	out, err := w.invokeUnary(ctx, invokeSpec{
-		workspaceName:  msg.GetWorkspaceName(),
-		path:           msg.GetPath(),
-		itemName:       msg.GetItemName(),
-		service:        msg.GetService(),
-		method:         msg.GetMethod(),
-		target:         msg.GetTarget(),
-		body:           msg.GetBody(),
-		metadataScript: msg.GetMetadataScript(),
-		metadata:       msg.GetMetadata(),
-		recordHistory:  true,
-	})
+	spec := specFrom(request.Msg.GetSpec())
+	spec.body = request.Msg.GetBody()
+	spec.recordHistory = true
+	out, err := w.invokeUnary(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -171,31 +179,26 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 }
 
 // InvokeStreaming adapts the Connect server-streaming handler onto streamInvoke.
-func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamResponse]) error {
-	return w.streamInvoke(ctx, request.Msg, stream.Send, nil, true)
+func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
+	spec := specFrom(request.Msg.GetSpec())
+	spec.recordHistory = true
+	return w.streamInvoke(ctx, spec, request.Msg.GetMessages(), stream.Send)
 }
 
-func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamResponse) error, params map[string]any, recordHistory bool) error {
-	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, msg.GetTarget(), msg.GetWorkspaceName(), msg.GetService(), msg.GetMethod())
+// streamInvoke takes the spec and the messages separately, mirroring InvokeStreamRequest, so the
+// saved form can hand over its already-resolved spec instead of re-encoding one field by field.
+func (w Workspace) streamInvoke(ctx context.Context, spec invokeSpec, messages []string, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, spec.target, spec.workspaceName, spec.service, spec.method)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	bodies := msg.GetMessages()
+	bodies := messages
 	if len(bodies) == 0 {
 		bodies = []string{emptyBody}
 	}
-	bodies, resolvedMD, err := w.resolvePreSend(ctx, invokeSpec{
-		workspaceName:  msg.GetWorkspaceName(),
-		path:           msg.GetPath(),
-		itemName:       msg.GetItemName(),
-		service:        msg.GetService(),
-		target:         msg.GetTarget(),
-		metadataScript: msg.GetMetadataScript(),
-		metadata:       msg.GetMetadata(),
-		params:         params,
-	}, bodies)
+	bodies, resolvedMD, err := w.resolvePreSend(ctx, spec, bodies)
 	if err != nil {
 		return err
 	}
@@ -225,7 +228,7 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 		if err != nil {
 			return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal response to json: %w", err))
 		}
-		return send(&grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Message{Message: jsonBytes}})
+		return send(&grpcviewv1.InvokeStreamingResponse{Event: &grpcviewv1.InvokeStreamingResponse_Message{Message: jsonBytes}})
 	}
 
 	var (
@@ -340,16 +343,17 @@ func (w Workspace) streamInvoke(ctx context.Context, msg *grpcviewv1.InvokeStrea
 		out.Status = &grpcviewv1.Status{Code: int32(codeOK)}
 	}
 
-	if err := send(&grpcviewv1.InvokeStreamResponse{Event: &grpcviewv1.InvokeStreamResponse_Result{Result: out}}); err != nil {
+	if err := send(&grpcviewv1.InvokeStreamingResponse{Event: &grpcviewv1.InvokeStreamingResponse_Result{Result: out}}); err != nil {
 		return err
 	}
 
-	if recordHistory {
+	if spec.recordHistory {
+		// The caller's own first message, not the "{}" default and not the evaluated form.
 		var body string
-		if bodies := msg.GetMessages(); len(bodies) > 0 {
-			body = bodies[0]
+		if len(messages) > 0 {
+			body = messages[0]
 		}
-		w.recordHistory(ctx, msg.GetWorkspaceName(), msg.GetPath(), msg.GetItemName(), msg.GetService(), msg.GetMethod(), body, out)
+		w.recordHistory(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.method, body, out)
 	}
 	return nil
 }

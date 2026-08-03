@@ -183,11 +183,13 @@ func TestInvokeTypeScriptBody(t *testing.T) {
 
 	port := startEchoServer(t)
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        "Unary",
-		Body:          `export default () => ({ message: "hi-" + Math.random() })`,
-		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			Service:       echoService,
+			Method:        "Unary",
+			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+		Body: `export default () => ({ message: "hi-" + Math.random() })`,
 	}))
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)

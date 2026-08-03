@@ -36,33 +36,37 @@ func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.Invo
 		wrapped[i] = tsBody(m)
 	}
 	return &grpcviewv1.InvokeStreamRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        method,
-		Messages:      wrapped,
-		Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName: testWorkspace,
+			Service:       echoService,
+			Method:        method,
+			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+		Messages: wrapped,
 	}
 }
 
-func collectStream(ctx context.Context, w Workspace, msg *grpcviewv1.InvokeStreamRequest) ([]*grpcviewv1.InvokeStreamResponse, error) {
-	var frames []*grpcviewv1.InvokeStreamResponse
-	send := func(resp *grpcviewv1.InvokeStreamResponse) error {
+func collectStream(ctx context.Context, w Workspace, msg *grpcviewv1.InvokeStreamRequest) ([]*grpcviewv1.InvokeStreamingResponse, error) {
+	var frames []*grpcviewv1.InvokeStreamingResponse
+	send := func(resp *grpcviewv1.InvokeStreamingResponse) error {
 		frames = append(frames, resp)
 		return nil
 	}
-	return frames, w.streamInvoke(ctx, msg, send, nil, true)
+	spec := specFrom(msg.GetSpec())
+	spec.recordHistory = true
+	return frames, w.streamInvoke(ctx, spec, msg.GetMessages(), send)
 }
 
-func splitFrames(t *testing.T, frames []*grpcviewv1.InvokeStreamResponse) (msgs [][]byte, result *grpcviewv1.Request_Response) {
+func splitFrames(t *testing.T, frames []*grpcviewv1.InvokeStreamingResponse) (msgs [][]byte, result *grpcviewv1.Request_Response) {
 	t.Helper()
 	for i, f := range frames {
 		switch ev := f.GetEvent().(type) {
-		case *grpcviewv1.InvokeStreamResponse_Message:
+		case *grpcviewv1.InvokeStreamingResponse_Message:
 			if result != nil {
 				t.Fatalf("message frame at index %d appears after the terminal result frame", i)
 			}
 			msgs = append(msgs, ev.Message)
-		case *grpcviewv1.InvokeStreamResponse_Result:
+		case *grpcviewv1.InvokeStreamingResponse_Result:
 			if result != nil {
 				t.Fatalf("more than one terminal result frame")
 			}
@@ -170,7 +174,7 @@ func TestStreamInvokePreflightErrors(t *testing.T) {
 		defer cancel()
 
 		msg := echoStreamReq(port, "Unary", `{}`)
-		msg.Target = &grpcviewv1.Server{Address: "127.0.0.1:1"}
+		msg.Spec.Target = &grpcviewv1.Server{Address: "127.0.0.1:1"}
 
 		frames, err := collectStream(ctx, w, msg)
 		if err == nil {

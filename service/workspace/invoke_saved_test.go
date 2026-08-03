@@ -375,8 +375,8 @@ func TestInvokeSavedStreamingSendsEveryMessage(t *testing.T) {
 	saveRequest(t, w, ctx, nil, "Upload", "ClientStream",
 		`export default () => ({ message: "saved" })`, loopback(port))
 
-	var frames []*grpcviewv1.InvokeStreamResponse
-	send := func(resp *grpcviewv1.InvokeStreamResponse) error {
+	var frames []*grpcviewv1.InvokeStreamingResponse
+	send := func(resp *grpcviewv1.InvokeStreamingResponse) error {
 		frames = append(frames, resp)
 		return nil
 	}
@@ -414,8 +414,8 @@ func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 	saveRequest(t, w, ctx, nil, "Stream", "ServerStream",
 		`export default () => ({ message: "s-" + gv.request.params.n, count: 2 })`, loopback(port))
 
-	var frames []*grpcviewv1.InvokeStreamResponse
-	send := func(resp *grpcviewv1.InvokeStreamResponse) error {
+	var frames []*grpcviewv1.InvokeStreamingResponse
+	send := func(resp *grpcviewv1.InvokeStreamingResponse) error {
 		frames = append(frames, resp)
 		return nil
 	}
@@ -444,7 +444,7 @@ func TestInvokeSavedStreamingRejectsDryRun(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 
 	sent := 0
-	send := func(*grpcviewv1.InvokeStreamResponse) error { sent++; return nil }
+	send := func(*grpcviewv1.InvokeStreamingResponse) error { sent++; return nil }
 	err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedRequest{
 		WorkspaceName: testWorkspace,
 		ItemName:      "Whatever",

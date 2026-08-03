@@ -215,14 +215,16 @@ func TestInvokeFolderMetadataInheritanceEndToEnd(t *testing.T) {
 
 	port := startEchoServer(t)
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
-		WorkspaceName:  testWorkspace,
-		Path:           []string{"Folder"},
-		ItemName:       "Echo",
-		Service:        echoService,
-		Method:         "Unary",
-		Body:           tsBody(`{"message":"hi"}`),
-		MetadataScript: `export default () => ({ ...gv.metadata.inherit(), "x-own": ["mine"] })`,
-		Target:         &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		Spec: &grpcviewv1.InvokeSpec{
+			WorkspaceName:  testWorkspace,
+			Path:           []string{"Folder"},
+			ItemName:       "Echo",
+			Service:        echoService,
+			Method:         "Unary",
+			MetadataScript: `export default () => ({ ...gv.metadata.inherit(), "x-own": ["mine"] })`,
+			Target:         &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+		Body: tsBody(`{"message":"hi"}`),
 	}))
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
