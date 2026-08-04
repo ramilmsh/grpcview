@@ -352,6 +352,61 @@ host.
 ## The CLI
 
 `grpcview` with no subcommand still serves the UI + API. Everything else is a
+## The workspace and its collections
+
+**A workspace is a repository; the collections are what's in it.** Three tiers:
+the workspace root owns no requests, a collection is the unchanged unit
+(`grpcview.json`, `tree/`, `scripts/`), and a request is unchanged. The plan is
+`docs/design/vscode/phase-1-workspace.md`; sub-phases 1a and 1b are shipped, 1c–1e
+are not.
+
+- **The root is found by walking up** (`service/wsroot`): `--workspace <path>`
+  wins, else the nearest ancestor of the cwd holding `.git`, else the cwd with a
+  warning on stderr. `--workspace` names a **directory**, not a collection — the
+  flag that names a collection is `--collection`.
+- **A collection is addressed by its path** relative to the root
+  (`services/payments/requests`, `.` for the root itself), and that id is never
+  its display name: the id is the disk location and is never written to disk, the
+  name lives in the manifest and defaults to the directory's base name.
+  `store.Open` cleans the wire-supplied id, rejects absolute paths and `..`
+  escapes, and keys its handle map **case-folded**, because `Requests` and
+  `requests` are one directory on macOS and `Collection.mu` is the only write
+  serializer.
+- **Nothing is created that the user did not ask for.** `grpcview init [dir]` (or
+  the UI's empty state) is the only thing that creates a collection; every other
+  handler returns `NotFound`. An id joined onto a repo root means a typo'd
+  `--collection` would otherwise materialise a collection among project files.
+- **Local state lives outside the collection directory** — one durable
+  per-workspace state root under `os.UserConfigDir()` keyed by a hash of the
+  root's absolute path (`wsroot.StateDir`), holding the resolve caches, run
+  history and the collection index. Not `os.UserCacheDir()`: history is user data.
+  A collection directory is therefore 100% committed content, and there is nothing
+  left to `.gitignore`.
+- **Discovery is declared-or-scanned** (`store.List`). A `grpcview.work.json` with
+  a non-empty `collections` list wins (globs allowed; a glob matching nothing is
+  fine, a missing *literal* is reported as a row carrying an error). Otherwise the
+  root is scanned for `grpcview.json`, pruning dot-directories, `node_modules`,
+  `bazel-*` (symlinks into an unbounded output base) and anything gitignored, and
+  **pruning at a hit**: a collection is a leaf, nested collections are not a
+  supported shape, and that invariant is what makes `<collection id>/<path>` an
+  unambiguous key later. Past 20k directories it fails with
+  `ErrWorkspaceTooLarge` rather than hanging on a `$HOME` that happens to be a
+  repo.
+- **The scan result is cached** as `collections.json` in the state root, keyed by
+  the workspace root directory's own mtime, plus `collections ls --refresh` and an
+  explicit `Store.InvalidateList()` from `CreateCollection` — creating
+  `services/payments/requests` never touches the root's mtime, so the writer has
+  to say so.
+- **go-git supplies only the ignore matcher.** `gitignore.ParsePattern` +
+  `NewMatcher`, accumulated per directory as the scan enters it. Its
+  `ReadPatterns` helper is deliberately unused: it does its own recursive
+  `ReadDir` of the whole tree, descending `node_modules` and the `bazel-*`
+  symlinks before our cap can apply.
+- **`ListCollections` is cheap by construction** and is the only thing a client
+  needs before it knows which collection to `Get`: it reads manifests, never
+  trees. Never `Get` every collection eagerly — `Collection.descriptor_set` is a
+  merged `FileDescriptorSet` in bytes.
+
 cobra verb in `service/cli/`, on the **same binary** — the embedded UI is 26.9 MB
 of the 51.5 MB binary, so a second CLI binary would duplicate ~20 MB of Go.
 
@@ -365,10 +420,14 @@ grpcview get
 grpcview sources ls | add | refresh | rm | reorder
 grpcview request create | rm | mv        grpcview folder create
 grpcview script ls | run                 grpcview completion bash|zsh|fish
+grpcview init [dir] [--name]            create a collection
+grpcview collections ls                 [-o text|json] [--refresh]
 ```
 
 The reason it exists is one verb: **run a saved request from a shell, with an exit
 code that reflects the gRPC status.** The rest is in service of that.
+
+Every verb takes `--workspace <root>` and `--collection <id>`.
 
 - **`service.Run` does not own argv.** It takes `service.Options{Port}`; the CLI
   (or `dev`'s own two-line flag set) parses. The flag is `--port`: pflag reads
@@ -390,6 +449,15 @@ code that reflects the gRPC status.** The rest is in service of that.
 - **Exit codes are the contract.** `0` = the call returned status OK; `1` = it
   returned any other gRPC status (which arrives *inside* `Request.Response.status`
   with a nil error); `2` = grpcview's own failure, nothing invoked. That 1-vs-2
+- **Where you stand decides what you address**, like `git` and `bazel`. With no
+  `--collection`, a verb resolves one: the nearest collection at or above the cwd
+  bounded by the workspace root, else the workspace's only collection, else **exit
+  2 listing the candidates** — never a guess, since guessing runs a request
+  against the wrong service. `withCollection` (`service/cli/write.go`) is the one
+  seam that resolves; no verb reads the raw flag. `init` is the exception and
+  resolves its own address, because it runs in a workspace that may hold zero
+  collections. `collections ls` marks the row the cwd resolves to with `*`, and
+  marks nothing when the answer is ambiguous.
   line is exactly the Connect-error-vs-status-in-payload line the backend already
   draws, so it needs no new classification — but it does need the invariant to
   hold, which `invoke_saved_test.go` pins directly.

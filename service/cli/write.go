@@ -34,12 +34,21 @@ func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn fun
 	return fn(ctx, sess)
 }
 
-func workspaceSnapshot(ctx context.Context, sess session, g *globalFlags) (*grpcviewv1.Collection, error) {
-	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read collection %q: %w", g.Collection, err)
-	}
-	return resp.Msg.GetCollection(), nil
+// withCollection is withSession plus resolving which collection the verb addresses, so no
+// verb reads a raw --collection flag that may be empty.
+func withCollection(ctx context.Context, g *globalFlags, open clientFactory, fn func(ctx context.Context, sess session, collection string) error) error {
+	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+		collection, err := resolveCollection(ctx, sess, g)
+		if err != nil {
+			return err
+		}
+		return fn(ctx, sess, collection)
+	})
+}
+
+func workspaceSnapshot(ctx context.Context, sess session, collection string) (*grpcviewv1.Collection, error) {
+	resp, err := readWorkspace(ctx, sess, collection)
+	return resp.GetCollection(), err
 }
 
 func splitItemPath(arg string) ([]string, string, error) {
@@ -108,9 +117,9 @@ func runFolderCreate(ctx context.Context, g *globalFlags, open clientFactory, ar
 	if err != nil {
 		return err
 	}
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		_, err := sess.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Path:       parent,
 			ItemName:   name,
 		}))
@@ -195,9 +204,9 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 		return err
 	}
 
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		_, err := sess.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Path:       parent,
 			ItemName:   name,
 			Service:    f.service,
@@ -211,7 +220,7 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 		}
 
 		_, err = sess.UpdateRequest(ctx, connect.NewRequest(&grpcviewv1.UpdateRequestRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Path:       parent,
 			ItemName:   name,
 			DraftBody:  proto.String(string(raw)),
@@ -250,9 +259,9 @@ func runRequestRm(ctx context.Context, g *globalFlags, open clientFactory, arg s
 	if err != nil {
 		return err
 	}
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		_, err := sess.DeleteRequest(ctx, connect.NewRequest(&grpcviewv1.DeleteRequestRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Path:       parent,
 			ItemName:   name,
 		}))
@@ -306,9 +315,9 @@ func runRequestMv(ctx context.Context, g *globalFlags, open clientFactory, arg, 
 	if err != nil {
 		return err
 	}
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		_, err := sess.MoveItem(ctx, connect.NewRequest(&grpcviewv1.MoveItemRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Path:       parent,
 			ItemName:   name,
 			NewPath:    newPath,
@@ -356,11 +365,13 @@ func newScriptLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comman
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			snapshot, err := readWorkspace(cmd.Context(), g, open)
-			if err != nil {
-				return err
-			}
-			return renderScripts(s.Out, snapshot.GetCollection().GetScripts())
+			return withCollection(cmd.Context(), g, open, func(ctx context.Context, sess session, collection string) error {
+				ws, err := workspaceSnapshot(ctx, sess, collection)
+				if err != nil {
+					return err
+				}
+				return renderScripts(s.Out, ws.GetScripts())
+			})
 		},
 	}
 }
@@ -470,11 +481,11 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			arg)
 	}
 
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		source, runKind, label := stdinSource, kind, "the script on stdin"
 
 		if arg != stdinScript {
-			ws, err := workspaceSnapshot(ctx, sess, g)
+			ws, err := workspaceSnapshot(ctx, sess, collection)
 			if err != nil {
 				return err
 			}
@@ -482,7 +493,7 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			if script == nil {
 				return fmt.Errorf(
 					"unknown script %q: collection %q has %d saved script(s), and `grpcview script ls` lists them",
-					arg, g.Collection, len(ws.GetScripts()))
+					arg, collection, len(ws.GetScripts()))
 			}
 			source = script.GetSource()
 			runKind = script.GetKind().Enum()
@@ -490,7 +501,7 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 		}
 
 		resp, err := sess.RunScript(ctx, connect.NewRequest(&grpcviewv1.RunScriptRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Source:     source,
 			Kind:       runKind,
 		}))

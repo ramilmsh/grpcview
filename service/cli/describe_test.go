@@ -76,7 +76,7 @@ func TestDescribe(t *testing.T) {
 				got.GetService(), got.GetMethod())
 		}
 		if got.GetCollection() != "." {
-			t.Errorf("collection = %q, want the inherited default", got.GetCollection())
+			t.Errorf("collection = %q, want the resolved collection", got.GetCollection())
 		}
 	})
 

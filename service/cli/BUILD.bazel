@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "body.go",
         "client.go",
+        "collection.go",
         "describe.go",
         "get.go",
         "init.go",
@@ -19,6 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//proto/grpcview/v1:grpcview",
+        "//service/store",
         "//service/workspace",
         "//service/wsroot",
         "@com_connectrpc_connect//:connect",
@@ -34,6 +36,7 @@ go_test(
     name = "cli_test",
     srcs = [
         "body_test.go",
+        "collection_test.go",
         "describe_test.go",
         "get_test.go",
         "init_test.go",
@@ -47,6 +50,7 @@ go_test(
     embed = [":cli"],
     deps = [
         "//proto/grpcview/v1:grpcview",
+        "//service/store",
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_google_protobuf//encoding/protojson",

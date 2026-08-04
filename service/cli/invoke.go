@@ -86,44 +86,34 @@ func runInvoke(ctx context.Context, s Streams, g *globalFlags, open clientFactor
 		return errors.New("--tls needs --target: it selects TLS for the target this run dials, and no target was given")
 	}
 
-	if g.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
-		defer cancel()
-	}
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
+		ws, err := workspaceSnapshot(ctx, sess, collection)
+		if err != nil {
+			return err
+		}
 
-	sess, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sess.close(ctx) }()
+		target, err := resolveInvokeArg(ws, arg)
+		if err != nil {
+			return err
+		}
+		if err := checkFormFlags(target, f); err != nil {
+			return err
+		}
 
-	snapshot, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
-	if err != nil {
-		return fmt.Errorf("failed to read collection %q: %w", g.Collection, err)
-	}
+		raw, err := readBody(s, f.file)
+		if err != nil {
+			return err
+		}
+		messages, err := bodyMessages(raw, target.kind)
+		if err != nil {
+			return err
+		}
 
-	target, err := resolveInvokeArg(snapshot.Msg.GetCollection(), arg)
-	if err != nil {
-		return err
-	}
-	if err := checkFormFlags(target, f); err != nil {
-		return err
-	}
-
-	raw, err := readBody(s, f.file)
-	if err != nil {
-		return err
-	}
-	messages, err := bodyMessages(raw, target.kind)
-	if err != nil {
-		return err
-	}
-
-	if target.saved {
-		return invokeSaved(ctx, s, sess, g, f, target, messages)
-	}
-	return invokeAdhoc(ctx, s, sess, g, f, target, messages)
+		if target.saved {
+			return invokeSaved(ctx, s, sess, collection, f, target, messages)
+		}
+		return invokeAdhoc(ctx, s, sess, collection, f, target, messages)
+	})
 }
 
 func checkFormFlags(target invokeTarget, f *invokeFlags) error {
@@ -148,14 +138,14 @@ func checkFormFlags(target invokeTarget, f *invokeFlags) error {
 	return nil
 }
 
-func invokeSaved(ctx context.Context, s Streams, sess session, g *globalFlags, f *invokeFlags, target invokeTarget, messages []string) error {
+func invokeSaved(ctx context.Context, s Streams, sess session, collection string, f *invokeFlags, target invokeTarget, messages []string) error {
 	params, err := buildParams(f.paramsFile, f.params)
 	if err != nil {
 		return err
 	}
 
 	spec := &grpcviewv1.SavedInvokeSpec{
-		Collection: g.Collection,
+		Collection: collection,
 		Path:       target.parent,
 		ItemName:   target.itemName,
 		Params:     params,
@@ -190,13 +180,13 @@ func invokeSaved(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	return renderUnary(s, f.output, target.arg, resp.Msg.GetResponse())
 }
 
-func invokeAdhoc(ctx context.Context, s Streams, sess session, g *globalFlags, f *invokeFlags, target invokeTarget, messages []string) error {
+func invokeAdhoc(ctx context.Context, s Streams, sess session, collection string, f *invokeFlags, target invokeTarget, messages []string) error {
 	md, err := buildMetadata(f.metadataFile, f.metadata)
 	if err != nil {
 		return err
 	}
 	spec := &grpcviewv1.InvokeSpec{
-		Collection: g.Collection,
+		Collection: collection,
 		Service:    target.service,
 		Method:     target.method,
 		Metadata:   md,

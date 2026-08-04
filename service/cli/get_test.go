@@ -46,7 +46,7 @@ func TestGet(t *testing.T) {
 		t.Errorf("get invoked %d call(s); it must invoke nothing", fc.invokeCalls())
 	}
 	if len(fc.gotGet) != 1 || fc.gotGet[0].GetCollection() != "." {
-		t.Errorf("gotGet = %+v, want exactly one Get for the default --collection \".\"", fc.gotGet)
+		t.Errorf("gotGet = %+v, want exactly one Get for the resolved collection \".\"", fc.gotGet)
 	}
 	if fc.closed != 1 {
 		t.Errorf("session closed %d times, want 1", fc.closed)

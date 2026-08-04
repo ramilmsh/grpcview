@@ -80,12 +80,14 @@ func newSourcesLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comma
 }
 
 func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory) error {
-	snapshot, err := readWorkspace(ctx, g, open)
-	if err != nil {
-		return err
-	}
-	// Collection.sources is already in priority order; never sort it.
-	return renderSources(s.Out, snapshot.GetCollection().GetSources())
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
+		ws, err := workspaceSnapshot(ctx, sess, collection)
+		if err != nil {
+			return err
+		}
+		// Collection.sources is already in priority order; never sort it.
+		return renderSources(s.Out, ws.GetSources())
+	})
 }
 
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
@@ -125,11 +127,14 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 }
 
 func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg string, tls bool) error {
-	msg, err := buildAddSource(g.Collection, arg, tls)
+	// Built before any session opens, so a bad argument — or an unreadable file — fails
+	// without touching the workspace; only the address it carries is filled in later.
+	msg, err := buildAddSource(arg, tls)
 	if err != nil {
 		return err
 	}
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
+		msg.Collection = collection
 		if _, err := sess.AddDescriptorSource(ctx, connect.NewRequest(msg)); err != nil {
 			return fmt.Errorf("failed to add the definition source %q: %w", arg, err)
 		}
@@ -137,7 +142,7 @@ func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg 
 	})
 }
 
-func buildAddSource(collectionID, arg string, tls bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
+func buildAddSource(arg string, tls bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
 	if arg == "" {
 		return nil, errors.New("no definition source given: `sources add` takes a reflection address or the path of a descriptor-set file")
 	}
@@ -158,8 +163,7 @@ func buildAddSource(collectionID, arg string, tls bool) (*grpcviewv1.AddDescript
 			return nil, fmt.Errorf("failed to read the descriptor set: %w", err)
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			Collection: collectionID,
-			Source:     &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
+			Source: &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
 			// The basename, deliberately: file_name is the source's identity.
 			FileName: filepath.Base(arg),
 		}, nil
@@ -170,8 +174,7 @@ func buildAddSource(collectionID, arg string, tls bool) (*grpcviewv1.AddDescript
 			server.Tls = &grpcviewv1.Server_TLS{}
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			Collection: collectionID,
-			Source:     &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
+			Source: &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
 		}, nil
 	}
 }
@@ -203,10 +206,10 @@ func newSourcesRefreshCmd(g *globalFlags, open clientFactory) *cobra.Command {
 }
 
 func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, id string) error {
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		ids := []string{id}
 		if id == "" {
-			ws, err := workspaceSnapshot(ctx, sess, g)
+			ws, err := workspaceSnapshot(ctx, sess, collection)
 			if err != nil {
 				return err
 			}
@@ -218,7 +221,7 @@ func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, 
 
 		for _, each := range ids {
 			_, err := sess.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
-				Collection: g.Collection,
+				Collection: collection,
 				Id:         each,
 			}))
 			if err != nil {
@@ -248,9 +251,9 @@ func newSourcesRmCmd(g *globalFlags, open clientFactory) *cobra.Command {
 }
 
 func runSourcesRm(ctx context.Context, g *globalFlags, open clientFactory, id string) error {
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		_, err := sess.RemoveDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RemoveDescriptorSourceRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Id:         id,
 		}))
 		if err != nil {
@@ -283,10 +286,10 @@ func newSourcesReorderCmd(g *globalFlags, open clientFactory) *cobra.Command {
 }
 
 func runSourcesReorder(ctx context.Context, g *globalFlags, open clientFactory, ids []string) error {
-	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		// Verbatim: the RPC's permutation check is what protects a stale caller.
 		_, err := sess.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Ids:        ids,
 		}))
 		if err != nil {

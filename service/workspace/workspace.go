@@ -66,6 +66,10 @@ func toConnectError(err error) error {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, store.ErrCollectionExists):
 		return connect.NewError(connect.CodeAlreadyExists, err)
+	case errors.Is(err, store.ErrWorkspaceTooLarge):
+		// ResourceExhausted, not InvalidArgument: nothing about the workspace is malformed,
+		// the scan is refusing to be unbounded — and the message already names the fix.
+		return connect.NewError(connect.CodeResourceExhausted, err)
 	case errors.Is(err, store.ErrNotAFolder), errors.Is(err, store.ErrNotARequest),
 		errors.Is(err, store.ErrAlreadyExists), errors.Is(err, store.ErrMoveIntoDescendant):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
@@ -88,6 +92,29 @@ func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.
 	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: ws}), nil
 }
 
+// ListCollections summarizes every collection in the workspace. A collection that cannot be
+// summarized comes back as a row carrying its error, so one unparseable grpcview.json cannot
+// hide the rest of the repo.
+func (w Workspace) ListCollections(ctx context.Context, request *connect.Request[grpcviewv1.ListCollectionsRequest]) (*connect.Response[grpcviewv1.ListCollectionsResponse], error) {
+	infos, err := w.store.List(ctx, request.Msg.GetRefresh())
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	collections := make([]*grpcviewv1.CollectionSummary, 0, len(infos))
+	for _, info := range infos {
+		collections = append(collections, &grpcviewv1.CollectionSummary{
+			Id:          info.ID,
+			Name:        info.Name,
+			SourceCount: int32(info.SourceCount),
+			Error:       info.Err,
+		})
+	}
+	return connect.NewResponse(&grpcviewv1.ListCollectionsResponse{
+		Root:        w.store.Root(),
+		Collections: collections,
+	}), nil
+}
+
 // CreateCollection is the one place a collection legitimately comes into existence: every
 // other handler now requires one to already be there. An existing collection at this address
 // is AlreadyExists, not silently reused.
@@ -99,6 +126,10 @@ func (w Workspace) CreateCollection(ctx context.Context, request *connect.Reques
 	if err := coll.Create(ctx, request.Msg.GetName()); err != nil {
 		return nil, toConnectError(err)
 	}
+	// The cached listing is keyed by the workspace ROOT's mtime, and creating
+	// services/payments/requests never touches the root — so the only writer that can add a
+	// collection has to say so itself.
+	w.store.InvalidateList()
 	ws, err := coll.Load(ctx)
 	if err != nil {
 		return nil, toConnectError(err)

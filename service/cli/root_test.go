@@ -179,7 +179,7 @@ func TestRootCmd_persistentFlags(t *testing.T) {
 
 	for name, want := range map[string]string{
 		"workspace":  "",
-		"collection": ".",
+		"collection": "",
 		"server":     "",
 		"timeout":    "30s",
 	} {

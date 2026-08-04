@@ -66,16 +66,19 @@ type globalFlags struct {
 	Collection string
 	Server     string
 	Timeout    time.Duration
+
+	// resolved memoizes resolveCollection's answer for this invocation.
+	resolved string
 }
 
 func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	g := &globalFlags{}
 	f := cmd.PersistentFlags()
 	f.StringVar(&g.Workspace, "workspace", "", "workspace root; empty walks up from the current directory to the nearest .git")
-	// "." — the workspace root is the collection — covers the common non-monorepo case
-	// (cd ~/api-requests && grpcview). Resolving a collection by walking up from the cwd
-	// within a monorepo is a later phase, not this one.
-	f.StringVar(&g.Collection, "collection", ".", "collection to operate on")
+	// Empty, not ".": where you stand decides what you address, the same way `git` and
+	// `bazel` work — resolveCollection walks up from the cwd. A "." default would instead
+	// point every invocation at the workspace root, which in a monorepo holds no collection.
+	f.StringVar(&g.Collection, "collection", "", "collection to operate on; empty resolves from the current directory")
 	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
 	f.DurationVar(&g.Timeout, "timeout", 30*time.Second, "per-request timeout")
 	return g
@@ -128,6 +131,7 @@ func newRootCmd(
 	root.AddCommand(newFolderCmd(globals, open))
 	root.AddCommand(newScriptCmd(s, globals, open))
 	root.AddCommand(newInitCmd(s, globals, open))
+	root.AddCommand(newCollectionsCmd(s, globals, open))
 	root.AddCommand(newServeCmd(serve, globals))
 	root.AddCommand(newVersionCmd())
 

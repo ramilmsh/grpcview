@@ -139,6 +139,30 @@ message GetResponse {
   Collection collection = 1;
 }
 
+message ListCollectionsRequest {
+  // Bypass the cached index and rescan.
+  bool refresh = 1;
+}
+
+message CollectionSummary {
+  // The workspace-relative path that addresses this collection; "." is the root itself.
+  string id           = 1;
+  // Display name. Never the id — a collection is addressed by its path and named
+  // separately, so five of them may all be called "requests".
+  string name         = 2;
+  int32  source_count = 3;
+  // Why this collection could not be summarized. A broken collection is a visible row,
+  // not a failed listing.
+  string error        = 4;
+}
+
+message ListCollectionsResponse {
+  // Absolute path of the workspace root, so a caller with a cwd of its own (the CLI) can
+  // resolve that cwd against the workspace it is talking to.
+  string                      root        = 1;
+  repeated CollectionSummary  collections = 2;
+}
+
 // A collection is only ever created by an explicit act — this RPC, or `grpcview
 // init`. Nothing else may materialize one, or a stale query would scatter
 // grpcview.json among a repo's project files.
@@ -328,6 +352,11 @@ service WorkspaceService {
   // Get reports NOTHING implicitly: a collection that does not exist is NotFound,
   // never created on demand.
   rpc Get(GetRequest) returns (GetResponse);
+  // ListCollections is deliberately cheap: it reads manifests, never trees. It is the
+  // only thing a client needs before it knows which collection to Get, and since
+  // Collection.descriptor_set is a merged FileDescriptorSet in bytes, eagerly Getting
+  // every collection instead is the one way to make this design feel slow.
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   rpc CreateRequest(CreateRequestRequest) returns (CreateRequestResponse);

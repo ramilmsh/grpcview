@@ -34,6 +34,11 @@ type fakeClient struct {
 	describeErr error
 	gotDescribe []*grpcviewv1.DescribeMethodRequest
 
+	listing  []*grpcviewv1.CollectionSummary
+	listRoot string
+	listErr  error
+	gotList  []*grpcviewv1.ListCollectionsRequest
+
 	gotGet         []*grpcviewv1.GetRequest
 	gotSaved       []*grpcviewv1.InvokeSavedRequest
 	gotSavedStream []*grpcviewv1.InvokeSavedStreamRequest
@@ -48,6 +53,18 @@ func (f *fakeClient) Get(_ context.Context, r *connect.Request[grpcviewv1.GetReq
 		return nil, f.getErr
 	}
 	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: f.snapshot}), nil
+}
+
+// ListCollections is what resolveCollection consults, so every verb reaches it now.
+func (f *fakeClient) ListCollections(_ context.Context, r *connect.Request[grpcviewv1.ListCollectionsRequest]) (*connect.Response[grpcviewv1.ListCollectionsResponse], error) {
+	f.gotList = append(f.gotList, r.Msg)
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return connect.NewResponse(&grpcviewv1.ListCollectionsResponse{
+		Root:        f.listRoot,
+		Collections: f.listing,
+	}), nil
 }
 
 func (f *fakeClient) Invoke(_ context.Context, r *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
@@ -92,8 +109,14 @@ func (f *fakeClient) invokeCalls() int {
 	return len(f.gotSaved) + len(f.gotSavedStream) + len(f.gotAdhoc) + len(f.gotAdhocStream)
 }
 
+// newFake's workspace holds one collection at its root, so resolveCollection's
+// single-collection rule answers "." — the address the verbs used to default to.
 func newFake() *fakeClient {
-	return &fakeClient{snapshot: testWorkspace(), response: okResponse(`{"token":"t"}`)}
+	return &fakeClient{
+		snapshot: testWorkspace(),
+		response: okResponse(`{"token":"t"}`),
+		listing:  []*grpcviewv1.CollectionSummary{{Id: ".", Name: "default"}},
+	}
 }
 
 func okResponse(body string) *grpcviewv1.Request_Response {

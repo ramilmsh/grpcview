@@ -58,9 +58,9 @@ func runDescribe(ctx context.Context, s Streams, g *globalFlags, open clientFact
 	}
 
 	var described *grpcviewv1.DescribeMethodResponse
-	err := withSession(ctx, g, open, func(ctx context.Context, sess session) error {
+	err := withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		resp, err := sess.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
-			Collection: g.Collection,
+			Collection: collection,
 			Service:    service,
 			Method:     method,
 		}))

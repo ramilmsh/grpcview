@@ -49,26 +49,27 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 		return fmt.Errorf("invalid --output %q: want one of %s, %s", output, outputText, outputJSON)
 	}
 
-	snapshot, err := readWorkspace(ctx, g, open)
-	if err != nil {
-		return err
-	}
-	ws := snapshot.GetCollection()
-
-	root, prefix, err := lsRoot(ws, path)
-	if err != nil {
-		return err
-	}
-
-	if output == outputJSON {
-		line, err := marshalOneLine(root)
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
+		ws, err := workspaceSnapshot(ctx, sess, collection)
 		if err != nil {
-			return fmt.Errorf("failed to render collection %q: %w", g.Collection, err)
+			return err
 		}
-		return writeLine(s.Out, line)
-	}
 
-	return renderLs(s.Out, lsRows(root.GetFolder(), prefix))
+		root, prefix, err := lsRoot(ws, path)
+		if err != nil {
+			return err
+		}
+
+		if output == outputJSON {
+			line, err := marshalOneLine(root)
+			if err != nil {
+				return fmt.Errorf("failed to render collection %q: %w", collection, err)
+			}
+			return writeLine(s.Out, line)
+		}
+
+		return renderLs(s.Out, lsRows(root.GetFolder(), prefix))
+	})
 }
 
 // lsRoot picks the item to list and the prefix that keeps a subtree listing pasteable.

@@ -554,6 +554,87 @@ export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
 export declare const GetResponseSchema: GenMessage<GetResponse>;
 
 /**
+ * @generated from message grpcview.v1.ListCollectionsRequest
+ */
+export declare type ListCollectionsRequest = Message<"grpcview.v1.ListCollectionsRequest"> & {
+  /**
+   * Bypass the cached index and rescan.
+   *
+   * @generated from field: bool refresh = 1;
+   */
+  refresh: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.ListCollectionsRequest.
+ * Use `create(ListCollectionsRequestSchema)` to create a new message.
+ */
+export declare const ListCollectionsRequestSchema: GenMessage<ListCollectionsRequest>;
+
+/**
+ * @generated from message grpcview.v1.CollectionSummary
+ */
+export declare type CollectionSummary = Message<"grpcview.v1.CollectionSummary"> & {
+  /**
+   * The workspace-relative path that addresses this collection; "." is the root itself.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Display name. Never the id — a collection is addressed by its path and named
+   * separately, so five of them may all be called "requests".
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: int32 source_count = 3;
+   */
+  sourceCount: number;
+
+  /**
+   * Why this collection could not be summarized. A broken collection is a visible row,
+   * not a failed listing.
+   *
+   * @generated from field: string error = 4;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message grpcview.v1.CollectionSummary.
+ * Use `create(CollectionSummarySchema)` to create a new message.
+ */
+export declare const CollectionSummarySchema: GenMessage<CollectionSummary>;
+
+/**
+ * @generated from message grpcview.v1.ListCollectionsResponse
+ */
+export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectionsResponse"> & {
+  /**
+   * Absolute path of the workspace root, so a caller with a cwd of its own (the CLI) can
+   * resolve that cwd against the workspace it is talking to.
+   *
+   * @generated from field: string root = 1;
+   */
+  root: string;
+
+  /**
+   * @generated from field: repeated grpcview.v1.CollectionSummary collections = 2;
+   */
+  collections: CollectionSummary[];
+};
+
+/**
+ * Describes the message grpcview.v1.ListCollectionsResponse.
+ * Use `create(ListCollectionsResponseSchema)` to create a new message.
+ */
+export declare const ListCollectionsResponseSchema: GenMessage<ListCollectionsResponse>;
+
+/**
  * A collection is only ever created by an explicit act — this RPC, or `grpcview
  * init`. Nothing else may materialize one, or a stale query would scatter
  * grpcview.json among a repo's project files.
@@ -1276,6 +1357,19 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof GetRequestSchema;
     output: typeof GetResponseSchema;
+  },
+  /**
+   * ListCollections is deliberately cheap: it reads manifests, never trees. It is the
+   * only thing a client needs before it knows which collection to Get, and since
+   * Collection.descriptor_set is a merged FileDescriptorSet in bytes, eagerly Getting
+   * every collection instead is the one way to make this design feel slow.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.ListCollections
+   */
+  listCollections: {
+    methodKind: "unary";
+    input: typeof ListCollectionsRequestSchema;
+    output: typeof ListCollectionsResponseSchema;
   },
   /**
    * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection

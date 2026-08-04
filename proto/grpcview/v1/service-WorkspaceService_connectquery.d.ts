@@ -34,6 +34,15 @@ export const reorderDescriptorSources: typeof WorkspaceService["method"]["reorde
  */
 export const get: typeof WorkspaceService["method"]["get"];
 /**
+ * ListCollections is deliberately cheap: it reads manifests, never trees. It is the
+ * only thing a client needs before it knows which collection to Get, and since
+ * Collection.descriptor_set is a merged FileDescriptorSet in bytes, eagerly Getting
+ * every collection instead is the one way to make this design feel slow.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.ListCollections
+ */
+export const listCollections: typeof WorkspaceService["method"]["listCollections"];
+/**
  * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
  */
 export const createCollection: typeof WorkspaceService["method"]["createCollection"];
