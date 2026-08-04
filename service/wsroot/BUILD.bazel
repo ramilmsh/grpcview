@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "wsroot",
+    srcs = ["wsroot.go"],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/wsroot",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "wsroot_test",
+    srcs = ["wsroot_test.go"],
+    embed = [":wsroot"],
+)
