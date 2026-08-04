@@ -42,7 +42,7 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
 ## Delegating to background agents
 
 Code-writing here is delegated to background agents (Workflow / Agent) while the
-main thread orchestrates, verifies in a browser, and commits.
+main thread orchestrates, verifies, and commits.
 
 Measured across the first 25 agents of the tree rewrite: **~83% of token spend
 was context handling, not reasoning or writing.** Cache reads alone fit
@@ -70,6 +70,9 @@ matters** — every rule below exists to cut it.
   the brief instead of letting the reviewer rediscover it.
 - **`effort`: one tier below the session's, floored at `medium`. Never `low`** —
   low mangles output, and a mangled result costs a whole re-run.
+- **Verify through the CLI unless the change is UI-only** — a browser session
+  costs multiples of a verb per check. See "Verify through the CLI, not the
+  browser" below.
 
 Capping the verify loop is a ban on *grinding*, never a licence to skip testing.
 Agents in this repo have a track record of **reporting passes that never
@@ -515,10 +518,26 @@ between three feature views:
 Server state is fetched via `@connectrpc/connect-query` on top of
 `@tanstack/react-query`; local/view state lives in `zustand`.
 
+## Verify through the CLI, not the browser
+
+**Reproduce bugs and exercise new features through `grpcview <verb>` whenever the
+CLI can reach them.** The two surfaces share the whole backend — store, resolve,
+invoke, scripting, TS body/metadata evaluation — so for anything below the React
+layer a CLI run tests the same code the UI would, in one `bazel run` instead of a
+browser session. Driving Chrome is *far* slower per check: tab setup, screenshots,
+DOM reads and click round-trips cost multiples of what a verb costs, and that
+overhead lands on every iteration.
+
+The browser is the exception, reserved for what only it can exercise: rendering,
+Monaco behavior, the tree's keyboard/mouse/DnD semantics, focus and layout,
+zustand/query-cache state, and any bug that does not reproduce from the CLI. A
+change confined to `ui/` is a UI bug by definition — verify that one in a browser
+(hook below), and say in the report which surface you used.
+
 ## Browser verification hook (editors)
 
-Driving the app in a real browser is the preferred way to verify UI / invoke
-changes. Because several Monaco editors coexist (each with its own model) and there
+When a change does need a browser, this hook makes driving it cheap. Because
+several Monaco editors coexist (each with its own model) and there
 is no global `monaco`, the request **body** and **metadata** editors register
 themselves on a `window` map keyed by model URI (`ui/src/lib/editor-debug.ts`), so
 the devtools console — or a browser-automation harness — can read and drive their
@@ -602,7 +621,7 @@ target — it has to be run by hand.
 `//ui:test` runs vitest under `environment: "node"` with no jsdom. Component
 behavior is tested by rendering with `renderToStaticMarkup` and asserting on
 markup; anything needing real layout, focus, or event dispatch can only be
-verified in a browser (see Browser verification hook below).
+verified in a browser (see Browser verification hook above).
 
 ## Directory Structure
 
