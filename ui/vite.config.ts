@@ -29,6 +29,7 @@ export default defineConfig(({ command, mode }) => ({
     // the app's, so rollup would bundle two copies → two React contexts →
     // "No QueryClient set" at runtime. Dedupe collapses them to one.
     dedupe: [
+      "monaco-editor",
       "react",
       "react-dom",
       "@tanstack/react-query",
