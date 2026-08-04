@@ -20,7 +20,7 @@ come from the cited primary sources.
 - **Shared resources are referenced by logical key into well-known top-level dirs**
   (`targets/`, `auth/`, `environments/`, `descriptors/`). A ref is just `"prod"` →
   `targets/prod.json`. Beats relative-paths (move-fragile), opaque-id+manifest
-  (merge-hotspot, unreadable diffs), and symlinks (Windows/git-fragile). It's
+  (merge-hotspot, unreadable diffs), and symlinks (git-fragile). It’s
   Kreya's id-ref model made human-readable, with the directory listing acting as the
   manifest.
 - **Secrets never hit git.** Committed files reference secrets by *name only*
@@ -67,7 +67,7 @@ ref is the resource's key (filename stem): `auth:{ref:"bearer-main"}` →
 | Breaks on **move of referrer** (reorg — the common op) | **Yes** | No | Depends | **No** — keys resolve from collection root, independent of referrer ✅ |
 | Move of resource | Yes | No | Yes | Only if it leaves the well-known dir |
 | Cycle detection | Manual | Manual | Hard | DAG check at load (only if resources ref resources) |
-| Cross-platform | OK | OK | **Bad** (Windows symlinks) | OK — plain strings |
+| Cross-platform | OK | OK | **Bad** (symlinks) | OK — plain strings |
 | Git-merge | Path noise | **Bad** — index file write-hotspot → conflicts | Bad | **Best** — ref is a word (`"prod"`); no central index; add/remove touches one file |
 | Diff readability | Medium | **Poor** (`auth_ab12`) | Poor | **High** (`"auth":"prod"`) |
 

@@ -3,7 +3,7 @@
 #
 # We invoke `zig cc` DIRECTLY as a build tool rather than going through cc_toolchain
 # resolution: hermetic_cc_toolchain ships wasm32-wasi-musl target files (headers,
-# libc, wasm-ld) but the root module only registers the linux/macos/windows cc
+# libc, wasm-ld) but the root module only registers the host-platform cc
 # toolchains, and the macOS host forces the Apple cc toolchain. Calling the compiler
 # directly sidesteps toolchain resolution entirely and works identically on a macOS
 # host and on the Linux RBE executors. See docs/design/quickjs-wasm-spike.md.

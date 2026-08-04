@@ -119,7 +119,7 @@ Bruno-exact ergonomics; then reserved names become forbidden folder names.
   *is* the slug, the config *is* the name.
   - Slug derived from the display name on create (`"Get User"` → `get-user`), made
     unique within its parent (`-2`, `-3`, …) and filesystem-safe (sanitize `/ : \0`,
-    reserve config names, enforce case-insensitive uniqueness on macOS/Windows).
+    reserve config names, enforce case-insensitive uniqueness for macOS).
   - **Renaming the display name only edits `meta.name`; the slug/dir is stable** — so
     identity (and any references) survive a rename. Moving an item = `mv` its dir.
   - Gives tree items stable identity for free, on top of the logical-key refs used
@@ -196,7 +196,7 @@ dir — not by raw filesystem path, not by opaque id+manifest, not by symlink.**
 
 Rationale vs. alternatives:
 
-| Option                    | Diff-readable | Survives rename | Integrity | Windows/git | Verdict |
+| Option                    | Diff-readable | Survives rename | Integrity | git-safe | Verdict |
 |---------------------------|:-------------:|:--------------:|:---------:|:-----------:|---------|
 | **Logical key + known dir** | ✅ (`"default"`) | app rewrites refs | validate on load | ✅ | **chosen** |
 | Relative FS path          | ⚠️ ugly deep  | ❌ brittle       | none      | ✅          | no |
@@ -230,8 +230,8 @@ resource itself** (pure logical keys don't) and is consistent with the slug-iden
 choice for tree items (§5). Cost: an opaque id in the file (mitigated by the readable
 hint) + a scan-built index. **Recorded as the Phase 2 direction — build it then, not
 in Phase 1** (Phase 1 exercises no shared-resource refs); re-confirm the exact `id`
-format at implementation time. Avoid symlinks for committed refs (Windows
-`core.symlinks=false` silently checks them out as text files).
+format at implementation time. Avoid symlinks for committed refs — git support for
+them is uneven and a mis-checked-out link is a silently corrupt text file.
 
 ## 8. Git: committed vs. local
 
@@ -292,8 +292,8 @@ Backed by a completed `go-git` exploration (full report:
 **`github.com/go-git/go-git/v5` v5.18.0** (v6 is alpha — a transport rewrite; only
 relevant if/when we do network sync). go-git is **pure Go / CGO-free**, so it
 embeds in the static binary with zero runtime dependency — this must be the
-baseline, because a gRPC tool can't assume a `git` binary is installed (Windows,
-minimal containers, locked-down machines). Detect a `git` binary on `PATH` at
+baseline, because a gRPC tool cannot assume a `git` binary is installed (minimal
+containers, locked-down machines). Detect a `git` binary on `PATH` at
 startup and use it only where go-git is weak/slow (below). Keep both behind one
 `gitBackend` interface (`goGit`, `execGit`) chosen per-op.
 

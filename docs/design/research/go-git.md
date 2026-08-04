@@ -29,7 +29,7 @@ for network sync.
 Default to go-git for everything; detect a `git` binary on `PATH` and use it only
 for the ops where go-git is weak/slow. Baseline must be pure-Go go-git (the product
 promise is "download one binary, open a directory, it works" — can't assume a git
-toolchain, esp. Windows/containers/locked-down machines). exec-`git`, when present,
+toolchain, esp. containers/locked-down machines). exec-`git`, when present,
 is a graceful perf/correctness upgrade for a small set of ops. Keep both behind one
 `gitBackend` interface. MVP ships go-git-only; exec upgrade is phase 2+. Do NOT go
 exec-only (breaks no-dependency promise) or go-git-only forever (leaves monorepo
@@ -194,7 +194,6 @@ history (`tree.Patch().String()`).
   unstage/discard; no credential helpers. Each designed-around or an exec candidate.
 - Commit identity must be resolved or commits fail.
 - Global gitignore not reliably honored (cosmetic).
-- Windows: normalize to forward slashes (go-git keys status that way).
 
 ## MVP vs deferred
 

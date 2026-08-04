@@ -32,9 +32,9 @@ Two real tools bracket the space:
 | Move referent | **Breaks** | **Survives** | **Breaks** |
 | Move referrer | **Breaks** (relative base changes) | **Survives** | **Breaks** (depth changes) |
 | Cycle detection | App graph walk needed | App graph walk needed | OS `ELOOP` after 40 resolutions; still want app-level |
-| Cross-platform | Portable if normalized POSIX `/` | Fully portable (opaque strings) | **Worst** — Windows needs privilege/Dev-Mode; git `core.symlinks=false` on Windows checks links out as **plain text files** (silent corruption) |
+| Cross-platform | Portable if normalized POSIX `/` | Fully portable (opaque strings) | **Worst** — git `core.symlinks=false` checks links out as **plain text files** (silent corruption) |
 | Git-merge | Excellent (plain text, independent). Trap: git rename = add+delete; doesn't update path-strings in *other* files → silent cross-branch breakage | Ids stable, rarely collide. Trap: a *central* manifest is a merge hotspot → make the index **derivable**, not committed | mode `120000`, blob=target path; dominated by checkout corruption |
-| Diff readability | **High** (self-describing) | **Low** (`auth_ab12` opaque) | Medium (shows target; confusing on Windows) |
+| Diff readability | **High** (self-describing) | **Low** (`auth_ab12` opaque) | Medium (shows target) |
 
 ### Reference-resolution standards (for the resolver)
 - **JSON Schema `$id`/`$ref`:** `$id` pins an explicit **base URI**; relative `$ref`
@@ -78,8 +78,8 @@ Two real tools bracket the space:
    be a merge hotspot; rebuild on change.
 6. **Validate + detect cycles at load** (three-color DFS); report dangling refs and
    cycles with the offending chain.
-7. **No symlinks for committed refs** — Windows `core.symlinks=false` "checked out as
-   text file" silently corrupts collections. (Symlinks fine for local gitignored
+7. **No symlinks for committed refs** — a `core.symlinks=false` checkout writes them as
+   plain text files, silently corrupting collections. (Symlinks fine for local gitignored
    convenience only.)
 
 Optional simplification: **id-as-filename** (slug *is* the id) collapses id and path
@@ -103,11 +103,10 @@ loads `.env` at the collection root and references `{{process.env.NAME}}` (dotte
 | | `zalando/go-keyring` | `99designs/keyring` |
 |---|---|---|
 | macOS | shells to `/usr/bin/security` | native Keychain |
-| Windows | Credential Manager | `WinCredBackend` |
 | Linux/BSD | Secret Service (D-Bus, GNOME) | SecretService + KWallet + KeyCtl + Pass |
 | File fallback | **None** | **Encrypted `FileBackend`** (jose + scrypt, passphrase) |
 | Backend select | fixed per-OS | `AllowedBackends` whitelist |
-| Size limits | documented: macOS ≲3000B; Windows password ≤2560B → `ErrSetDataTooBig` | varies; file backend unconstrained |
+| Size limits | documented: macOS ≲3000B → `ErrSetDataTooBig` | varies; file backend unconstrained |
 
 **Recommendation: `99designs/keyring`** — same native keychains **plus** an encrypted
 file fallback for headless/CI, and `AllowedBackends` to force file mode. (Used by
@@ -171,6 +170,6 @@ Ship a committed `.env.example` alongside.
 JSON Schema structuring; RFC 6901 (JSON Pointer); Insomnia import-export & storage;
 Bruno collections & dotenv secrets; Postman collection-format & Vault; VS Code
 multi-root workspaces; TypeScript project references; pnpm workspaces; Bazel labels;
-Windows symlinks / git `core.symlinks`; path_resolution(7) ELOOP; three-color DFS
+git `core.symlinks`; path_resolution(7) ELOOP; three-color DFS
 cycle detection; git-credential-store; zalando/go-keyring; 99designs/keyring; XDG
 Base Directory spec. (Full URLs in the agent transcript.)

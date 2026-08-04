@@ -80,7 +80,7 @@ from the genrule. Findings that drove this:
 
 - hermetic_cc_toolchain 4.2.0 **defines** wasm target structs (`_target_wasm()` →
   `wasm32-wasi-musl`, `@platforms//cpu:wasm32`, `wasm-ld`) but the root module only
-  `register_toolchains`es the linux/mac/windows cc toolchains. There is **no registered
+  `register_toolchains`es the host-platform cc toolchains. There is **no registered
   wasm cc_toolchain** to resolve.
 - On a macOS host, `.bazelrc` force-selects the Apple cc toolchain
   (`build:macos --extra_toolchains=…apple…`). Even if a wasm toolchain were registered,
