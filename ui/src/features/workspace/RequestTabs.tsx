@@ -51,7 +51,9 @@ export function RequestTabs() {
             onClick={() => setActiveKey(tab.key)}
           >
             <MethodKindTag kind={kind} />
-            {tab.name}
+            {/* Live name, not the stored one: the key is slug-based, so a rename no
+                longer rewrites the tab. tab.name only covers a deleted item. */}
+            {item?.item.name ?? tab.name}
             <X
               size={12}
               style={{ opacity: 0.5 }}

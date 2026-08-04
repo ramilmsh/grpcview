@@ -3,14 +3,28 @@ import type { Item } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
 import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
 
+const slugify = (name: string): string => name.toLowerCase();
+
 const folder = (name: string, path: string[] = []): ItemWithPath => ({
-  item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+  item: {
+    name,
+    slug: slugify(name),
+    content: { case: "folder", value: { items: [] } },
+  } as unknown as Item,
+  collection: ".",
   path,
+  slugPath: path.map(slugify),
 });
 
 const request = (name: string, path: string[] = []): ItemWithPath => ({
-  item: { name, content: { case: "request", value: {} } } as unknown as Item,
+  item: {
+    name,
+    slug: slugify(name),
+    content: { case: "request", value: {} },
+  } as unknown as Item,
+  collection: ".",
   path,
+  slugPath: path.map(slugify),
 });
 
 const spies = (): CollectionMenuActions & Record<keyof CollectionMenuActions, ReturnType<typeof vi.fn>> => ({

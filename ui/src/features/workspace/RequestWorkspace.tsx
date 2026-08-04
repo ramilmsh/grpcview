@@ -14,7 +14,7 @@ import {
   COLLECTION_ID,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import { findByKey, keyOf, methodKind, prettyBody, resolveMethod } from "@/lib/format";
+import { findByKey, methodKind, prettyBody, resolveMethod } from "@/lib/format";
 import { Centered } from "@/components/ui/Centered";
 import { MethodHeader } from "./MethodHeader";
 import { RequestPane } from "./RequestPane";
@@ -45,7 +45,6 @@ export function RequestWorkspace() {
   const endStream = useUIStore((s) => s.endStream);
   const stopStream = useUIStore((s) => s.stopStream);
   const failStream = useUIStore((s) => s.failStream);
-  const moveSubtree = useUIStore((s) => s.moveSubtree);
   const [typesOpen, setTypesOpen] = useState(false);
 
   const activeItem = useMemo(() => findByKey(rootItems, activeKey), [rootItems, activeKey]);
@@ -175,10 +174,8 @@ export function RequestWorkspace() {
   const onRename = (nextName: string) => {
     const next = nextName.trim();
     if (!next || next === itemName) return;
-    updateRequest.mutate(
-      { collection: COLLECTION_ID, path, itemName, name: next },
-      { onSuccess: () => moveSubtree(key, keyOf(path, next), next) }
-    );
+    // No key remap: keys are slug-based, and a rename leaves the slug alone.
+    updateRequest.mutate({ collection: COLLECTION_ID, path, itemName, name: next });
   };
 
   // Takes body/metadata/messages explicitly so a history re-run can pass historical

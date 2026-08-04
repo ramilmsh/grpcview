@@ -12,15 +12,32 @@ import type { ItemWithPath } from "@/lib/format";
 // No jsdom here, so rows are rendered with react-dom/server; `expanded` is passed
 // controlled because useTreeState's default-expansion useEffect never runs under SSR.
 
+// Row ids are slug keys ("<collection id>/<slug path>"); these fixtures use the
+// lower-cased display name as the slug, as store.slugify would.
+const COLL = ".";
+const slugify = (name: string): string => name.toLowerCase();
+
 const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWithPath => ({
-  item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+  item: {
+    name,
+    slug: slugify(name),
+    content: { case: "folder", value: { items: [] } },
+  } as unknown as Item,
+  collection: COLL,
   path,
+  slugPath: path.map(slugify),
   children,
 });
 
 const request = (name: string, path: string[], service: string, method: string): ItemWithPath => ({
-  item: { name, content: { case: "request", value: { service, method } } } as unknown as Item,
+  item: {
+    name,
+    slug: slugify(name),
+    content: { case: "request", value: { service, method } },
+  } as unknown as Item,
+  collection: COLL,
   path,
+  slugPath: path.map(slugify),
 });
 
 const SERVICE = "fixture.Greeter";
@@ -50,7 +67,7 @@ const roots: ItemWithPath[] = [
   ]),
 ];
 
-const FULLY_EXPANDED = new Set(["Calls", "Calls/Admin"]);
+const FULLY_EXPANDED = new Set(["./calls", "./calls/admin"]);
 
 const adapter = requestTreeAdapter(roots);
 
@@ -240,9 +257,9 @@ describe("request tree rows: active/selected/focused", () => {
         adapter={adapter}
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
-        activeId="Calls/ListHellos"
-        selection={["Calls/SendHellos"]}
-        focused="Calls/Chat"
+        activeId="./calls/listhellos"
+        selection={["./calls/sendhellos"]}
+        focused="./calls/chat"
         aria-label="Test tree"
       />
     );
@@ -265,9 +282,9 @@ describe("request tree rows: active/selected/focused", () => {
         adapter={adapter}
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
-        activeId="Calls/Chat"
-        selection={["Calls/Chat"]}
-        focused="Calls/Chat"
+        activeId="./calls/chat"
+        selection={["./calls/chat"]}
+        focused="./calls/chat"
         aria-label="Test tree"
       />
     );
@@ -328,7 +345,7 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
     )[0];
 
   it("swaps a request row's whole content for the input — tag, name and buttons all yield", () => {
-    const row = renamingMarkup("Calls/SayHello");
+    const row = renamingMarkup("./calls/sayhello");
 
     expect(findAll(row.children, (n) => n.tag === "input")).toHaveLength(1);
     expect(row.children.some((c) => c.text === "SayHello")).toBe(false);
@@ -338,7 +355,7 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
   });
 
   it("keeps the row SHELL — indent guides and the twistie column — around the input", () => {
-    const row = renamingMarkup("Calls/Admin");
+    const row = renamingMarkup("./calls/admin");
     expect(row.children.filter((c) => hasClass(c, "guide"))).toHaveLength(1);
     const twistie = row.children.find((c) => hasClass(c, "twistie"));
     expect(twistie).toBeDefined();
@@ -347,10 +364,10 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
   });
 
   it("seeds the input from adapter.getTreeItem().label, even for this RICH adapter", () => {
-    const row = renamingMarkup("Calls/SayHello");
+    const row = renamingMarkup("./calls/sayhello");
     const input = findAll(row.children, (n) => n.tag === "input")[0];
     expect(input.attrs.value).toBe("SayHello");
-    expect(adapter.getTreeItem(rowModel("Calls/SayHello").node).label).toBe("SayHello");
+    expect(adapter.getTreeItem(rowModel("./calls/sayhello").node).label).toBe("SayHello");
     expect(input.attrs["aria-invalid"]).toBeUndefined();
     expect(input.classes).not.toContain("rename-invalid");
   });
@@ -366,7 +383,7 @@ describe("request tree rows: keyboard + a11y (T1)", () => {
         adapter={adapter}
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
-        focused="Calls/SayHello"
+        focused="./calls/sayhello"
         aria-label="Test tree"
       />
     );
@@ -376,7 +393,7 @@ describe("request tree rows: keyboard + a11y (T1)", () => {
     const [, , rowSayHello] = rowsOf(markup);
     // An ARIA IDREF may not contain whitespace, so the dom id is never the raw itemKey.
     expect(rowSayHello.attrs.id).toBeTruthy();
-    expect(rowSayHello.attrs.id).not.toBe("Calls/SayHello");
+    expect(rowSayHello.attrs.id).not.toBe("./calls/sayhello");
     expect(container.attrs["aria-activedescendant"]).toBe(rowSayHello.attrs.id);
   });
 
@@ -408,8 +425,8 @@ describe("request tree rows: keyboard + a11y (T1)", () => {
         adapter={adapter}
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
-        selection={["Calls/SendHellos"]}
-        focused="Calls/Chat"
+        selection={["./calls/sendhellos"]}
+        focused="./calls/chat"
         aria-label="Test tree"
       />
     );

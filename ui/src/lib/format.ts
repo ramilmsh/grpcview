@@ -3,43 +3,83 @@ import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 // Type-only: avoids a runtime import cycle with the component.
 import type { MethodKind } from "@/components/ui/Tag";
 
-// An Item plus the path to its parent folder (empty at the root).
+// An Item plus both ways of addressing it: `path` is the DISPLAY-NAME path to its
+// parent folder (empty at the root), which is what every RPC takes; `slugPath` is
+// the same walk in on-disk slugs, which is what `itemKey` is built from.
 export interface ItemWithPath {
   item: Item;
+  collection: string;
   path: string[];
+  slugPath: string[];
   children?: ItemWithPath[]; // populated for folders
 }
 
 const convertToItemWithPath = (
   protoItem: Item,
-  parentPath: string[]
+  collection: string,
+  parentPath: string[],
+  parentSlugPath: string[]
 ): ItemWithPath => {
-  const result: ItemWithPath = { item: protoItem, path: parentPath };
+  const result: ItemWithPath = {
+    item: protoItem,
+    collection,
+    path: parentPath,
+    slugPath: parentSlugPath,
+  };
   if (protoItem.content.case === "folder") {
     const childPath = [...parentPath, protoItem.name];
+    const childSlugPath = [...parentSlugPath, protoItem.slug];
     result.children = protoItem.content.value.items.map((child) =>
-      convertToItemWithPath(child, childPath)
+      convertToItemWithPath(child, collection, childPath, childSlugPath)
     );
   }
   return result;
 };
 
-export const rootItemsOf = (rootItem?: Item): ItemWithPath[] => {
+export const rootItemsOf = (
+  rootItem: Item | undefined,
+  collection: string
+): ItemWithPath[] => {
   if (rootItem?.content.case === "folder") {
     return rootItem.content.value.items.map((child) =>
-      convertToItemWithPath(child, [])
+      convertToItemWithPath(child, collection, [], [])
     );
   }
   return [];
 };
 
-export const keyOf = (path: string[], name: string): string =>
-  [...path, name].join("/");
-
-// The name-derived identity of an item, so a rename changes it — callers must
-// remap keyed state (see ui-store's moveSubtree).
+// The identity of an item: its collection id followed by its slug path. Slugs are
+// on-disk directory names, so a RENAME never changes a key and no keyed state has
+// to be remapped for one. Only a real MOVE changes it — and the new key must be
+// read back off the server's response (see slugKeyIn), because a move re-slugs on
+// a destination collision. A plain "/" separator is unambiguous: no collection id
+// can be a path prefix of another, and slugs never contain a slash.
 export const itemKey = (item: ItemWithPath): string =>
-  keyOf(item.path, item.item.name);
+  [item.collection, ...item.slugPath, item.item.slug].join("/");
+
+// The slug key of the item that display-name path `path` + `name` now addresses in
+// `root`, or null if it is not there. Read back off a mutation response because a
+// move may re-slug on a destination collision (store.Move's uniqueSlug).
+export const slugKeyIn = (
+  collection: string,
+  root: Item | undefined,
+  path: string[],
+  name: string
+): string | null => {
+  let items = root?.content.case === "folder" ? root.content.value.items : null;
+  const slugs: string[] = [];
+  for (const segment of path) {
+    const folder = items?.find(
+      (it) => it.name === segment && it.content.case === "folder"
+    );
+    if (!folder || folder.content.case !== "folder") return null;
+    slugs.push(folder.slug);
+    items = folder.content.value.items;
+  }
+  const found = items?.find((it) => it.name === name);
+  if (!found) return null;
+  return [collection, ...slugs, found.slug].join("/");
+};
 
 export const findByKey = (
   items: ItemWithPath[],

@@ -123,6 +123,11 @@ message Request {
 
 message Item {
   string  name    = 1;
+  // The stable on-disk directory name. A rename never changes it, so UI state
+  // (tabs, drafts, expansion) is keyed by it. RPC addressing stays on
+  // display-name paths; this is identity, not an address. Empty on the synthetic
+  // root item, which has no directory of its own.
+  string  slug    = 4;
   oneof content {
     Folder  folder  = 2;
     Request request = 3;

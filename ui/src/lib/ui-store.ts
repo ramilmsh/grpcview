@@ -58,7 +58,9 @@ interface UIState {
   openTab: (item: ItemWithPath) => void;
   closeTab: (key: string) => void;
   setActiveKey: (key: string | null) => void;
-  moveSubtree: (oldKey: string, newKey: string, newName: string) => void;
+  // Remaps every slug-keyed slice after a real MOVE (the only thing that changes a
+  // key). A move never renames, so `OpenTab.name` needs no fixing up here.
+  moveSubtree: (oldKey: string, newKey: string) => void;
 
   setTreeExpanded: (next: ReadonlySet<string>) => void;
   setTreeSelection: (next: readonly string[]) => void;
@@ -131,14 +133,14 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setActiveKey: (activeKey) => set({ activeKey }),
 
-  moveSubtree: (oldKey, newKey, newName) =>
+  moveSubtree: (oldKey, newKey) =>
     set((s) => {
       if (oldKey === newKey) return {};
       const prefix = `${oldKey}/`;
       const remap = (key: string): string | null => {
         if (key === oldKey) return newKey;
-        // The trailing "/" (keyOf's join char) is what stops a sibling "Foo2" being
-        // swept up by a rename of "Foo".
+        // The trailing "/" (itemKey's slug separator) is what stops a sibling slug
+        // "foo2" being swept up by a move of "foo".
         if (key.startsWith(prefix)) return newKey + key.slice(oldKey.length);
         return null;
       };
@@ -180,7 +182,7 @@ export const useUIStore = create<UIState>()((set) => ({
         const to = remap(t.key);
         if (to === null) return t;
         tabsChanged = true;
-        return t.key === oldKey ? { key: to, name: newName } : { ...t, key: to };
+        return { ...t, key: to };
       });
 
       let selectionChanged = false;

@@ -688,6 +688,7 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 		}
 		return &grpcviewv1.Item{
 			Name: ch.name,
+			Slug: ch.slug,
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{
 				Items:               children,
 				DraftMetadataScript: ch.folder.GetDraftMetadataScript(),
@@ -698,6 +699,7 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 		req.History = c.readHistory(dir)
 		return &grpcviewv1.Item{
 			Name:    ch.name,
+			Slug:    ch.slug,
 			Content: &grpcviewv1.Item_Request{Request: req},
 		}, nil
 	}

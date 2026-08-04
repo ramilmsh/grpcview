@@ -13,9 +13,9 @@ import {
   childPathOf,
   findByKey,
   itemKey,
-  keyOf,
   pruneNestedSelections,
   serviceName,
+  slugKeyIn,
   type ItemWithPath,
 } from "@/lib/format";
 import { renderRequestRow, useRequestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
@@ -130,12 +130,9 @@ export function CollectionPanel() {
       itemName: item.item.name,
       name: next,
     };
-    // Renaming a folder changes the key of every descendant, hence moveSubtree.
-    const opts = {
-      onSuccess: () => moveSubtree(itemKey(item), keyOf(item.path, next), next),
-    };
-    if (item.item.content.case === "folder") updateFolder.mutate(args, opts);
-    else updateRequest.mutate(args, opts);
+    // No key remap: keys are slug-based, and a rename leaves every slug alone.
+    if (item.item.content.case === "folder") updateFolder.mutate(args);
+    else updateRequest.mutate(args);
   };
 
   const doDelete = () => {
@@ -198,8 +195,11 @@ export function CollectionPanel() {
           before: to.before?.item.name,
         },
         {
-          onSuccess: () => {
-            moveSubtree(itemKey(node), keyOf(newPath, node.item.name), node.item.name);
+          // The new key comes from the response, never from names: Move allocates a
+          // fresh slug when the destination already has one by that name.
+          onSuccess: (res) => {
+            const newKey = slugKeyIn(COLLECTION_ID, res.collection?.item, newPath, node.item.name);
+            if (newKey) moveSubtree(itemKey(node), newKey);
             fire(i + 1);
           },
         }

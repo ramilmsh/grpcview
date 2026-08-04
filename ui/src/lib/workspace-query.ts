@@ -110,7 +110,7 @@ export function useCreateCollection() {
 }
 
 export function useRootItems(workspace?: Collection): ItemWithPath[] {
-  return useMemo(() => rootItemsOf(workspace?.item), [workspace]);
+  return useMemo(() => rootItemsOf(workspace?.item, COLLECTION_ID), [workspace]);
 }
 
 function useSeedGetCache() {

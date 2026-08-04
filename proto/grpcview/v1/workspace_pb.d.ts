@@ -486,6 +486,16 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
   name: string;
 
   /**
+   * The stable on-disk directory name. A rename never changes it, so UI state
+   * (tabs, drafts, expansion) is keyed by it. RPC addressing stays on
+   * display-name paths; this is identity, not an address. Empty on the synthetic
+   * root item, which has no directory of its own.
+   *
+   * @generated from field: string slug = 4;
+   */
+  slug: string;
+
+  /**
    * @generated from oneof grpcview.v1.Item.content
    */
   content: {

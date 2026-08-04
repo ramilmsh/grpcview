@@ -144,6 +144,35 @@ func TestSlugUniqueness(t *testing.T) {
 	}
 }
 
+// The wire Item carries the on-disk slug, and a rename never changes it — the
+// invariant the UI's slug-keyed tree state depends on.
+func TestWireItemCarriesStableSlug(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Users"); err != nil {
+		t.Fatal(err)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get User", "s.S", "GetUser"); err != nil {
+		t.Fatal(err)
+	}
+
+	folder := childByName(rootItems(t, coll, ctx), "Users")
+	if folder.GetSlug() != "users" {
+		t.Errorf("folder slug = %q, want %q", folder.GetSlug(), "users")
+	}
+	if got := childByName(folder.GetFolder().GetItems(), "Get User").GetSlug(); got != "get-user" {
+		t.Errorf("request slug = %q, want %q", got, "get-user")
+	}
+
+	newName := "Fetch User"
+	if err := coll.UpdateRequest(ctx, []string{"Users"}, "Get User", RequestPatch{Name: &newName}); err != nil {
+		t.Fatalf("UpdateRequest rename: %v", err)
+	}
+	folder = childByName(rootItems(t, coll, ctx), "Users")
+	if got := childByName(folder.GetFolder().GetItems(), newName).GetSlug(); got != "get-user" {
+		t.Errorf("slug after rename = %q, want %q", got, "get-user")
+	}
+}
+
 func TestOrderedListReconciliation(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	for _, n := range []string{"Alpha", "Bravo", "Charlie"} {

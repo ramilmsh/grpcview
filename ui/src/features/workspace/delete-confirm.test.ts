@@ -4,13 +4,25 @@ import type { ItemWithPath } from "@/lib/format";
 import { deleteConfirmCopy } from "./delete-confirm";
 
 const folder = (name: string): ItemWithPath => ({
-  item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+  item: {
+    name,
+    slug: name.toLowerCase(),
+    content: { case: "folder", value: { items: [] } },
+  } as unknown as Item,
+  collection: ".",
   path: [],
+  slugPath: [],
 });
 
 const request = (name: string): ItemWithPath => ({
-  item: { name, content: { case: "request", value: {} } } as unknown as Item,
+  item: {
+    name,
+    slug: name.toLowerCase(),
+    content: { case: "request", value: {} },
+  } as unknown as Item,
+  collection: ".",
   path: [],
+  slugPath: [],
 });
 
 describe("deleteConfirmCopy: a single item (unchanged wording from before T2)", () => {

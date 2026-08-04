@@ -4,22 +4,38 @@ import {
   childPathOf,
   findByKey,
   itemKey,
-  keyOf,
   pruneNestedSelections,
   resolveMethod,
+  rootItemsOf,
   serviceName,
+  slugKeyIn,
   type ItemWithPath,
 } from "./format";
 
-const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWithPath => ({
-  item: { name, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+const COLL = ".";
+
+// Slugs default to the lower-kebab of the name, matching store.slugify, but the
+// fixtures below pass them explicitly wherever a test turns on slug vs name.
+const slugify = (name: string): string => name.toLowerCase().replace(/\s+/g, "-");
+
+const folder = (
+  name: string,
+  path: string[],
+  children: ItemWithPath[],
+  slug = slugify(name)
+): ItemWithPath => ({
+  item: { name, slug, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+  collection: COLL,
   path,
+  slugPath: path.map(slugify),
   children,
 });
 
-const request = (name: string, path: string[]): ItemWithPath => ({
-  item: { name, content: { case: "request", value: {} } } as unknown as Item,
+const request = (name: string, path: string[], slug = slugify(name)): ItemWithPath => ({
+  item: { name, slug, content: { case: "request", value: {} } } as unknown as Item,
+  collection: COLL,
   path,
+  slugPath: path.map(slugify),
 });
 
 const tree: ItemWithPath[] = [
@@ -29,6 +45,13 @@ const tree: ItemWithPath[] = [
     folder("Admin", ["Users"], [request("Ban", ["Users", "Admin"])]),
   ]),
 ];
+
+// A wire Item tree, for rootItemsOf/slugKeyIn (which read protos, not ItemWithPath).
+const wireRequest = (name: string, slug = slugify(name)): Item =>
+  ({ name, slug, content: { case: "request", value: {} } }) as unknown as Item;
+
+const wireFolder = (name: string, items: Item[], slug = slugify(name)): Item =>
+  ({ name, slug, content: { case: "folder", value: { items } } }) as unknown as Item;
 
 const service = (pkg: string, name: string, methods: string[]): Service =>
   ({
@@ -59,39 +82,105 @@ describe("resolveMethod", () => {
   });
 });
 
-describe("keyOf", () => {
-  it("joins a parent path and name with /", () => {
-    expect(keyOf(["Users", "Admin"], "Ban")).toBe("Users/Admin/Ban");
+describe("itemKey", () => {
+  it("derives the key from the item's slug path, prefixed by its collection id", () => {
+    expect(itemKey(tree[1].children![1].children![0])).toBe("./users/admin/ban");
   });
 
-  it("is just the name at the root", () => {
-    expect(keyOf([], "Ping")).toBe("Ping");
+  it("prefixes a DIFFERENT collection id, so two collections never collide", () => {
+    const other = { ...request("Ping", []), collection: "apis/echo" };
+    expect(itemKey(other)).toBe("apis/echo/ping");
+  });
+
+  it("is UNCHANGED by a rename — the same slug under a new display name", () => {
+    const before = itemKey(request("GetUser", ["Users"], "get-user"));
+    const after = itemKey(request("FetchUser", ["Users"], "get-user"));
+    expect(after).toBe(before);
+    expect(after).toBe("./users/get-user");
+  });
+
+  it("does change when the slug does, which is what a real MOVE produces", () => {
+    const before = itemKey(request("GetUser", ["Users"], "get-user"));
+    const after = itemKey(request("GetUser", ["Users"], "get-user-2"));
+    expect(after).not.toBe(before);
   });
 });
 
-describe("itemKey", () => {
-  it("derives the key from the item's own path and name", () => {
-    expect(itemKey(tree[1].children![1].children![0])).toBe("Users/Admin/Ban");
+describe("rootItemsOf", () => {
+  const root = wireFolder("Coll", [
+    wireRequest("Ping"),
+    wireFolder("Users", [wireRequest("Get User")]),
+  ]);
+
+  it("threads the collection id and the slug path down every level", () => {
+    const items = rootItemsOf(root, "apis/echo");
+    expect(itemKey(items[0])).toBe("apis/echo/ping");
+    expect(itemKey(items[1].children![0])).toBe("apis/echo/users/get-user");
   });
 
-  it("changes when the name changes — the property every rename path must remap", () => {
-    const before = itemKey(request("GetUser", ["Users"]));
-    const after = itemKey(request("FetchUser", ["Users"]));
-    expect(before).not.toBe(after);
+  it("keeps `path` on DISPLAY names, since that is what the RPCs address by", () => {
+    const items = rootItemsOf(root, ".");
+    expect(items[1].children![0].path).toEqual(["Users"]);
+    expect(items[1].children![0].slugPath).toEqual(["users"]);
+  });
+
+  it("is empty when there is no root folder", () => {
+    expect(rootItemsOf(undefined, ".")).toEqual([]);
+  });
+});
+
+describe("slugKeyIn", () => {
+  // The shape a Move response has after "Get User" landed in Admin, where an
+  // existing sibling already held the "get-user" slug (store.Move's uniqueSlug).
+  const root = wireFolder("Coll", [
+    wireFolder("Users", [
+      wireFolder("Admin", [
+        wireRequest("Other", "get-user"),
+        wireRequest("Get User", "get-user-2"),
+      ]),
+    ]),
+  ]);
+
+  it("reads back the RE-SLUGGED key of a moved item, which names cannot predict", () => {
+    expect(slugKeyIn(".", root, ["Users", "Admin"], "Get User")).toBe(
+      "./users/admin/get-user-2"
+    );
+  });
+
+  it("finds an item at the collection root", () => {
+    const flat = wireFolder("Coll", [wireRequest("Ping")]);
+    expect(slugKeyIn("apis/echo", flat, [], "Ping")).toBe("apis/echo/ping");
+  });
+
+  it("returns null when a folder on the path is missing", () => {
+    expect(slugKeyIn(".", root, ["Users", "Nope"], "Get User")).toBeNull();
+  });
+
+  it("returns null when the leaf is missing", () => {
+    expect(slugKeyIn(".", root, ["Users", "Admin"], "Unban")).toBeNull();
+  });
+
+  it("returns null for no root at all", () => {
+    expect(slugKeyIn(".", undefined, [], "Ping")).toBeNull();
+  });
+
+  it("will not walk THROUGH a request as if it were a folder", () => {
+    const flat = wireFolder("Coll", [wireRequest("Ping")]);
+    expect(slugKeyIn(".", flat, ["Ping"], "Ping")).toBeNull();
   });
 });
 
 describe("findByKey", () => {
   it("resolves a nested item", () => {
-    expect(findByKey(tree, "Users/Admin/Ban")?.item.name).toBe("Ban");
+    expect(findByKey(tree, "./users/admin/ban")?.item.name).toBe("Ban");
   });
 
   it("resolves a root item", () => {
-    expect(findByKey(tree, "Ping")?.item.name).toBe("Ping");
+    expect(findByKey(tree, "./ping")?.item.name).toBe("Ping");
   });
 
   it("returns null for a key that no longer exists", () => {
-    expect(findByKey(tree, "Users/Admin/Unban")).toBeNull();
+    expect(findByKey(tree, "./users/admin/unban")).toBeNull();
   });
 
   it("returns null for a null key rather than guessing", () => {
@@ -99,7 +188,7 @@ describe("findByKey", () => {
   });
 
   it("does not match a folder's key against its child's name", () => {
-    expect(findByKey(tree, "Ban")).toBeNull();
+    expect(findByKey(tree, "./ban")).toBeNull();
   });
 });
 
