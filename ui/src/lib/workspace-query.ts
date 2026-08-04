@@ -7,11 +7,12 @@ import {
   createConnectQueryKey,
 } from "@connectrpc/connect-query";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { createClient } from "@connectrpc/connect";
+import { createClient, ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { WorkspaceService } from "@grpcview/v1/service_pb";
 import {
   get,
+  createCollection,
   createFolder,
   createRequest,
   deleteRequest,
@@ -32,7 +33,19 @@ import { GetResponseSchema } from "@grpcview/v1/service_pb";
 import type { Collection, Server } from "@grpcview/v1/workspace_pb";
 import { rootItemsOf, type ItemWithPath } from "./format";
 
-export const COLLECTION_ID = "default";
+const COLLECTION_STORAGE_KEY = "grpcview.collection";
+
+// 1a addresses ONE collection per load. Phase 1c adds the multi-collection tier and
+// turns this into state; until then, switching collections is a reload, which also
+// guarantees every connect-query key is rebuilt.
+export const COLLECTION_ID = localStorage.getItem(COLLECTION_STORAGE_KEY) ?? ".";
+
+// Switches the active collection and reloads, so every connect-query key (all of
+// which close over COLLECTION_ID at module load) is rebuilt against the new one.
+export function openCollection(id: string): void {
+  localStorage.setItem(COLLECTION_STORAGE_KEY, id);
+  window.location.reload();
+}
 
 export const firstReflectionSource = (ws?: Collection): Server | null => {
   for (const s of ws?.sources ?? []) {
@@ -79,12 +92,21 @@ function useWorkspaceKey(): QueryKey {
 export function useWorkspace() {
   const query = useQuery(get, { collection: COLLECTION_ID });
   const workspace = query.data?.collection;
+  const notFound = query.isError && ConnectError.from(query.error).code === Code.NotFound;
   return {
     workspace,
     services: workspace?.services ?? [],
     sources: workspace?.sources ?? [],
     reflection: firstReflectionSource(workspace),
+    notFound,
   };
+}
+
+// Creates a collection at a workspace-relative directory. Not wired to the Get
+// cache: the caller (NoCollection) always follows success with openCollection,
+// which reloads and re-seeds everything against the new COLLECTION_ID.
+export function useCreateCollection() {
+  return useMutation(createCollection);
 }
 
 export function useRootItems(workspace?: Collection): ItemWithPath[] {

@@ -11,7 +11,7 @@ const stroke = (key: string, mods: Partial<Omit<KeyStroke, "key">> = {}): KeyStr
   ...mods,
 });
 
-describe("keyToIntent: Windows/Linux (isMac=false)", () => {
+describe("keyToIntent: non-macOS (isMac=false)", () => {
   it("bare arrows move focus one row", () => {
     expect(keyToIntent(stroke("ArrowUp"), false)).toEqual({ kind: "move", to: "up" });
     expect(keyToIntent(stroke("ArrowDown"), false)).toEqual({ kind: "move", to: "down" });

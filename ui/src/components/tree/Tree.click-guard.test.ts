@@ -25,7 +25,7 @@ describe("isRightClickGesture: macOS ctrl+click", () => {
     expect(isRightClickGesture({ button: 0, ctrlKey: true }, IS_MAC)).toBe(true);
   });
 
-  it("is FALSE for ctrl+click on Windows/Linux — ctrl is the multi-select modKey there", () => {
+  it("is FALSE for ctrl+click on non-macOS — ctrl is the multi-select modKey there", () => {
     expect(isRightClickGesture({ button: 0, ctrlKey: true }, NOT_MAC)).toBe(false);
   });
 });
