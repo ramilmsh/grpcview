@@ -22,6 +22,13 @@ common --protocopt=--include_source_info
 
 build --workspace_status_command=$(pwd)/tools/workspace_status.sh
 
+# .envrc exports GOPROXY=off, which stops `go mod tidy` hanging on the bazel-generated
+# proto packages it cannot resolve. Bazel inherits that env, and gazelle's go_deps
+# fetch_repo then can't look up a module even when its zip is already in the module cache,
+# so a fresh output base fails to fetch any external Go dep. Pin the proxy for repository
+# rules only, leaving the plain `go` command in a shell unaffected.
+common --repo_env=GOPROXY=https://proxy.golang.org,direct
+
 build:linux --sandbox_add_mount_pair=/tmp
 build:macos --sandbox_add_mount_pair=/var/tmp
 build:windows --sandbox_add_mount_pair=C:\Temp
