@@ -13,32 +13,32 @@ func TestScriptCRUDHandlers(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
 
-	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace})); err != nil {
+	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace})); err != nil {
 		t.Fatalf("Get (auto-create): %v", err)
 	}
 
 	resp, err := w.CreateScript(ctx, connect.NewRequest(&grpcviewv1.CreateScriptRequest{
-		WorkspaceName: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
+		Collection: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
 	}))
 	if err != nil {
 		t.Fatalf("CreateScript generator: %v", err)
 	}
-	if len(resp.Msg.GetWorkspace().GetScripts()) != 1 {
-		t.Fatalf("after first create, scripts = %v", resp.Msg.GetWorkspace().GetScripts())
+	if len(resp.Msg.GetCollection().GetScripts()) != 1 {
+		t.Fatalf("after first create, scripts = %v", resp.Msg.GetCollection().GetScripts())
 	}
 	resp, err = w.CreateScript(ctx, connect.NewRequest(&grpcviewv1.CreateScriptRequest{
-		WorkspaceName: testWorkspace, Name: "sign", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE,
+		Collection: testWorkspace, Name: "sign", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE,
 	}))
 	if err != nil {
 		t.Fatalf("CreateScript middleware: %v", err)
 	}
-	scripts := resp.Msg.GetWorkspace().GetScripts()
+	scripts := resp.Msg.GetCollection().GetScripts()
 	if len(scripts) != 2 || scripts[0].GetName() != "uuid" || scripts[0].GetKind() != grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR {
 		t.Fatalf("scripts = %+v, want [uuid(gen) sign(mw)]", scripts)
 	}
 
 	if _, err := w.CreateScript(ctx, connect.NewRequest(&grpcviewv1.CreateScriptRequest{
-		WorkspaceName: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
+		Collection: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("duplicate create code = %v, want FailedPrecondition", connect.CodeOf(err))
 	}
@@ -46,23 +46,23 @@ func TestScriptCRUDHandlers(t *testing.T) {
 	src := `export default () => crypto.randomUUID?.() ?? "x"`
 	newName := "uuidv4"
 	upd, err := w.UpdateScript(ctx, connect.NewRequest(&grpcviewv1.UpdateScriptRequest{
-		WorkspaceName: testWorkspace, Name: "uuid", Source: &src, NewName: &newName,
+		Collection: testWorkspace, Name: "uuid", Source: &src, NewName: &newName,
 	}))
 	if err != nil {
 		t.Fatalf("UpdateScript: %v", err)
 	}
-	renamed := scriptByName(upd.Msg.GetWorkspace().GetScripts(), "uuidv4")
+	renamed := scriptByName(upd.Msg.GetCollection().GetScripts(), "uuidv4")
 	if renamed == nil || renamed.GetSource() != src {
-		t.Fatalf("rename+source not applied: %+v", upd.Msg.GetWorkspace().GetScripts())
+		t.Fatalf("rename+source not applied: %+v", upd.Msg.GetCollection().GetScripts())
 	}
 
 	del, err := w.DeleteScript(ctx, connect.NewRequest(&grpcviewv1.DeleteScriptRequest{
-		WorkspaceName: testWorkspace, Name: "sign",
+		Collection: testWorkspace, Name: "sign",
 	}))
 	if err != nil {
 		t.Fatalf("DeleteScript: %v", err)
 	}
-	remaining := del.Msg.GetWorkspace().GetScripts()
+	remaining := del.Msg.GetCollection().GetScripts()
 	if len(remaining) != 1 || remaining[0].GetName() != "uuidv4" {
 		t.Fatalf("after delete, scripts = %+v, want [uuidv4]", remaining)
 	}

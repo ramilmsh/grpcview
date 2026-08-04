@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Request_Response, ScriptKind, Server, Workspace } from "./workspace_pb";
+import type { Collection, Request_Response, ScriptKind, Server } from "./workspace_pb";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -16,9 +16,9 @@ export declare const file_proto_grpcview_v1_service: GenFile;
  */
 export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescriptorSourceRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from oneof grpcview.v1.AddDescriptorSourceRequest.source
@@ -56,9 +56,9 @@ export declare const AddDescriptorSourceRequestSchema: GenMessage<AddDescriptorS
  */
 export declare type AddDescriptorSourceResponse = Message<"grpcview.v1.AddDescriptorSourceResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -72,9 +72,9 @@ export declare const AddDescriptorSourceResponseSchema: GenMessage<AddDescriptor
  */
 export declare type RemoveDescriptorSourceRequest = Message<"grpcview.v1.RemoveDescriptorSourceRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: string id = 2;
@@ -93,9 +93,9 @@ export declare const RemoveDescriptorSourceRequestSchema: GenMessage<RemoveDescr
  */
 export declare type RemoveDescriptorSourceResponse = Message<"grpcview.v1.RemoveDescriptorSourceResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -109,9 +109,9 @@ export declare const RemoveDescriptorSourceResponseSchema: GenMessage<RemoveDesc
  */
 export declare type RefreshDescriptorSourceRequest = Message<"grpcview.v1.RefreshDescriptorSourceRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: string id = 2;
@@ -130,9 +130,9 @@ export declare const RefreshDescriptorSourceRequestSchema: GenMessage<RefreshDes
  */
 export declare type RefreshDescriptorSourceResponse = Message<"grpcview.v1.RefreshDescriptorSourceResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -146,9 +146,9 @@ export declare const RefreshDescriptorSourceResponseSchema: GenMessage<RefreshDe
  */
 export declare type ReorderDescriptorSourcesRequest = Message<"grpcview.v1.ReorderDescriptorSourcesRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * Every DescriptorSource.id in priority order — earlier wins; must be a permutation.
@@ -169,9 +169,9 @@ export declare const ReorderDescriptorSourcesRequestSchema: GenMessage<ReorderDe
  */
 export declare type ReorderDescriptorSourcesResponse = Message<"grpcview.v1.ReorderDescriptorSourcesResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -185,9 +185,9 @@ export declare const ReorderDescriptorSourcesResponseSchema: GenMessage<ReorderD
  */
 export declare type CreateFolderRequest = Message<"grpcview.v1.CreateFolderRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: repeated string path = 2;
@@ -211,9 +211,9 @@ export declare const CreateFolderRequestSchema: GenMessage<CreateFolderRequest>;
  */
 export declare type CreateFolderResponse = Message<"grpcview.v1.CreateFolderResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -227,9 +227,9 @@ export declare const CreateFolderResponseSchema: GenMessage<CreateFolderResponse
  */
 export declare type CreateRequestRequest = Message<"grpcview.v1.CreateRequestRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: repeated string path = 2;
@@ -263,9 +263,9 @@ export declare const CreateRequestRequestSchema: GenMessage<CreateRequestRequest
  */
 export declare type CreateRequestResponse = Message<"grpcview.v1.CreateRequestResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -279,9 +279,9 @@ export declare const CreateRequestResponseSchema: GenMessage<CreateRequestRespon
  */
 export declare type DeleteRequestRequest = Message<"grpcview.v1.DeleteRequestRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: repeated string path = 2;
@@ -305,9 +305,9 @@ export declare const DeleteRequestRequestSchema: GenMessage<DeleteRequestRequest
  */
 export declare type DeleteRequestResponse = Message<"grpcview.v1.DeleteRequestResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -321,9 +321,9 @@ export declare const DeleteRequestResponseSchema: GenMessage<DeleteRequestRespon
  */
 export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: repeated string path = 2;
@@ -398,9 +398,9 @@ export declare const UpdateRequestRequestSchema: GenMessage<UpdateRequestRequest
  */
 export declare type UpdateRequestResponse = Message<"grpcview.v1.UpdateRequestResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -414,9 +414,9 @@ export declare const UpdateRequestResponseSchema: GenMessage<UpdateRequestRespon
  */
 export declare type UpdateFolderRequest = Message<"grpcview.v1.UpdateFolderRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: repeated string path = 2;
@@ -452,9 +452,9 @@ export declare const UpdateFolderRequestSchema: GenMessage<UpdateFolderRequest>;
  */
 export declare type UpdateFolderResponse = Message<"grpcview.v1.UpdateFolderResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -470,9 +470,9 @@ export declare const UpdateFolderResponseSchema: GenMessage<UpdateFolderResponse
  */
 export declare type MoveItemRequest = Message<"grpcview.v1.MoveItemRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: repeated string path = 2;
@@ -510,9 +510,9 @@ export declare const MoveItemRequestSchema: GenMessage<MoveItemRequest>;
  */
 export declare type MoveItemResponse = Message<"grpcview.v1.MoveItemResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -526,9 +526,9 @@ export declare const MoveItemResponseSchema: GenMessage<MoveItemResponse>;
  */
 export declare type GetRequest = Message<"grpcview.v1.GetRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 };
 
 /**
@@ -542,9 +542,9 @@ export declare const GetRequestSchema: GenMessage<GetRequest>;
  */
 export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -561,9 +561,9 @@ export declare const GetResponseSchema: GenMessage<GetResponse>;
  */
 export declare type InvokeSpec = Message<"grpcview.v1.InvokeSpec"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * Parent-folder display-name path, outermost first; empty at the top level.
@@ -593,7 +593,7 @@ export declare type InvokeSpec = Message<"grpcview.v1.InvokeSpec"> & {
   metadata?: JsonObject | undefined;
 
   /**
-   * Unset defaults to the workspace's first reflection source.
+   * Unset defaults to the collection's first reflection source.
    *
    * @generated from field: optional grpcview.v1.Server target = 7;
    */
@@ -716,9 +716,9 @@ export declare const InvokeStreamingResponseSchema: GenMessage<InvokeStreamingRe
  */
 export declare type SavedInvokeSpec = Message<"grpcview.v1.SavedInvokeSpec"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * Parent-folder display-name path, outermost first; empty at the top level.
@@ -877,9 +877,9 @@ export declare const ResolvedRequestSchema: GenMessage<ResolvedRequest>;
  */
 export declare type DescribeMethodRequest = Message<"grpcview.v1.DescribeMethodRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * Fully qualified, e.g. "echo.v1.EchoService"; method is its own name, "Unary".
@@ -947,9 +947,9 @@ export declare const DescribeMethodResponseSchema: GenMessage<DescribeMethodResp
  */
 export declare type CreateScriptRequest = Message<"grpcview.v1.CreateScriptRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: string name = 2;
@@ -973,9 +973,9 @@ export declare const CreateScriptRequestSchema: GenMessage<CreateScriptRequest>;
  */
 export declare type CreateScriptResponse = Message<"grpcview.v1.CreateScriptResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -991,9 +991,9 @@ export declare const CreateScriptResponseSchema: GenMessage<CreateScriptResponse
  */
 export declare type UpdateScriptRequest = Message<"grpcview.v1.UpdateScriptRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: string name = 2;
@@ -1022,9 +1022,9 @@ export declare const UpdateScriptRequestSchema: GenMessage<UpdateScriptRequest>;
  */
 export declare type UpdateScriptResponse = Message<"grpcview.v1.UpdateScriptResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -1038,9 +1038,9 @@ export declare const UpdateScriptResponseSchema: GenMessage<UpdateScriptResponse
  */
 export declare type DeleteScriptRequest = Message<"grpcview.v1.DeleteScriptRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: string name = 2;
@@ -1059,9 +1059,9 @@ export declare const DeleteScriptRequestSchema: GenMessage<DeleteScriptRequest>;
  */
 export declare type DeleteScriptResponse = Message<"grpcview.v1.DeleteScriptResponse"> & {
   /**
-   * @generated from field: grpcview.v1.Workspace workspace = 1;
+   * @generated from field: grpcview.v1.Collection collection = 1;
    */
-  workspace?: Workspace | undefined;
+  collection?: Collection | undefined;
 };
 
 /**
@@ -1075,9 +1075,9 @@ export declare const DeleteScriptResponseSchema: GenMessage<DeleteScriptResponse
  */
 export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> & {
   /**
-   * @generated from field: string workspace_name = 1;
+   * @generated from field: string collection = 1;
    */
-  workspaceName: string;
+  collection: string;
 
   /**
    * @generated from field: string source = 2;
@@ -1331,7 +1331,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof DescribeMethodResponseSchema;
   },
   /**
-   * RunScript uses a fresh isolated instance: no capabilities, no workspace state.
+   * RunScript uses a fresh isolated instance: no capabilities, no collection state.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.RunScript
    */

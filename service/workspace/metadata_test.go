@@ -85,7 +85,7 @@ func TestInvokeMetadataScript(t *testing.T) {
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName:  testWorkspace,
+			Collection:     testWorkspace,
 			Service:        echoService,
 			Method:         "Unary",
 			MetadataScript: `export default () => ({ authorization: [bearer()], "x-scope": ["read", "write"] })`,

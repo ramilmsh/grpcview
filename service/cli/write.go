@@ -34,12 +34,12 @@ func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn fun
 	return fn(ctx, sess)
 }
 
-func workspaceSnapshot(ctx context.Context, sess session, g *globalFlags) (*grpcviewv1.Workspace, error) {
-	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: g.Workspace}))
+func workspaceSnapshot(ctx context.Context, sess session, g *globalFlags) (*grpcviewv1.Collection, error) {
+	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Workspace, err)
+		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Collection, err)
 	}
-	return resp.Msg.GetWorkspace(), nil
+	return resp.Msg.GetCollection(), nil
 }
 
 func splitItemPath(arg string) ([]string, string, error) {
@@ -110,9 +110,9 @@ func runFolderCreate(ctx context.Context, g *globalFlags, open clientFactory, ar
 	}
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		_, err := sess.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-			WorkspaceName: g.Workspace,
-			Path:          parent,
-			ItemName:      name,
+			Collection: g.Collection,
+			Path:       parent,
+			ItemName:   name,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to create the folder %q: %w", arg, err)
@@ -197,11 +197,11 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		_, err := sess.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
-			WorkspaceName: g.Workspace,
-			Path:          parent,
-			ItemName:      name,
-			Service:       f.service,
-			Method:        f.method,
+			Collection: g.Collection,
+			Path:       parent,
+			ItemName:   name,
+			Service:    f.service,
+			Method:     f.method,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to create the request %q: %w", arg, err)
@@ -211,10 +211,10 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 		}
 
 		_, err = sess.UpdateRequest(ctx, connect.NewRequest(&grpcviewv1.UpdateRequestRequest{
-			WorkspaceName: g.Workspace,
-			Path:          parent,
-			ItemName:      name,
-			DraftBody:     proto.String(string(raw)),
+			Collection: g.Collection,
+			Path:       parent,
+			ItemName:   name,
+			DraftBody:  proto.String(string(raw)),
 		}))
 		if err != nil {
 			return fmt.Errorf("created the request %q, but failed to seed its body: %w", arg, err)
@@ -252,9 +252,9 @@ func runRequestRm(ctx context.Context, g *globalFlags, open clientFactory, arg s
 	}
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		_, err := sess.DeleteRequest(ctx, connect.NewRequest(&grpcviewv1.DeleteRequestRequest{
-			WorkspaceName: g.Workspace,
-			Path:          parent,
-			ItemName:      name,
+			Collection: g.Collection,
+			Path:       parent,
+			ItemName:   name,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to delete %q: %w", arg, err)
@@ -308,11 +308,11 @@ func runRequestMv(ctx context.Context, g *globalFlags, open clientFactory, arg, 
 	}
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		_, err := sess.MoveItem(ctx, connect.NewRequest(&grpcviewv1.MoveItemRequest{
-			WorkspaceName: g.Workspace,
-			Path:          parent,
-			ItemName:      name,
-			NewPath:       newPath,
-			Before:        before,
+			Collection: g.Collection,
+			Path:       parent,
+			ItemName:   name,
+			NewPath:    newPath,
+			Before:     before,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to move %q: %w", arg, err)
@@ -349,7 +349,7 @@ func newScriptLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comman
 		Short: "List the saved scripts, one per line: name and kind",
 		Long: "List every saved script, one per line: its display name and its kind.\n\n" +
 			"The source is deliberately not listed — a listing that printed whole modules\n" +
-			"could not be one line per script, and `grpcview get | jq .workspace.scripts`\n" +
+			"could not be one line per script, and `grpcview get | jq .collection.scripts`\n" +
 			"is the form that carries everything.\n\n" +
 			"Scripts appear in the collection's own order; ls does not sort.",
 		Args:          cobra.NoArgs,
@@ -360,7 +360,7 @@ func newScriptLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comman
 			if err != nil {
 				return err
 			}
-			return renderScripts(s.Out, snapshot.GetWorkspace().GetScripts())
+			return renderScripts(s.Out, snapshot.GetCollection().GetScripts())
 		},
 	}
 }
@@ -482,7 +482,7 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			if script == nil {
 				return fmt.Errorf(
 					"unknown script %q: workspace %q has %d saved script(s), and `grpcview script ls` lists them",
-					arg, g.Workspace, len(ws.GetScripts()))
+					arg, g.Collection, len(ws.GetScripts()))
 			}
 			source = script.GetSource()
 			runKind = script.GetKind().Enum()
@@ -490,9 +490,9 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 		}
 
 		resp, err := sess.RunScript(ctx, connect.NewRequest(&grpcviewv1.RunScriptRequest{
-			WorkspaceName: g.Workspace,
-			Source:        source,
-			Kind:          runKind,
+			Collection: g.Collection,
+			Source:     source,
+			Kind:       runKind,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to run %s: %w", label, err)

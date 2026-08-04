@@ -53,7 +53,7 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 	if err != nil {
 		return err
 	}
-	ws := snapshot.GetWorkspace()
+	ws := snapshot.GetCollection()
 
 	root, prefix, err := lsRoot(ws, path)
 	if err != nil {
@@ -63,7 +63,7 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 	if output == outputJSON {
 		line, err := marshalOneLine(root)
 		if err != nil {
-			return fmt.Errorf("failed to render workspace %q: %w", g.Workspace, err)
+			return fmt.Errorf("failed to render workspace %q: %w", g.Collection, err)
 		}
 		return writeLine(s.Out, line)
 	}
@@ -72,7 +72,7 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 }
 
 // lsRoot picks the item to list and the prefix that keeps a subtree listing pasteable.
-func lsRoot(ws *grpcviewv1.Workspace, path string) (*grpcviewv1.Item, string, error) {
+func lsRoot(ws *grpcviewv1.Collection, path string) (*grpcviewv1.Item, string, error) {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		return ws.GetItem(), "", nil

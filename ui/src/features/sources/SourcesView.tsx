@@ -12,7 +12,7 @@ import {
 import { Button, IconButton } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
 import { Dialog } from "@/components/ui/Dialog";
-import { useWorkspace, useWorkspaceMutations, hostLabel, WORKSPACE_NAME } from "@/lib/workspace-query";
+import { useWorkspace, useWorkspaceMutations, hostLabel, COLLECTION_ID } from "@/lib/workspace-query";
 import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
 import { AddSourceModal } from "./AddSourceModal";
 
@@ -55,7 +55,7 @@ export function SourcesView() {
   const onAdd = (address: string, tls: boolean) => {
     addDescriptorSource.mutate(
       {
-        workspaceName: WORKSPACE_NAME,
+        collection: COLLECTION_ID,
         source: { case: "reflection", value: { address, tls: tls ? {} : undefined } },
       },
       { onSuccess: () => setModalOpen(false) }
@@ -64,7 +64,7 @@ export function SourcesView() {
 
   const onAddDescriptorSet = (bytes: Uint8Array, fileName: string) => {
     addDescriptorSource.mutate(
-      { workspaceName: WORKSPACE_NAME, source: { case: "descriptorSet", value: bytes }, fileName },
+      { collection: COLLECTION_ID, source: { case: "descriptorSet", value: bytes }, fileName },
       { onSuccess: () => setModalOpen(false) }
     );
   };
@@ -72,7 +72,7 @@ export function SourcesView() {
   const doRemove = () => {
     if (!confirm) return;
     removeDescriptorSource.mutate(
-      { workspaceName: WORKSPACE_NAME, id: confirm.id },
+      { collection: COLLECTION_ID, id: confirm.id },
       { onSuccess: () => setConfirm(null) }
     );
   };
@@ -83,7 +83,7 @@ export function SourcesView() {
     const ids = sources.map((s) => s.id);
     const [id] = ids.splice(from, 1);
     ids.splice(to, 0, id);
-    reorderDescriptorSources.mutate({ workspaceName: WORKSPACE_NAME, ids });
+    reorderDescriptorSources.mutate({ collection: COLLECTION_ID, ids });
   };
 
   const busy =
@@ -224,7 +224,7 @@ export function SourcesView() {
                     }
                     aria-label={`Refresh ${sourceLabel(s)}`}
                     onClick={() =>
-                      refreshDescriptorSource.mutate({ workspaceName: WORKSPACE_NAME, id: s.id })
+                      refreshDescriptorSource.mutate({ collection: COLLECTION_ID, id: s.id })
                     }
                     disabled={busy}
                   >

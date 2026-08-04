@@ -11,7 +11,7 @@ import {
   useRefreshWorkspace,
   sourceForService,
   schemaSourceFor,
-  WORKSPACE_NAME,
+  COLLECTION_ID,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { findByKey, keyOf, methodKind, prettyBody, resolveMethod } from "@/lib/format";
@@ -130,7 +130,7 @@ export function RequestWorkspace() {
     const timerKey = `${key}:${slot}`;
     window.clearTimeout(timers.current[timerKey]);
     timers.current[timerKey] = window.setTimeout(() => {
-      updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, ...fields });
+      updateRequest.mutate({ collection: COLLECTION_ID, path, itemName, ...fields });
     }, DEBOUNCE_MS);
   };
 
@@ -152,7 +152,7 @@ export function RequestWorkspace() {
   };
 
   const onChangeMethod = (service: string, method: string) => {
-    updateRequest.mutate({ workspaceName: WORKSPACE_NAME, path, itemName, service, method });
+    updateRequest.mutate({ collection: COLLECTION_ID, path, itemName, service, method });
   };
 
   const onTargetChange = (t: Server) => {
@@ -164,7 +164,7 @@ export function RequestWorkspace() {
   // cache flows the fresh request.middleware back down, so there is no local copy.
   const onMiddlewareChange = (next: string[]) => {
     updateRequest.mutate({
-      workspaceName: WORKSPACE_NAME,
+      collection: COLLECTION_ID,
       path,
       itemName,
       updateMiddleware: true,
@@ -176,7 +176,7 @@ export function RequestWorkspace() {
     const next = nextName.trim();
     if (!next || next === itemName) return;
     updateRequest.mutate(
-      { workspaceName: WORKSPACE_NAME, path, itemName, name: next },
+      { collection: COLLECTION_ID, path, itemName, name: next },
       { onSuccess: () => moveSubtree(key, keyOf(path, next), next) }
     );
   };
@@ -189,7 +189,7 @@ export function RequestWorkspace() {
       invokeMut.mutate(
         {
           spec: {
-            workspaceName: WORKSPACE_NAME,
+            collection: COLLECTION_ID,
             path,
             itemName,
             service: request.service,
@@ -218,7 +218,7 @@ export function RequestWorkspace() {
     const messagesToSend = (kind === "ss" ? [b] : msgs).map(migrateBodyToTs);
     const req = {
       spec: {
-        workspaceName: WORKSPACE_NAME,
+        collection: COLLECTION_ID,
         path,
         itemName,
         service: request.service,

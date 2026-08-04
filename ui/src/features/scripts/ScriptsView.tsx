@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { BracketsCurly, Plus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
-import { useWorkspace, useCreateScript, WORKSPACE_NAME } from "@/lib/workspace-query";
+import { useWorkspace, useCreateScript, COLLECTION_ID } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import type { ScriptKind } from "@grpcview/v1/workspace_pb";
 import { ScriptSidebar } from "./ScriptSidebar";
@@ -23,7 +23,7 @@ export function ScriptsView() {
 
   const onCreate = (name: string, kind: ScriptKind) => {
     createScript.mutate(
-      { workspaceName: WORKSPACE_NAME, name, kind },
+      { collection: COLLECTION_ID, name, kind },
       {
         onSuccess: () => {
           selectScript(name);

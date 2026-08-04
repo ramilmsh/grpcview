@@ -18,14 +18,14 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// Load assembles the whole collection as a wire Workspace.
-func (c *Collection) Load(ctx context.Context) (*grpcviewv1.Workspace, error) {
+// Load assembles the whole collection as a wire Collection.
+func (c *Collection) Load(ctx context.Context) (*grpcviewv1.Collection, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.load(ctx)
 }
 
-func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
+func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 	col, err := c.readCollection()
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrNotFound
@@ -55,7 +55,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Workspace, error) {
 	}
 
 	name := cmp.Or(col.GetName(), c.name)
-	return &grpcviewv1.Workspace{
+	return &grpcviewv1.Collection{
 		Name: name,
 		Item: &grpcviewv1.Item{
 			Name:    name,
@@ -80,11 +80,11 @@ func overlayResolved(sources, cached []*grpcviewv1.DescriptorSource) {
 	}
 }
 
-// Merged returns the resolved-schema cache as a bare Workspace: the merged descriptor set, the
+// Merged returns the resolved-schema cache as a bare Collection: the merged descriptor set, the
 // services derived from it, and each source's derived summary. It reads one file and never walks
 // the request tree, so the invoke path can consult the definitions without paying for a Load.
-// An absent cache is not an error — it yields a zero Workspace, which reads as "no definitions".
-func (c *Collection) Merged(_ context.Context) (*grpcviewv1.Workspace, error) {
+// An absent cache is not an error — it yields a zero Collection, which reads as "no definitions".
+func (c *Collection) Merged(_ context.Context) (*grpcviewv1.Collection, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.readMergedCache()
@@ -767,7 +767,7 @@ func (c *Collection) writeMergedCache(sources []*grpcviewv1.DescriptorSource, se
 	if err := os.MkdirAll(filepath.Dir(c.servicesCachePath()), 0o755); err != nil {
 		return err
 	}
-	wrapper := &grpcviewv1.Workspace{Sources: sources, Services: services, DescriptorSet: descriptorSet}
+	wrapper := &grpcviewv1.Collection{Sources: sources, Services: services, DescriptorSet: descriptorSet}
 	data, err := protojson.MarshalOptions{Multiline: true, Indent: "  "}.Marshal(wrapper)
 	if err != nil {
 		return fmt.Errorf("marshal services cache: %w", err)
@@ -775,8 +775,8 @@ func (c *Collection) writeMergedCache(sources []*grpcviewv1.DescriptorSource, se
 	return writeFileAtomic(c.servicesCachePath(), append(data, '\n'), 0o644)
 }
 
-func (c *Collection) readMergedCache() (*grpcviewv1.Workspace, error) {
-	wrapper := &grpcviewv1.Workspace{}
+func (c *Collection) readMergedCache() (*grpcviewv1.Collection, error) {
+	wrapper := &grpcviewv1.Collection{}
 	data, err := os.ReadFile(c.servicesCachePath())
 	if errors.Is(err, os.ErrNotExist) {
 		return wrapper, nil

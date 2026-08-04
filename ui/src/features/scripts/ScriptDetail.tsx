@@ -17,7 +17,7 @@ import {
   useUpdateScript,
   useDeleteScript,
   useRunScript,
-  WORKSPACE_NAME,
+  COLLECTION_ID,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
@@ -82,22 +82,22 @@ function useScriptDraft(script: Script): ScriptDraft {
 
   const save = () => {
     if (!dirty || updateScript.isPending) return;
-    updateScript.mutate({ workspaceName: WORKSPACE_NAME, name: script.name, source });
+    updateScript.mutate({ collection: COLLECTION_ID, name: script.name, source });
   };
   const testRun = () => {
     if (!source.trim() || runScript.isPending) return;
     setOutputOpen(true);
-    runScript.mutate({ workspaceName: WORKSPACE_NAME, source, kind: script.kind });
+    runScript.mutate({ collection: COLLECTION_ID, source, kind: script.kind });
   };
   const rename = (next: string) => {
     updateScript.mutate(
-      { workspaceName: WORKSPACE_NAME, name: script.name, newName: next },
+      { collection: COLLECTION_ID, name: script.name, newName: next },
       { onSuccess: () => renameScript(script.name, next) }
     );
   };
   const doDelete = () => {
     deleteScript.mutate(
-      { workspaceName: WORKSPACE_NAME, name: script.name },
+      { collection: COLLECTION_ID, name: script.name },
       {
         onSuccess: () => {
           forgetScript(script.name);

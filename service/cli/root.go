@@ -53,15 +53,15 @@ func exitCode(err error) int {
 }
 
 type globalFlags struct {
-	Workspace string
-	Server    string
-	Timeout   time.Duration
+	Collection string
+	Server     string
+	Timeout    time.Duration
 }
 
 func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	g := &globalFlags{}
 	f := cmd.PersistentFlags()
-	f.StringVar(&g.Workspace, "workspace", "default", "workspace (collection) to operate on")
+	f.StringVar(&g.Collection, "collection", "default", "collection to operate on")
 	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
 	f.DurationVar(&g.Timeout, "timeout", 30*time.Second, "per-request timeout")
 	return g
@@ -84,7 +84,7 @@ func newRootCmd(
 	root := &cobra.Command{
 		Use:   "grpcview",
 		Short: "grpcview — a gRPC request client",
-		Long: "grpcview serves its own UI and API, and exposes the same workspace as\n" +
+		Long: "grpcview serves its own UI and API, and exposes the same collection as\n" +
 			"command-line verbs. Invoked with no subcommand, it serves.",
 		// ArbitraryArgs alone would make `grpcview typoe` serve the UI, hence RunE's check.
 		Args:          cobra.ArbitraryArgs,

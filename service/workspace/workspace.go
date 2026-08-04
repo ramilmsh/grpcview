@@ -69,7 +69,7 @@ func toConnectError(err error) error {
 }
 
 func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error) {
-	coll, err := w.store.Open(ctx, request.Msg.GetWorkspaceName())
+	coll, err := w.store.Open(ctx, request.Msg.GetCollection())
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +85,13 @@ func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.
 		return nil, toConnectError(err)
 	}
 
-	return connect.NewResponse(&grpcviewv1.GetResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: ws}), nil
 }
 
 // AddDescriptorSource adds (or, when the id already exists, refreshes in place) a descriptor
 // source at LOWEST priority.
 func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
-	coll, ws, err := w.openWithSources(ctx, request.Msg.GetWorkspaceName())
+	coll, ws, err := w.openWithSources(ctx, request.Msg.GetCollection())
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +141,12 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Workspace: reloaded}), nil
+	return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Collection: reloaded}), nil
 }
 
 // RefreshDescriptorSource re-resolves exactly one source and re-derives the merged view.
 func (w Workspace) RefreshDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.RefreshDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RefreshDescriptorSourceResponse], error) {
-	coll, ws, err := w.openWithSources(ctx, request.Msg.GetWorkspaceName())
+	coll, ws, err := w.openWithSources(ctx, request.Msg.GetCollection())
 	if err != nil {
 		return nil, err
 	}
@@ -167,13 +167,13 @@ func (w Workspace) RefreshDescriptorSource(ctx context.Context, request *connect
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	return connect.NewResponse(&grpcviewv1.RefreshDescriptorSourceResponse{Workspace: reloaded}), nil
+	return connect.NewResponse(&grpcviewv1.RefreshDescriptorSourceResponse{Collection: reloaded}), nil
 }
 
 // ReorderDescriptorSources sets the source priority order and re-derives the merged view from
 // the cached resolves — no network.
 func (w Workspace) ReorderDescriptorSources(ctx context.Context, request *connect.Request[grpcviewv1.ReorderDescriptorSourcesRequest]) (*connect.Response[grpcviewv1.ReorderDescriptorSourcesResponse], error) {
-	coll, ws, err := w.openWithSources(ctx, request.Msg.GetWorkspaceName())
+	coll, ws, err := w.openWithSources(ctx, request.Msg.GetCollection())
 	if err != nil {
 		return nil, err
 	}
@@ -188,10 +188,10 @@ func (w Workspace) ReorderDescriptorSources(ctx context.Context, request *connec
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Workspace: reloaded}), nil
+	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Collection: reloaded}), nil
 }
 
-func (w Workspace) openWithSources(ctx context.Context, name string) (*store.Collection, *grpcviewv1.Workspace, error) {
+func (w Workspace) openWithSources(ctx context.Context, name string) (*store.Collection, *grpcviewv1.Collection, error) {
 	coll, err := w.store.Open(ctx, name)
 	if err != nil {
 		return nil, nil, err
@@ -209,7 +209,7 @@ func (w Workspace) openWithSources(ctx context.Context, name string) (*store.Col
 // RemoveDescriptorSource drops one source and re-derives the merged view from the cached
 // resolves of those that remain — no network.
 func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.RemoveDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RemoveDescriptorSourceResponse], error) {
-	coll, ws, err := w.openWithSources(ctx, request.Msg.GetWorkspaceName())
+	coll, ws, err := w.openWithSources(ctx, request.Msg.GetCollection())
 	if err != nil {
 		return nil, err
 	}
@@ -226,10 +226,10 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	return connect.NewResponse(&grpcviewv1.RemoveDescriptorSourceResponse{Workspace: reloaded}), nil
+	return connect.NewResponse(&grpcviewv1.RemoveDescriptorSourceResponse{Collection: reloaded}), nil
 }
 
-func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Collection) error) (*grpcviewv1.Workspace, error) {
+func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Collection) error) (*grpcviewv1.Collection, error) {
 	coll, err := w.store.Open(ctx, name)
 	if err != nil {
 		return nil, err
@@ -248,34 +248,34 @@ func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Colle
 }
 
 func (w Workspace) CreateFolder(ctx context.Context, request *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.CreateFolder(ctx, request.Msg.GetPath(), request.Msg.GetItemName())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.CreateFolderResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.CreateFolderResponse{Collection: ws}), nil
 }
 
 func (w Workspace) CreateRequest(ctx context.Context, request *connect.Request[grpcviewv1.CreateRequestRequest]) (*connect.Response[grpcviewv1.CreateRequestResponse], error) {
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.CreateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), request.Msg.GetService(), request.Msg.GetMethod())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{Collection: ws}), nil
 }
 
 // DeleteRequest removes any item — folder or request — by name.
 func (w Workspace) DeleteRequest(ctx context.Context, request *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error) {
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.Delete(ctx, request.Msg.GetPath(), request.Msg.GetItemName())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.DeleteRequestResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.DeleteRequestResponse{Collection: ws}), nil
 }
 
 func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error) {
@@ -290,13 +290,13 @@ func (w Workspace) UpdateRequest(ctx context.Context, request *connect.Request[g
 		Target:              request.Msg.GetTarget(),
 		SetTarget:           request.Msg.GetUpdateTarget(),
 	}
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.UpdateRequest(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Collection: ws}), nil
 }
 
 func (w Workspace) UpdateFolder(ctx context.Context, request *connect.Request[grpcviewv1.UpdateFolderRequest]) (*connect.Response[grpcviewv1.UpdateFolderResponse], error) {
@@ -304,35 +304,35 @@ func (w Workspace) UpdateFolder(ctx context.Context, request *connect.Request[gr
 		Name:                request.Msg.Name,
 		DraftMetadataScript: request.Msg.DraftMetadataScript,
 	}
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.UpdateFolder(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), patch)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.UpdateFolderResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.UpdateFolderResponse{Collection: ws}), nil
 }
 
 // MoveItem passes `before` as the raw *string: GetBefore() would collapse "unset" (append at
 // the end) into "" (insert before an item literally named "").
 func (w Workspace) MoveItem(ctx context.Context, request *connect.Request[grpcviewv1.MoveItemRequest]) (*connect.Response[grpcviewv1.MoveItemResponse], error) {
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.Move(ctx, request.Msg.GetPath(), request.Msg.GetItemName(), request.Msg.GetNewPath(), request.Msg.Before)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.MoveItemResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.MoveItemResponse{Collection: ws}), nil
 }
 
 func (w Workspace) CreateScript(ctx context.Context, request *connect.Request[grpcviewv1.CreateScriptRequest]) (*connect.Response[grpcviewv1.CreateScriptResponse], error) {
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.CreateScript(ctx, request.Msg.GetName(), request.Msg.GetKind())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.CreateScriptResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.CreateScriptResponse{Collection: ws}), nil
 }
 
 func (w Workspace) UpdateScript(ctx context.Context, request *connect.Request[grpcviewv1.UpdateScriptRequest]) (*connect.Response[grpcviewv1.UpdateScriptResponse], error) {
@@ -340,21 +340,21 @@ func (w Workspace) UpdateScript(ctx context.Context, request *connect.Request[gr
 		Name:   request.Msg.NewName,
 		Source: request.Msg.Source,
 	}
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.UpdateScript(ctx, request.Msg.GetName(), patch)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.UpdateScriptResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.UpdateScriptResponse{Collection: ws}), nil
 }
 
 func (w Workspace) DeleteScript(ctx context.Context, request *connect.Request[grpcviewv1.DeleteScriptRequest]) (*connect.Response[grpcviewv1.DeleteScriptResponse], error) {
-	ws, err := w.mutate(ctx, request.Msg.GetWorkspaceName(), func(coll *store.Collection) error {
+	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
 		return coll.DeleteScript(ctx, request.Msg.GetName())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.DeleteScriptResponse{Workspace: ws}), nil
+	return connect.NewResponse(&grpcviewv1.DeleteScriptResponse{Collection: ws}), nil
 }

@@ -16,9 +16,9 @@ import (
 func describeMethodCall(t *testing.T, w Workspace, ctx context.Context, service, method string) *grpcviewv1.DescribeMethodResponse {
 	t.Helper()
 	resp, err := w.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
-		WorkspaceName: testWorkspace,
-		Service:       service,
-		Method:        method,
+		Collection: testWorkspace,
+		Service:    service,
+		Method:     method,
 	}))
 	if err != nil {
 		t.Fatalf("DescribeMethod(%s/%s): %v", service, method, err)
@@ -61,7 +61,7 @@ func fieldNames(md *desc.MessageDescriptor) []string {
 	return out
 }
 
-func wonBy(t *testing.T, ws *grpcviewv1.Workspace, service string) string {
+func wonBy(t *testing.T, ws *grpcviewv1.Collection, service string) string {
 	t.Helper()
 	for _, src := range ws.GetSources() {
 		for _, name := range src.GetResolved().GetWonServiceNames() {
@@ -74,7 +74,7 @@ func wonBy(t *testing.T, ws *grpcviewv1.Workspace, service string) string {
 	return ""
 }
 
-func describeEchoWorkspace(t *testing.T, ctx context.Context) (Workspace, *grpcviewv1.Workspace) {
+func describeEchoWorkspace(t *testing.T, ctx context.Context) (Workspace, *grpcviewv1.Collection) {
 	t.Helper()
 	w := newTestWorkspace(t)
 	ensureWorkspace(t, w, ctx)
@@ -83,7 +83,7 @@ func describeEchoWorkspace(t *testing.T, ctx context.Context) (Workspace, *grpcv
 	if err != nil {
 		t.Fatalf("AddDescriptorSource (echo reflection): %v", err)
 	}
-	return w, resp.Msg.GetWorkspace()
+	return w, resp.Msg.GetCollection()
 }
 
 func TestDescribeMethodRendersEchoUnary(t *testing.T) {
@@ -177,7 +177,7 @@ func TestDescribeMethodPullsInReferencedTypes(t *testing.T) {
 		}
 	}
 
-	if want := wonBy(t, addResp.Msg.GetWorkspace(), service); got.GetSourceId() != want {
+	if want := wonBy(t, addResp.Msg.GetCollection(), service); got.GetSourceId() != want {
 		t.Errorf("source_id = %q, want %q", got.GetSourceId(), want)
 	}
 	if got.GetSourceId() != "upload:"+testUploadName {
@@ -198,7 +198,7 @@ func TestDescribeMethodSourceIsThePriorityWinner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddDescriptorSource (reflection): %v", err)
 	}
-	ws := addResp.Msg.GetWorkspace()
+	ws := addResp.Msg.GetCollection()
 	if len(ws.GetSources()) != 2 {
 		t.Fatalf("want 2 sources, got %d", len(ws.GetSources()))
 	}
@@ -217,18 +217,18 @@ func TestDescribeMethodNotFound(t *testing.T) {
 	w, _ := describeEchoWorkspace(t, ctx)
 
 	_, err := w.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
-		WorkspaceName: testWorkspace,
-		Service:       "echo.v1.NoSuchService",
-		Method:        "Unary",
+		Collection: testWorkspace,
+		Service:    "echo.v1.NoSuchService",
+		Method:     "Unary",
 	}))
 	if code := connect.CodeOf(err); code != connect.CodeNotFound {
 		t.Fatalf("unknown service: code = %v (%v), want NotFound", code, err)
 	}
 
 	_, err = w.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        "Unray",
+		Collection: testWorkspace,
+		Service:    echoService,
+		Method:     "Unray",
 	}))
 	if code := connect.CodeOf(err); code != connect.CodeNotFound {
 		t.Fatalf("unknown method: code = %v (%v), want NotFound", code, err)
@@ -244,9 +244,9 @@ func TestDescribeMethodWithoutResolvedSource(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 
 	_, err := w.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
-		WorkspaceName: testWorkspace,
-		Service:       echoService,
-		Method:        "Unary",
+		Collection: testWorkspace,
+		Service:    echoService,
+		Method:     "Unary",
 	}))
 	if code := connect.CodeOf(err); code != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v (%v), want FailedPrecondition", code, err)

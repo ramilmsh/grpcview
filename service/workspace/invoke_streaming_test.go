@@ -49,10 +49,10 @@ func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.Invo
 	}
 	return &grpcviewv1.InvokeStreamRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName: testWorkspace,
-			Service:       echoService,
-			Method:        method,
-			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			Collection: testWorkspace,
+			Service:    echoService,
+			Method:     method,
+			Target:     &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 		Messages: wrapped,
 	}

@@ -134,7 +134,7 @@ func savedInvokeFrom(spec *grpcviewv1.SavedInvokeSpec) savedInvoke {
 		recordHistory = spec.GetRecordHistory()
 	}
 	return savedInvoke{
-		workspaceName: spec.GetWorkspaceName(),
+		workspaceName: spec.GetCollection(),
 		parent:        spec.GetPath(),
 		itemName:      spec.GetItemName(),
 		params:        spec.GetParams().AsMap(),

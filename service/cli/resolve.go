@@ -37,7 +37,7 @@ type savedLookup struct {
 	isFolder bool
 }
 
-func resolveInvokeArg(ws *grpcviewv1.Workspace, arg string) (invokeTarget, error) {
+func resolveInvokeArg(ws *grpcviewv1.Collection, arg string) (invokeTarget, error) {
 	saved := lookupSaved(ws, arg)
 	service, method, kind, adhoc := lookupAdhoc(ws, arg)
 
@@ -72,7 +72,7 @@ func resolveInvokeArg(ws *grpcviewv1.Workspace, arg string) (invokeTarget, error
 	}
 }
 
-func unknownArgError(ws *grpcviewv1.Workspace, arg string, saved savedLookup) error {
+func unknownArgError(ws *grpcviewv1.Collection, arg string, saved savedLookup) error {
 	if saved.isFolder {
 		return fmt.Errorf(
 			"cannot invoke %q: it is a folder, not a request; invoke addresses a saved request or a <service>/<method>", arg)
@@ -89,7 +89,7 @@ func unknownArgError(ws *grpcviewv1.Workspace, arg string, saved savedLookup) er
 }
 
 // lookupSaved walks the collection tree by display name from the root Item.
-func lookupSaved(ws *grpcviewv1.Workspace, arg string) savedLookup {
+func lookupSaved(ws *grpcviewv1.Collection, arg string) savedLookup {
 	parent, name, err := workspace.SplitInvokePath(arg)
 	if err != nil {
 		// SplitInvokePath's error text names gv.invoke, so it is not surfaced here.
@@ -127,7 +127,7 @@ func itemNamed(items []*grpcviewv1.Item, name string) *grpcviewv1.Item {
 	return nil
 }
 
-func lookupAdhoc(ws *grpcviewv1.Workspace, arg string) (service, method string, kind methodKind, ok bool) {
+func lookupAdhoc(ws *grpcviewv1.Collection, arg string) (service, method string, kind methodKind, ok bool) {
 	service, method = splitMethodPath(arg)
 	if service == "" || method == "" {
 		return "", "", methodKind{}, false
@@ -148,7 +148,7 @@ func splitMethodPath(arg string) (service, method string) {
 	return arg[:i], arg[i+1:]
 }
 
-func lookupMethod(ws *grpcviewv1.Workspace, service, method string) (methodKind, bool) {
+func lookupMethod(ws *grpcviewv1.Collection, service, method string) (methodKind, bool) {
 	for _, svc := range ws.GetServices() {
 		if serviceFullName(svc) != service {
 			continue

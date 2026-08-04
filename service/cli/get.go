@@ -36,7 +36,7 @@ func runGet(ctx context.Context, s Streams, g *globalFlags, open clientFactory) 
 	// The whole GetResponse, so `get` output and the RPC read the same paths.
 	line, err := marshalOneLine(snapshot)
 	if err != nil {
-		return fmt.Errorf("failed to render workspace %q: %w", g.Workspace, err)
+		return fmt.Errorf("failed to render workspace %q: %w", g.Collection, err)
 	}
 	return writeLine(s.Out, line)
 }
@@ -55,9 +55,9 @@ func readWorkspace(ctx context.Context, g *globalFlags, open clientFactory) (*gr
 	}
 	defer func() { _ = sess.close(ctx) }()
 
-	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: g.Workspace}))
+	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Workspace, err)
+		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Collection, err)
 	}
 	return resp.Msg, nil
 }

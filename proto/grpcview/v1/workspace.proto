@@ -69,7 +69,7 @@ message Upload {
 message Resolved {
   int32           file_count        = 1;
   repeated string service_names     = 2;
-  // Subset of service_names whose descriptors the workspace takes from here.
+  // Subset of service_names whose descriptors the collection takes from here.
   repeated string won_service_names = 3;
   // Why the last resolve failed; empty when it succeeded.
   string          error             = 4;
@@ -117,7 +117,7 @@ message Request {
   repeated string           middleware        = 7;
   // TypeScript module returning {[key: string]: string[]}, evaluated on invoke.
   string                    draft_metadata_script = 9;
-  // Unset means "use the workspace's first reflection source".
+  // Unset means "use the collection's first reflection source".
   optional Server           target                = 10;
 }
 
@@ -142,7 +142,7 @@ message Script {
   string     source = 3;
 }
 
-message Workspace {
+message Collection {
   string                    name     = 1;
   Item                      item     = 2;
   repeated DescriptorSource sources  = 3;

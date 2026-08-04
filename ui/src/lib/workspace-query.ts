@@ -29,12 +29,12 @@ import {
   deleteScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
-import type { Workspace, Server } from "@grpcview/v1/workspace_pb";
+import type { Collection, Server } from "@grpcview/v1/workspace_pb";
 import { rootItemsOf, type ItemWithPath } from "./format";
 
-export const WORKSPACE_NAME = "default";
+export const COLLECTION_ID = "default";
 
-export const firstReflectionSource = (ws?: Workspace): Server | null => {
+export const firstReflectionSource = (ws?: Collection): Server | null => {
   for (const s of ws?.sources ?? []) {
     if (s.source.case === "reflection") return s.source.value;
   }
@@ -42,9 +42,9 @@ export const firstReflectionSource = (ws?: Workspace): Server | null => {
 };
 
 // The Server a service is dialed at: the first reflection source that serves it,
-// falling back to the workspace's first reflection source (upload-only services).
+// falling back to the collection's first reflection source (upload-only services).
 export const sourceForService = (
-  ws: Workspace | undefined,
+  ws: Collection | undefined,
   service: string
 ): Server | null => {
   const svc = ws?.services.find((s) => `${s.package}.${s.name}` === service);
@@ -54,12 +54,12 @@ export const sourceForService = (
 // Where a service's SCHEMA came from (the source that won the priority merge),
 // which need not be where its traffic goes. `live` is true only for reflection.
 export const schemaSourceFor = (
-  ws: Workspace | undefined,
+  ws: Collection | undefined,
   service: string
 ): { id: string; live: boolean } | null => {
   const winner = ws?.sources.find((s) => s.resolved?.wonServiceNames.includes(service));
   if (winner) return { id: winner.id, live: winner.source.case === "reflection" };
-  // Fallback for a workspace whose sources predate per-source contributions.
+  // Fallback for a collection whose sources predate per-source contributions.
   const dial = sourceForService(ws, service);
   return dial ? { id: `reflection:${dial.address}`, live: true } : null;
 };
@@ -71,14 +71,14 @@ function useWorkspaceKey(): QueryKey {
   return createConnectQueryKey({
     schema: get,
     transport,
-    input: { workspaceName: WORKSPACE_NAME },
+    input: { collection: COLLECTION_ID },
     cardinality: "finite",
   });
 }
 
 export function useWorkspace() {
-  const query = useQuery(get, { workspaceName: WORKSPACE_NAME });
-  const workspace = query.data?.workspace;
+  const query = useQuery(get, { collection: COLLECTION_ID });
+  const workspace = query.data?.collection;
   return {
     workspace,
     services: workspace?.services ?? [],
@@ -87,7 +87,7 @@ export function useWorkspace() {
   };
 }
 
-export function useRootItems(workspace?: Workspace): ItemWithPath[] {
+export function useRootItems(workspace?: Collection): ItemWithPath[] {
   return useMemo(() => rootItemsOf(workspace?.item), [workspace]);
 }
 
@@ -95,13 +95,13 @@ function useSeedGetCache() {
   const qc = useQueryClient();
   const key = useWorkspaceKey();
   return {
-    onSuccess: (res: { workspace?: Workspace }) => {
-      if (res.workspace) qc.setQueryData(key, create(GetResponseSchema, { workspace: res.workspace }));
+    onSuccess: (res: { collection?: Collection }) => {
+      if (res.collection) qc.setQueryData(key, create(GetResponseSchema, { collection: res.collection }));
     },
   };
 }
 
-// The write RPCs, each seeding the Get cache with the fresh Workspace it returns.
+// The write RPCs, each seeding the Get cache with the fresh Collection it returns.
 export function useWorkspaceMutations() {
   const opts = useSeedGetCache();
   return {
@@ -135,7 +135,7 @@ export function useInvoke() {
 }
 
 // Invalidates the Get query: Invoke persists run history server-side but does not
-// return the fresh Workspace the History timeline rides on.
+// return the fresh Collection the History timeline rides on.
 export function useRefreshWorkspace() {
   const qc = useQueryClient();
   const key = useWorkspaceKey();

@@ -10,8 +10,8 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-func lsWorkspace() *grpcviewv1.Workspace {
-	return &grpcviewv1.Workspace{
+func lsWorkspace() *grpcviewv1.Collection {
+	return &grpcviewv1.Collection{
 		Name: "default",
 		Item: testFolder("",
 			testFolder("Auth",
@@ -109,7 +109,7 @@ func TestLs(t *testing.T) {
 		{
 			name:     "an empty collection lists nothing, successfully",
 			args:     []string{"ls"},
-			fake:     func(fc *fakeClient) { fc.snapshot = &grpcviewv1.Workspace{Name: "default", Item: testFolder("")} },
+			fake:     func(fc *fakeClient) { fc.snapshot = &grpcviewv1.Collection{Name: "default", Item: testFolder("")} },
 			wantOut:  "",
 			wantCode: 0,
 		},
@@ -117,7 +117,7 @@ func TestLs(t *testing.T) {
 			name: "a request with no method picked yet still lists",
 			args: []string{"ls"},
 			fake: func(fc *fakeClient) {
-				fc.snapshot = &grpcviewv1.Workspace{Name: "default", Item: testFolder("", testRequest("Draft", "", ""))}
+				fc.snapshot = &grpcviewv1.Collection{Name: "default", Item: testFolder("", testRequest("Draft", "", ""))}
 			},
 			wantOut:  "Draft  -\n",
 			wantCode: 0,

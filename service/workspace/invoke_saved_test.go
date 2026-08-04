@@ -112,8 +112,8 @@ func TestInvokeSavedRunsTheSavedRequest(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Echo",
+			Collection: testWorkspace,
+			ItemName:   "Echo",
 		},
 	})
 	if err != nil {
@@ -148,9 +148,9 @@ func TestInvokeSavedNestedPath(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			Path:          []string{"Users"},
-			ItemName:      "GetUser",
+			Collection: testWorkspace,
+			Path:       []string{"Users"},
+			ItemName:   "GetUser",
 		},
 	})
 	if err != nil {
@@ -173,9 +173,9 @@ func TestInvokeSavedParamsReachTheBody(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Echo",
-			Params:        paramsStruct(t, map[string]any{"who": "ada"}),
+			Collection: testWorkspace,
+			ItemName:   "Echo",
+			Params:     paramsStruct(t, map[string]any{"who": "ada"}),
 		},
 	})
 	if err != nil {
@@ -197,10 +197,10 @@ func TestInvokeSavedOverrides(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Echo",
-			Target:        &grpcviewv1.Server{Address: loopback(port)},
-			Messages:      []string{tsBody(`{"message":"overridden"}`)},
+			Collection: testWorkspace,
+			ItemName:   "Echo",
+			Target:     &grpcviewv1.Server{Address: loopback(port)},
+			Messages:   []string{tsBody(`{"message":"overridden"}`)},
 		},
 	})
 	if err != nil {
@@ -236,8 +236,8 @@ func TestInvokeSavedAddressErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 				Spec: &grpcviewv1.SavedInvokeSpec{
-					WorkspaceName: testWorkspace,
-					ItemName:      tc.itemName,
+					Collection: testWorkspace,
+					ItemName:   tc.itemName,
 				},
 			})
 			if err == nil {
@@ -261,8 +261,8 @@ func TestInvokeSavedTargetStatusIsInThePayload(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Denied",
+			Collection: testWorkspace,
+			ItemName:   "Denied",
 		},
 	})
 	if err != nil {
@@ -309,7 +309,7 @@ func TestInvokeSavedRecordHistory(t *testing.T) {
 	off := false
 	if _, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
+			Collection:    testWorkspace,
 			ItemName:      "Echo",
 			RecordHistory: &off,
 		},
@@ -322,8 +322,8 @@ func TestInvokeSavedRecordHistory(t *testing.T) {
 
 	if _, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Echo",
+			Collection: testWorkspace,
+			ItemName:   "Echo",
 		},
 	}); err != nil {
 		t.Fatalf("InvokeSaved (default): %v", err)
@@ -353,9 +353,9 @@ func TestInvokeSavedDryRun(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Echo",
-			Params:        paramsStruct(t, map[string]any{"n": "7"}),
+			Collection: testWorkspace,
+			ItemName:   "Echo",
+			Params:     paramsStruct(t, map[string]any{"n": "7"}),
 		},
 		DryRun: true,
 	})
@@ -400,8 +400,8 @@ func TestInvokeSavedStreamingSendsEveryMessage(t *testing.T) {
 	}
 	err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Upload",
+			Collection: testWorkspace,
+			ItemName:   "Upload",
 			Messages: []string{
 				tsBody(`{"message":"a"}`),
 				tsBody(`{"message":"b"}`),
@@ -441,9 +441,9 @@ func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 	}
 	if err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Stream",
-			Params:        paramsStruct(t, map[string]any{"n": "9"}),
+			Collection: testWorkspace,
+			ItemName:   "Stream",
+			Params:     paramsStruct(t, map[string]any{"n": "9"}),
 		},
 	}, send); err != nil {
 		t.Fatalf("invokeSavedStream: %v", err)
@@ -471,8 +471,8 @@ func TestInvokeSavedStreamingMethodViaUnary(t *testing.T) {
 
 	_, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Stream",
+			Collection: testWorkspace,
+			ItemName:   "Stream",
 		},
 	})
 	if code := connect.CodeOf(err); code != connect.CodeUnimplemented {
@@ -490,8 +490,8 @@ func TestInvokeSavedEmptyBodyRuns(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "Empty",
+			Collection: testWorkspace,
+			ItemName:   "Empty",
 		},
 	})
 	if err != nil {

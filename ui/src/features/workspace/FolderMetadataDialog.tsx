@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
+import { useWorkspaceMutations, COLLECTION_ID } from "@/lib/workspace-query";
 import { itemKey, type ItemWithPath } from "@/lib/format";
 import { MetadataEditor } from "./MetadataEditor";
 import { defaultMetadataModule } from "./metadata-wrapper";
@@ -31,7 +31,7 @@ export function FolderMetadataDialog({
     if (!folder) return;
     updateFolder.mutate(
       {
-        workspaceName: WORKSPACE_NAME,
+        collection: COLLECTION_ID,
         path: folder.path,
         itemName: folder.item.name,
         draftMetadataScript: draft,

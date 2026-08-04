@@ -25,7 +25,7 @@ func uploadSource(fileName string, resolved *grpcviewv1.Resolved) *grpcviewv1.De
 	}
 }
 
-func sourcesWorkspace() *grpcviewv1.Workspace {
+func sourcesWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Sources = []*grpcviewv1.DescriptorSource{
 		reflectionSource("localhost:50055", &grpcviewv1.Resolved{

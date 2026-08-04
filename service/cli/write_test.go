@@ -37,7 +37,7 @@ func (f *fakeClient) AddDescriptorSource(_ context.Context, r *connect.Request[g
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) RefreshDescriptorSource(_ context.Context, r *connect.Request[grpcviewv1.RefreshDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RefreshDescriptorSourceResponse], error) {
@@ -46,7 +46,7 @@ func (f *fakeClient) RefreshDescriptorSource(_ context.Context, r *connect.Reque
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.RefreshDescriptorSourceResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.RefreshDescriptorSourceResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) RemoveDescriptorSource(_ context.Context, r *connect.Request[grpcviewv1.RemoveDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RemoveDescriptorSourceResponse], error) {
@@ -55,7 +55,7 @@ func (f *fakeClient) RemoveDescriptorSource(_ context.Context, r *connect.Reques
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.RemoveDescriptorSourceResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.RemoveDescriptorSourceResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) ReorderDescriptorSources(_ context.Context, r *connect.Request[grpcviewv1.ReorderDescriptorSourcesRequest]) (*connect.Response[grpcviewv1.ReorderDescriptorSourcesResponse], error) {
@@ -64,7 +64,7 @@ func (f *fakeClient) ReorderDescriptorSources(_ context.Context, r *connect.Requ
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) CreateFolder(_ context.Context, r *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
@@ -73,7 +73,7 @@ func (f *fakeClient) CreateFolder(_ context.Context, r *connect.Request[grpcview
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.CreateFolderResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.CreateFolderResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) CreateRequest(_ context.Context, r *connect.Request[grpcviewv1.CreateRequestRequest]) (*connect.Response[grpcviewv1.CreateRequestResponse], error) {
@@ -82,7 +82,7 @@ func (f *fakeClient) CreateRequest(_ context.Context, r *connect.Request[grpcvie
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) UpdateRequest(_ context.Context, r *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error) {
@@ -91,7 +91,7 @@ func (f *fakeClient) UpdateRequest(_ context.Context, r *connect.Request[grpcvie
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.UpdateRequestResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) DeleteRequest(_ context.Context, r *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error) {
@@ -100,7 +100,7 @@ func (f *fakeClient) DeleteRequest(_ context.Context, r *connect.Request[grpcvie
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.DeleteRequestResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.DeleteRequestResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) MoveItem(_ context.Context, r *connect.Request[grpcviewv1.MoveItemRequest]) (*connect.Response[grpcviewv1.MoveItemResponse], error) {
@@ -109,7 +109,7 @@ func (f *fakeClient) MoveItem(_ context.Context, r *connect.Request[grpcviewv1.M
 	if f.writes.err != nil {
 		return nil, f.writes.err
 	}
-	return connect.NewResponse(&grpcviewv1.MoveItemResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.MoveItemResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) RunScript(_ context.Context, r *connect.Request[grpcviewv1.RunScriptRequest]) (*connect.Response[grpcviewv1.RunScriptResponse], error) {
@@ -266,8 +266,8 @@ func onlyAdd(t *testing.T, fc *fakeClient) *grpcviewv1.AddDescriptorSourceReques
 		t.Fatalf("AddDescriptorSource called %d time(s), want 1", len(fc.writes.addSource))
 	}
 	got := fc.writes.addSource[0]
-	if got.GetWorkspaceName() != "default" {
-		t.Errorf("workspace_name = %q, want %q", got.GetWorkspaceName(), "default")
+	if got.GetCollection() != "default" {
+		t.Errorf("collection = %q, want %q", got.GetCollection(), "default")
 	}
 	return got
 }
@@ -372,7 +372,7 @@ func TestSourcesRmAndReorder(t *testing.T) {
 			t.Fatalf("RemoveDescriptorSource called %d time(s), want 1", len(fc.writes.removeSource))
 		}
 		got := fc.writes.removeSource[0]
-		if got.GetId() != "upload:echo.binpb" || got.GetWorkspaceName() != "default" {
+		if got.GetId() != "upload:echo.binpb" || got.GetCollection() != "default" {
 			t.Errorf("got %+v, want id=%q workspace=%q", got, "upload:echo.binpb", "default")
 		}
 	})
@@ -430,8 +430,8 @@ func TestFolderCreate(t *testing.T) {
 			if got.GetItemName() != tc.wantName {
 				t.Errorf("item_name = %q, want %q", got.GetItemName(), tc.wantName)
 			}
-			if got.GetWorkspaceName() != "default" {
-				t.Errorf("workspace_name = %q, want %q", got.GetWorkspaceName(), "default")
+			if got.GetCollection() != "default" {
+				t.Errorf("collection = %q, want %q", got.GetCollection(), "default")
 			}
 		})
 	}
@@ -637,7 +637,7 @@ func TestRequestMv(t *testing.T) {
 
 func strptr(s string) *string { return &s }
 
-func scriptsWorkspace() *grpcviewv1.Workspace {
+func scriptsWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Scripts = []*grpcviewv1.Script{
 		{Name: "seed", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR, Source: "export default () => ({})\n"},
@@ -827,8 +827,8 @@ func TestScriptRun(t *testing.T) {
 				return
 			}
 			got := fc.writes.runScript[0]
-			if got.GetWorkspaceName() != "default" {
-				t.Errorf("workspace_name = %q, want %q", got.GetWorkspaceName(), "default")
+			if got.GetCollection() != "default" {
+				t.Errorf("collection = %q, want %q", got.GetCollection(), "default")
 			}
 			if tc.wantSource != "" && got.GetSource() != tc.wantSource {
 				t.Errorf("source = %q, want %q", got.GetSource(), tc.wantSource)

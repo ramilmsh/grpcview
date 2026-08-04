@@ -80,7 +80,7 @@ func createGenerator(t *testing.T, w Workspace, ctx context.Context, name, sourc
 
 func reflectionAddReq(port int) *grpcviewv1.AddDescriptorSourceRequest {
 	return &grpcviewv1.AddDescriptorSourceRequest{
-		WorkspaceName: testWorkspace,
+		Collection: testWorkspace,
 		Source: &grpcviewv1.AddDescriptorSourceRequest_Reflection{
 			Reflection: &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
@@ -88,16 +88,16 @@ func reflectionAddReq(port int) *grpcviewv1.AddDescriptorSourceRequest {
 }
 
 func removeReq(id string) *grpcviewv1.RemoveDescriptorSourceRequest {
-	return &grpcviewv1.RemoveDescriptorSourceRequest{WorkspaceName: testWorkspace, Id: id}
+	return &grpcviewv1.RemoveDescriptorSourceRequest{Collection: testWorkspace, Id: id}
 }
 
 const testUploadName = "test.binpb"
 
 func descriptorSetAddReq(set []byte) *grpcviewv1.AddDescriptorSourceRequest {
 	return &grpcviewv1.AddDescriptorSourceRequest{
-		WorkspaceName: testWorkspace,
-		Source:        &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: set},
-		FileName:      testUploadName,
+		Collection: testWorkspace,
+		Source:     &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: set},
+		FileName:   testUploadName,
 	}
 }
 
@@ -120,7 +120,7 @@ func fileDescriptorSet(t *testing.T, path string) []byte {
 
 func ensureWorkspace(t *testing.T, w Workspace, ctx context.Context) {
 	t.Helper()
-	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace})); err != nil {
+	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace})); err != nil {
 		t.Fatalf("Get (create): %v", err)
 	}
 }
@@ -149,7 +149,7 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddDescriptorSource B: %v", err)
 	}
-	ws := addB.Msg.GetWorkspace()
+	ws := addB.Msg.GetCollection()
 	if len(ws.GetSources()) != 2 {
 		t.Fatalf("want 2 sources, got %d", len(ws.GetSources()))
 	}
@@ -162,7 +162,7 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveDescriptorSource: %v", err)
 	}
-	ws = remResp.Msg.GetWorkspace()
+	ws = remResp.Msg.GetCollection()
 	if len(ws.GetSources()) != 1 {
 		t.Fatalf("want 1 source after remove, got %d", len(ws.GetSources()))
 	}
@@ -173,11 +173,11 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 		t.Fatalf("expected B's reflection services to remain after remove")
 	}
 
-	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after remove: %v", err)
 	}
-	if got := reloaded.Msg.GetWorkspace(); len(got.GetSources()) != 1 || hasService(got.GetServices(), "Health") {
+	if got := reloaded.Msg.GetCollection(); len(got.GetSources()) != 1 || hasService(got.GetServices(), "Health") {
 		t.Fatalf("removal not persisted: %d sources, Health present=%v",
 			len(got.GetSources()), hasService(got.GetServices(), "Health"))
 	}
@@ -186,11 +186,11 @@ func TestRemoveDescriptorSourceReResolves(t *testing.T) {
 	if _, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(removeReq(idB))); err != nil {
 		t.Fatalf("RemoveDescriptorSource (last): %v", err)
 	}
-	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get final: %v", err)
 	}
-	if got := final.Msg.GetWorkspace(); len(got.GetSources()) != 0 || len(got.GetServices()) != 0 {
+	if got := final.Msg.GetCollection(); len(got.GetSources()) != 0 || len(got.GetServices()) != 0 {
 		t.Fatalf("want empty sources+services, got %d sources / %d services",
 			len(got.GetSources()), len(got.GetServices()))
 	}
@@ -206,7 +206,7 @@ func TestAddDescriptorSetSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddDescriptorSource (descriptor set): %v", err)
 	}
-	ws := resp.Msg.GetWorkspace()
+	ws := resp.Msg.GetCollection()
 	if len(ws.GetSources()) != 1 {
 		t.Fatalf("want 1 source, got %d", len(ws.GetSources()))
 	}
@@ -217,11 +217,11 @@ func TestAddDescriptorSetSource(t *testing.T) {
 		t.Fatalf("Health service missing after adding descriptor-set source")
 	}
 
-	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after add: %v", err)
 	}
-	got := reloaded.Msg.GetWorkspace()
+	got := reloaded.Msg.GetCollection()
 	if len(got.GetSources()) != 1 || got.GetSources()[0].GetUpload().GetFileName() != testUploadName {
 		t.Fatalf("descriptor-set source not persisted: %+v", got.GetSources())
 	}
@@ -244,7 +244,7 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddDescriptorSource (descriptor set): %v", err)
 	}
-	ws := addResp.Msg.GetWorkspace()
+	ws := addResp.Msg.GetCollection()
 	if len(ws.GetSources()) != 2 {
 		t.Fatalf("want 2 sources, got %d", len(ws.GetSources()))
 	}
@@ -256,7 +256,7 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveDescriptorSource: %v", err)
 	}
-	ws = remResp.Msg.GetWorkspace()
+	ws = remResp.Msg.GetCollection()
 	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetUpload().GetFileName() != testUploadName {
 		t.Fatalf("want 1 descriptor-set source after remove, got %+v", ws.GetSources())
 	}
@@ -267,11 +267,11 @@ func TestRemoveReResolvesDescriptorSetSource(t *testing.T) {
 		t.Fatalf("ServerReflection should be gone after removing the reflection source")
 	}
 
-	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	final, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after remove: %v", err)
 	}
-	if got := final.Msg.GetWorkspace(); len(got.GetSources()) != 1 || !hasService(got.GetServices(), "Health") {
+	if got := final.Msg.GetCollection(); len(got.GetSources()) != 1 || !hasService(got.GetServices(), "Health") {
 		t.Fatalf("re-resolved descriptor-set state not persisted: %d sources, Health present=%v",
 			len(got.GetSources()), hasService(got.GetServices(), "Health"))
 	}
@@ -299,16 +299,16 @@ func TestMutateCreatesTheCollection(t *testing.T) {
 	t.Run("a tree mutation", func(t *testing.T) {
 		w := newTestWorkspace(t)
 		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-			WorkspaceName: testWorkspace,
-			ItemName:      "First",
+			Collection: testWorkspace,
+			ItemName:   "First",
 		})); err != nil {
 			t.Fatalf("CreateFolder on an unread workspace: %v", err)
 		}
-		got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+		got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
-		if items := got.Msg.GetWorkspace().GetItem().GetFolder().GetItems(); len(items) != 1 || items[0].GetName() != "First" {
+		if items := got.Msg.GetCollection().GetItem().GetFolder().GetItems(); len(items) != 1 || items[0].GetName() != "First" {
 			t.Fatalf("items = %v, want the created folder to have persisted", items)
 		}
 	})
@@ -316,14 +316,14 @@ func TestMutateCreatesTheCollection(t *testing.T) {
 	t.Run("a source mutation", func(t *testing.T) {
 		w := newTestWorkspace(t)
 		if _, err := w.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
-			WorkspaceName: testWorkspace,
+			Collection: testWorkspace,
 		})); err != nil {
 			t.Fatalf("ReorderDescriptorSources on an unread workspace: %v", err)
 		}
 	})
 }
 
-func folderNamed(t *testing.T, ws *grpcviewv1.Workspace, name string) *grpcviewv1.Folder {
+func folderNamed(t *testing.T, ws *grpcviewv1.Collection, name string) *grpcviewv1.Folder {
 	t.Helper()
 	for _, it := range ws.GetItem().GetFolder().GetItems() {
 		if it.GetName() == name {
@@ -343,59 +343,59 @@ func TestUpdateFolderRPC(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 
 	if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      "Users",
+		Collection: testWorkspace,
+		ItemName:   "Users",
 	})); err != nil {
 		t.Fatalf("CreateFolder: %v", err)
 	}
 	if _, err := w.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      "Leaf",
-		Service:       "s",
-		Method:        "m",
+		Collection: testWorkspace,
+		ItemName:   "Leaf",
+		Service:    "s",
+		Method:     "m",
 	})); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
 	script := "export default () => ({ ...gv.metadata.inherit(), team: ['users'] })"
 	updResp, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
-		WorkspaceName:       testWorkspace,
+		Collection:          testWorkspace,
 		ItemName:            "Users",
 		DraftMetadataScript: &script,
 	}))
 	if err != nil {
 		t.Fatalf("UpdateFolder: %v", err)
 	}
-	if got := folderNamed(t, updResp.Msg.GetWorkspace(), "Users").GetDraftMetadataScript(); got != script {
+	if got := folderNamed(t, updResp.Msg.GetCollection(), "Users").GetDraftMetadataScript(); got != script {
 		t.Fatalf("folder script in mutate response = %q, want %q", got, script)
 	}
 
-	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got := folderNamed(t, getResp.Msg.GetWorkspace(), "Users").GetDraftMetadataScript(); got != script {
+	if got := folderNamed(t, getResp.Msg.GetCollection(), "Users").GetDraftMetadataScript(); got != script {
 		t.Fatalf("folder script after Get = %q, want %q", got, script)
 	}
 
 	empty := ""
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
-		WorkspaceName:       testWorkspace,
+		Collection:          testWorkspace,
 		ItemName:            "Users",
 		DraftMetadataScript: &empty,
 	})); err != nil {
 		t.Fatalf("UpdateFolder clear: %v", err)
 	}
-	cleared, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	cleared, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after clear: %v", err)
 	}
-	if got := folderNamed(t, cleared.Msg.GetWorkspace(), "Users").GetDraftMetadataScript(); got != "" {
+	if got := folderNamed(t, cleared.Msg.GetCollection(), "Users").GetDraftMetadataScript(); got != "" {
 		t.Fatalf("folder script after clear = %q, want empty", got)
 	}
 
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
-		WorkspaceName:       testWorkspace,
+		Collection:          testWorkspace,
 		ItemName:            "Ghost",
 		DraftMetadataScript: &script,
 	})); connect.CodeOf(err) != connect.CodeNotFound {
@@ -403,7 +403,7 @@ func TestUpdateFolderRPC(t *testing.T) {
 	}
 
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
-		WorkspaceName:       testWorkspace,
+		Collection:          testWorkspace,
 		ItemName:            "Leaf",
 		DraftMetadataScript: &script,
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -418,8 +418,8 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 
 	for _, name := range []string{"Users", "Admin"} {
 		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-			WorkspaceName: testWorkspace,
-			ItemName:      name,
+			Collection: testWorkspace,
+			ItemName:   name,
 		})); err != nil {
 			t.Fatalf("CreateFolder %s: %v", name, err)
 		}
@@ -427,21 +427,21 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 
 	newName := "People"
 	updResp, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      "Users",
-		Name:          &newName,
+		Collection: testWorkspace,
+		ItemName:   "Users",
+		Name:       &newName,
 	}))
 	if err != nil {
 		t.Fatalf("UpdateFolder rename: %v", err)
 	}
-	folderNamed(t, updResp.Msg.GetWorkspace(), newName)
+	folderNamed(t, updResp.Msg.GetCollection(), newName)
 
-	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	folderNamed(t, getResp.Msg.GetWorkspace(), newName)
-	for _, it := range getResp.Msg.GetWorkspace().GetItem().GetFolder().GetItems() {
+	folderNamed(t, getResp.Msg.GetCollection(), newName)
+	for _, it := range getResp.Msg.GetCollection().GetItem().GetFolder().GetItems() {
 		if it.GetName() == "Users" {
 			t.Fatalf("old folder name survived the rename")
 		}
@@ -449,9 +449,9 @@ func TestUpdateFolderRenameRPC(t *testing.T) {
 
 	collide := "Admin"
 	if _, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      newName,
-		Name:          &collide,
+		Collection: testWorkspace,
+		ItemName:   newName,
+		Name:       &collide,
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("colliding rename = %v, want FailedPrecondition", err)
 	}
@@ -472,57 +472,57 @@ func TestMoveItemRPC(t *testing.T) {
 
 	for _, name := range []string{"Src", "Dst"} {
 		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-			WorkspaceName: testWorkspace,
-			ItemName:      name,
+			Collection: testWorkspace,
+			ItemName:   name,
 		})); err != nil {
 			t.Fatalf("CreateFolder %s: %v", name, err)
 		}
 	}
 	if _, err := w.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
-		WorkspaceName: testWorkspace,
-		Path:          []string{"Src"},
-		ItemName:      "Leaf",
-		Service:       "s",
-		Method:        "m",
+		Collection: testWorkspace,
+		Path:       []string{"Src"},
+		ItemName:   "Leaf",
+		Service:    "s",
+		Method:     "m",
 	})); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
 	moveResp, err := w.MoveItem(ctx, connect.NewRequest(&grpcviewv1.MoveItemRequest{
-		WorkspaceName: testWorkspace,
-		Path:          []string{"Src"},
-		ItemName:      "Leaf",
-		NewPath:       []string{"Dst"},
+		Collection: testWorkspace,
+		Path:       []string{"Src"},
+		ItemName:   "Leaf",
+		NewPath:    []string{"Dst"},
 	}))
 	if err != nil {
 		t.Fatalf("MoveItem: %v", err)
 	}
-	if got := itemNames(folderNamed(t, moveResp.Msg.GetWorkspace(), "Dst").GetItems()); len(got) != 1 || got[0] != "Leaf" {
+	if got := itemNames(folderNamed(t, moveResp.Msg.GetCollection(), "Dst").GetItems()); len(got) != 1 || got[0] != "Leaf" {
 		t.Fatalf("Dst in mutate response = %v, want [Leaf]", got)
 	}
-	if got := itemNames(folderNamed(t, moveResp.Msg.GetWorkspace(), "Src").GetItems()); len(got) != 0 {
+	if got := itemNames(folderNamed(t, moveResp.Msg.GetCollection(), "Src").GetItems()); len(got) != 0 {
 		t.Fatalf("Src in mutate response = %v, want empty", got)
 	}
 
-	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: testWorkspace}))
+	getResp, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got := itemNames(folderNamed(t, getResp.Msg.GetWorkspace(), "Dst").GetItems()); len(got) != 1 || got[0] != "Leaf" {
+	if got := itemNames(folderNamed(t, getResp.Msg.GetCollection(), "Dst").GetItems()); len(got) != 1 || got[0] != "Leaf" {
 		t.Fatalf("Dst after Get = %v, want [Leaf]", got)
 	}
 
 	if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-		WorkspaceName: testWorkspace,
-		Path:          []string{"Dst"},
-		ItemName:      "Inner",
+		Collection: testWorkspace,
+		Path:       []string{"Dst"},
+		ItemName:   "Inner",
 	})); err != nil {
 		t.Fatalf("CreateFolder Inner: %v", err)
 	}
 	if _, err := w.MoveItem(ctx, connect.NewRequest(&grpcviewv1.MoveItemRequest{
-		WorkspaceName: testWorkspace,
-		ItemName:      "Dst",
-		NewPath:       []string{"Dst", "Inner"},
+		Collection: testWorkspace,
+		ItemName:   "Dst",
+		NewPath:    []string{"Dst", "Inner"},
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("move into own descendant = %v, want FailedPrecondition", err)
 	}

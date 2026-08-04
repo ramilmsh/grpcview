@@ -216,7 +216,7 @@ func TestInvokeFolderMetadataInheritanceEndToEnd(t *testing.T) {
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName:  testWorkspace,
+			Collection:     testWorkspace,
 			Path:           []string{"Folder"},
 			ItemName:       "Echo",
 			Service:        echoService,

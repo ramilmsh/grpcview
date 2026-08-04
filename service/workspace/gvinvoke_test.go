@@ -32,10 +32,10 @@ func TestGvInvokeNestedReentrancy(t *testing.T) {
 
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName: testWorkspace,
-			Service:       echoService,
-			Method:        "Unary",
-			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			Collection: testWorkspace,
+			Service:    echoService,
+			Method:     "Unary",
+			Target:     &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 		Body: aBody,
 	}))
@@ -75,10 +75,10 @@ func TestGvInvokeFromStreamingPath(t *testing.T) {
 }`
 	frames, err := collectStream(ctx, w, &grpcviewv1.InvokeStreamRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName: testWorkspace,
-			Service:       echoService,
-			Method:        "ServerStream",
-			Target:        &grpcviewv1.Server{Address: loopback(port)},
+			Collection: testWorkspace,
+			Service:    echoService,
+			Method:     "ServerStream",
+			Target:     &grpcviewv1.Server{Address: loopback(port)},
 		},
 		Messages: []string{body},
 	})
@@ -116,8 +116,8 @@ func TestGvInvokeFromSavedDryRun(t *testing.T) {
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "A",
+			Collection: testWorkspace,
+			ItemName:   "A",
 		},
 		DryRun: true,
 	})
@@ -153,11 +153,11 @@ func TestGvInvokeSuppressesNestedHistory(t *testing.T) {
 
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      "A",
-			Service:       echoService,
-			Method:        "Unary",
-			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			Collection: testWorkspace,
+			ItemName:   "A",
+			Service:    echoService,
+			Method:     "Unary",
+			Target:     &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 		Body: aBody,
 	}))

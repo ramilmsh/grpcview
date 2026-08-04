@@ -1,7 +1,7 @@
 import { Broadcast, CaretDown, MagnifyingGlass, Gear } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
-import { useWorkspace, hostLabel, WORKSPACE_NAME } from "@/lib/workspace-query";
+import { useWorkspace, hostLabel, COLLECTION_ID } from "@/lib/workspace-query";
 
 export function TopBar() {
   const { reflection, sources } = useWorkspace();
@@ -44,7 +44,7 @@ export function TopBar() {
         disabled
       >
         <span className="text-accent" style={{ fontSize: 13 }}>❯</span>
-        {WORKSPACE_NAME}
+        {COLLECTION_ID}
         <CaretDown size={11} style={{ opacity: 0.5 }} />
       </Button>
 

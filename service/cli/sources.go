@@ -68,7 +68,7 @@ func newSourcesLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comma
 			"shadowed, not idle, and reordering the list is what changes it.\n\n" +
 			"A source whose last resolve failed stays listed with the reason and\n" +
 			"contributes nothing. That is a normal state, not a failure of this command.\n\n" +
-			"There is no -o: `grpcview get | jq .workspace.sources` is the JSON form, and\n" +
+			"There is no -o: `grpcview get | jq .collection.sources` is the JSON form, and\n" +
 			"it is the same bytes the UI's Sources view reads.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
@@ -84,8 +84,8 @@ func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFac
 	if err != nil {
 		return err
 	}
-	// Workspace.sources is already in priority order; never sort it.
-	return renderSources(s.Out, snapshot.GetWorkspace().GetSources())
+	// Collection.sources is already in priority order; never sort it.
+	return renderSources(s.Out, snapshot.GetCollection().GetSources())
 }
 
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
@@ -125,7 +125,7 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 }
 
 func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg string, tls bool) error {
-	msg, err := buildAddSource(g.Workspace, arg, tls)
+	msg, err := buildAddSource(g.Collection, arg, tls)
 	if err != nil {
 		return err
 	}
@@ -158,8 +158,8 @@ func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescrip
 			return nil, fmt.Errorf("failed to read the descriptor set: %w", err)
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			WorkspaceName: workspaceName,
-			Source:        &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
+			Collection: workspaceName,
+			Source:     &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
 			// The basename, deliberately: file_name is the source's identity.
 			FileName: filepath.Base(arg),
 		}, nil
@@ -170,8 +170,8 @@ func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescrip
 			server.Tls = &grpcviewv1.Server_TLS{}
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			WorkspaceName: workspaceName,
-			Source:        &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
+			Collection: workspaceName,
+			Source:     &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
 		}, nil
 	}
 }
@@ -218,8 +218,8 @@ func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, 
 
 		for _, each := range ids {
 			_, err := sess.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
-				WorkspaceName: g.Workspace,
-				Id:            each,
+				Collection: g.Collection,
+				Id:         each,
 			}))
 			if err != nil {
 				return fmt.Errorf("failed to refresh the definition source %q: %w", each, err)
@@ -250,8 +250,8 @@ func newSourcesRmCmd(g *globalFlags, open clientFactory) *cobra.Command {
 func runSourcesRm(ctx context.Context, g *globalFlags, open clientFactory, id string) error {
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		_, err := sess.RemoveDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RemoveDescriptorSourceRequest{
-			WorkspaceName: g.Workspace,
-			Id:            id,
+			Collection: g.Collection,
+			Id:         id,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to remove the definition source %q: %w", id, err)
@@ -286,8 +286,8 @@ func runSourcesReorder(ctx context.Context, g *globalFlags, open clientFactory, 
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		// Verbatim: the RPC's permutation check is what protects a stale caller.
 		_, err := sess.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
-			WorkspaceName: g.Workspace,
-			Ids:           ids,
+			Collection: g.Collection,
+			Ids:        ids,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to reorder the definition sources: %w", err)

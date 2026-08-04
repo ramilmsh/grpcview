@@ -45,11 +45,11 @@ func echoInvoke(t *testing.T, w Workspace, ctx context.Context, port int, itemNa
 	t.Helper()
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName: testWorkspace,
-			ItemName:      itemName,
-			Service:       echoService,
-			Method:        "Unary",
-			Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			Collection: testWorkspace,
+			ItemName:   itemName,
+			Service:    echoService,
+			Method:     "Unary",
+			Target:     &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 		Body: tsBody(body),
 	}))
@@ -148,11 +148,11 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 	for _, item := range []string{"Boom", "Malformed", "Missing"} {
 		_, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 			Spec: &grpcviewv1.InvokeSpec{
-				WorkspaceName: testWorkspace,
-				ItemName:      item,
-				Service:       echoService,
-				Method:        "Unary",
-				Target:        &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+				Collection: testWorkspace,
+				ItemName:   item,
+				Service:    echoService,
+				Method:     "Unary",
+				Target:     &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 			},
 			Body: tsBody(`{"message":"hi"}`),
 		}))

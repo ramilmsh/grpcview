@@ -178,9 +178,9 @@ func TestRootCmd_persistentFlags(t *testing.T) {
 	root := newRootCmd(s, (&fakeServe{}).serve, unusedFactory(t))
 
 	for name, want := range map[string]string{
-		"workspace": "default",
-		"server":    "",
-		"timeout":   "30s",
+		"collection": "default",
+		"server":     "",
+		"timeout":    "30s",
 	} {
 		f := root.PersistentFlags().Lookup(name)
 		if f == nil {

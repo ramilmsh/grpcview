@@ -8,7 +8,7 @@ import "proto/grpcview/v1/workspace.proto";
 option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1";
 
 message AddDescriptorSourceRequest {
-  string workspace_name = 1;
+  string collection = 1;
   oneof source {
     bytes  descriptor_set = 2;
     Server reflection     = 3;
@@ -18,49 +18,49 @@ message AddDescriptorSourceRequest {
 }
 
 message AddDescriptorSourceResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message RemoveDescriptorSourceRequest {
-  string workspace_name = 1;
+  string collection = 1;
   string id = 2;
 }
 
 message RemoveDescriptorSourceResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message RefreshDescriptorSourceRequest {
-  string workspace_name = 1;
+  string collection = 1;
   string id = 2;
 }
 
 message RefreshDescriptorSourceResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message ReorderDescriptorSourcesRequest {
-  string workspace_name = 1;
+  string collection = 1;
   // Every DescriptorSource.id in priority order — earlier wins; must be a permutation.
   repeated string ids = 2;
 }
 
 message ReorderDescriptorSourcesResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message CreateFolderRequest {
-  string workspace_name = 1;
+  string collection = 1;
   repeated string path = 2;
   string item_name = 3;
 }
 
 message CreateFolderResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message CreateRequestRequest {
-  string workspace_name = 1;
+  string collection = 1;
   repeated string path = 2;
   string item_name = 3;
   string service = 4;
@@ -68,21 +68,21 @@ message CreateRequestRequest {
 }
 
 message CreateRequestResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message DeleteRequestRequest {
-  string workspace_name = 1;
+  string collection = 1;
   repeated string path = 2;
   string item_name = 3;
 }
 
 message DeleteRequestResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message UpdateRequestRequest {
-  string workspace_name = 1;
+  string collection = 1;
   repeated string path = 2;
   string item_name = 3;
   optional string service = 4;
@@ -100,11 +100,11 @@ message UpdateRequestRequest {
 }
 
 message UpdateRequestResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message UpdateFolderRequest {
-  string workspace_name = 1;
+  string collection = 1;
   repeated string path = 2;
   string item_name = 3;
   // TypeScript module feeding the gv.metadata.inherit() chain; empty clears it.
@@ -113,12 +113,12 @@ message UpdateFolderRequest {
 }
 
 message UpdateFolderResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 // A move into the moved folder's own subtree, or onto an existing name, fails.
 message MoveItemRequest {
-  string workspace_name = 1;
+  string collection = 1;
   repeated string path = 2;
   string item_name = 3;
   // Destination parent; empty is the root, the current parent means a pure reorder.
@@ -128,28 +128,28 @@ message MoveItemRequest {
 }
 
 message MoveItemResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message GetRequest {
-  string workspace_name = 1;
+  string collection = 1;
 }
 
 message GetResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 // Everything an ad-hoc invoke needs except the client payload — the one thing
 // the unary and streaming forms disagree about.
 message InvokeSpec {
-  string                 workspace_name  = 1;
+  string                 collection      = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string        path            = 2;
   string                 item_name       = 3;
   string                 service         = 4;
   string                 method          = 5;
   google.protobuf.Struct metadata        = 6;
-  // Unset defaults to the workspace's first reflection source.
+  // Unset defaults to the collection's first reflection source.
   optional Server        target          = 7;
   // TypeScript module; supersedes `metadata` when non-empty.
   string                 metadata_script = 8;
@@ -184,7 +184,7 @@ message InvokeStreamingResponse {
 // Addresses the request SAVED at path/item_name and says how to run it once;
 // everything the unary and streaming saved forms share.
 message SavedInvokeSpec {
-  string                 workspace_name = 1;
+  string                 collection     = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string        path           = 2;
   string                 item_name      = 3;
@@ -227,7 +227,7 @@ message ResolvedRequest {
 }
 
 message DescribeMethodRequest {
-  string workspace_name = 1;
+  string collection = 1;
   // Fully qualified, e.g. "echo.v1.EchoService"; method is its own name, "Unary".
   string service        = 2;
   string method         = 3;
@@ -245,41 +245,41 @@ message DescribeMethodResponse {
 }
 
 message CreateScriptRequest {
-  string     workspace_name = 1;
-  string     name           = 2;
-  ScriptKind kind           = 3;
+  string     collection = 1;
+  string     name       = 2;
+  ScriptKind kind       = 3;
 }
 
 message CreateScriptResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 // Partial update: `name` addresses the script, `new_name` renames it.
 message UpdateScriptRequest {
-  string          workspace_name = 1;
-  string          name           = 2;
-  optional string source         = 3;
-  optional string new_name       = 4;
+  string          collection = 1;
+  string          name       = 2;
+  optional string source     = 3;
+  optional string new_name   = 4;
 }
 
 message UpdateScriptResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message DeleteScriptRequest {
-  string workspace_name = 1;
-  string name           = 2;
+  string collection = 1;
+  string name       = 2;
 }
 
 message DeleteScriptResponse {
-  Workspace workspace = 1;
+  Collection collection = 1;
 }
 
 message RunScriptRequest {
-  string              workspace_name = 1;
-  string              source         = 2;
+  string              collection = 1;
+  string              source     = 2;
   // Unset evaluates `source` as a scratchpad, yielding its last-expression value.
-  optional ScriptKind kind           = 3;
+  optional ScriptKind kind       = 3;
 }
 
 message ScriptLog {
@@ -331,7 +331,7 @@ service WorkspaceService {
   // the target down. Doc comments survive only if the winning source carried
   // them — reflection strips them, an uploaded descriptor set keeps them.
   rpc DescribeMethod(DescribeMethodRequest) returns (DescribeMethodResponse);
-  // RunScript uses a fresh isolated instance: no capabilities, no workspace state.
+  // RunScript uses a fresh isolated instance: no capabilities, no collection state.
   rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
   rpc CreateScript(CreateScriptRequest) returns (CreateScriptResponse);
   rpc UpdateScript(UpdateScriptRequest) returns (UpdateScriptResponse);

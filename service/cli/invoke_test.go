@@ -20,7 +20,7 @@ import (
 )
 
 type fakeClient struct {
-	snapshot *grpcviewv1.Workspace
+	snapshot *grpcviewv1.Collection
 	getErr   error
 
 	response  *grpcviewv1.Request_Response
@@ -47,7 +47,7 @@ func (f *fakeClient) Get(_ context.Context, r *connect.Request[grpcviewv1.GetReq
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
-	return connect.NewResponse(&grpcviewv1.GetResponse{Workspace: f.snapshot}), nil
+	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) Invoke(_ context.Context, r *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
@@ -111,8 +111,8 @@ func failedResponse(code int32, message string) *grpcviewv1.Request_Response {
 	}
 }
 
-func testWorkspace() *grpcviewv1.Workspace {
-	return &grpcviewv1.Workspace{
+func testWorkspace() *grpcviewv1.Collection {
+	return &grpcviewv1.Collection{
 		Name: "default",
 		Item: testFolder("",
 			testFolder("Auth", testRequest("Login", "auth.v1.AuthService", "Login")),
@@ -190,8 +190,8 @@ func TestInvoke(t *testing.T) {
 				}
 				got := fc.gotSaved[0]
 				spec := got.GetSpec()
-				if spec.GetWorkspaceName() != "default" {
-					t.Errorf("workspace_name = %q, want %q", spec.GetWorkspaceName(), "default")
+				if spec.GetCollection() != "default" {
+					t.Errorf("collection = %q, want %q", spec.GetCollection(), "default")
 				}
 				if want := []string{"Auth"}; len(spec.GetPath()) != 1 || spec.GetPath()[0] != want[0] {
 					t.Errorf("path = %v, want %v", spec.GetPath(), want)
@@ -756,14 +756,14 @@ func TestInvokeAppliesTheGlobalTimeout(t *testing.T) {
 	var deadline time.Time
 	factory := func(ctx context.Context, g *globalFlags) (session, error) {
 		deadline, _ = ctx.Deadline()
-		if g.Workspace != "other" {
-			t.Errorf("--workspace reached the factory as %q, want %q", g.Workspace, "other")
+		if g.Collection != "other" {
+			t.Errorf("--collection reached the factory as %q, want %q", g.Collection, "other")
 		}
 		return session{Client: fc, close: func(context.Context) error { return nil }}, nil
 	}
 
 	code := execute(context.Background(), newRootCmd(s, (&fakeServe{}).serve, factory),
-		[]string{"invoke", "Auth/Login", "--timeout", "5s", "--workspace", "other"}, s)
+		[]string{"invoke", "Auth/Login", "--timeout", "5s", "--collection", "other"}, s)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr=%q)", code, errBuf.String())
@@ -771,8 +771,8 @@ func TestInvokeAppliesTheGlobalTimeout(t *testing.T) {
 	if deadline.IsZero() {
 		t.Error("want --timeout applied as a context deadline around the call")
 	}
-	if fc.gotSaved[0].GetSpec().GetWorkspaceName() != "other" {
-		t.Errorf("workspace_name = %q, want %q", fc.gotSaved[0].GetSpec().GetWorkspaceName(), "other")
+	if fc.gotSaved[0].GetSpec().GetCollection() != "other" {
+		t.Errorf("collection = %q, want %q", fc.gotSaved[0].GetSpec().GetCollection(), "other")
 	}
 }
 

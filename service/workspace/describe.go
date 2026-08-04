@@ -31,7 +31,7 @@ func (w Workspace) describeMethod(ctx context.Context, workspaceName, service, m
 // definitions, as rendered .proto text and as a self-contained FileDescriptorSet. It never dials.
 func (w Workspace) DescribeMethod(ctx context.Context, request *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error) {
 	msg := request.Msg
-	methodDesc, sourceID, err := w.describeMethod(ctx, msg.GetWorkspaceName(), msg.GetService(), msg.GetMethod())
+	methodDesc, sourceID, err := w.describeMethod(ctx, msg.GetCollection(), msg.GetService(), msg.GetMethod())
 	if err != nil {
 		return nil, err
 	}

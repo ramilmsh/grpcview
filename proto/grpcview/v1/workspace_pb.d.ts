@@ -247,7 +247,7 @@ export declare type Resolved = Message$1<"grpcview.v1.Resolved"> & {
   serviceNames: string[];
 
   /**
-   * Subset of service_names whose descriptors the workspace takes from here.
+   * Subset of service_names whose descriptors the collection takes from here.
    *
    * @generated from field: repeated string won_service_names = 3;
    */
@@ -422,7 +422,7 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
   draftMetadataScript: string;
 
   /**
-   * Unset means "use the workspace's first reflection source".
+   * Unset means "use the collection's first reflection source".
    *
    * @generated from field: optional grpcview.v1.Server target = 10;
    */
@@ -536,9 +536,9 @@ export declare type Script = Message$1<"grpcview.v1.Script"> & {
 export declare const ScriptSchema: GenMessage<Script>;
 
 /**
- * @generated from message grpcview.v1.Workspace
+ * @generated from message grpcview.v1.Collection
  */
-export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
+export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   /**
    * @generated from field: string name = 1;
    */
@@ -575,10 +575,10 @@ export declare type Workspace = Message$1<"grpcview.v1.Workspace"> & {
 };
 
 /**
- * Describes the message grpcview.v1.Workspace.
- * Use `create(WorkspaceSchema)` to create a new message.
+ * Describes the message grpcview.v1.Collection.
+ * Use `create(CollectionSchema)` to create a new message.
  */
-export declare const WorkspaceSchema: GenMessage<Workspace>;
+export declare const CollectionSchema: GenMessage<Collection>;
 
 /**
  * @generated from enum grpcview.v1.ScriptKind

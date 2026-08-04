@@ -76,7 +76,7 @@ export const invokeSaved: typeof WorkspaceService["method"]["invokeSaved"];
  */
 export const describeMethod: typeof WorkspaceService["method"]["describeMethod"];
 /**
- * RunScript uses a fresh isolated instance: no capabilities, no workspace state.
+ * RunScript uses a fresh isolated instance: no capabilities, no collection state.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.RunScript
  */

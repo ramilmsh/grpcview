@@ -70,12 +70,12 @@ func TestInvokeRecordsHistory(t *testing.T) {
 		md, _ := structpb.NewStruct(map[string]any{"x-run": fmt.Sprintf("%d", i)})
 		resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 			Spec: &grpcviewv1.InvokeSpec{
-				WorkspaceName: testWorkspace,
-				ItemName:      "Echo",
-				Service:       echoService,
-				Method:        "Unary",
-				Metadata:      md,
-				Target:        target,
+				Collection: testWorkspace,
+				ItemName:   "Echo",
+				Service:    echoService,
+				Method:     "Unary",
+				Metadata:   md,
+				Target:     target,
 			},
 			Body: tsBody(fmt.Sprintf(`{"message":"hi-%d"}`, i)),
 		}))
@@ -89,10 +89,10 @@ func TestInvokeRecordsHistory(t *testing.T) {
 
 	if _, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			WorkspaceName: testWorkspace,
-			Service:       echoService,
-			Method:        "Unary",
-			Target:        target,
+			Collection: testWorkspace,
+			Service:    echoService,
+			Method:     "Unary",
+			Target:     target,
 		},
 		Body: tsBody(`{"message":"ad-hoc"}`),
 	})); err != nil {

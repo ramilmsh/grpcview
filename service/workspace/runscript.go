@@ -25,7 +25,7 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 	)
 	switch request.Msg.GetKind() {
 	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
-		allGens, gerr := w.loadGenerators(ctx, request.Msg.GetWorkspaceName())
+		allGens, gerr := w.loadGenerators(ctx, request.Msg.GetCollection())
 		if gerr != nil {
 			return nil, gerr
 		}

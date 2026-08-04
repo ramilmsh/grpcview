@@ -60,9 +60,9 @@ func runDescribe(ctx context.Context, s Streams, g *globalFlags, open clientFact
 	var described *grpcviewv1.DescribeMethodResponse
 	err := withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		resp, err := sess.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
-			WorkspaceName: g.Workspace,
-			Service:       service,
-			Method:        method,
+			Collection: g.Collection,
+			Service:    service,
+			Method:     method,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to describe %s: %w", arg, err)

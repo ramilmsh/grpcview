@@ -63,7 +63,7 @@ type invokeSpec struct {
 // ad-hoc RPCs — which is the whole point of the two of them embedding the same message.
 func specFrom(in *grpcviewv1.InvokeSpec) invokeSpec {
 	return invokeSpec{
-		workspaceName:  in.GetWorkspaceName(),
+		workspaceName:  in.GetCollection(),
 		path:           in.GetPath(),
 		itemName:       in.GetItemName(),
 		service:        in.GetService(),

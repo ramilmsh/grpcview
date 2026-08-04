@@ -98,12 +98,12 @@ func runInvoke(ctx context.Context, s Streams, g *globalFlags, open clientFactor
 	}
 	defer func() { _ = sess.close(ctx) }()
 
-	snapshot, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{WorkspaceName: g.Workspace}))
+	snapshot, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
 	if err != nil {
-		return fmt.Errorf("failed to read workspace %q: %w", g.Workspace, err)
+		return fmt.Errorf("failed to read workspace %q: %w", g.Collection, err)
 	}
 
-	target, err := resolveInvokeArg(snapshot.Msg.GetWorkspace(), arg)
+	target, err := resolveInvokeArg(snapshot.Msg.GetCollection(), arg)
 	if err != nil {
 		return err
 	}
@@ -155,12 +155,12 @@ func invokeSaved(ctx context.Context, s Streams, sess session, g *globalFlags, f
 	}
 
 	spec := &grpcviewv1.SavedInvokeSpec{
-		WorkspaceName: g.Workspace,
-		Path:          target.parent,
-		ItemName:      target.itemName,
-		Params:        params,
-		Target:        buildTarget(f),
-		Messages:      messages,
+		Collection: g.Collection,
+		Path:       target.parent,
+		ItemName:   target.itemName,
+		Params:     params,
+		Target:     buildTarget(f),
+		Messages:   messages,
 	}
 	// record_history defaults to true server-side, so only the opt-out is sent.
 	if f.noHistory {
@@ -196,11 +196,11 @@ func invokeAdhoc(ctx context.Context, s Streams, sess session, g *globalFlags, f
 		return err
 	}
 	spec := &grpcviewv1.InvokeSpec{
-		WorkspaceName: g.Workspace,
-		Service:       target.service,
-		Method:        target.method,
-		Metadata:      md,
-		Target:        buildTarget(f),
+		Collection: g.Collection,
+		Service:    target.service,
+		Method:     target.method,
+		Metadata:   md,
+		Target:     buildTarget(f),
 	}
 
 	if target.kind.streaming() {

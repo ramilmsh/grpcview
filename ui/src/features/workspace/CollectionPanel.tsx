@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Menu } from "@/components/ui/Menu";
 import { Tree, isEditableTarget } from "@/components/tree/Tree";
 import type { TreeHandle, TreeRowState } from "@/components/tree/types";
-import { useWorkspace, useRootItems, useWorkspaceMutations, WORKSPACE_NAME } from "@/lib/workspace-query";
+import { useWorkspace, useRootItems, useWorkspaceMutations, COLLECTION_ID } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import {
   childPathOf,
@@ -101,7 +101,7 @@ export function CollectionPanel() {
     const name = folderName.trim();
     if (name) {
       createFolder.mutate({
-        workspaceName: WORKSPACE_NAME,
+        collection: COLLECTION_ID,
         path: childPathOf(newFolderParent ?? null),
         itemName: name,
       });
@@ -112,7 +112,7 @@ export function CollectionPanel() {
 
   const onPick = (service: Service, method: Method) => {
     createRequest.mutate({
-      workspaceName: WORKSPACE_NAME,
+      collection: COLLECTION_ID,
       path: childPathOf(pickerParent ?? null),
       itemName: method.name,
       service: serviceName(service),
@@ -125,7 +125,7 @@ export function CollectionPanel() {
     const next = newName.trim();
     if (!next || next === item.item.name) return;
     const args = {
-      workspaceName: WORKSPACE_NAME,
+      collection: COLLECTION_ID,
       path: item.path,
       itemName: item.item.name,
       name: next,
@@ -141,7 +141,7 @@ export function CollectionPanel() {
   const doDelete = () => {
     for (const item of confirm) {
       deleteRequest.mutate({
-        workspaceName: WORKSPACE_NAME,
+        collection: COLLECTION_ID,
         path: item.path,
         itemName: item.item.name,
       });
@@ -191,7 +191,7 @@ export function CollectionPanel() {
       if (node === undefined) return;
       moveItem.mutate(
         {
-          workspaceName: WORKSPACE_NAME,
+          collection: COLLECTION_ID,
           path: node.path,
           itemName: node.item.name,
           newPath,
