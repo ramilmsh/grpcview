@@ -1,6 +1,6 @@
 # Phase 2 — body and metadata as files
 
-**Prereqs:** [phase 1](./phase-1-collection-dir.md). **Unblocks:** reveal-body-as-file,
+**Prereqs:** [phase 1](./phase-1-workspace.md). **Unblocks:** reveal-body-as-file,
 CI type-checking, `import`s from shared modules. See [`README.md`](./README.md) for the
 track overview.
 

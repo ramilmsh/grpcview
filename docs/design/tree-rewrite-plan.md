@@ -237,7 +237,7 @@ implements `getTreeItem` is portable by construction — which makes portability
 you can check, not a convention to remember.
 
 The request tree stays deliberately **rich/standalone-only**: in plugin mode the
-collection is a directory of files (`docs/design/vscode/phase-1-collection-dir.md`), so
+collection is a directory of files (`docs/design/vscode/phase-1-workspace.md`), so
 VS Code's *file explorer* is the request tree and there is nothing to port. That
 assumption is load-bearing for this split — if the plugin ever needs a custom request
 tree, the hover-reveal gear/pencil/plus/trash affordances would have to collapse into
@@ -295,7 +295,7 @@ Keyboard, verified against `abstractTree.js` / `listWidget.js` in
 | `←` | expanded folder → collapse; otherwise → focus parent |
 | `→` | collapsed folder → expand; otherwise → focus first child |
 | `Space` | toggle expand/collapse |
-| `Enter` | **platform-split** — macOS: rename; Windows/Linux: open |
+| `Enter` | **platform-split** — macOS: rename; elsewhere: open |
 | `cmd+↓` | open (macOS only) |
 | `PgUp` `PgDn` | move focus one viewport |
 | `Home` `End` | first / last visible row |
@@ -336,7 +336,7 @@ the viewport edges; reject drops into a dragged node's own descendant.
 1. ~~**`Enter` opens; `F2` renames — on every platform.**~~ **Withdrawn 2026-07-31.** This
    was the one place the plan knowingly broke "identical"; it was put to the user and
    reversed. We now bind exactly what VS Code binds on each platform — macOS `Enter`
-   renames and `cmd+↓` opens, Windows/Linux `Enter` opens — so `keymap.ts` is
+   renames and `cmd+↓` opens, elsewhere `Enter` opens — so `keymap.ts` is
    platform-parameterized. See the key table above. Nothing else in this doc changes.
 2. **No preview/pinned-tab distinction.** VS Code single-click previews (italic tab) and
    double-click pins. grpcview's tabs have no preview concept; single click opens, double

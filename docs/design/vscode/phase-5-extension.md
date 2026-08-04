@@ -1,6 +1,6 @@
 # Phase 5 — the extension
 
-**Prereqs:** phases [1](./phase-1-collection-dir.md), [2](./phase-2-body-files.md),
+**Prereqs:** phases [1](./phase-1-workspace.md), [2](./phase-2-body-files.md),
 [3](./phase-3-type-sinks.md), [4](./phase-4-request-management.md).
 See [`README.md`](./README.md) for the approach and the sink model.
 
@@ -23,13 +23,17 @@ plumbing.
 
 ### 2. Backend supervisor
 
-Spawn the Go binary with `--dir <workspaceFolder> --port 0`, read the chosen port from
-stdout, health-check, restart on crash, kill on `deactivate`.
+Spawn the Go binary with `--workspace <workspaceFolder>` (the port is random —
+[`../daemon.md`](../daemon.md)), or better, let the daemon's connect-or-spawn registry do it
+and just read the registration file. Health-check, restart on crash, kill on `deactivate`.
+Which of the two is an open question in that document.
 
-**Requires a backend change:** `http.ListenAndServe` (`service/service.go:82`) cannot
-report the port the OS chose for `:0`. Switch to `net.Listen` + `http.Serve` and print
-the resolved address. Also bind `127.0.0.1` rather than `net.IPv4zero`
-(`service.go:80`) — an editor extension has no business listening on all interfaces.
+**Requires a backend change:** `http.ListenAndServe` (`service/service.go:83`) cannot
+report the port the OS chose for `:0`. Switch to `net.Listen` + `http.Serve` and report
+the resolved address — the same restructure the daemon needs for graceful shutdown. The
+`127.0.0.1` bind (today `net.IPv4zero`, `service.go:81`) lands earlier, in
+[phase 1](./phase-1-workspace.md) Decision 12, since it is a live defect rather than an
+extension concern.
 
 ### 3. Connect client
 
@@ -82,7 +86,7 @@ the invalidating mutations, write `.grpcview/types/` plus `types.stamp`.
 
 ### 8. Packaging
 
-Platform-specific `.vsix` (`vsce package --target darwin-arm64|linux-x64|win32-x64`),
+Platform-specific `.vsix` (`vsce package --target darwin-arm64|linux-x64`),
 since a Go binary is bundled. Publish to Marketplace **and** Open VSX.
 
 ## Verify

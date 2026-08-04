@@ -281,10 +281,14 @@ Phase 3 fixes both, and both fixes are **shared-layer**, not MCP-specific:
   methods on every workspace-returning tool. Phase 1 strips only `descriptor_set`. Open:
   should the shim also trim `services` on *mutation* responses (keeping it only on
   `get_workspace`), or does `describe_method` plus a future `find_method` make that moot?
-- **`workspace_name` is dead weight in every schema.** [VS Code phase 1](../vscode/phase-1-collection-dir.md)
-  plans to delete it ("the collection is the directory grpcview runs in"). Until then every
-  tool description must tell the agent to pass it. Sequencing question: is it cheaper to do
-  that deletion *before* phase 2's comment rewrite, so the rewrite is written once?
+- **`workspace_name` is noise in every schema, but it is not dead.**
+  [VS Code phase 1](../vscode/phase-1-workspace.md) renames it to `collection` and makes it
+  the collection's workspace-relative path — a monorepo has several, so the field survives
+  with a real meaning. What an agent should never have to do is *choose*: the tool schema
+  wants it optional, defaulting to the sole collection (or the one containing the cwd), and
+  erroring with the candidate list when the workspace holds several. Sequencing question: is
+  it cheaper to do that rename *before* phase 2's comment rewrite, so the rewrite is written
+  once?
 - **`grpcview mcp` has no `--dir`.** It inherits `os.UserConfigDir()/.grpcview` like the
   server. After VS Code phase 1 it must accept `--dir` too, or an agent cannot be pointed
   at a project's collection.

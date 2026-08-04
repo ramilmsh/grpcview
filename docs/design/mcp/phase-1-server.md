@@ -239,10 +239,14 @@ entirely and put a cobra tree in `service/cli`, so:
   a goroutine dump.
 - `service/cli` **must not** import `//service`, so if `mcp.Run` ever needs the HTTP server
   it takes the same injected-closure route `serve` does.
-- **No new flags.** The collection is `os.UserConfigDir()/.grpcview`, the same one the
-  server uses (`workspace.go:52`) — that is Decision 4's shared-directory model. When
-  [VS Code phase 1](../vscode/phase-1-collection-dir.md) lands `--dir`, `grpcview mcp` must
-  take it too.
+- **No new flags** *today*: the collection is `os.UserConfigDir()/.grpcview`, the same one the
+  server uses (`workspace.go:44`) — Decision 4's shared-directory model. This is the part
+  [VS Code phase 1](../vscode/phase-1-workspace.md) invalidates, and by more than one flag.
+  `grpcview mcp` must take `--workspace <path>`, resolve `collection` the way the other verbs
+  do, and become a **client of the workspace daemon** through the same connect-or-spawn
+  registry ([`../daemon.md`](../daemon.md)) — so an agent's writes and the UI's writes land in
+  one process rather than two racing on a directory. MCP itself needs no port and no discovery
+  *of* itself: it is launched by its client over stdio, which is the easy half.
 
 ## Files touched
 

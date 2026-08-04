@@ -11,13 +11,14 @@ two architecture decisions every phase depends on.
 
 | Phase | Doc | Summary |
 |---|---|---|
-| 1 | [`phase-1-collection-dir.md`](./phase-1-collection-dir.md) | The collection is the directory grpcview runs in |
+| 1 | [`phase-1-workspace.md`](./phase-1-workspace.md) | The workspace is the repo; collections are what's in it |
 | 2 | [`phase-2-body-files.md`](./phase-2-body-files.md) | Body + metadata become real `.ts` files on disk |
 | 3 | [`phase-3-type-sinks.md`](./phase-3-type-sinks.md) | Extract the type producer/sink seam |
 | 4 | [`phase-4-request-management.md`](./phase-4-request-management.md) | Document identity, dirty state, preview tabs, commands |
 | 5 | [`phase-5-extension.md`](./phase-5-extension.md) | The extension itself |
 | 6 | [`phase-6-optional.md`](./phase-6-optional.md) | QuickJS producer, tsserver plugin, tsgo IPC, CI checking |
 | — | [`body-contract.md`](./body-contract.md) | Enforcing the body/metadata export signature (spans 2 and 5) |
+| — | [`../daemon.md`](../daemon.md) | One daemon per workspace — was phase 1's Decision 10; depends only on 1a |
 
 ---
 
