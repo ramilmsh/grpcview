@@ -190,8 +190,8 @@ func TestInvoke(t *testing.T) {
 				}
 				got := fc.gotSaved[0]
 				spec := got.GetSpec()
-				if spec.GetCollection() != "default" {
-					t.Errorf("collection = %q, want %q", spec.GetCollection(), "default")
+				if spec.GetCollection() != "." {
+					t.Errorf("collection = %q, want %q", spec.GetCollection(), ".")
 				}
 				if want := []string{"Auth"}; len(spec.GetPath()) != 1 || spec.GetPath()[0] != want[0] {
 					t.Errorf("path = %v, want %v", spec.GetPath(), want)
@@ -238,21 +238,21 @@ func TestInvoke(t *testing.T) {
 			name:       "a failing Get is exit 2 and invokes nothing",
 			args:       []string{"invoke", "Auth/Login"},
 			fake:       func(fc *fakeClient) { fc.getErr = connect.NewError(connect.CodeInternal, errNoTarget) },
-			wantErrHas: "failed to read workspace \"default\"",
+			wantErrHas: "failed to read collection \".\"",
 			wantCode:   2,
 			check:      wantNothingInvoked,
 		},
 		{
 			name:       "an ambiguous argument is exit 2 naming both interpretations",
 			args:       []string{"invoke", "echo.v1.EchoService/Unary"},
-			wantErrHas: "ambiguous argument \"echo.v1.EchoService/Unary\": it names both the saved request echo.v1.EchoService/Unary in workspace \"default\" and the method echo.v1.EchoService/Unary in the schema",
+			wantErrHas: "ambiguous argument \"echo.v1.EchoService/Unary\": it names both the saved request echo.v1.EchoService/Unary in collection \"default\" and the method echo.v1.EchoService/Unary in the schema",
 			wantCode:   2,
 			check:      wantNothingInvoked,
 		},
 		{
 			name:       "an unknown slashed argument is exit 2 saying what was looked for",
 			args:       []string{"invoke", "Auth/Nope"},
-			wantErrHas: "unknown request or method \"Auth/Nope\": no saved request at that path in workspace \"default\", and no service \"Auth\" with a method \"Nope\" among its 2 service(s)",
+			wantErrHas: "unknown request or method \"Auth/Nope\": no saved request at that path in collection \"default\", and no service \"Auth\" with a method \"Nope\" among its 2 service(s)",
 			wantCode:   2,
 			check:      wantNothingInvoked,
 		},
@@ -273,7 +273,7 @@ func TestInvoke(t *testing.T) {
 		{
 			name:       "a saved request whose method is not in the schema is exit 2",
 			args:       []string{"invoke", "Broken"},
-			wantErrHas: "it calls gone.v1.GoneService/Missing, which no definition source in workspace \"default\" resolves",
+			wantErrHas: "it calls gone.v1.GoneService/Missing, which no definition source in collection \"default\" resolves",
 			wantCode:   2,
 			check:      wantNothingInvoked,
 		},

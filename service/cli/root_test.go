@@ -178,7 +178,8 @@ func TestRootCmd_persistentFlags(t *testing.T) {
 	root := newRootCmd(s, (&fakeServe{}).serve, unusedFactory(t))
 
 	for name, want := range map[string]string{
-		"collection": "default",
+		"workspace":  "",
+		"collection": ".",
 		"server":     "",
 		"timeout":    "30s",
 	} {

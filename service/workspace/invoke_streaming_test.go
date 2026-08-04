@@ -98,7 +98,9 @@ func splitFrames(t *testing.T, frames []*grpcviewv1.InvokeStreamingResponse) (ms
 
 func TestStreamInvokeKinds(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
-	port := echoTarget(t, w, context.Background(), startEchoServer)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	cases := []struct {
 		name     string
@@ -149,7 +151,9 @@ func TestStreamInvokeKinds(t *testing.T) {
 
 func TestStreamInvokeDefaultsEmptyMessages(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
-	port := echoTarget(t, w, context.Background(), startEchoServer)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	frames, err := collectStream(context.Background(), w, echoStreamReq(port, "Unary"))
 	if err != nil {
@@ -166,7 +170,9 @@ func TestStreamInvokeDefaultsEmptyMessages(t *testing.T) {
 
 func TestStreamInvokePreflightErrors(t *testing.T) {
 	w := newTestWorkspace(t)
-	port := echoTarget(t, w, context.Background(), startEchoServer)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := echoTarget(t, w, ctx, startEchoServer)
 
 	t.Run("unknown_method", func(t *testing.T) {
 		frames, err := collectStream(context.Background(), w, echoStreamReq(port, "NoSuchMethod", `{}`))

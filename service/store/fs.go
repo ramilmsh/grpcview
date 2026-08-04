@@ -125,18 +125,26 @@ func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	return c.loadScripts(col.GetScripts())
 }
 
-// EnsureCreated creates an empty collection (manifest, tree/) if absent, with the manifest's
-// display name defaulted to the collection directory's own base name.
-func (c *Collection) EnsureCreated(_ context.Context) error {
+// Create creates a new, empty collection (manifest, tree/) at this address, with the
+// manifest's display name set to name — or, when name is empty, to the collection
+// directory's own base name. A collection that already exists here is ErrAlreadyExists,
+// wrapped with this collection's id: unlike the old EnsureCreated this replaces, a typo'd
+// address must not silently materialize a collection or silently reuse one.
+func (c *Collection) Create(_ context.Context, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if fileExists(c.collectionFilePath()) {
-		return nil
+		// Its own sentinel, not ErrAlreadyExists: that one reads "item already exists" and
+		// is about tree items, and it maps to FailedPrecondition where this wants AlreadyExists.
+		return fmt.Errorf("%w: %q", ErrCollectionExists, c.id)
 	}
 	if err := os.MkdirAll(c.treeRoot(), 0o755); err != nil {
 		return err
 	}
-	return c.writeCollection(&grpcviewstorev1.Collection{Name: c.defaultName()})
+	if name == "" {
+		name = c.defaultName()
+	}
+	return c.writeCollection(&grpcviewstorev1.Collection{Name: name})
 }
 
 // CreateFolder creates a folder inside the folder addressed by the display-name path parent.

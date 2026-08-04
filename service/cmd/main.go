@@ -21,7 +21,7 @@ func serve(ctx context.Context, opts cli.ServeOptions) error {
 	}
 	defer indexPageFile.Close()
 
-	if err := service.Run(ctx, indexPageFile, service.Options{Port: opts.Port}); err != nil {
+	if err := service.Run(ctx, indexPageFile, service.Options{Port: opts.Port, Root: opts.Root}); err != nil {
 		return fmt.Errorf("failed to run server: %w", err)
 	}
 

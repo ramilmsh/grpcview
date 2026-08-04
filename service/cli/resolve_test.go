@@ -44,7 +44,7 @@ func TestResolveInvokeArg(t *testing.T) {
 		{name: "both forms matching is refused", arg: "echo.v1.EchoService/Unary", wantErr: "ambiguous argument"},
 		{name: "a folder is not a request", arg: "Auth", wantErr: "it is a folder, not a request"},
 		{name: "an unknown method on a known service", arg: "auth.v1.AuthService/Nope", wantErr: "unknown request or method"},
-		{name: "an unresolvable saved method", arg: "Broken", wantErr: "which no definition source in workspace"},
+		{name: "an unresolvable saved method", arg: "Broken", wantErr: "which no definition source in collection"},
 		{name: "a trailing slash is not a path", arg: "Auth/", wantErr: "unknown request or method"},
 		{name: "the empty argument", arg: "", wantErr: "unknown request"},
 		{name: "a path through a request rather than a folder", arg: "Stream/Nested", wantErr: "unknown request or method"},

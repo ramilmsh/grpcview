@@ -23,7 +23,7 @@ func newDescribeCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comman
 		Short: "Print a method's input and output shape",
 		Long: "Print the input and output messages of one method, plus every type they\n" +
 			"reference, so a body can be written without opening the UI.\n\n" +
-			"The shape comes from definitions the workspace has already resolved, so this\n" +
+			"The shape comes from definitions the collection has already resolved, so this\n" +
 			"answers even when the target is unreachable. Which source it was read from is\n" +
 			"reported on stderr, because doc comments survive only if that source carried\n" +
 			"them: a server answering by reflection strips them, an uploaded descriptor set\n" +

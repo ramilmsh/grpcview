@@ -27,9 +27,16 @@ export const refreshDescriptorSource: typeof WorkspaceService["method"]["refresh
  */
 export const reorderDescriptorSources: typeof WorkspaceService["method"]["reorderDescriptorSources"];
 /**
+ * Get reports NOTHING implicitly: a collection that does not exist is NotFound,
+ * never created on demand.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.Get
  */
 export const get: typeof WorkspaceService["method"]["get"];
+/**
+ * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
+ */
+export const createCollection: typeof WorkspaceService["method"]["createCollection"];
 /**
  * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder
  */

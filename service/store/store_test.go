@@ -33,8 +33,8 @@ func newTestCollection(t *testing.T) (*Collection, context.Context) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	return coll, ctx
 }
@@ -524,8 +524,8 @@ func TestAppendHistoryCapAndReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	if err := coll.CreateRequest(ctx, nil, "Get User", "acme.v1.UserService", "GetUser"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
@@ -612,8 +612,8 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	if err := coll.CreateRequest(ctx, nil, "Echo", "echo.v1.EchoService", "Unary"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
@@ -679,8 +679,8 @@ func TestUpdateRequestTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	if err := coll.CreateRequest(ctx, nil, "Echo", "echo.v1.EchoService", "Unary"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
@@ -993,8 +993,8 @@ func TestDisplayNameIsNeverTheID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open(%q): %v", id, err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
 	col := &grpcviewstorev1.Collection{}
@@ -1025,8 +1025,8 @@ func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	if err := coll.CreateRequest(ctx, nil, "Echo", "s", "m"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)

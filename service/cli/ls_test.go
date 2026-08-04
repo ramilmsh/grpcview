@@ -78,7 +78,7 @@ func TestLs(t *testing.T) {
 		{
 			name:       "an unknown folder is grpcview's own failure",
 			args:       []string{"ls", "Nope"},
-			wantErrHas: `grpcview: unknown folder "Nope": no folder at that path in workspace "default"`,
+			wantErrHas: `grpcview: unknown folder "Nope": no folder at that path in collection "default"`,
 			wantCode:   2,
 		},
 		{
@@ -103,7 +103,7 @@ func TestLs(t *testing.T) {
 			name:       "a Connect error from Get is exit 2, never exit 1",
 			args:       []string{"ls"},
 			fake:       func(fc *fakeClient) { fc.getErr = connect.NewError(connect.CodeUnavailable, errNoTarget) },
-			wantErrHas: `failed to read workspace "default"`,
+			wantErrHas: `failed to read collection "."`,
 			wantCode:   2,
 		},
 		{

@@ -24,6 +24,7 @@ var (
 	ErrNotAFolder          = errors.New("item is not a folder")
 	ErrNotARequest         = errors.New("item is not a request")
 	ErrAlreadyExists       = errors.New("item already exists")
+	ErrCollectionExists    = errors.New("collection already exists")
 	ErrMoveIntoDescendant  = errors.New("cannot move an item into itself or its own descendant")
 	ErrInvalidCollectionID = errors.New("invalid collection id")
 )

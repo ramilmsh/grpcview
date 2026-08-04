@@ -146,7 +146,7 @@ func TestSourcesLsEmptyAndFailing(t *testing.T) {
 			name:       "a Connect error from Get is exit 2",
 			args:       []string{"sources", "ls"},
 			fake:       func(fc *fakeClient) { fc.getErr = connect.NewError(connect.CodeUnavailable, errNoTarget) },
-			wantErrHas: `failed to read workspace "default"`,
+			wantErrHas: `failed to read collection "."`,
 			wantCode:   2,
 		},
 	} {

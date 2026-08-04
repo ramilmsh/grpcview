@@ -19,8 +19,8 @@ import (
 func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sources",
-		Short: "Inspect and edit the workspace's definition sources",
-		Long: "A workspace's services and descriptors are derived from a priority-ordered\n" +
+		Short: "Inspect and edit the collection's definition sources",
+		Long: "A collection's services and descriptors are derived from a priority-ordered\n" +
 			"list of definition sources — reflection targets and uploaded descriptor sets.\n" +
 			"These verbs show that list and change it.\n\n" +
 			"Order is precedence and only order: the outcome is a pure function of the\n" +

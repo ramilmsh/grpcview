@@ -62,6 +62,10 @@ func toConnectError(err error) error {
 		return nil
 	case errors.Is(err, store.ErrItemNotFound), errors.Is(err, store.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, store.ErrInvalidCollectionID):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, store.ErrCollectionExists):
+		return connect.NewError(connect.CodeAlreadyExists, err)
 	case errors.Is(err, store.ErrNotAFolder), errors.Is(err, store.ErrNotARequest),
 		errors.Is(err, store.ErrAlreadyExists), errors.Is(err, store.ErrMoveIntoDescendant):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
@@ -73,21 +77,33 @@ func toConnectError(err error) error {
 func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error) {
 	coll, err := w.store.Open(ctx, request.Msg.GetCollection())
 	if err != nil {
-		return nil, err
+		return nil, toConnectError(err)
 	}
 
 	ws, err := coll.Load(ctx)
-	if errors.Is(err, store.ErrNotFound) {
-		if err := coll.EnsureCreated(ctx); err != nil {
-			return nil, fmt.Errorf("failed to create workspace: %w", err)
-		}
-		ws, err = coll.Load(ctx)
-	}
 	if err != nil {
 		return nil, toConnectError(err)
 	}
 
 	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: ws}), nil
+}
+
+// CreateCollection is the one place a collection legitimately comes into existence: every
+// other handler now requires one to already be there. An existing collection at this address
+// is AlreadyExists, not silently reused.
+func (w Workspace) CreateCollection(ctx context.Context, request *connect.Request[grpcviewv1.CreateCollectionRequest]) (*connect.Response[grpcviewv1.CreateCollectionResponse], error) {
+	coll, err := w.store.Open(ctx, request.Msg.GetCollection())
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	if err := coll.Create(ctx, request.Msg.GetName()); err != nil {
+		return nil, toConnectError(err)
+	}
+	ws, err := coll.Load(ctx)
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	return connect.NewResponse(&grpcviewv1.CreateCollectionResponse{Collection: ws}), nil
 }
 
 // AddDescriptorSource adds (or, when the id already exists, refreshes in place) a descriptor
@@ -196,10 +212,7 @@ func (w Workspace) ReorderDescriptorSources(ctx context.Context, request *connec
 func (w Workspace) openWithSources(ctx context.Context, name string) (*store.Collection, *grpcviewv1.Collection, error) {
 	coll, err := w.store.Open(ctx, name)
 	if err != nil {
-		return nil, nil, err
-	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		return nil, nil, fmt.Errorf("failed to create workspace: %w", err)
+		return nil, nil, toConnectError(err)
 	}
 	ws, err := coll.Load(ctx)
 	if err != nil {
@@ -234,10 +247,7 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Collection) error) (*grpcviewv1.Collection, error) {
 	coll, err := w.store.Open(ctx, name)
 	if err != nil {
-		return nil, err
-	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		return nil, fmt.Errorf("failed to create workspace: %w", err)
+		return nil, toConnectError(err)
 	}
 	if err := fn(coll); err != nil {
 		return nil, toConnectError(err)

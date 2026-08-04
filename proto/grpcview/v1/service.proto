@@ -139,6 +139,20 @@ message GetResponse {
   Collection collection = 1;
 }
 
+// A collection is only ever created by an explicit act — this RPC, or `grpcview
+// init`. Nothing else may materialize one, or a stale query would scatter
+// grpcview.json among a repo's project files.
+message CreateCollectionRequest {
+  // Workspace-relative directory to create it in; "." is the workspace root.
+  string collection = 1;
+  // Display name; empty defaults to the directory's own base name.
+  string name       = 2;
+}
+
+message CreateCollectionResponse {
+  Collection collection = 1;
+}
+
 // Everything an ad-hoc invoke needs except the client payload — the one thing
 // the unary and streaming forms disagree about.
 message InvokeSpec {
@@ -311,7 +325,10 @@ service WorkspaceService {
   // ReorderDescriptorSources sets which source wins when several describe the
   // same protos.
   rpc ReorderDescriptorSources(ReorderDescriptorSourcesRequest) returns (ReorderDescriptorSourcesResponse);
+  // Get reports NOTHING implicitly: a collection that does not exist is NotFound,
+  // never created on demand.
   rpc Get(GetRequest) returns (GetResponse);
+  rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   rpc CreateRequest(CreateRequestRequest) returns (CreateRequestResponse);
   rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);

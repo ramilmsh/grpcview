@@ -12,10 +12,7 @@ import (
 func TestScriptCRUDHandlers(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
-
-	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace})); err != nil {
-		t.Fatalf("Get (auto-create): %v", err)
-	}
+	ensureWorkspace(t, w, ctx)
 
 	resp, err := w.CreateScript(ctx, connect.NewRequest(&grpcviewv1.CreateScriptRequest{
 		Collection: testWorkspace, Name: "uuid", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,

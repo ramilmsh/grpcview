@@ -24,7 +24,13 @@ type Streams struct {
 	Err io.Writer
 }
 
-type ServeOptions struct{ Port int }
+type ServeOptions struct {
+	Port int
+	// Root is the raw --workspace override, passed through unresolved: service.Run does
+	// its own wsroot.Discover(Root, cwd) and logs the warning, so serving is the one path
+	// that discovers relative to the SERVER's cwd, not the CLI process invoking it.
+	Root string
+}
 
 // statusError carries an explicit process exit code out of a verb's RunE.
 type statusError struct {
@@ -53,6 +59,10 @@ func exitCode(err error) int {
 }
 
 type globalFlags struct {
+	// Workspace is the raw --workspace override: the workspace ROOT, not a collection
+	// address. Empty means "discover one" — see wsroot.Discover, called from
+	// service/cli/client.go's openClient and from service.Run.
+	Workspace  string
 	Collection string
 	Server     string
 	Timeout    time.Duration
@@ -61,7 +71,11 @@ type globalFlags struct {
 func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	g := &globalFlags{}
 	f := cmd.PersistentFlags()
-	f.StringVar(&g.Collection, "collection", "default", "collection to operate on")
+	f.StringVar(&g.Workspace, "workspace", "", "workspace root; empty walks up from the current directory to the nearest .git")
+	// "." — the workspace root is the collection — covers the common non-monorepo case
+	// (cd ~/api-requests && grpcview). Resolving a collection by walking up from the cwd
+	// within a monorepo is a later phase, not this one.
+	f.StringVar(&g.Collection, "collection", ".", "collection to operate on")
 	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
 	f.DurationVar(&g.Timeout, "timeout", 30*time.Second, "per-request timeout")
 	return g
@@ -80,6 +94,10 @@ func newRootCmd(
 	open clientFactory,
 ) *cobra.Command {
 	var rootPort int
+	// globals is assigned below, before Execute ever runs RunE — registerGlobalFlags needs
+	// the *cobra.Command literal to already exist, so it can't run before this closure is
+	// written, but it does run before the closure is ever CALLED.
+	var globals *globalFlags
 
 	root := &cobra.Command{
 		Use:   "grpcview",
@@ -94,12 +112,12 @@ func newRootCmd(
 			if len(args) > 0 {
 				return unknownCommand(cmd, args[0])
 			}
-			return serve(cmd.Context(), ServeOptions{Port: rootPort})
+			return serve(cmd.Context(), ServeOptions{Port: rootPort, Root: globals.Workspace})
 		},
 	}
 	root.Flags().IntVar(&rootPort, "port", defaultPort, "port to serve on")
 
-	globals := registerGlobalFlags(root)
+	globals = registerGlobalFlags(root)
 
 	root.AddCommand(newInvokeCmd(s, globals, open))
 	root.AddCommand(newDescribeCmd(s, globals, open))
@@ -109,7 +127,8 @@ func newRootCmd(
 	root.AddCommand(newRequestCmd(s, globals, open))
 	root.AddCommand(newFolderCmd(globals, open))
 	root.AddCommand(newScriptCmd(s, globals, open))
-	root.AddCommand(newServeCmd(serve))
+	root.AddCommand(newInitCmd(s, globals, open))
+	root.AddCommand(newServeCmd(serve, globals))
 	root.AddCommand(newVersionCmd())
 
 	root.SetIn(s.In)
@@ -128,14 +147,14 @@ func unknownCommand(cmd *cobra.Command, arg string) error {
 	return statusError{code: 2, err: fmt.Errorf("unknown command %q for %q", arg, cmd.CommandPath())}
 }
 
-func newServeCmd(serve func(context.Context, ServeOptions) error) *cobra.Command {
+func newServeCmd(serve func(context.Context, ServeOptions) error, g *globalFlags) *cobra.Command {
 	var port int
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Serve the UI and API",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return serve(cmd.Context(), ServeOptions{Port: port})
+			return serve(cmd.Context(), ServeOptions{Port: port, Root: g.Workspace})
 		},
 	}
 	cmd.Flags().IntVar(&port, "port", defaultPort, "port to serve on")
@@ -156,7 +175,11 @@ func newVersionCmd() *cobra.Command {
 
 // Main builds the command tree, executes it, and returns the process exit code.
 func Main(ctx context.Context, args []string, s Streams, serve func(context.Context, ServeOptions) error) int {
-	return execute(ctx, newRootCmd(s, serve, openClient), args, s)
+	// openClient needs Streams (to surface wsroot.Discover's warning on s.Err), but
+	// clientFactory does not carry one — every verb already has its own s — so it is
+	// bound here, once, at the production wiring.
+	open := func(ctx context.Context, g *globalFlags) (session, error) { return openClient(ctx, g, s) }
+	return execute(ctx, newRootCmd(s, serve, open), args, s)
 }
 
 func execute(ctx context.Context, root *cobra.Command, args []string, s Streams) int {

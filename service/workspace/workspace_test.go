@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -118,10 +119,17 @@ func fileDescriptorSet(t *testing.T, path string) []byte {
 	return raw
 }
 
+// ensureWorkspace explicitly creates the test collection: Get no longer does this on
+// demand (see TestGetMissingCollectionIsNotFound), so every test that needs the collection
+// to already exist must ask for that itself.
 func ensureWorkspace(t *testing.T, w Workspace, ctx context.Context) {
 	t.Helper()
-	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace})); err != nil {
-		t.Fatalf("Get (create): %v", err)
+	coll, err := w.store.Open(ctx, testWorkspace)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 }
 
@@ -293,34 +301,92 @@ func TestRemoveDescriptorSourceUnknownID(t *testing.T) {
 	}
 }
 
-func TestMutateCreatesTheCollection(t *testing.T) {
+// TestGetMissingCollectionIsNotFound is the point of removing the implicit-create behavior
+// (see AGENTS.md): a stale query for a collection that was never created must fail cleanly
+// and leave nothing behind on disk, not materialize one.
+func TestGetMissingCollectionIsNotFound(t *testing.T) {
+	root := t.TempDir()
+	w := Workspace{
+		store: store.New(root, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		defs:  newDefinitionsCache(),
+	}
 	ctx := context.Background()
 
-	t.Run("a tree mutation", func(t *testing.T) {
-		w := newTestWorkspace(t)
-		if _, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
-			Collection: testWorkspace,
-			ItemName:   "First",
-		})); err != nil {
-			t.Fatalf("CreateFolder on an unread workspace: %v", err)
-		}
-		got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
-		if err != nil {
-			t.Fatalf("Get: %v", err)
-		}
-		if items := got.Msg.GetCollection().GetItem().GetFolder().GetItems(); len(items) != 1 || items[0].GetName() != "First" {
-			t.Fatalf("items = %v, want the created folder to have persisted", items)
-		}
-	})
+	_, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("Get on a missing collection = %v, want NotFound", err)
+	}
 
-	t.Run("a source mutation", func(t *testing.T) {
-		w := newTestWorkspace(t)
-		if _, err := w.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
-			Collection: testWorkspace,
-		})); err != nil {
-			t.Fatalf("ReorderDescriptorSources on an unread workspace: %v", err)
-		}
-	})
+	entries, rerr := os.ReadDir(root)
+	if rerr != nil {
+		t.Fatalf("ReadDir workspace root: %v", rerr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Get must create nothing on disk, found %v", entries)
+	}
+}
+
+// TestMutateOnMissingCollectionIsNotFound is Get's counterpart for the write side: a
+// mutating RPC against a collection that was never created must fail the same way, not
+// stand one up on demand.
+func TestMutateOnMissingCollectionIsNotFound(t *testing.T) {
+	root := t.TempDir()
+	w := Workspace{
+		store: store.New(root, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		defs:  newDefinitionsCache(),
+	}
+	ctx := context.Background()
+
+	_, err := w.CreateFolder(ctx, connect.NewRequest(&grpcviewv1.CreateFolderRequest{
+		Collection: testWorkspace,
+		ItemName:   "First",
+	}))
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("CreateFolder on a missing collection = %v, want NotFound", err)
+	}
+
+	entries, rerr := os.ReadDir(root)
+	if rerr != nil {
+		t.Fatalf("ReadDir workspace root: %v", rerr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("CreateFolder must create nothing on disk, found %v", entries)
+	}
+}
+
+// TestCreateCollection covers the RPC that replaces the implicit auto-create: it must
+// default the display name to the directory's own base name, honor an explicit one, and
+// refuse to silently reuse an address that already holds a collection.
+func TestCreateCollection(t *testing.T) {
+	root := t.TempDir()
+	w := Workspace{
+		store: store.New(root, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		defs:  newDefinitionsCache(),
+	}
+	ctx := context.Background()
+
+	resp, err := w.CreateCollection(ctx, connect.NewRequest(&grpcviewv1.CreateCollectionRequest{Collection: "requests"}))
+	if err != nil {
+		t.Fatalf("CreateCollection: %v", err)
+	}
+	if got := resp.Msg.GetCollection().GetName(); got != "requests" {
+		t.Errorf("default name = %q, want the directory base name %q", got, "requests")
+	}
+
+	if _, err := w.CreateCollection(ctx, connect.NewRequest(&grpcviewv1.CreateCollectionRequest{Collection: "requests"})); connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("second CreateCollection at the same address = %v, want AlreadyExists", err)
+	}
+
+	named, err := w.CreateCollection(ctx, connect.NewRequest(&grpcviewv1.CreateCollectionRequest{
+		Collection: "other",
+		Name:       "My Collection",
+	}))
+	if err != nil {
+		t.Fatalf("CreateCollection with an explicit name: %v", err)
+	}
+	if got := named.Msg.GetCollection().GetName(); got != "My Collection" {
+		t.Errorf("name = %q, want the explicit %q", got, "My Collection")
+	}
 }
 
 func folderNamed(t *testing.T, ws *grpcviewv1.Collection, name string) *grpcviewv1.Folder {

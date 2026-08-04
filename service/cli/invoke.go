@@ -48,7 +48,7 @@ func newInvokeCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command 
 		Long: "Run a saved request by its display-name path (Auth/Login), or call a method\n" +
 			"ad hoc by its full name (user.v1.UserService/GetUser) with a body from -f or\n" +
 			"stdin.\n\n" +
-			"One workspace snapshot decides which form the argument is: an argument that\n" +
+			"One collection snapshot decides which form the argument is: an argument that\n" +
 			"names both a saved request and a method is an error rather than a guess.\n\n" +
 			"stdout is data and stderr is everything else. The exit code is 0 when the\n" +
 			"call returned status OK, 1 when it returned any other gRPC status, and 2 when\n" +
@@ -100,7 +100,7 @@ func runInvoke(ctx context.Context, s Streams, g *globalFlags, open clientFactor
 
 	snapshot, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
 	if err != nil {
-		return fmt.Errorf("failed to read workspace %q: %w", g.Collection, err)
+		return fmt.Errorf("failed to read collection %q: %w", g.Collection, err)
 	}
 
 	target, err := resolveInvokeArg(snapshot.Msg.GetCollection(), arg)

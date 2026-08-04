@@ -554,6 +554,51 @@ export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
 export declare const GetResponseSchema: GenMessage<GetResponse>;
 
 /**
+ * A collection is only ever created by an explicit act — this RPC, or `grpcview
+ * init`. Nothing else may materialize one, or a stale query would scatter
+ * grpcview.json among a repo's project files.
+ *
+ * @generated from message grpcview.v1.CreateCollectionRequest
+ */
+export declare type CreateCollectionRequest = Message<"grpcview.v1.CreateCollectionRequest"> & {
+  /**
+   * Workspace-relative directory to create it in; "." is the workspace root.
+   *
+   * @generated from field: string collection = 1;
+   */
+  collection: string;
+
+  /**
+   * Display name; empty defaults to the directory's own base name.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message grpcview.v1.CreateCollectionRequest.
+ * Use `create(CreateCollectionRequestSchema)` to create a new message.
+ */
+export declare const CreateCollectionRequestSchema: GenMessage<CreateCollectionRequest>;
+
+/**
+ * @generated from message grpcview.v1.CreateCollectionResponse
+ */
+export declare type CreateCollectionResponse = Message<"grpcview.v1.CreateCollectionResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Collection collection = 1;
+   */
+  collection?: Collection | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.CreateCollectionResponse.
+ * Use `create(CreateCollectionResponseSchema)` to create a new message.
+ */
+export declare const CreateCollectionResponseSchema: GenMessage<CreateCollectionResponse>;
+
+/**
  * Everything an ad-hoc invoke needs except the client payload — the one thing
  * the unary and streaming forms disagree about.
  *
@@ -1222,12 +1267,23 @@ export declare const WorkspaceService: GenService<{
     output: typeof ReorderDescriptorSourcesResponseSchema;
   },
   /**
+   * Get reports NOTHING implicitly: a collection that does not exist is NotFound,
+   * never created on demand.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.Get
    */
   get: {
     methodKind: "unary";
     input: typeof GetRequestSchema;
     output: typeof GetResponseSchema;
+  },
+  /**
+   * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
+   */
+  createCollection: {
+    methodKind: "unary";
+    input: typeof CreateCollectionRequestSchema;
+    output: typeof CreateCollectionResponseSchema;
   },
   /**
    * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder

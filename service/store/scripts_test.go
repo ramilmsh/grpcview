@@ -129,8 +129,8 @@ func TestScriptPersistRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.EnsureCreated(ctx); err != nil {
-		t.Fatalf("EnsureCreated: %v", err)
+	if err := coll.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	for _, n := range []string{"Alpha", "Bravo", "Charlie"} {
 		if err := coll.CreateScript(ctx, n, grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR); err != nil {

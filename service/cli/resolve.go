@@ -44,14 +44,14 @@ func resolveInvokeArg(ws *grpcviewv1.Collection, arg string) (invokeTarget, erro
 	switch {
 	case saved.req != nil && adhoc:
 		return invokeTarget{}, fmt.Errorf(
-			"ambiguous argument %q: it names both the saved request %s in workspace %q and the method %s/%s in the schema — nothing was invoked; rename one of the two",
+			"ambiguous argument %q: it names both the saved request %s in collection %q and the method %s/%s in the schema — nothing was invoked; rename one of the two",
 			arg, arg, ws.GetName(), service, method)
 
 	case saved.req != nil:
 		kind, ok := lookupMethod(ws, saved.req.GetService(), saved.req.GetMethod())
 		if !ok {
 			return invokeTarget{}, fmt.Errorf(
-				"cannot invoke the saved request %q: it calls %s/%s, which no definition source in workspace %q resolves; refresh the source or fix the request",
+				"cannot invoke the saved request %q: it calls %s/%s, which no definition source in collection %q resolves; refresh the source or fix the request",
 				arg, saved.req.GetService(), saved.req.GetMethod(), ws.GetName())
 		}
 		return invokeTarget{
@@ -79,12 +79,12 @@ func unknownArgError(ws *grpcviewv1.Collection, arg string, saved savedLookup) e
 	}
 	if !strings.Contains(arg, "/") {
 		return fmt.Errorf(
-			"unknown request %q: no saved request by that name at the top level of workspace %q, and a <service>/<method> argument needs a slash",
+			"unknown request %q: no saved request by that name at the top level of collection %q, and a <service>/<method> argument needs a slash",
 			arg, ws.GetName())
 	}
 	service, method := splitMethodPath(arg)
 	return fmt.Errorf(
-		"unknown request or method %q: no saved request at that path in workspace %q, and no service %q with a method %q among its %d service(s)",
+		"unknown request or method %q: no saved request at that path in collection %q, and no service %q with a method %q among its %d service(s)",
 		arg, ws.GetName(), service, method, len(ws.GetServices()))
 }
 

@@ -7,6 +7,7 @@ go_library(
         "client.go",
         "describe.go",
         "get.go",
+        "init.go",
         "invoke.go",
         "ls.go",
         "resolve.go",
@@ -19,6 +20,7 @@ go_library(
     deps = [
         "//proto/grpcview/v1:grpcview",
         "//service/workspace",
+        "//service/wsroot",
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_google_protobuf//encoding/protojson",
@@ -34,6 +36,7 @@ go_test(
         "body_test.go",
         "describe_test.go",
         "get_test.go",
+        "init_test.go",
         "invoke_test.go",
         "ls_test.go",
         "resolve_test.go",

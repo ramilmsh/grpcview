@@ -63,7 +63,7 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 	if output == outputJSON {
 		line, err := marshalOneLine(root)
 		if err != nil {
-			return fmt.Errorf("failed to render workspace %q: %w", g.Collection, err)
+			return fmt.Errorf("failed to render collection %q: %w", g.Collection, err)
 		}
 		return writeLine(s.Out, line)
 	}
@@ -88,7 +88,7 @@ func lsRoot(ws *grpcviewv1.Collection, path string) (*grpcviewv1.Item, string, e
 			path, trimmed)
 	default:
 		return nil, "", fmt.Errorf(
-			"unknown folder %q: no folder at that path in workspace %q", path, ws.GetName())
+			"unknown folder %q: no folder at that path in collection %q", path, ws.GetName())
 	}
 }
 

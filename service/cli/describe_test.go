@@ -75,7 +75,7 @@ func TestDescribe(t *testing.T) {
 			t.Errorf("service/method = %q/%q, want the argument split on the LAST slash",
 				got.GetService(), got.GetMethod())
 		}
-		if got.GetCollection() != "default" {
+		if got.GetCollection() != "." {
 			t.Errorf("collection = %q, want the inherited default", got.GetCollection())
 		}
 	})

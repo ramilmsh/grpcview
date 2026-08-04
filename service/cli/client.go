@@ -10,6 +10,7 @@ import (
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 // Client is the slice of WorkspaceService the CLI verbs use. The streaming methods
@@ -29,6 +30,7 @@ type Client interface {
 	RemoveDescriptorSource(context.Context, *connect.Request[grpcviewv1.RemoveDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RemoveDescriptorSourceResponse], error)
 	ReorderDescriptorSources(context.Context, *connect.Request[grpcviewv1.ReorderDescriptorSourcesRequest]) (*connect.Response[grpcviewv1.ReorderDescriptorSourcesResponse], error)
 
+	CreateCollection(context.Context, *connect.Request[grpcviewv1.CreateCollectionRequest]) (*connect.Response[grpcviewv1.CreateCollectionResponse], error)
 	CreateFolder(context.Context, *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error)
 	CreateRequest(context.Context, *connect.Request[grpcviewv1.CreateRequestRequest]) (*connect.Response[grpcviewv1.CreateRequestResponse], error)
 	UpdateRequest(context.Context, *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error)
@@ -86,8 +88,11 @@ type session struct {
 // clientFactory opens a session on demand, so building the command tree opens nothing.
 type clientFactory func(ctx context.Context, g *globalFlags) (session, error)
 
-// openClient is the production factory: --server talks to a running server, empty is in-process.
-func openClient(ctx context.Context, g *globalFlags) (session, error) {
+// openClient is the production factory: --server talks to a running server, empty is
+// in-process, discovering the workspace root via wsroot.Discover. A warning from Discover
+// (no .git found, silently rooting at the cwd) is printed to s.Err — the failure mode it
+// exists to catch is exactly the one a silent CLI run would hide.
+func openClient(ctx context.Context, g *globalFlags, s Streams) (session, error) {
 	if g != nil && g.Server != "" {
 		return session{
 			Client: remote{grpcviewv1.NewWorkspaceServiceClient(http.DefaultClient, g.Server)},
@@ -95,12 +100,24 @@ func openClient(ctx context.Context, g *globalFlags) (session, error) {
 		}, nil
 	}
 
-	// Real --workspace discovery (service/wsroot.Discover) is wired in a later step; for
-	// now the in-process CLI, like the server, just roots itself at the current directory.
-	root, err := os.Getwd()
-	if err != nil {
-		return session{}, fmt.Errorf("failed to resolve workspace root: %w", err)
+	var override string
+	if g != nil {
+		override = g.Workspace
 	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return session{}, fmt.Errorf("failed to resolve the current directory: %w", err)
+	}
+	// A --workspace that isn't an existing directory returns a plain error here, which
+	// exitCode maps to 2 — exactly the "bad argument" exit this deserves.
+	root, warn, err := wsroot.Discover(override, cwd)
+	if err != nil {
+		return session{}, err
+	}
+	if warn != "" {
+		fmt.Fprintln(s.Err, warn)
+	}
+
 	ws, err := workspace.New(ctx, root)
 	if err != nil {
 		return session{}, fmt.Errorf("failed to open workspace: %w", err)

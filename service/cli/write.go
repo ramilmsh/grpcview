@@ -37,7 +37,7 @@ func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn fun
 func workspaceSnapshot(ctx context.Context, sess session, g *globalFlags) (*grpcviewv1.Collection, error) {
 	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Collection, err)
+		return nil, fmt.Errorf("failed to read collection %q: %w", g.Collection, err)
 	}
 	return resp.Msg.GetCollection(), nil
 }
@@ -324,7 +324,7 @@ func runRequestMv(ctx context.Context, g *globalFlags, open clientFactory, arg, 
 func newScriptCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "script",
-		Short: "List the workspace's scripts and run one",
+		Short: "List the collection's scripts and run one",
 		Long: "List the saved scripts and evaluate one through the scripting engine.\n\n" +
 			"There is no create, update or delete here: writing TypeScript is an editor's\n" +
 			"job, and a CLI flag is the wrong place to put a module.",
@@ -421,9 +421,9 @@ func newScriptRunCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comma
 		Use:   "run <name>|-",
 		Short: "Run a saved script, or a script read from stdin",
 		Long: "Evaluate a script through the scripting engine — a fresh isolated instance\n" +
-			"with no capabilities granted and no workspace state touched.\n\n" +
+			"with no capabilities granted and no collection state touched.\n\n" +
 			"The engine runs a SOURCE, not a name: it knows nothing about the collection.\n" +
-			"So a <name> argument is resolved here, against the workspace snapshot — that\n" +
+			"So a <name> argument is resolved here, against the collection snapshot — that\n" +
 			"script's source and its own kind are what get sent — and an unknown name fails\n" +
 			"before anything is evaluated. `-` reads the source from stdin instead, and\n" +
 			"--kind selects the profile it runs under; unset evaluates the buffer as a\n" +
@@ -481,7 +481,7 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			script := scriptNamed(ws.GetScripts(), arg)
 			if script == nil {
 				return fmt.Errorf(
-					"unknown script %q: workspace %q has %d saved script(s), and `grpcview script ls` lists them",
+					"unknown script %q: collection %q has %d saved script(s), and `grpcview script ls` lists them",
 					arg, g.Collection, len(ws.GetScripts()))
 			}
 			source = script.GetSource()

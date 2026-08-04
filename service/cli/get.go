@@ -13,8 +13,8 @@ import (
 func newGetCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get",
-		Short: "Print the whole workspace as JSON",
-		Long: "Print the workspace — the collection tree, the merged services, the\n" +
+		Short: "Print the whole collection as JSON",
+		Long: "Print the collection — the collection tree, the merged services, the\n" +
 			"definition sources and the scripts — as one line of protojson on stdout, so\n" +
 			"it pipes into jq.\n\n" +
 			"One line, not indented: protojson randomizes its own whitespace between\n" +
@@ -36,7 +36,7 @@ func runGet(ctx context.Context, s Streams, g *globalFlags, open clientFactory) 
 	// The whole GetResponse, so `get` output and the RPC read the same paths.
 	line, err := marshalOneLine(snapshot)
 	if err != nil {
-		return fmt.Errorf("failed to render workspace %q: %w", g.Collection, err)
+		return fmt.Errorf("failed to render collection %q: %w", g.Collection, err)
 	}
 	return writeLine(s.Out, line)
 }
@@ -57,7 +57,7 @@ func readWorkspace(ctx context.Context, g *globalFlags, open clientFactory) (*gr
 
 	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: g.Collection}))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read workspace %q: %w", g.Collection, err)
+		return nil, fmt.Errorf("failed to read collection %q: %w", g.Collection, err)
 	}
 	return resp.Msg, nil
 }

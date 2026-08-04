@@ -45,8 +45,8 @@ func TestGet(t *testing.T) {
 	if fc.invokeCalls() != 0 {
 		t.Errorf("get invoked %d call(s); it must invoke nothing", fc.invokeCalls())
 	}
-	if len(fc.gotGet) != 1 || fc.gotGet[0].GetCollection() != "default" {
-		t.Errorf("gotGet = %+v, want exactly one Get for --collection default", fc.gotGet)
+	if len(fc.gotGet) != 1 || fc.gotGet[0].GetCollection() != "." {
+		t.Errorf("gotGet = %+v, want exactly one Get for the default --collection \".\"", fc.gotGet)
 	}
 	if fc.closed != 1 {
 		t.Errorf("session closed %d times, want 1", fc.closed)
@@ -76,7 +76,7 @@ func TestGetWorkspaceReadFailure(t *testing.T) {
 	if out != "" {
 		t.Errorf("stdout = %q, want empty", out)
 	}
-	if !strings.Contains(errOut, `grpcview: failed to read workspace "default"`) {
+	if !strings.Contains(errOut, `grpcview: failed to read collection "."`) {
 		t.Errorf("stderr = %q, want the prefixed one-liner", errOut)
 	}
 	if code != 2 {

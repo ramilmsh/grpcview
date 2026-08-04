@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//proto/grpcview/v1:grpcview",
         "//service/workspace",
+        "//service/wsroot",
         "@com_connectrpc_connect//:connect",
         "@com_connectrpc_cors//:cors",
         "@com_connectrpc_grpcreflect//:grpcreflect",

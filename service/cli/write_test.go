@@ -14,21 +14,36 @@ import (
 )
 
 type writeCalls struct {
-	addSource     []*grpcviewv1.AddDescriptorSourceRequest
-	refreshSource []*grpcviewv1.RefreshDescriptorSourceRequest
-	removeSource  []*grpcviewv1.RemoveDescriptorSourceRequest
-	reorderSource []*grpcviewv1.ReorderDescriptorSourcesRequest
-	createFolder  []*grpcviewv1.CreateFolderRequest
-	createRequest []*grpcviewv1.CreateRequestRequest
-	updateRequest []*grpcviewv1.UpdateRequestRequest
-	deleteRequest []*grpcviewv1.DeleteRequestRequest
-	moveItem      []*grpcviewv1.MoveItemRequest
-	runScript     []*grpcviewv1.RunScriptRequest
+	createCollection []*grpcviewv1.CreateCollectionRequest
+	addSource        []*grpcviewv1.AddDescriptorSourceRequest
+	refreshSource    []*grpcviewv1.RefreshDescriptorSourceRequest
+	removeSource     []*grpcviewv1.RemoveDescriptorSourceRequest
+	reorderSource    []*grpcviewv1.ReorderDescriptorSourcesRequest
+	createFolder     []*grpcviewv1.CreateFolderRequest
+	createRequest    []*grpcviewv1.CreateRequestRequest
+	updateRequest    []*grpcviewv1.UpdateRequestRequest
+	deleteRequest    []*grpcviewv1.DeleteRequestRequest
+	moveItem         []*grpcviewv1.MoveItemRequest
+	runScript        []*grpcviewv1.RunScriptRequest
 
 	order []string
 
-	err    error
-	script *grpcviewv1.RunScriptResponse
+	err               error
+	script            *grpcviewv1.RunScriptResponse
+	createdCollection *grpcviewv1.Collection
+}
+
+func (f *fakeClient) CreateCollection(_ context.Context, r *connect.Request[grpcviewv1.CreateCollectionRequest]) (*connect.Response[grpcviewv1.CreateCollectionResponse], error) {
+	f.writes.createCollection = append(f.writes.createCollection, r.Msg)
+	f.writes.order = append(f.writes.order, "CreateCollection")
+	if f.writes.err != nil {
+		return nil, f.writes.err
+	}
+	created := f.writes.createdCollection
+	if created == nil {
+		created = f.snapshot
+	}
+	return connect.NewResponse(&grpcviewv1.CreateCollectionResponse{Collection: created}), nil
 }
 
 func (f *fakeClient) AddDescriptorSource(_ context.Context, r *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
@@ -266,8 +281,8 @@ func onlyAdd(t *testing.T, fc *fakeClient) *grpcviewv1.AddDescriptorSourceReques
 		t.Fatalf("AddDescriptorSource called %d time(s), want 1", len(fc.writes.addSource))
 	}
 	got := fc.writes.addSource[0]
-	if got.GetCollection() != "default" {
-		t.Errorf("collection = %q, want %q", got.GetCollection(), "default")
+	if got.GetCollection() != "." {
+		t.Errorf("collection = %q, want %q", got.GetCollection(), ".")
 	}
 	return got
 }
@@ -372,8 +387,8 @@ func TestSourcesRmAndReorder(t *testing.T) {
 			t.Fatalf("RemoveDescriptorSource called %d time(s), want 1", len(fc.writes.removeSource))
 		}
 		got := fc.writes.removeSource[0]
-		if got.GetId() != "upload:echo.binpb" || got.GetCollection() != "default" {
-			t.Errorf("got %+v, want id=%q workspace=%q", got, "upload:echo.binpb", "default")
+		if got.GetId() != "upload:echo.binpb" || got.GetCollection() != "." {
+			t.Errorf("got %+v, want id=%q workspace=%q", got, "upload:echo.binpb", ".")
 		}
 	})
 
@@ -430,8 +445,8 @@ func TestFolderCreate(t *testing.T) {
 			if got.GetItemName() != tc.wantName {
 				t.Errorf("item_name = %q, want %q", got.GetItemName(), tc.wantName)
 			}
-			if got.GetCollection() != "default" {
-				t.Errorf("collection = %q, want %q", got.GetCollection(), "default")
+			if got.GetCollection() != "." {
+				t.Errorf("collection = %q, want %q", got.GetCollection(), ".")
 			}
 		})
 	}
@@ -827,8 +842,8 @@ func TestScriptRun(t *testing.T) {
 				return
 			}
 			got := fc.writes.runScript[0]
-			if got.GetCollection() != "default" {
-				t.Errorf("collection = %q, want %q", got.GetCollection(), "default")
+			if got.GetCollection() != "." {
+				t.Errorf("collection = %q, want %q", got.GetCollection(), ".")
 			}
 			if tc.wantSource != "" && got.GetSource() != tc.wantSource {
 				t.Errorf("source = %q, want %q", got.GetSource(), tc.wantSource)
