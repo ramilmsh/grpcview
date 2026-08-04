@@ -10,7 +10,21 @@ import { SourcesView } from "@/features/sources/SourcesView";
 import { ScriptsView } from "@/features/scripts/ScriptsView";
 
 // TransportProvider must sit OUTSIDE QueryClientProvider.
-const queryClient = new QueryClient();
+//
+// Both defaults exist because the server is on THIS machine, always reachable whether
+// or not the machine has internet:
+//   - networkMode "always": react-query's default pauses a fetch (and, worse, a retry
+//     of one that already failed) whenever its onlineManager thinks the browser is
+//     offline. A paused query sits at status "pending" forever, so a failure never
+//     surfaces — the NotFound that drives <NoCollection> would never render.
+//   - retry false: a Connect error from localhost is an answer, not a network blip, and
+//     retrying one costs seconds of a stale view before the real state appears.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { networkMode: "always", retry: false },
+    mutations: { networkMode: "always", retry: false },
+  },
+});
 
 function CurrentView() {
   const activeView = useUIStore((s) => s.activeView);

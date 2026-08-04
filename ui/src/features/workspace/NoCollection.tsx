@@ -2,14 +2,20 @@ import { useState, type KeyboardEvent } from "react";
 import { FolderPlus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Input, Field } from "@/components/ui/Input";
-import { useCreateCollection, openCollection } from "@/lib/workspace-query";
+import { useCreateCollection, openCollection, COLLECTION_ID } from "@/lib/workspace-query";
 import { collectionBaseName, normalizeCollectionPath } from "./collection-path";
+
+// The directory to offer: the address that just came back not_found, so "create" means
+// "create the collection I asked for". The one exception is ".", which every load falls
+// back to when nothing named a collection — there, offering to scatter grpcview.json
+// across the repo root is a worse guess than suggesting a subdirectory for it.
+const suggestedDir = COLLECTION_ID === "." ? "requests" : COLLECTION_ID;
 
 // Replaces the workspace view (and Sources/Scripts, equally meaningless without a
 // collection) when Get comes back not_found: this workspace has no grpcview
 // collection at the addressed path, and nothing creates one implicitly anymore.
 export function NoCollection() {
-  const [dir, setDir] = useState("requests");
+  const [dir, setDir] = useState(suggestedDir);
   const [name, setName] = useState("");
   const createCollection = useCreateCollection();
 
@@ -55,7 +61,7 @@ export function NoCollection() {
             value={dir}
             onChange={(e) => setDir(e.target.value)}
             onKeyDown={onEnter}
-            placeholder="requests"
+            placeholder={suggestedDir}
             autoFocus
           />
         </Field>
