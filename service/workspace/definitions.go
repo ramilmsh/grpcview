@@ -29,8 +29,8 @@ type definitions struct {
 }
 
 // definitionsCache memoizes the linking step, which is the expensive half and pure: identical
-// descriptor-set bytes always link to identical descriptors. Keyed by workspace and invalidated by
-// the bytes' digest, so it holds one entry per workspace no matter how often sources are refreshed.
+// descriptor-set bytes always link to identical descriptors. Keyed by collection and invalidated by
+// the bytes' digest, so it holds one entry per collection no matter how often sources are refreshed.
 type definitionsCache struct {
 	mu      sync.Mutex
 	entries map[string]definitionsEntry
@@ -47,37 +47,37 @@ func newDefinitionsCache() *definitionsCache {
 
 // A nil cache is a working cache that just never hits, which keeps Workspace usable as a bare
 // struct literal.
-func (c *definitionsCache) lookup(workspaceName string, digest [sha256.Size]byte) *definitions {
+func (c *definitionsCache) lookup(collectionID string, digest [sha256.Size]byte) *definitions {
 	if c == nil {
 		return nil
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e, ok := c.entries[workspaceName]; ok && e.digest == digest {
+	if e, ok := c.entries[collectionID]; ok && e.digest == digest {
 		return e.defs
 	}
 	return nil
 }
 
-func (c *definitionsCache) store(workspaceName string, digest [sha256.Size]byte, defs *definitions) {
+func (c *definitionsCache) store(collectionID string, digest [sha256.Size]byte, defs *definitions) {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[workspaceName] = definitionsEntry{digest: digest, defs: defs}
+	c.entries[collectionID] = definitionsEntry{digest: digest, defs: defs}
 }
 
-// definitions loads the workspace's merged descriptor set and links it. It never dials.
-func (w Workspace) definitions(ctx context.Context, workspaceName string) (*definitions, error) {
-	coll, err := w.store.Open(ctx, workspaceName)
+// definitions loads the collection's merged descriptor set and links it. It never dials.
+func (w Workspace) definitions(ctx context.Context, collectionID string) (*definitions, error) {
+	coll, err := w.store.Open(ctx, collectionID)
 	if err != nil {
 		return nil, err
 	}
-	return w.definitionsOf(ctx, coll, workspaceName)
+	return w.definitionsOf(ctx, coll, collectionID)
 }
 
-func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection, workspaceName string) (*definitions, error) {
+func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection, collectionID string) (*definitions, error) {
 	merged, err := coll.Merged(ctx)
 	if err != nil {
 		return nil, toConnectError(err)
@@ -85,11 +85,11 @@ func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection, wo
 	raw := merged.GetDescriptorSet()
 	if len(raw) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"workspace %q has no resolved definitions: add a descriptor source (or refresh one) first", workspaceName))
+			"collection %q has no resolved definitions: add a descriptor source (or refresh one) first", collectionID))
 	}
 
 	digest := sha256.Sum256(raw)
-	if cached := w.defs.lookup(workspaceName, digest); cached != nil {
+	if cached := w.defs.lookup(collectionID, digest); cached != nil {
 		// The summaries can change without the descriptors changing (a reorder shuffles which
 		// source WON a service), so those are re-read rather than cached with the linked set.
 		return &definitions{services: cached.services, sources: merged.GetSources()}, nil
@@ -97,12 +97,12 @@ func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection, wo
 
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(raw, fds); err != nil {
-		return nil, fmt.Errorf("parse the workspace's descriptor set: %w", err)
+		return nil, fmt.Errorf("parse the collection's descriptor set: %w", err)
 	}
 	files, err := desc.CreateFileDescriptorsFromSet(fds)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("link the workspace's descriptor set: %w", err))
+			fmt.Errorf("link the collection's descriptor set: %w", err))
 	}
 	byName := make(map[string]*desc.ServiceDescriptor)
 	for _, fd := range files {
@@ -111,17 +111,17 @@ func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection, wo
 		}
 	}
 
-	w.defs.store(workspaceName, digest, &definitions{services: byName})
+	w.defs.store(collectionID, digest, &definitions{services: byName})
 	return &definitions{services: byName, sources: merged.GetSources()}, nil
 }
 
-// method finds one method, naming the workspace in both misses: at this point the caller has
-// already been told the workspace HAS definitions, so "not found" means "not in them".
-func (d *definitions) method(workspaceName, service, method string) (*desc.MethodDescriptor, error) {
+// method finds one method, naming the collection in both misses: at this point the caller has
+// already been told the collection HAS definitions, so "not found" means "not in them".
+func (d *definitions) method(collectionID, service, method string) (*desc.MethodDescriptor, error) {
 	serviceDesc, ok := d.services[service]
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf(
-			"service %q is not in workspace %q's definitions", service, workspaceName))
+			"service %q is not in collection %q's definitions", service, collectionID))
 	}
 	methodDesc := serviceDesc.FindMethodByName(method)
 	if methodDesc == nil {

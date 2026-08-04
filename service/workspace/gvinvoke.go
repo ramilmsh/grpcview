@@ -50,9 +50,9 @@ type gvInvokeStatus struct {
 	Message string `json:"message"`
 }
 
-// scriptInvoker returns the Invoker for workspaceName. An error return here becomes a REJECTED
+// scriptInvoker returns the Invoker for collectionID. An error return here becomes a REJECTED
 // gv.invoke promise; a gRPC-status failure of the invoked call resolves with ok:false instead.
-func (w Workspace) scriptInvoker(workspaceName string) scripting.Invoker {
+func (w Workspace) scriptInvoker(collectionID string) scripting.Invoker {
 	return func(ctx context.Context, req []byte) ([]byte, error) {
 		var env invokeEnvelope
 		if err := json.Unmarshal(req, &env); err != nil {
@@ -70,7 +70,7 @@ func (w Workspace) scriptInvoker(workspaceName string) scripting.Invoker {
 		}
 
 		run, err := w.resolveSavedRun(ctx, savedInvoke{
-			workspaceName: workspaceName,
+			workspaceName: collectionID,
 			parent:        parent,
 			itemName:      name,
 			params:        env.Params,

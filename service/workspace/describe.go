@@ -15,19 +15,19 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-func (w Workspace) describeMethod(ctx context.Context, workspaceName, service, method string) (*desc.MethodDescriptor, string, error) {
-	defs, err := w.definitions(ctx, workspaceName)
+func (w Workspace) describeMethod(ctx context.Context, collectionID, service, method string) (*desc.MethodDescriptor, string, error) {
+	defs, err := w.definitions(ctx, collectionID)
 	if err != nil {
 		return nil, "", err
 	}
-	methodDesc, err := defs.method(workspaceName, service, method)
+	methodDesc, err := defs.method(collectionID, service, method)
 	if err != nil {
 		return nil, "", err
 	}
 	return methodDesc, defs.wonBy(service), nil
 }
 
-// DescribeMethod reports one method's input and output shape from the workspace's resolved
+// DescribeMethod reports one method's input and output shape from the collection's resolved
 // definitions, as rendered .proto text and as a self-contained FileDescriptorSet. It never dials.
 func (w Workspace) DescribeMethod(ctx context.Context, request *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error) {
 	msg := request.Msg

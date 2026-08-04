@@ -137,7 +137,7 @@ func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg 
 	})
 }
 
-func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
+func buildAddSource(collectionID, arg string, tls bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
 	if arg == "" {
 		return nil, errors.New("no definition source given: `sources add` takes a reflection address or the path of a descriptor-set file")
 	}
@@ -158,7 +158,7 @@ func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescrip
 			return nil, fmt.Errorf("failed to read the descriptor set: %w", err)
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			Collection: workspaceName,
+			Collection: collectionID,
 			Source:     &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
 			// The basename, deliberately: file_name is the source's identity.
 			FileName: filepath.Base(arg),
@@ -170,7 +170,7 @@ func buildAddSource(workspaceName, arg string, tls bool) (*grpcviewv1.AddDescrip
 			server.Tls = &grpcviewv1.Server_TLS{}
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			Collection: workspaceName,
+			Collection: collectionID,
 			Source:     &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
 		}, nil
 	}
