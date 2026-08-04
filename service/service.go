@@ -29,6 +29,10 @@ import (
 // Options configures the server. argv parsing lives in the callers, never here.
 type Options struct {
 	Port int
+	// DevOrigins are the cross-origin callers allowed to reach the API. The production
+	// binary serves its UI same-origin and needs none; only //service/cmd/dev, talking to
+	// the vite dev server, sets this. Empty installs no CORS handler at all.
+	DevOrigins []string
 }
 
 func Run(
@@ -70,19 +74,24 @@ func Run(
 
 	server := http2.Server{}
 
-	corsPolicy := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: connectcors.AllowedMethods(),
-		AllowedHeaders: connectcors.AllowedHeaders(),
-		ExposedHeaders: connectcors.ExposedHeaders(),
-		MaxAge:         int((2 * time.Hour).Seconds()),
-	})
+	var handler http.Handler = mux
+	if len(opts.DevOrigins) > 0 {
+		handler = cors.New(cors.Options{
+			AllowedOrigins: opts.DevOrigins,
+			AllowedMethods: connectcors.AllowedMethods(),
+			AllowedHeaders: connectcors.AllowedHeaders(),
+			ExposedHeaders: connectcors.ExposedHeaders(),
+			MaxAge:         int((2 * time.Hour).Seconds()),
+		}).Handler(mux)
+	}
 
-	address := net.TCPAddr{IP: net.IPv4zero, Port: opts.Port}
+	// Loopback only: nothing off-machine ever needs to connect, and a LAN-reachable
+	// grpcview hands strangers your internal services. There is deliberately no --host.
+	address := net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: opts.Port}
 	logger.InfoContext(ctx, "starting server", "address", address.String())
 	err = http.ListenAndServe(
 		address.String(),
-		h2c.NewHandler(corsPolicy.Handler(mux), &server),
+		h2c.NewHandler(handler, &server),
 	)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

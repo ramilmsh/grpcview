@@ -18,7 +18,11 @@ func run(ctx context.Context) error {
 	b := bytes.Buffer{}
 	b.WriteString("<h1>dummy</h1>")
 
-	if err := service.Run(ctx, io.NopCloser(&b), service.Options{Port: port}); err != nil {
+	// The vite dev server is the only cross-origin caller grpcview has; the release
+	// binary serves its UI same-origin and installs no CORS handler.
+	devOrigins := []string{"http://localhost:5173", "http://127.0.0.1:5173"}
+
+	if err := service.Run(ctx, io.NopCloser(&b), service.Options{Port: port, DevOrigins: devOrigins}); err != nil {
 		return fmt.Errorf("failed to run server: %w", err)
 	}
 
