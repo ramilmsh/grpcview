@@ -1052,7 +1052,7 @@ func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadDir collection root: %v", err)
 	}
-	want := map[string]bool{collectionFileName: true, treeDir: true}
+	want := map[string]bool{CollectionFileName: true, treeDir: true}
 	for _, e := range entries {
 		if !want[e.Name()] {
 			t.Errorf("collection root has unexpected entry %q (local state must live outside it)", e.Name())

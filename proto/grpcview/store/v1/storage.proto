@@ -16,6 +16,44 @@ import "google/protobuf/descriptor.proto";
 
 option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1;grpcviewstorev1";
 
+// Workspace is grpcview.work.json at the workspace root. It is OPTIONAL: the
+// zero-config case is a repo with no such file, and it appears only once the user
+// has something to pin. Nothing creates it implicitly.
+//
+// A non-empty collections list WINS over discovery: it is fast, deterministic,
+// reviewable, and it survives a colleague's stray grpcview.json. Only when the
+// file is absent (or lists nothing) does the store scan for collections.
+message Workspace {
+  int32 schema_version = 1;
+  string name = 2;
+  // Workspace-relative paths or globs ("services/*/requests"); empty means "scan".
+  repeated string collections = 3;
+}
+
+// CollectionIndex is the cached result of a workspace scan. Unlike every other
+// message here it is LOCAL STATE, not committed content: it lives under the
+// workspace state root, and losing it costs one rescan.
+message CollectionIndex {
+  int32 schema_version = 1;
+  // The workspace root directory's own mtime when the scan ran; a different mtime
+  // invalidates the whole index. It covers grpcview.work.json too, since editing
+  // the manifest touches the directory holding it.
+  int64 root_mtime_unix_nano = 2;
+  repeated CollectionIndexEntry entries = 3;
+}
+
+// CollectionIndexEntry is one collection as a listing sees it: enough to render a
+// row, and never enough to require reading a tree.
+message CollectionIndexEntry {
+  string id = 1;
+  string name = 2;
+  int32 source_count = 3;
+  // error is why this collection could not be summarized — a declared path with no
+  // grpcview.json, or a manifest that would not parse. A broken collection is a
+  // visible row, not a failed listing.
+  string error = 4;
+}
+
 // Collection is grpcview.json at the collection root: the committed manifest,
 // the root folder's child ordering, and the descriptor-source config. It
 // doubles as the root folder's config (its items are the top-level ordering).

@@ -82,6 +82,11 @@ func New(root, stateRoot string, logger *slog.Logger) *Store {
 	}
 }
 
+// Root is the workspace root — the directory collection ids are relative to. It is exposed
+// so a client with a cwd of its own (the CLI) can resolve that cwd against the workspace it
+// is talking to, which it cannot do from a relative id alone.
+func (s *Store) Root() string { return s.root }
+
 // Open returns the collection handle addressed by id, a workspace-relative path ("." for
 // the workspace root itself, "services/payments/requests" for a subdirectory); it does not
 // create the collection on disk. id comes off the wire, so it is cleaned and checked against
@@ -159,7 +164,7 @@ type Collection struct {
 func (c *Collection) Root() string  { return c.root }
 func (c *Collection) State() string { return c.state }
 
-func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, collectionFileName) }
+func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, CollectionFileName) }
 func (c *Collection) treeRoot() string           { return filepath.Join(c.root, treeDir) }
 func (c *Collection) scriptsRoot() string        { return filepath.Join(c.root, scriptsDir) }
 func (c *Collection) servicesCachePath() string {

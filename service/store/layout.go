@@ -11,7 +11,15 @@ import (
 )
 
 const (
-	collectionFileName = "grpcview.json"
+	// workspaceFileName and CollectionFileName differ by five characters in a listing,
+	// which is accepted (after go.work) — but only because both names live HERE, so a
+	// product rename edits one place rather than every use site.
+	//
+	// CollectionFileName alone is exported: it is also what marks a directory as a
+	// collection to a caller OUTSIDE the store, since the CLI walks up from the cwd looking
+	// for one (service/cli/collection.go).
+	workspaceFileName  = "grpcview.work.json"
+	CollectionFileName = "grpcview.json"
 	folderFileName     = "folder.json"
 	requestFileName    = "request.json"
 	scriptFileName     = "script.json"
@@ -24,6 +32,20 @@ const (
 	servicesCacheFileName = "services.json"
 	sourcesCacheSubdir    = "sources"
 	sourceCacheFileExt    = ".binpb"
+
+	// collectionIndexFileName sits directly under the workspace STATE root, not under
+	// collections/: the index is about the workspace, and no collection owns it.
+	collectionIndexFileName = "collections.json"
+
+	gitignoreFileName = ".gitignore"
+	// gitExcludeRelPath is the repo-local ignore file git itself reads before any
+	// .gitignore; discovery honors it for the same reason it honors .gitignore.
+	gitExcludeRelPath = ".git/info/exclude"
+
+	// nodeModulesDirName and bazelSymlinkPrefix are the two prune names discovery knows
+	// by hand. Everything else it prunes it learns from a .gitignore — see Store.scan.
+	nodeModulesDirName = "node_modules"
+	bazelSymlinkPrefix = "bazel-"
 )
 
 type itemKind int
@@ -55,7 +77,7 @@ type slugNamed interface {
 // them. Local state no longer lives inside a collection directory (see Collection.state), so
 // there is no local-state dirname to reserve here any more.
 var reservedSlugs = map[string]bool{
-	collectionFileName: true,
+	CollectionFileName: true,
 	folderFileName:     true,
 	requestFileName:    true,
 }

@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "codec.go",
         "convert.go",
+        "discover.go",
         "fs.go",
         "layout.go",
         "scripts.go",
@@ -16,6 +17,7 @@ go_library(
     deps = [
         "//proto/grpcview/store/v1:store",
         "//proto/grpcview/v1:grpcview",
+        "@com_github_go_git_go_git_v5//plumbing/format/gitignore",
         "@org_golang_google_protobuf//encoding/protojson",
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//types/descriptorpb",
@@ -25,6 +27,7 @@ go_library(
 go_test(
     name = "store_test",
     srcs = [
+        "discover_test.go",
         "scripts_test.go",
         "sources_test.go",
         "store_test.go",

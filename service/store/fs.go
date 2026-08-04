@@ -80,6 +80,27 @@ func overlayResolved(sources, cached []*grpcviewv1.DescriptorSource) {
 	}
 }
 
+// Summary reads only this collection's own manifest — never its tree — so listing a workspace
+// stays cheap. Load's walkFolder routes through readChildren, which reads every folder's
+// config to order it; that is exactly the cost a listing must not pay, once for each of N
+// collections.
+//
+// name falls back to the collection directory's base name, never to the id: the id addresses,
+// the name displays, and a monorepo id like "services/payments/requests" rendered as a panel
+// header is the leak that split them.
+func (c *Collection) Summary(_ context.Context) (name string, sourceCount int, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	col, err := c.readCollection()
+	if errors.Is(err, os.ErrNotExist) {
+		return "", 0, ErrNotFound
+	}
+	if err != nil {
+		return "", 0, err
+	}
+	return cmp.Or(col.GetName(), c.defaultName()), len(col.GetSources()), nil
+}
+
 // Merged returns the resolved-schema cache as a bare Collection: the merged descriptor set, the
 // services derived from it, and each source's derived summary. It reads one file and never walks
 // the request tree, so the invoke path can consult the definitions without paying for a Load.
