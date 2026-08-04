@@ -16,11 +16,9 @@ const (
 	requestFileName    = "request.json"
 	scriptFileName     = "script.json"
 	historyFileName    = "history.json"
-	gitignoreFileName  = ".gitignore"
 
 	treeDir               = "tree"
 	scriptsDir            = "scripts"
-	stateDir              = ".grpcview"
 	cacheSubdir           = "cache"
 	historyDir            = "history"
 	servicesCacheFileName = "services.json"
@@ -53,26 +51,14 @@ type slugNamed interface {
 	orderName() string
 }
 
-// reservedSlugs collide with managed files, the local-state dir, or (case-insensitively)
-// Windows device names, which are illegal as directory names on that platform.
-var reservedSlugs = func() map[string]bool {
-	m := map[string]bool{
-		collectionFileName: true,
-		folderFileName:     true,
-		requestFileName:    true,
-		gitignoreFileName:  true,
-		stateDir:           true,
-		"con":              true,
-		"prn":              true,
-		"aux":              true,
-		"nul":              true,
-	}
-	for i := 1; i <= 9; i++ {
-		m[fmt.Sprintf("com%d", i)] = true
-		m[fmt.Sprintf("lpt%d", i)] = true
-	}
-	return m
-}()
+// reservedSlugs are names a child item must not take, because a managed file already owns
+// them. Local state no longer lives inside a collection directory (see Collection.state), so
+// there is no local-state dirname to reserve here any more.
+var reservedSlugs = map[string]bool{
+	collectionFileName: true,
+	folderFileName:     true,
+	requestFileName:    true,
+}
 
 func isReserved(slug string) bool {
 	return reservedSlugs[strings.ToLower(slug)]
@@ -101,7 +87,7 @@ func slugify(name string) string {
 }
 
 // uniqueSlug derives a slug that is neither reserved nor in used, which holds LOWERCASED
-// slugs: the comparison must stay case-insensitive for macOS/Windows filesystems.
+// slugs: the comparison must stay case-insensitive for macOS's case-insensitive filesystem.
 func uniqueSlug(name string, used map[string]bool) string {
 	base := slugify(name)
 	candidate := base

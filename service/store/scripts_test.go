@@ -121,11 +121,11 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 }
 
 func TestScriptPersistRoundTrip(t *testing.T) {
-	base := t.TempDir()
+	root, state := t.TempDir(), t.TempDir()
 	ctx := context.Background()
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	coll, err := New(base, discard).Open(ctx, "test")
+	coll, err := New(root, state, discard).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestScriptPersistRoundTrip(t *testing.T) {
 		t.Fatalf("UpdateScript: %v", err)
 	}
 
-	reloaded, err := New(base, discard).Open(ctx, "test")
+	reloaded, err := New(root, state, discard).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}

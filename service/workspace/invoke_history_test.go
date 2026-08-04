@@ -15,7 +15,7 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-func workspaceAt(t *testing.T, base string) Workspace {
+func workspaceAt(t *testing.T, root, state string) Workspace {
 	t.Helper()
 	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
 	if err != nil {
@@ -23,15 +23,15 @@ func workspaceAt(t *testing.T, base string) Workspace {
 	}
 	t.Cleanup(func() { _ = eng.Close(context.Background()) })
 	return Workspace{
-		store:  store.New(base, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		store:  store.New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil))),
 		engine: eng,
 	}
 }
 
-func loadHistory(t *testing.T, base, name string) []*grpcviewv1.History {
+func loadHistory(t *testing.T, root, state, name string) []*grpcviewv1.History {
 	t.Helper()
 	ctx := context.Background()
-	coll, err := store.New(base, slog.New(slog.NewTextHandler(io.Discard, nil))).Open(ctx, testWorkspace)
+	coll, err := store.New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil))).Open(ctx, testWorkspace)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -49,8 +49,8 @@ func loadHistory(t *testing.T, base, name string) []*grpcviewv1.History {
 }
 
 func TestInvokeRecordsHistory(t *testing.T) {
-	base := t.TempDir()
-	w := workspaceAt(t, base)
+	root, state := t.TempDir(), t.TempDir()
+	w := workspaceAt(t, root, state)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
@@ -99,7 +99,7 @@ func TestInvokeRecordsHistory(t *testing.T) {
 		t.Fatalf("ad-hoc Invoke: %v", err)
 	}
 
-	hist := loadHistory(t, base, "Echo")
+	hist := loadHistory(t, root, state, "Echo")
 	if len(hist) != runs {
 		t.Fatalf("history len = %d, want %d (ad-hoc invoke must not append)", len(hist), runs)
 	}
@@ -127,8 +127,8 @@ func TestInvokeRecordsHistory(t *testing.T) {
 }
 
 func TestStreamInvokeRecordsHistory(t *testing.T) {
-	base := t.TempDir()
-	w := workspaceAt(t, base)
+	root, state := t.TempDir(), t.TempDir()
+	w := workspaceAt(t, root, state)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
@@ -147,7 +147,7 @@ func TestStreamInvokeRecordsHistory(t *testing.T) {
 		t.Fatalf("streamInvoke: %v", err)
 	}
 
-	hist := loadHistory(t, base, "Stream")
+	hist := loadHistory(t, root, state, "Stream")
 	if len(hist) != 1 {
 		t.Fatalf("history len = %d, want 1", len(hist))
 	}

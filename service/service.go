@@ -29,6 +29,11 @@ import (
 // Options configures the server. argv parsing lives in the callers, never here.
 type Options struct {
 	Port int
+	// Root is the workspace root the server serves — the repository whose collections and
+	// local state this instance owns. Empty falls back to the process's current directory;
+	// real --workspace discovery (service/wsroot.Discover) is wired in a later step, so
+	// this is deliberately not doing any of that yet.
+	Root string
 	// DevOrigins are the cross-origin callers allowed to reach the API. The production
 	// binary serves its UI same-origin and needs none; only //service/cmd/dev, talking to
 	// the vite dev server, sets this. Empty installs no CORS handler at all.
@@ -42,7 +47,15 @@ func Run(
 ) error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-	ws, err := workspace.New(ctx)
+	root := opts.Root
+	if root == "" {
+		var err error
+		root, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to resolve workspace root: %w", err)
+		}
+	}
+	ws, err := workspace.New(ctx, root)
 	if err != nil {
 		return fmt.Errorf("failed to initialize workspace hander: %w", err)
 	}

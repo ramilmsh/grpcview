@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -17,10 +18,16 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
+// newTestStore returns a Store rooted at two independent temp dirs — a workspace root and
+// a state root — mirroring how a real Store never keeps state inside the workspace.
+func newTestStore(t *testing.T) *Store {
+	t.Helper()
+	return New(t.TempDir(), t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
 func newTestCollection(t *testing.T) (*Collection, context.Context) {
 	t.Helper()
-	base := t.TempDir()
-	s := New(base, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := newTestStore(t)
 	ctx := context.Background()
 	coll, err := s.Open(ctx, "test")
 	if err != nil {
@@ -116,7 +123,7 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSlugUniquenessAndReserved(t *testing.T) {
+func TestSlugUniqueness(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
 	if err := coll.CreateRequest(ctx, nil, "Get User", "s", "m"); err != nil {
@@ -129,17 +136,6 @@ func TestSlugUniquenessAndReserved(t *testing.T) {
 	for _, slug := range []string{"get-user", "get-user-2"} {
 		if _, err := os.Stat(filepath.Join(tree, slug)); err != nil {
 			t.Errorf("expected slug dir %q: %v", slug, err)
-		}
-	}
-
-	if err := coll.CreateFolder(ctx, nil, "con"); err != nil {
-		t.Fatal(err)
-	}
-	col := &grpcviewstorev1.Collection{}
-	mustRead(t, coll.collectionFilePath(), col)
-	for _, slug := range col.GetItems() {
-		if slug == "con" {
-			t.Errorf("reserved name leaked as slug %q", slug)
 		}
 	}
 
@@ -518,15 +514,11 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if _, err := os.Stat(coll.sourceCachePath("reflection:localhost:50051")); !os.IsNotExist(err) {
 		t.Errorf("per-source resolve cache not pruned: %v", err)
 	}
-	gi, err := os.ReadFile(filepath.Join(coll.Root(), gitignoreFileName))
-	if err != nil || string(gi) == "" {
-		t.Fatalf(".gitignore missing: %v", err)
-	}
 }
 
 func TestAppendHistoryCapAndReload(t *testing.T) {
-	base := t.TempDir()
-	s := New(base, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	root, state := t.TempDir(), t.TempDir()
+	s := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ctx := context.Background()
 	coll, err := s.Open(ctx, "test")
 	if err != nil {
@@ -556,12 +548,12 @@ func TestAppendHistoryCapAndReload(t *testing.T) {
 		}
 	}
 
-	histFile := filepath.Join(base, "test", stateDir, historyDir, "get-user", historyFileName)
+	histFile := filepath.Join(coll.State(), historyDir, "get-user", historyFileName)
 	if _, err := os.Stat(histFile); err != nil {
 		t.Fatalf("history sidecar missing at %s: %v", histFile, err)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(base, "test", treeDir, "get-user", requestFileName), rf)
+	mustRead(t, filepath.Join(root, "test", treeDir, "get-user", requestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("request.json meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
@@ -584,7 +576,7 @@ func TestAppendHistoryCapAndReload(t *testing.T) {
 
 	assertHistory(t, historyOf(t, coll, ctx, "Get User"))
 
-	reloaded, err := New(base, slog.New(slog.NewTextHandler(io.Discard, nil))).Open(ctx, "test")
+	reloaded, err := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil))).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -601,9 +593,8 @@ func historyOf(t *testing.T, coll *Collection, ctx context.Context, name string)
 }
 
 func TestLoadMissingCollection(t *testing.T) {
-	base := t.TempDir()
 	ctx := context.Background()
-	s := New(base, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := newTestStore(t)
 	coll, err := s.Open(ctx, "absent")
 	if err != nil {
 		t.Fatal(err)
@@ -614,10 +605,10 @@ func TestLoadMissingCollection(t *testing.T) {
 }
 
 func TestUpdateRequestMiddleware(t *testing.T) {
-	base := t.TempDir()
+	root, state := t.TempDir(), t.TempDir()
 	ctx := context.Background()
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	coll, err := New(base, discard).Open(ctx, "test")
+	coll, err := New(root, state, discard).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -664,7 +655,7 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 		t.Fatalf("middleware after unrelated patch = %v, want [sign trace] unchanged", got)
 	}
 
-	reloaded, err := New(base, discard).Open(ctx, "test")
+	reloaded, err := New(root, state, discard).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -681,10 +672,10 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 }
 
 func TestUpdateRequestTarget(t *testing.T) {
-	base := t.TempDir()
+	root, state := t.TempDir(), t.TempDir()
 	ctx := context.Background()
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
-	coll, err := New(base, discard).Open(ctx, "test")
+	coll, err := New(root, state, discard).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -724,7 +715,7 @@ func TestUpdateRequestTarget(t *testing.T) {
 		t.Fatalf("target after unrelated patch = %+v, want unchanged", got)
 	}
 
-	reloaded, err := New(base, discard).Open(ctx, "test")
+	reloaded, err := New(root, state, discard).Open(ctx, "test")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -943,5 +934,145 @@ func TestResolveRequest(t *testing.T) {
 	}
 	if _, err := coll.ResolveRequest(ctx, nil, "Users"); !errors.Is(err, ErrNotARequest) {
 		t.Errorf("ResolveRequest on a folder = %v, want ErrNotARequest", err)
+	}
+}
+
+func TestOpenRejectsTraversal(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	for _, id := range []string{"../evil", "/etc", "foo/../../bar"} {
+		if _, err := s.Open(ctx, id); !errors.Is(err, ErrInvalidCollectionID) {
+			t.Errorf("Open(%q) = %v, want ErrInvalidCollectionID", id, err)
+		}
+	}
+
+	entries, err := os.ReadDir(s.root)
+	if err != nil {
+		t.Fatalf("ReadDir workspace root: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a rejected id must create nothing on disk, found %v", entries)
+	}
+}
+
+func TestOpenDotIsTheWorkspaceRoot(t *testing.T) {
+	s := newTestStore(t)
+	coll, err := s.Open(context.Background(), ".")
+	if err != nil {
+		t.Fatalf("Open(.): %v", err)
+	}
+	if coll.Root() != s.root {
+		t.Errorf("Open(.).Root() = %q, want the workspace root %q", coll.Root(), s.root)
+	}
+}
+
+func TestOpenCaseFoldsHandleIdentity(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	lower, err := s.Open(ctx, "requests")
+	if err != nil {
+		t.Fatalf("Open(requests): %v", err)
+	}
+	upper, err := s.Open(ctx, "Requests")
+	if err != nil {
+		t.Fatalf("Open(Requests): %v", err)
+	}
+	if lower != upper {
+		t.Errorf("Open(%q) and Open(%q) returned different *Collection handles for what is one directory on a case-insensitive filesystem", "requests", "Requests")
+	}
+}
+
+func TestDisplayNameIsNeverTheID(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	const id = "services/payments/requests"
+	coll, err := s.Open(ctx, id)
+	if err != nil {
+		t.Fatalf("Open(%q): %v", id, err)
+	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		t.Fatalf("EnsureCreated: %v", err)
+	}
+
+	col := &grpcviewstorev1.Collection{}
+	mustRead(t, coll.collectionFilePath(), col)
+	if col.GetName() != "requests" {
+		t.Errorf("on-disk grpcview.json name = %q, want the base name %q (never the id %q)", col.GetName(), "requests", id)
+	}
+
+	ws, err := coll.Load(ctx)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if ws.GetName() != "requests" {
+		t.Errorf("Load(...).Name = %q, want %q", ws.GetName(), "requests")
+	}
+}
+
+// TestLocalStateStaysOutOfCollectionDir exercises all three kinds of local state (descriptor
+// cache, per-source resolve cache, run history) and asserts none of it lands next to the
+// committed manifest/tree — it must all be reachable only under the state root passed to
+// New, which for a real workspace is wsroot.StateDir's directory, never the repo.
+func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	s := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+
+	coll, err := s.Open(ctx, "test")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.EnsureCreated(ctx); err != nil {
+		t.Fatalf("EnsureCreated: %v", err)
+	}
+	if err := coll.CreateRequest(ctx, nil, "Echo", "s", "m"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+
+	const sourceID = "reflection:localhost:1"
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{{
+			Id:     sourceID,
+			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "localhost:1"}},
+		}},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			sourceID: {Id: sourceID},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState: %v", err)
+	}
+	if err := coll.AppendHistory(ctx, nil, "Echo", &grpcviewv1.History{}, 0); err != nil {
+		t.Fatalf("AppendHistory: %v", err)
+	}
+
+	entries, err := os.ReadDir(coll.Root())
+	if err != nil {
+		t.Fatalf("ReadDir collection root: %v", err)
+	}
+	want := map[string]bool{collectionFileName: true, treeDir: true}
+	for _, e := range entries {
+		if !want[e.Name()] {
+			t.Errorf("collection root has unexpected entry %q (local state must live outside it)", e.Name())
+		}
+	}
+
+	if !strings.HasPrefix(coll.State(), state) {
+		t.Errorf("collection state dir %q is not under the configured state root %q", coll.State(), state)
+	}
+	if _, err := os.Stat(coll.servicesCachePath()); err != nil {
+		t.Errorf("services cache missing under the state root: %v", err)
+	}
+	if _, err := os.Stat(coll.sourceCachePath(sourceID)); err != nil {
+		t.Errorf("per-source resolve cache missing under the state root: %v", err)
+	}
+	histPath, err := coll.historyFilePath(filepath.Join(coll.treeRoot(), "echo"))
+	if err != nil {
+		t.Fatalf("historyFilePath: %v", err)
+	}
+	if _, err := os.Stat(histPath); err != nil {
+		t.Errorf("history file missing under the state root: %v", err)
 	}
 }

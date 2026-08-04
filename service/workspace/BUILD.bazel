@@ -20,6 +20,7 @@ go_library(
         "//proto/grpcview/v1:grpcview",
         "//service/scripting",
         "//service/store",
+        "//service/wsroot",
         "@com_connectrpc_connect//:connect",
         "@com_github_jhump_protoreflect//desc",
         "@com_github_jhump_protoreflect//desc/protoprint",

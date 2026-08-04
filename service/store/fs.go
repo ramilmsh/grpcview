@@ -54,7 +54,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 		return nil, err
 	}
 
-	name := cmp.Or(col.GetName(), c.name)
+	name := cmp.Or(col.GetName(), c.defaultName())
 	return &grpcviewv1.Collection{
 		Name: name,
 		Item: &grpcviewv1.Item{
@@ -125,7 +125,8 @@ func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	return c.loadScripts(col.GetScripts())
 }
 
-// EnsureCreated creates an empty collection (manifest, tree/, .gitignore) if absent.
+// EnsureCreated creates an empty collection (manifest, tree/) if absent, with the manifest's
+// display name defaulted to the collection directory's own base name.
 func (c *Collection) EnsureCreated(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -135,10 +136,7 @@ func (c *Collection) EnsureCreated(_ context.Context) error {
 	if err := os.MkdirAll(c.treeRoot(), 0o755); err != nil {
 		return err
 	}
-	if err := c.ensureGitignore(); err != nil {
-		return err
-	}
-	return c.writeCollection(&grpcviewstorev1.Collection{})
+	return c.writeCollection(&grpcviewstorev1.Collection{Name: c.defaultName()})
 }
 
 // CreateFolder creates a folder inside the folder addressed by the display-name path parent.
@@ -748,19 +746,7 @@ func (c *Collection) writeCollection(col *grpcviewstorev1.Collection) error {
 	if col.SchemaVersion == 0 {
 		col.SchemaVersion = schemaVersion
 	}
-	if col.Name == "" {
-		col.Name = c.name
-	}
 	return writeMessage(c.collectionFilePath(), col)
-}
-
-func (c *Collection) ensureGitignore() error {
-	p := filepath.Join(c.root, gitignoreFileName)
-	if fileExists(p) {
-		return nil
-	}
-	content := "# grpcview local state — run history, resolved-schema cache, secrets, UI state\n" + stateDir + "/\n"
-	return writeFileAtomic(p, []byte(content), 0o644)
 }
 
 func (c *Collection) writeMergedCache(sources []*grpcviewv1.DescriptorSource, services []*grpcviewv1.Service, descriptorSet []byte) error {

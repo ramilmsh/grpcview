@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"connectrpc.com/connect"
 
@@ -94,7 +95,13 @@ func openClient(ctx context.Context, g *globalFlags) (session, error) {
 		}, nil
 	}
 
-	ws, err := workspace.New(ctx)
+	// Real --workspace discovery (service/wsroot.Discover) is wired in a later step; for
+	// now the in-process CLI, like the server, just roots itself at the current directory.
+	root, err := os.Getwd()
+	if err != nil {
+		return session{}, fmt.Errorf("failed to resolve workspace root: %w", err)
+	}
+	ws, err := workspace.New(ctx, root)
 	if err != nil {
 		return session{}, fmt.Errorf("failed to open workspace: %w", err)
 	}

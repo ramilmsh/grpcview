@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"slices"
 
 	"connectrpc.com/connect"
@@ -16,6 +14,7 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 // scriptingMaxPages is the wazero linear-memory ceiling in 64 KiB pages (256 MiB).
@@ -29,19 +28,22 @@ type Workspace struct {
 	defs   *definitionsCache
 }
 
-// New returns a handler persisting collections under os.UserConfigDir()/.grpcview/<name>, with
-// the scripting engine compiled once up front.
-func New(ctx context.Context) (Workspace, error) {
-	configDir, err := os.UserConfigDir()
+// New returns a handler persisting collections under the workspace rooted at root, with local
+// state (resolved-schema cache, run history) kept in root's OS-level state directory —
+// wsroot.StateDir(root), never inside root itself — and the scripting engine compiled once up
+// front. root is expected to already be resolved (see wsroot.Discover); this does no discovery
+// of its own.
+func New(ctx context.Context, root string) (Workspace, error) {
+	stateRoot, err := wsroot.StateDir(root)
 	if err != nil {
-		return Workspace{}, fmt.Errorf("failed to get user config dir: %w", err)
+		return Workspace{}, fmt.Errorf("failed to resolve workspace state dir: %w", err)
 	}
 	engine, err := scripting.NewEngine(ctx, scriptingMaxPages)
 	if err != nil {
 		return Workspace{}, fmt.Errorf("failed to initialize scripting engine: %w", err)
 	}
 	return Workspace{
-		store:  store.New(filepath.Join(configDir, ".grpcview"), slog.Default()),
+		store:  store.New(root, stateRoot, slog.Default()),
 		engine: engine,
 		defs:   newDefinitionsCache(),
 	}, nil
