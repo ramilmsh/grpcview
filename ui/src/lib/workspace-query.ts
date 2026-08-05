@@ -26,6 +26,7 @@ import {
   removeDescriptorSource,
   refreshDescriptorSource,
   reorderDescriptorSources,
+  setDescriptorSourceCommit,
   invoke,
   runScript,
   createScript,
@@ -265,6 +266,7 @@ export function useWorkspaceMutations() {
     removeDescriptorSource: useMutation(removeDescriptorSource, opts),
     refreshDescriptorSource: useMutation(refreshDescriptorSource, opts),
     reorderDescriptorSources: useMutation(reorderDescriptorSources, opts),
+    setDescriptorSourceCommit: useMutation(setDescriptorSourceCommit, opts),
   };
 }
 

@@ -6,13 +6,21 @@ type TagVariant = "accent" | "neutral";
 export function Tag({
   variant = "neutral",
   className,
+  // A one-word tag sometimes stands for a paragraph of meaning (Sources' "shared"), and the
+  // native tooltip is where that paragraph goes.
+  title,
   children,
 }: {
   variant?: TagVariant;
   className?: string;
+  title?: string;
   children: ReactNode;
 }) {
-  return <span className={clsx("tag", `tag-${variant}`, className)}>{children}</span>;
+  return (
+    <span className={clsx("tag", `tag-${variant}`, className)} title={title}>
+      {children}
+    </span>
+  );
 }
 
 // Unary, server-stream, client-stream, bidi.

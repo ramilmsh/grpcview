@@ -1,44 +1,11 @@
 import { useState } from "react";
-import {
-  Plus,
-  PlugsConnected,
-  FileArchive,
-  Warning,
-  Trash,
-  ArrowClockwise,
-  CaretUp,
-  CaretDown,
-} from "@/components/ui/icons";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Tag } from "@/components/ui/Tag";
+import { Plus, Warning } from "@/components/ui/icons";
+import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { useActiveWorkspace, useWorkspaceMutations, hostLabel } from "@/lib/workspace-query";
+import { useActiveWorkspace, useWorkspaceMutations } from "@/lib/workspace-query";
 import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
 import { AddSourceModal } from "./AddSourceModal";
-
-function sourceLabel(s: DescriptorSource): string {
-  if (s.source.case === "reflection") return hostLabel(s.source.value);
-  if (s.source.case === "upload") return s.source.value.fileName;
-  return s.id;
-}
-
-function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted" | "warn" } {
-  const r = s.resolved;
-  if (r?.error) return { text: r.error, tone: "warn" };
-  if (!r) return { text: "not resolved yet", tone: "muted" };
-  const defined = r.serviceNames.length;
-  const won = r.wonServiceNames.length;
-  const files = `${r.fileCount} file${r.fileCount === 1 ? "" : "s"}`;
-  if (defined === 0) return { text: `${files}, no services`, tone: "muted" };
-  if (won === 0) {
-    const shadowed = defined === 1 ? "its 1 service" : `all ${defined} services`;
-    return { text: `${files}, ${shadowed} shadowed`, tone: "muted" };
-  }
-  if (won < defined) {
-    return { text: `${files}, ${won} of ${defined} services`, tone: "ok" };
-  }
-  return { text: `${files}, ${won} service${won === 1 ? "" : "s"}`, tone: "ok" };
-}
+import { removeConsequence, SourceRow, sourceLabel } from "./source-row";
 
 // SourcesView lists the definition sources in priority order — the highest wins.
 export function SourcesView() {
@@ -52,23 +19,29 @@ export function SourcesView() {
     removeDescriptorSource,
     refreshDescriptorSource,
     reorderDescriptorSources,
+    setDescriptorSourceCommit,
   } = useWorkspaceMutations();
   const [modalOpen, setModalOpen] = useState(false);
   const [confirm, setConfirm] = useState<DescriptorSource | null>(null);
 
-  const onAdd = (address: string, tls: boolean) => {
+  const onAdd = (address: string, tls: boolean, commitDescriptors: boolean) => {
     addDescriptorSource.mutate(
       {
         collection,
         source: { case: "reflection", value: { address, tls: tls ? {} : undefined } },
+        commitDescriptors,
       },
       { onSuccess: () => setModalOpen(false) }
     );
   };
 
-  const onAddDescriptorSet = (bytes: Uint8Array, fileName: string) => {
+  const onAddDescriptorSet = (
+    bytes: Uint8Array,
+    fileName: string,
+    commitDescriptors: boolean
+  ) => {
     addDescriptorSource.mutate(
-      { collection, source: { case: "descriptorSet", value: bytes }, fileName },
+      { collection, source: { case: "descriptorSet", value: bytes }, fileName, commitDescriptors },
       { onSuccess: () => setModalOpen(false) }
     );
   };
@@ -94,11 +67,19 @@ export function SourcesView() {
     addDescriptorSource.isPending ||
     removeDescriptorSource.isPending ||
     refreshDescriptorSource.isPending ||
-    reorderDescriptorSources.isPending;
+    reorderDescriptorSources.isPending ||
+    setDescriptorSourceCommit.isPending;
 
   const activeError =
-    [addDescriptorSource, removeDescriptorSource, refreshDescriptorSource, reorderDescriptorSources]
-      .find((m) => m.isError)?.error ?? null;
+    [
+      addDescriptorSource,
+      removeDescriptorSource,
+      refreshDescriptorSource,
+      reorderDescriptorSources,
+      // Committing a source that has never resolved is refused, naming refresh as the fix —
+      // the banner is where that answer has to land.
+      setDescriptorSourceCommit,
+    ].find((m) => m.isError)?.error ?? null;
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -149,102 +130,23 @@ export function SourcesView() {
           </div>
         ) : (
           <div className="flex flex-col" style={{ gap: 8, maxWidth: 720 }}>
-            {sources.map((s, i) => {
-              const reflection = s.source.case === "reflection" ? s.source.value : null;
-              const info = contribution(s);
-              const toneColor =
-                info.tone === "warn"
-                  ? "var(--err-fg)"
-                  : info.tone === "ok"
-                    ? "var(--color-neutral-500)"
-                    : "var(--color-neutral-600)";
-              return (
-                <div
-                  key={s.id}
-                  className="flex items-center gap-[11px]"
-                  style={{
-                    padding: "11px 13px",
-                    background: "var(--panel-2)",
-                    border: "1px solid var(--line)",
-                    borderRadius: 9,
-                  }}
-                >
-                  <span
-                    className="font-mono"
-                    style={{ fontSize: 11, color: "var(--color-neutral-600)", width: "2ch" }}
-                  >
-                    {i + 1}
-                  </span>
-                  {reflection ? (
-                    <PlugsConnected
-                      size={18}
-                      style={{ color: s.resolved?.error ? "var(--err-fg)" : "var(--ok)" }}
-                    />
-                  ) : (
-                    <FileArchive
-                      size={18}
-                      style={{
-                        color: s.resolved?.error ? "var(--err-fg)" : "var(--color-neutral-400)",
-                      }}
-                    />
-                  )}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div
-                      className="font-mono"
-                      style={{ fontSize: 13, color: "var(--color-text)" }}
-                    >
-                      {sourceLabel(s)}
-                    </div>
-                    <div style={{ fontSize: 11, color: toneColor }}>{info.text}</div>
-                  </div>
-                  {reflection ? (
-                    <Tag variant="accent">reflection</Tag>
-                  ) : (
-                    <Tag variant="neutral">descriptor set</Tag>
-                  )}
-                  <div className="flex items-center">
-                    <IconButton
-                      title="Raise priority"
-                      aria-label={`Raise priority of ${sourceLabel(s)}`}
-                      onClick={() => move(i, i - 1)}
-                      disabled={busy || i === 0}
-                    >
-                      <CaretUp size={14} />
-                    </IconButton>
-                    <IconButton
-                      title="Lower priority"
-                      aria-label={`Lower priority of ${sourceLabel(s)}`}
-                      onClick={() => move(i, i + 1)}
-                      disabled={busy || i === sources.length - 1}
-                    >
-                      <CaretDown size={14} />
-                    </IconButton>
-                  </div>
-                  <IconButton
-                    title={
-                      reflection
-                        ? "Re-reflect this target"
-                        : "Re-link this descriptor set"
-                    }
-                    aria-label={`Refresh ${sourceLabel(s)}`}
-                    onClick={() =>
-                      refreshDescriptorSource.mutate({ collection, id: s.id })
-                    }
-                    disabled={busy}
-                  >
-                    <ArrowClockwise size={15} />
-                  </IconButton>
-                  <IconButton
-                    title="Remove source"
-                    aria-label={`Remove ${sourceLabel(s)}`}
-                    onClick={() => setConfirm(s)}
-                    disabled={busy}
-                  >
-                    <Trash size={15} />
-                  </IconButton>
-                </div>
-              );
-            })}
+            {sources.map((s, i) => (
+              <SourceRow
+                key={s.id}
+                source={s}
+                index={i}
+                count={sources.length}
+                busy={busy}
+                cb={{
+                  onMove: move,
+                  onRefresh: (src) =>
+                    refreshDescriptorSource.mutate({ collection, id: src.id }),
+                  onRemove: setConfirm,
+                  onSetCommit: (src, commit) =>
+                    setDescriptorSourceCommit.mutate({ collection, id: src.id, commit }),
+                }}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -264,8 +166,8 @@ export function SourcesView() {
         width={400}
       >
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-          Remove <strong>{confirm ? sourceLabel(confirm) : "this source"}</strong>? The
-          workspace's definitions are re-derived from the sources that remain.
+          Remove <strong>{confirm ? sourceLabel(confirm) : "this source"}</strong>?{" "}
+          {confirm ? removeConsequence(confirm) : ""}
         </p>
         <div className="dialog-actions">
           <Button onClick={() => setConfirm(null)}>Cancel</Button>
