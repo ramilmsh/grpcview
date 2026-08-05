@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/jhump/protoreflect/desc"
+	"google.golang.org/protobuf/proto"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/store"
@@ -39,6 +41,38 @@ type definitions struct {
 	// share. It is held rather than returned so that a load still succeeds; see
 	// deriveDefinitions.
 	mergeErr error
+	// listDigest identifies the source list this view was derived from, so a reader holding the
+	// list can tell whether the memo still describes it — see definitionsFor.
+	listDigest [sha256.Size]byte
+}
+
+// sourceListDigest identifies a source list by its whole authored content: ids, kinds, pointers,
+// commit flags and order, with the derived Resolved summaries excluded because those are an output
+// of the merge rather than an input to it.
+//
+// It exists because writer invalidation cannot be the memo's only coherency mechanism.
+// grpcview.json and grpcview.work.json are COMMITTED, hand-editable files: a `git pull`, a branch
+// switch or an editor can change which sources a collection lists, and none of that goes through
+// an RPC that could invalidate anything. Left unnoticed, a hand-added source came back with no
+// summary at all and a hand-removed one kept serving its services out of the memo.
+//
+// Marshalling rather than hand-writing the fields is deliberate: a kind added later (the file and
+// bazel pointers this phase is heading for) is covered without anyone remembering to extend this.
+func sourceListDigest(sources []*grpcviewv1.DescriptorSource) [sha256.Size]byte {
+	bare := make([]*grpcviewv1.DescriptorSource, 0, len(sources))
+	for _, src := range sources {
+		clone := proto.CloneOf(src)
+		clone.Resolved = nil
+		bare = append(bare, clone)
+	}
+	// A Collection is just the smallest message to hand a repeated field to; nothing reads it back.
+	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(&grpcviewv1.Collection{Sources: bare})
+	if err != nil {
+		// Marshalling a message that was just cloned cannot fail, and a digest that changes every
+		// time would only cost a re-derive per read, never correctness.
+		return sha256.Sum256(nil)
+	}
+	return sha256.Sum256(data)
 }
 
 // definitionsCacheSize bounds the memo. One entry is a fully linked descriptor set, which for a
@@ -170,6 +204,29 @@ func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection) (*
 	if defs := w.defs.lookup(coll.Key()); defs != nil {
 		return defs, nil
 	}
+	return w.derive(ctx, coll)
+}
+
+// definitionsFor is definitionsOf for a caller that has JUST read the collection's source list off
+// disk, and can therefore hand over the list the view must match. A memo entry derived from a
+// different list is stale — a hand-edited grpcview.json, a pulled branch — and is re-derived here.
+//
+// The check lives on this path and not on definitionsOf's because it must cost nothing: loadCollection
+// has already paid for the manifest read, while invoke and describe have not, and making a memo hit
+// stat or read a file to prove itself valid is exactly what keying the memo by digest used to do.
+// The interactive path self-heals, and it leaves a correct entry behind for the hot one.
+func (w Workspace) definitionsFor(ctx context.Context, coll *store.Collection, sources []*grpcviewv1.DescriptorSource) (*definitions, error) {
+	digest := sourceListDigest(sources)
+	if defs := w.defs.lookup(coll.Key()); defs != nil {
+		if defs.listDigest == digest {
+			return defs, nil
+		}
+		w.defs.invalidate(coll.Key())
+	}
+	return w.derive(ctx, coll)
+}
+
+func (w Workspace) derive(ctx context.Context, coll *store.Collection) (*definitions, error) {
 	// Read the epoch BEFORE the blobs: a write landing during the derivation below must be able
 	// to refuse the result, which it can only do if the epoch we quote predates the read.
 	epoch := w.defs.epoch(coll.Key())
@@ -224,13 +281,18 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 				summary.Error = err.Error()
 			}
 		}
-		return &definitions{sources: withSummaries(sources, summaries), mergeErr: err}, nil
+		return &definitions{
+			sources:    withSummaries(sources, summaries),
+			mergeErr:   err,
+			listDigest: sourceListDigest(sources),
+		}, nil
 	}
 	return &definitions{
 		services:      view.serviceDescs,
 		sources:       withSummaries(sources, view.summaries),
 		serviceList:   view.services,
 		descriptorSet: view.descriptorSet,
+		listDigest:    sourceListDigest(sources),
 	}, nil
 }
 
@@ -251,7 +313,10 @@ func (w Workspace) loadCollection(ctx context.Context, coll *store.Collection) (
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	defs, err := w.definitionsOf(ctx, coll)
+	// The list this response is about to carry is also what the derived half must match, so it is
+	// handed to the memo rather than trusted blindly: this is the path that notices a grpcview.json
+	// somebody edited by hand or pulled in on a branch.
+	defs, err := w.definitionsFor(ctx, coll, ws.GetSources())
 	if err != nil {
 		return nil, err
 	}

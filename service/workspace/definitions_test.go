@@ -356,3 +356,53 @@ func TestMemoRefusesAStaleDerivation(t *testing.T) {
 		t.Error("a derivation begun after the invalidation was refused")
 	}
 }
+
+// TestGetNoticesAHandEditedSourceList is the coherency hole writer invalidation cannot close.
+// grpcview.json is a committed file: a pull, a branch switch or an editor changes which sources a
+// collection lists without any RPC being involved, so a memo entry keyed only by collection would
+// answer for a list that is no longer there — a hand-added source came back carrying no summary at
+// all, and a hand-removed one kept serving its services out of the merged view.
+func TestGetNoticesAHandEditedSourceList(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	addEchoUpload(t, w, ctx)
+
+	// Warm the memo with the list as it stands.
+	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace})); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	coll, err := w.store.Open(ctx, testWorkspace)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	manifest := filepath.Join(coll.Root(), store.CollectionFileName)
+	data, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	// Drop the source list the way a colleague's commit would, leaving every blob in place.
+	edited := strings.Replace(string(data), `"sources"`, `"sourcesWasHere"`, 1)
+	if edited == string(data) {
+		t.Fatalf("the manifest has no sources to remove:\n%s", data)
+	}
+	if err := os.WriteFile(manifest, []byte(edited), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get after the edit: %v", err)
+	}
+	ws := got.Msg.GetCollection()
+	if len(ws.GetSources()) != 0 {
+		t.Errorf("sources = %v, want none after the edit", ws.GetSources())
+	}
+	if len(ws.GetServices()) != 0 {
+		t.Errorf("services = %v, want none: they came from a source the manifest no longer lists", ws.GetServices())
+	}
+	if len(ws.GetDescriptorSet()) != 0 {
+		t.Error("descriptor_set survived the removal of every source that produced it")
+	}
+}
