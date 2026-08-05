@@ -108,6 +108,20 @@ ts.typescriptDefaults.addExtraLib(ENV_DTS, "file:///grpcview-scripts-env.d.ts");
 // Module scope, never a React effect: a second addExtraLib at this URI throws.
 const GV_DTS = `
 /**
+ * The saved requests \`gv.invoke()\` can reach, path → response type. Declared empty here and
+ * MERGED into by the generated \`gv-requests.d.ts\` (proto-types.ts \`gvRequestMapDts\`), which the
+ * body editor registers per collection. With no map registered \`keyof\` is \`never\`, every path
+ * takes the string branch, and \`body\` is \`any\` — the untyped behavior, unchanged.
+ *
+ * Streaming saved requests are deliberately absent: \`gv.invoke\` rejects them, so there is no
+ * response to type.
+ */
+interface GvRequestMap {}
+/** Paths of the collection's invokable saved requests. */
+type GvPath = keyof GvRequestMap;
+/** The response type behind a path literal; \`any\` for a computed or unrecognized path. */
+type GvBody<P> = P extends keyof GvRequestMap ? GvRequestMap[P]["response"] : any;
+/**
  * grpcview's shared scripting global (gv-features-plan.md). Installed in every script run —
  * request body, request metadata, folder metadata, middleware, scenario, and inline-composed
  * generators — so its members are always present; they degrade gracefully where there is no
@@ -122,24 +136,40 @@ declare const gv: {
      */
     inherit(): { [key: string]: string[] };
   };
-  /** Kwargs passed by a \`gv.invoke()\` caller; \`{}\` on a top-level user invoke (Feature 3). */
-  request: { params: Readonly<Record<string, unknown>> };
+  /**
+   * Kwargs passed by a \`gv.invoke()\` caller; \`{}\` on a top-level user invoke (Feature 3).
+   * Values are \`any\`, not \`unknown\`: their real shape is whatever the caller passed, and a
+   * body that assigns one straight into a typed request field (\`refresh: gv.request.params.refresh\`)
+   * must not have to cast to get past the checker.
+   */
+  request: { params: Readonly<Record<string, any>> };
   /**
    * Invoke a saved request by its slash-separated display-name path (e.g.
    * "UserService/GetUser"), optionally passing kwargs the target reads as \`gv.request.params\`
    * (Feature 3). A gRPC-status failure still RESOLVES (\`ok: false\`, fetch-style); invoke() only
    * REJECTS for an unknown path, a streaming target, a body/metadata that won't evaluate, or the
    * invoke-depth cap.
+   *
+   * A literal path from \`GvRequestMap\` completes inside the quotes and types \`body\` as that
+   * method's response message. \`(string & {})\` keeps a computed path — one built from a
+   * variable or a template literal — compiling; it just falls back to \`body: any\`.
    */
-  invoke(path: string, params?: Record<string, unknown>): Promise<InvokeResult>;
+  invoke<P extends GvPath | (string & {})>(
+    path: P,
+    params?: Record<string, unknown>
+  ): Promise<InvokeResult<GvBody<P>>>;
 };
 /** The decoded result of \`gv.invoke()\` — a fetch-style POJO, never a proto Struct/Duration/Any. */
-type InvokeResult = {
+type InvokeResult<T = any> = {
   /** \`true\` iff \`status.code === 0\`. */
   ok: boolean;
   status: { code: number; message: string };
-  /** Decoded response JSON, or \`null\` on failure. */
-  body: unknown | null;
+  /**
+   * Decoded response JSON — the target method's \`<Message>Json\` type when the path is a known
+   * literal, else \`any\`. \`null\` at runtime when \`ok\` is false; \`strictNullChecks\` is off here,
+   * so that is documented rather than encoded in the type.
+   */
+  body: T;
   /** Merged response header + trailer metadata. */
   metadata: Record<string, string[]>;
   /** The metadata actually sent with the nested request. */

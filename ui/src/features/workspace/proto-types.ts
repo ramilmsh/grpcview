@@ -74,6 +74,57 @@ export {};
   return { symbol, importPath, dts };
 }
 
+// A saved request `gv.invoke()` can reach: its display-name path and its RESPONSE message.
+export interface InvokeTarget {
+  path: string;
+  pkg: string;
+  name: string;
+  file: string;
+}
+
+// gvRequestMapDts builds the ambient d.ts that populates `GvRequestMap` — the path → response
+// table `gv.invoke()`'s generic signature reads (see gv.d.ts in monaco-scripts.ts). Null when
+// nothing resolves, so the caller registers nothing and `invoke` stays at its `any` fallback.
+//
+// Every import is aliased positionally: two proto files may each export a `FooJson`, and the map
+// is one flat file.
+export function gvRequestMapDts(
+  files: Map<string, string>,
+  targets: InvokeTarget[]
+): string | null {
+  const imports: string[] = [];
+  const entries: string[] = [];
+  const seen = new Set<string>();
+
+  for (const target of targets) {
+    if (seen.has(target.path)) continue;
+    // WKT responses are not generated (generateWorkspaceTypes skips google/protobuf/*), so
+    // there is no module to import them from.
+    if (target.file.startsWith("google/protobuf/")) continue;
+
+    const base = target.file.replace(/\.proto$/, "_pb");
+    const content = files.get(`${base}.ts`);
+    if (!content) continue;
+    const local = resolveLocalSymbol(content, target.pkg, target.name);
+    if (!local) continue;
+
+    const alias = `GvResponse${imports.length}`;
+    imports.push(`import type { ${local}Json as ${alias} } from "./gen/${base}";`);
+    entries.push(`    ${JSON.stringify(target.path)}: { response: ${alias} };`);
+    seen.add(target.path);
+  }
+
+  if (entries.length === 0) return null;
+  return `${imports.join("\n")}
+declare global {
+  interface GvRequestMap {
+${entries.join("\n")}
+  }
+}
+export {};
+`;
+}
+
 // messageTypeText returns the generated `<Message>Json` type text for the TypesModal, or null
 // when there is nothing to show. Unlike requestMessageAlias it never guesses a symbol.
 export function messageTypeText(

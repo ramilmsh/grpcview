@@ -7,6 +7,7 @@ import { MessagesTab } from "./MessagesTab";
 import { MetadataTab } from "./MetadataTab";
 import { MiddlewareTab } from "./MiddlewareTab";
 import type { GeneratorDef } from "./generator-libs";
+import type { InvokeTarget } from "./proto-types";
 
 export function RequestPane({
   kind,
@@ -23,6 +24,7 @@ export function RequestPane({
   descriptorSet,
   inputPackage,
   inputFile,
+  invokeTargets,
   generators,
 }: {
   kind: MethodKind;
@@ -39,6 +41,7 @@ export function RequestPane({
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
+  invokeTargets?: InvokeTarget[];
   generators: GeneratorDef[];
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
@@ -99,6 +102,7 @@ export function RequestPane({
             descriptorSet={descriptorSet}
             inputPackage={inputPackage}
             inputFile={inputFile}
+            invokeTargets={invokeTargets}
             generators={generators}
           />
         )

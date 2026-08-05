@@ -157,10 +157,17 @@ ambient `gv.d.ts` registered once at `file:///grpcview/gv.d.ts`
 ```ts
 declare const gv: {
   metadata: { inherit(): { [key: string]: string[] } };
-  request:  { params: Readonly<Record<string, unknown>> };
+  request:  { params: Readonly<Record<string, any>> };
   invoke(path: string, params?: Record<string, unknown>): Promise<InvokeResult>;
 };
 ```
+
+`gv.request.params` values and `InvokeResult.body` are typed `any`, not `unknown`,
+on purpose: both hold data whose real shape the ambient `.d.ts` cannot name, and
+both are meant to be drilled into or assigned straight into a typed request field —
+`(await gv.invoke("Collections/ListCollections")).body.collections[0].id`,
+`refresh: gv.request.params.refresh ?? true`. Under `unknown` each of those is a
+checker error in the body editor for code that runs correctly.
 
 `gv` is assembled and frozen **exactly once** (`Object.freeze` blocks later member
 addition, and a second `globalThis.gv =` would clobber the first). The two
@@ -188,6 +195,35 @@ context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
   target, un-evaluable body/metadata, or the depth cap. Nested invokes do **not**
   record history. Bounded by a ctx depth counter (`gvinvoke.go`) — a depth cap only,
   with no cycle set, so self-recursive pagination still works.
+
+### Typed `gv.invoke` paths
+
+`gv.invoke` is generic over its path, so a literal path completes inside the quotes
+and types `body` as the target method's response message:
+
+```ts
+(await gv.invoke("Collections/ListCollections")).body.collections[0].id  // string
+```
+
+The mechanism is an ambient interface merged into from a generated file:
+
+- `gv.d.ts` (`monaco-scripts.ts`) declares `interface GvRequestMap {}` empty, plus
+  `invoke<P extends GvPath | (string & {})>(…): Promise<InvokeResult<GvBody<P>>>`.
+  `(string & {})` is load-bearing: a computed path still compiles and just gets
+  `body: any`, while literals keep their completions.
+- `collectInvokeTargets` (`gv-requests.ts`) walks the collection tree and pairs each
+  **unary** saved request's display-name path with its **output** message. Streaming
+  requests are skipped (`gv.invoke` rejects them), as is any name containing `/`,
+  which `splitInvokePath` would resolve elsewhere.
+- `gvRequestMapDts` (`proto-types.ts`) turns that list into
+  `gv-requests.d.ts`, importing each `<Message>Json` from the already-registered
+  generated `./gen/**_pb` modules under a positional alias (two files may export the
+  same symbol). `Editor.tsx` registers it beside `request-message.d.ts`.
+
+Degradation is the point: no descriptor set, an unresolvable symbol or an empty
+collection means no map, `keyof GvRequestMap` is `never`, and every path falls back
+to `body: any` — never a false error. The map is rebuilt whenever the tree or the
+descriptor set changes, so a rename retargets the paths.
 
 ## Definition sources (where schemas come from)
 

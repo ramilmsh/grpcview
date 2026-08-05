@@ -8,6 +8,7 @@ import "@/features/scripts/monaco-scripts";
 import "./vendor/bufbuild-stubs";
 import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
 import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
+import type { InvokeTarget } from "./proto-types";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
@@ -54,6 +55,8 @@ interface EditorProps {
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
+  // The collection's invokable saved requests, typing `gv.invoke()`'s path and body.
+  invokeTargets?: InvokeTarget[];
   generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
@@ -66,6 +69,7 @@ export function Editor({
   inputPackage,
   inputName,
   inputFile,
+  invokeTargets,
   generators = [],
   onErrorsChange,
 }: EditorProps) {
@@ -119,7 +123,9 @@ export function Editor({
     if (!monaco || !descriptorSet?.length || !inputFile) return;
     let cancelled = false;
     void (async () => {
-      const { generateWorkspaceTypes, requestMessageAlias } = await import("./proto-types");
+      const { generateWorkspaceTypes, requestMessageAlias, gvRequestMapDts } = await import(
+        "./proto-types"
+      );
       const files = generateWorkspaceTypes(descriptorSet);
       if (cancelled) return;
       const tsDefaults = monaco.languages.typescript.typescriptDefaults;
@@ -134,13 +140,20 @@ export function Editor({
       typeLibs.current.push(
         tsDefaults.addExtraLib(alias.dts, "file:///grpcview/request/request-message.d.ts")
       );
+      // Sibling of request-message.d.ts so its "./gen/…" imports resolve the same way.
+      const gvMap = gvRequestMapDts(files, invokeTargets ?? []);
+      if (gvMap) {
+        typeLibs.current.push(
+          tsDefaults.addExtraLib(gvMap, "file:///grpcview/request/gv-requests.d.ts")
+        );
+      }
     })();
     return () => {
       cancelled = true;
       typeLibs.current.forEach((d) => d.dispose());
       typeLibs.current = [];
     };
-  }, [monaco, descriptorSet, inputPackage, inputName, inputFile]);
+  }, [monaco, descriptorSet, inputPackage, inputName, inputFile, invokeTargets]);
 
   // Same dispose-before-add rule; scope="body" namespaces the URIs away from metadata.
   const genLibs = useRef<Monaco.IDisposable[]>([]);
