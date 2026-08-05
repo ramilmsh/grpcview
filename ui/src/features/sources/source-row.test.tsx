@@ -5,9 +5,12 @@ import {
   COMMITTED_LABEL,
   LOCAL_LABEL,
   NO_DEFINITION_LABEL,
+  REDROP_TO_REFRESH,
+  refreshTitle,
   removeConsequence,
   SourceRow,
   sourceKind,
+  sourceLabel,
   type SourceRowCallbacks,
 } from "./source-row";
 
@@ -39,11 +42,26 @@ const reflection = (address: string, over: Partial<DescriptorSource> = {}): Desc
     ...over,
   }) as unknown as DescriptorSource;
 
-const upload = (fileName: string, over: Partial<DescriptorSource> = {}): DescriptorSource =>
+// `path` is the refresh recipe, empty for anything that came from a browser file picker.
+const upload = (
+  fileName: string,
+  path = "",
+  over: Partial<DescriptorSource> = {}
+): DescriptorSource =>
   ({
     id: `upload:${fileName}`,
-    source: { case: "upload", value: { fileName } },
+    source: { case: "upload", value: { fileName, path } },
     resolved: resolved(3, ["fixture.Greeter"]),
+    origin: SourceOrigin.COLLECTION,
+    commitDescriptors: false,
+    ...over,
+  }) as unknown as DescriptorSource;
+
+const bazel = (label: string, over: Partial<DescriptorSource> = {}): DescriptorSource =>
+  ({
+    id: `bazel:${label}`,
+    source: { case: "bazel", value: { label } },
+    resolved: resolved(4, ["fixture.Greeter"]),
     origin: SourceOrigin.COLLECTION,
     commitDescriptors: false,
     ...over,
@@ -73,7 +91,16 @@ describe("sourceKind", () => {
   it("reads the oneof, and calls a reference with no arm neither kind", () => {
     expect(sourceKind(reflection("localhost:50051"))).toBe("reflection");
     expect(sourceKind(upload("api.binpb"))).toBe("descriptorSet");
+    expect(sourceKind(bazel("//proto/echo/v1:echov1_proto"))).toBe("bazel");
     expect(sourceKind(danglingReference("reflection:gone:1"))).toBe("reference");
+  });
+
+  // The regression this pins: with no bazel arm, sourceKind fell through to "reference", so a
+  // perfectly good bazel source rendered as a dangling reference the manifest does not define.
+  it("names a bazel source by its label, never by its id", () => {
+    expect(sourceLabel(bazel("//proto/echo/v1:echov1_proto"))).toBe(
+      "//proto/echo/v1:echov1_proto"
+    );
   });
 });
 
@@ -123,6 +150,66 @@ describe("a row's kind and origin", () => {
   });
 });
 
+describe("a bazel row", () => {
+  it("shows the label as the thing it points at, and claims the bazel kind", () => {
+    const markup = row(bazel("//proto/echo/v1:echov1_proto"));
+    expect(markup).toContain("//proto/echo/v1:echov1_proto");
+    expect(markup).toContain(">bazel<");
+    expect(markup).toContain("4 files, 1 service");
+    // Not a reference: the row must not claim the manifest fails to define it, and must not
+    // borrow another kind's chip.
+    expect(markup).not.toContain(NO_DEFINITION_LABEL);
+    expect(markup).not.toContain(">descriptor set<");
+    expect(markup).not.toContain(">reflection<");
+  });
+
+  it("says on the chip that resolving it builds, and that trust gates the build", () => {
+    const markup = row(bazel("//proto/echo/v1:echov1_proto"));
+    expect(markup).toContain("bazel build");
+    expect(markup).toContain("until the workspace is trusted");
+  });
+
+  it("carries a shared badge when the workspace manifest defines it", () => {
+    const markup = row(
+      bazel("//proto/echo/v1:echov1_proto", { origin: SourceOrigin.WORKSPACE })
+    );
+    expect(markup).toContain("shared");
+    expect(markup).toContain(">bazel<");
+  });
+});
+
+describe("the refresh affordance", () => {
+  it("offers to re-read an upload that recorded where its bytes came from", () => {
+    expect(refreshTitle(upload("api.binpb", "proto/api.binpb"))).toBe(
+      "Re-read this descriptor set from proto/api.binpb"
+    );
+    // The recipe is short, so the row's own secondary line shows it.
+    expect(row(upload("api.binpb", "proto/api.binpb"))).toContain("proto/api.binpb");
+  });
+
+  // A browser upload has no path, and the honest answer is not "this failed" but "the refresh
+  // is a different gesture" — so the control SAYS re-adding the file is the refresh, and stays
+  // enabled rather than being disabled with no explanation.
+  it("tells a pathless upload that re-adding the same file IS its refresh", () => {
+    expect(refreshTitle(upload("api.binpb"))).toBe(REDROP_TO_REFRESH);
+    expect(REDROP_TO_REFRESH).toContain("Add the same file again to refresh it");
+    // Middle of three, so neither priority arrow is disabled for being at an end.
+    const markup = row(upload("api.binpb"), 1, 3);
+    expect(markup).toContain("there is no path to re-read");
+    // Enabled: with nothing pending, the row disables nothing — a pathless upload keeps its
+    // refresh control precisely so the tooltip above is reachable.
+    expect(markup).not.toContain("disabled=\"\"");
+  });
+
+  it("promises a build for a bazel label, and a re-reflect for an address", () => {
+    expect(refreshTitle(bazel("//p:t"))).toContain("Run bazel build for this label");
+    expect(refreshTitle(reflection("localhost:50051"))).toBe("Re-reflect this target");
+    expect(refreshTitle(danglingReference("reflection:gone:1"))).toBe(
+      "Re-resolve this reference"
+    );
+  });
+});
+
 describe("the commit toggle", () => {
   it("says which of the two places this source's descriptors live in", () => {
     expect(row(reflection("localhost:50051"))).toContain(LOCAL_LABEL);
@@ -147,7 +234,7 @@ describe("the commit toggle", () => {
     expect(markup).toContain("var(--warn)");
     expect(markup).toContain("a clone of this repo has no schema for it at all");
     // Committed, the warning is gone and nothing about an upload is special.
-    const committed = row(upload("api.binpb", { commitDescriptors: true }));
+    const committed = row(upload("api.binpb", "", { commitDescriptors: true }));
     expect(committed).not.toContain("var(--warn)");
     expect(committed).not.toContain("has no schema for it at all");
     // A reflection source is never warned about: it can be re-fetched from its address.

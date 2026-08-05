@@ -34,6 +34,7 @@ export const FolderPlus = Ph.FolderPlus as unknown as Icon;
 export const Function = Ph.Function as unknown as Icon;
 export const Gear = Ph.Gear as unknown as Icon;
 export const GitBranch = Ph.GitBranch as unknown as Icon;
+export const Hammer = Ph.Hammer as unknown as Icon;
 export const HardDrives = Ph.HardDrives as unknown as Icon;
 export const Link = Ph.Link as unknown as Icon;
 export const LinkBreak = Ph.LinkBreak as unknown as Icon;

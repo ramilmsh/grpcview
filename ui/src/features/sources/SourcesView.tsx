@@ -1,11 +1,45 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Plus, Warning } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { useActiveWorkspace, useWorkspaceMutations } from "@/lib/workspace-query";
+import {
+  useActiveWorkspace,
+  useCollections,
+  useSetWorkspaceTrust,
+  useWorkspaceMutations,
+} from "@/lib/workspace-query";
 import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
 import { AddSourceModal } from "./AddSourceModal";
 import { removeConsequence, SourceRow, sourceLabel } from "./source-row";
+
+// One presentation for both of this view's banners — the mutation error and the trust
+// prompt — so a second warn box is not a second set of styles. Tokens only, no new colors.
+function Banner({
+  tone,
+  children,
+}: {
+  tone: "error" | "warn";
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-center gap-[8px]"
+      style={{
+        marginBottom: 14,
+        padding: "10px 12px",
+        borderRadius: 8,
+        fontSize: 13,
+        lineHeight: 1.5,
+        background: tone === "error" ? "var(--err-bg)" : "var(--warn-bg)",
+        border: `1px solid ${tone === "error" ? "var(--err-border)" : "var(--warn)"}`,
+        color: tone === "error" ? "var(--err-fg)" : "var(--warn)",
+      }}
+    >
+      <Warning weight="fill" style={{ flex: "none" }} />
+      {children}
+    </div>
+  );
+}
 
 // SourcesView lists the definition sources in priority order — the highest wins.
 export function SourcesView() {
@@ -21,8 +55,17 @@ export function SourcesView() {
     reorderDescriptorSources,
     setDescriptorSourceCommit,
   } = useWorkspaceMutations();
+  const { trusted } = useCollections();
+  const setWorkspaceTrust = useSetWorkspaceTrust();
   const [modalOpen, setModalOpen] = useState(false);
   const [confirm, setConfirm] = useState<DescriptorSource | null>(null);
+
+  // The trust prompt is shown only when a bazel source is actually in the list, NOT on every
+  // untrusted workspace. VS Code nags on open because any folder it opens can run tasks, so
+  // the risk is invisible until it fires; here the thing that would execute is a row on this
+  // screen. No bazel source means nothing in this workspace can build, and a permission
+  // request for a capability nobody is using is noise that teaches users to click through.
+  const untrustedBuild = !trusted && sources.some((s) => s.source.case === "bazel");
 
   const onAdd = (address: string, tls: boolean, commitDescriptors: boolean) => {
     addDescriptorSource.mutate(
@@ -31,6 +74,15 @@ export function SourcesView() {
         source: { case: "reflection", value: { address, tls: tls ? {} : undefined } },
         commitDescriptors,
       },
+      { onSuccess: () => setModalOpen(false) }
+    );
+  };
+
+  // No `path`: that field is a refresh recipe the CLI records, and a browser has a file
+  // picker, not a filesystem. A bazel label needs none — it knows how to produce its bytes.
+  const onAddBazel = (label: string, commitDescriptors: boolean) => {
+    addDescriptorSource.mutate(
+      { collection, source: { case: "bazel", value: { label } }, commitDescriptors },
       { onSuccess: () => setModalOpen(false) }
     );
   };
@@ -106,27 +158,39 @@ export function SourcesView() {
 
       <div style={{ flex: 1, overflow: "auto", padding: "14px 20px" }}>
         {activeError && (
-          <div
-            className="flex items-center gap-[8px]"
-            style={{
-              marginBottom: 14,
-              padding: "10px 12px",
-              borderRadius: 8,
-              fontSize: 13,
-              background: "var(--err-bg)",
-              border: "1px solid var(--err-border)",
-              color: "var(--err-fg)",
-            }}
-          >
-            <Warning weight="fill" />
+          <Banner tone="error">
             {activeError instanceof Error ? activeError.message : "Source operation failed"}
-          </div>
+          </Banner>
+        )}
+
+        {untrustedBuild && (
+          <Banner tone="warn">
+            <span>
+              Resolving a bazel source runs <code>bazel build</code>, which executes this
+              repo's own build code — so it is refused until you trust this workspace.
+              {setWorkspaceTrust.isError && (
+                <span style={{ display: "block", color: "var(--err-fg)" }}>
+                  {setWorkspaceTrust.error instanceof Error
+                    ? setWorkspaceTrust.error.message
+                    : "Could not trust this workspace"}
+                </span>
+              )}
+            </span>
+            <Button
+              className="ml-auto"
+              style={{ flex: "none" }}
+              onClick={() => setWorkspaceTrust.mutate({ trusted: true })}
+              disabled={setWorkspaceTrust.isPending}
+            >
+              {setWorkspaceTrust.isPending ? "Trusting…" : "Trust this workspace"}
+            </Button>
+          </Banner>
         )}
 
         {sources.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 13, padding: "16px 0", lineHeight: 1.6 }}>
-            No definition sources yet. Add a server-reflection target or upload a
-            descriptor set to load its services and schemas.
+            No definition sources yet. Add a server-reflection target, a bazel label, or
+            upload a descriptor set to load its services and schemas.
           </div>
         ) : (
           <div className="flex flex-col" style={{ gap: 8, maxWidth: 720 }}>
@@ -155,6 +219,7 @@ export function SourcesView() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onAddReflection={onAdd}
+        onAddBazel={onAddBazel}
         onAddDescriptorSet={onAddDescriptorSet}
         pending={addDescriptorSource.isPending}
       />

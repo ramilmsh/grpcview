@@ -3,17 +3,19 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input, Field } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-// AddSourceModal adds a reflection target or an uploaded FileDescriptorSet.
+// AddSourceModal adds a reflection target, a bazel label, or an uploaded FileDescriptorSet.
 export function AddSourceModal({
   open,
   onClose,
   onAddReflection,
+  onAddBazel,
   onAddDescriptorSet,
   pending,
 }: {
   open: boolean;
   onClose: () => void;
   onAddReflection: (address: string, tls: boolean, commitDescriptors: boolean) => void;
+  onAddBazel: (label: string, commitDescriptors: boolean) => void;
   onAddDescriptorSet: (
     bytes: Uint8Array,
     fileName: string,
@@ -24,17 +26,30 @@ export function AddSourceModal({
   // Must stay empty: a pre-filled default becomes the added source's real address.
   const [address, setAddress] = useState("");
   const [tls, setTls] = useState(false);
+  // Same rule, same reason: a pre-filled //pkg:target is the label that gets built.
+  const [label, setLabel] = useState("");
   // Off by default, matching the store: committing is a deliberate choice to put descriptors
-  // in git history, and it applies to whichever of the two sources below is added.
+  // in git history, and it applies to whichever of the kinds below is added.
   const [commit, setCommit] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const submit = () => {
+  const submitReflection = () => {
     if (address.trim()) onAddReflection(address.trim(), tls, commit);
   };
 
-  const onEnter = (e: KeyboardEvent) => {
-    if (e.key === "Enter") submit();
+  const submitBazel = () => {
+    if (label.trim()) onAddBazel(label.trim(), commit);
+  };
+
+  // The footer button adds whichever single field is filled. Both filled is ambiguous and the
+  // first field wins; each field's own Enter is the unambiguous way to say which one.
+  const submit = () => {
+    if (address.trim()) submitReflection();
+    else submitBazel();
+  };
+
+  const onEnter = (submitOne: () => void) => (e: KeyboardEvent) => {
+    if (e.key === "Enter") submitOne();
   };
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -52,7 +67,7 @@ export function AddSourceModal({
           onChange={(e) => setAddress(e.target.value)}
           placeholder="host:port (e.g. localhost:50051)"
           autoFocus
-          onKeyDown={onEnter}
+          onKeyDown={onEnter(submitReflection)}
         />
       </Field>
 
@@ -69,7 +84,24 @@ export function AddSourceModal({
         Use TLS
       </label>
 
-      {/* Between the two kinds, and not below them, because uploading a file adds the source
+      <div style={{ borderTop: "1px solid var(--line)" }} />
+      <Field label="Bazel target">
+        <Input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="//pkg:target"
+          onKeyDown={onEnter(submitBazel)}
+        />
+        <span
+          className="text-muted"
+          style={{ display: "block", fontSize: 12, lineHeight: 1.5, marginTop: 5 }}
+        >
+          A label whose default outputs are descriptor sets — a plain proto_library is enough.
+          Adding or refreshing it runs bazel build, so the workspace has to be trusted.
+        </span>
+      </Field>
+
+      {/* Between the kinds, and not below them, because uploading a file adds the source
           on the spot — an option under that button would never be seen in time. */}
       <div style={{ borderTop: "1px solid var(--line)" }} />
       <label
@@ -85,7 +117,7 @@ export function AddSourceModal({
         <span>
           Commit its descriptors to this collection
           <span className="text-muted" style={{ display: "block", fontSize: 12, lineHeight: 1.5 }}>
-            Either kind. The resolved descriptors land in the repo (descriptors/….json), so a
+            Any kind. The resolved descriptors land in the repo (descriptors/….json), so a
             fresh clone resolves this source with no local state and no network — at the cost
             of a large file in git history. Off, they are cached in local state only, which for
             an uploaded set means a clone has no schema for it until someone uploads the file
@@ -114,7 +146,11 @@ export function AddSourceModal({
 
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={submit} disabled={pending || !address.trim()}>
+        <Button
+          variant="primary"
+          onClick={submit}
+          disabled={pending || (!address.trim() && !label.trim())}
+        >
           {pending ? "Adding…" : "Add source"}
         </Button>
       </div>

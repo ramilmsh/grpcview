@@ -4,6 +4,7 @@ import {
   CaretUp,
   FileArchive,
   GitBranch,
+  Hammer,
   HardDrives,
   Link,
   LinkBreak,
@@ -23,18 +24,29 @@ import { SourceOrigin, type DescriptorSource } from "@grpcview/v1/workspace_pb";
 // unset — a reference grpcview.work.json no longer defines. It has no kind to claim, since
 // the manifest held the address and the address is what said reflection or upload, so the
 // row must not label it a descriptor set; Resolved.error already names the file to fix.
-export type SourceKind = "reflection" | "descriptorSet" | "reference";
+export type SourceKind = "reflection" | "descriptorSet" | "bazel" | "reference";
 
 export function sourceKind(s: DescriptorSource): SourceKind {
   if (s.source.case === "reflection") return "reflection";
   if (s.source.case === "upload") return "descriptorSet";
+  if (s.source.case === "bazel") return "bazel";
   return "reference";
 }
 
 export function sourceLabel(s: DescriptorSource): string {
   if (s.source.case === "reflection") return hostLabel(s.source.value);
   if (s.source.case === "upload") return s.source.value.fileName;
+  // The bazel label IS what the row points at, the way an address is for reflection: it is
+  // config, it is what a refresh builds, and it is the only readable half of the id.
+  if (s.source.case === "bazel") return s.source.value.label;
   return s.id;
+}
+
+// The workspace-root-relative path a source's bytes were last read from, empty when there
+// isn't one. Only an upload has one to show: reflection has an address instead, and a bazel
+// label's outputs are the build's business, not a recipe a user retypes.
+export function refreshRecipe(s: DescriptorSource): string {
+  return s.source.case === "upload" ? s.source.value.path : "";
 }
 
 export function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted" | "warn" } {
@@ -99,6 +111,33 @@ function commitTitle(s: DescriptorSource): string {
   return cached;
 }
 
+// Said on the refresh control rather than only after a failed refresh, because for a pathless
+// upload the answer is not "that went wrong" but "the refresh is a different gesture" — and
+// the button is where a user asks the question. The failure path still carries the server's
+// FailedPrecondition into the view's banner, so nothing is lost by answering early too.
+export const REDROP_TO_REFRESH =
+  "This descriptor set came from a file picker, so there is no path to re-read. Add the same " +
+  "file again to refresh it: the file name is the source's identity, so re-adding replaces " +
+  "these descriptors in place rather than adding a second source.";
+
+export function refreshTitle(s: DescriptorSource): string {
+  switch (sourceKind(s)) {
+    case "reflection":
+      return "Re-reflect this target";
+    case "descriptorSet": {
+      const path = refreshRecipe(s);
+      return path ? `Re-read this descriptor set from ${path}` : REDROP_TO_REFRESH;
+    }
+    case "bazel":
+      // Refusable: an untrusted workspace runs no build, and says so in Resolved.error.
+      return "Run bazel build for this label and re-read the descriptor sets it writes";
+    default:
+      // A reference with no definition has no pointer to re-acquire from, so this reports
+      // what is missing rather than fetching anything.
+      return "Re-resolve this reference";
+  }
+}
+
 const REDERIVED = "This collection's definitions are re-derived from the sources that remain.";
 
 // Removing a WORKSPACE-origin source drops THIS collection's reference and leaves the shared
@@ -117,6 +156,19 @@ export function removeConsequence(s: DescriptorSource): string {
   }
   return REDERIVED;
 }
+
+// A bazel source EXECUTES to produce its bytes, which is why it gets the tool and not another
+// file icon — the same distinction the trust gate is about.
+const KIND_ICON: Record<SourceKind, typeof PlugsConnected> = {
+  reflection: PlugsConnected,
+  descriptorSet: FileArchive,
+  bazel: Hammer,
+  reference: LinkBreak,
+};
+
+const BAZEL_TITLE =
+  "Refreshing this source runs `bazel build` for the label and reads the descriptor sets it " +
+  "writes. That runs this repo's build code, so it is refused until the workspace is trusted.";
 
 export interface SourceRowCallbacks {
   onMove: (from: number, to: number) => void;
@@ -148,15 +200,19 @@ export function SourceRow({
       : info.tone === "ok"
         ? "var(--color-neutral-500)"
         : "var(--color-neutral-600)";
-  const KindIcon =
-    kind === "reflection" ? PlugsConnected : kind === "descriptorSet" ? FileArchive : LinkBreak;
+  const KindIcon = KIND_ICON[kind];
   const kindIconColor = failed
     ? "var(--err-fg)"
     : kind === "reflection"
       ? "var(--ok)"
-      : kind === "reference"
-        ? "var(--warn)"
-        : "var(--color-neutral-400)";
+      : kind === "bazel"
+        ? "var(--color-accent)"
+        : kind === "reference"
+          ? "var(--warn)"
+          : "var(--color-neutral-400)";
+  // The recipe, on the one kind that has one to show and can lose it. Short by construction
+  // (workspace-root-relative), so it rides the existing secondary line.
+  const recipe = refreshRecipe(s);
   // Filled pill = the flag is on, outlined = off, so the state reads without hovering; warn
   // outline is reserved for the case where "off" costs a clone its schema entirely.
   const uncommittedUpload = kind === "descriptorSet" && !s.commitDescriptors;
@@ -187,7 +243,18 @@ export function SourceRow({
         <div className="font-mono" style={{ fontSize: 13, color: "var(--color-text)" }}>
           {label}
         </div>
-        <div style={{ fontSize: 11, color: toneColor }}>{info.text}</div>
+        <div style={{ fontSize: 11, color: toneColor }}>
+          {info.text}
+          {recipe && (
+            <span
+              className="font-mono"
+              style={{ color: "var(--color-neutral-600)" }}
+              title={`Refreshing re-reads this descriptor set from ${recipe}, relative to the workspace root.`}
+            >
+              {` · ${recipe}`}
+            </span>
+          )}
+        </div>
       </div>
       {s.origin === SourceOrigin.WORKSPACE && (
         <Tag variant="neutral" title={SHARED_TITLE}>
@@ -197,6 +264,11 @@ export function SourceRow({
       )}
       {kind === "reflection" && <Tag variant="accent">reflection</Tag>}
       {kind === "descriptorSet" && <Tag variant="neutral">descriptor set</Tag>}
+      {kind === "bazel" && (
+        <Tag variant="accent" title={BAZEL_TITLE}>
+          bazel
+        </Tag>
+      )}
       {kind === "reference" && (
         <span
           className="tag"
@@ -245,15 +317,7 @@ export function SourceRow({
         </IconButton>
       </div>
       <IconButton
-        title={
-          kind === "reflection"
-            ? "Re-reflect this target"
-            : kind === "descriptorSet"
-              ? "Re-link this descriptor set"
-              : // A reference with no definition has no pointer to re-acquire from, so this
-                // reports what is missing rather than fetching anything.
-                "Re-resolve this reference"
-        }
+        title={refreshTitle(s)}
         aria-label={`Refresh ${label}`}
         onClick={() => cb.onRefresh(s)}
         disabled={busy}

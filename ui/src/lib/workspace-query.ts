@@ -27,6 +27,7 @@ import {
   refreshDescriptorSource,
   reorderDescriptorSources,
   setDescriptorSourceCommit,
+  setWorkspaceTrust,
   invoke,
   runScript,
   createScript,
@@ -102,6 +103,7 @@ function useCollectionsKey(): QueryKey {
 export function useCollections(): {
   root: string;
   collections: CollectionSummary[];
+  trusted: boolean;
   isPending: boolean;
   error: ConnectError | null;
 } {
@@ -109,6 +111,10 @@ export function useCollections(): {
   return {
     root: query.data?.root ?? "",
     collections: query.data?.collections ?? [],
+    // Trusted until the listing says otherwise: the default has to be the one that shows NO
+    // banner, so a security prompt cannot flash on every load while the query is in flight.
+    // Nothing is gated client-side by this — the server refuses the build either way.
+    trusted: query.data?.trusted ?? true,
     isPending: query.isPending,
     error: query.error,
   };
@@ -268,6 +274,25 @@ export function useWorkspaceMutations() {
     reorderDescriptorSources: useMutation(reorderDescriptorSources, opts),
     setDescriptorSourceCommit: useMutation(setDescriptorSourceCommit, opts),
   };
+}
+
+// Workspace Trust (VS Code's, copied): grants or revokes permission for this workspace ROOT
+// to execute — today, for a bazel source to run `bazel build`. Its own hook rather than a
+// member of useWorkspaceMutations because it is the one write that does not return a
+// Collection, so there is no Get cache to seed; what it changes is `trusted` on the
+// collections listing, which is therefore what gets invalidated.
+//
+// It deliberately does NOT re-resolve anything: a source refused while untrusted keeps its
+// Resolved.error until someone refreshes it, matching the backend rule that trust is checked
+// at the point of exec. Granting trust permits a build, it does not start one.
+export function useSetWorkspaceTrust() {
+  const qc = useQueryClient();
+  const listKey = useCollectionsKey();
+  return useMutation(setWorkspaceTrust, {
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: listKey });
+    },
+  });
 }
 
 export function useCreateScript() {
