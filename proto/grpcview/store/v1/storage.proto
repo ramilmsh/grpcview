@@ -45,6 +45,21 @@ message Workspace {
   // referencing collection's entry, which carries its own.
   repeated DescriptorSource sources = 4;
   Defaults defaults = 5;
+  // bazel configures how a Bazel source is built. It lives at the workspace level because
+  // there is one bazel workspace for the whole repo, not one per collection, and because a
+  // colleague's checkout needs the same answer.
+  BazelConfig bazel = 6;
+}
+
+// BazelConfig is the workspace's bazel settings, all optional.
+message BazelConfig {
+  // root overrides where the bazel workspace is: absolute, or relative to the grpcview
+  // workspace root. Empty walks up from the workspace root for MODULE.bazel, WORKSPACE or
+  // WORKSPACE.bazel — the bazel root is often the same directory and must not be assumed to be.
+  string root = 1;
+  // timeout_seconds caps one build; 0 means the default (600). A descriptor build is seconds in
+  // practice, so this is for the pathological case.
+  int32 timeout_seconds = 2;
 }
 
 // Defaults is what a NEW collection in this workspace starts from, so `grpcview init` in a
@@ -168,12 +183,14 @@ message ItemMeta {
 // reorder can rewrite cheaply.
 message DescriptorSource {
   // id is the source's stable identity, mirroring the wire field: "upload:<file
-  // name>" or "reflection:<address>[+tls]". It keys the per-source resolve cache
-  // and makes re-adding the same source a refresh instead of a duplicate.
+  // name>", "reflection:<address>[+tls]" or "bazel:<//pkg:target>". It keys the
+  // per-source resolve cache and makes re-adding the same source a refresh instead
+  // of a duplicate.
   string id = 3;
   oneof source {
     Upload upload = 1;
     Reflection reflection = 2;
+    Bazel bazel = 5;
   }
   // commit_descriptors puts what this source resolves to in the repo — a
   // protojson ResolvedSource sidecar under the collection's descriptors/ — rather
@@ -189,6 +206,21 @@ message DescriptorSource {
 // local state.
 message Upload {
   string file_name = 1;
+  // path is the workspace-root-relative path the bytes were last read from; empty means
+  // there is no recipe, which is what a browser file picker leaves behind. It is stored
+  // root-relative so the manifest stays portable across checkouts, and it is never part of
+  // the identity: the file name is, so a git mv of the descriptor set edits this recipe
+  // instead of spawning a second source.
+  string path = 2;
+}
+
+// Bazel is a build label whose default outputs are descriptor sets. It is the one kind that
+// can PRODUCE its own bytes: refreshing it runs a build and then reads the outputs the
+// build reports, so unlike an upload it is a real pointer and may be a shared workspace
+// definition. The label is stored canonical ("//pkg:target"), which is what makes it a
+// stable identity.
+message Bazel {
+  string label = 1;
 }
 
 // DescriptorIndex is descriptors.json in a collection's state directory. Like

@@ -8,6 +8,7 @@ import (
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/bazelbuild"
 )
 
 // SourceID derives a source's stable identity from its config, so re-adding it refreshes in place.
@@ -17,6 +18,8 @@ func SourceID(src *grpcviewv1.DescriptorSource) string {
 		return reflectionSourceID(addressTLSFromServer(s.Reflection))
 	case *grpcviewv1.DescriptorSource_Upload:
 		return uploadSourceID(s.Upload.GetFileName())
+	case *grpcviewv1.DescriptorSource_Bazel:
+		return bazelSourceID(s.Bazel.GetLabel())
 	default:
 		return ""
 	}
@@ -28,6 +31,8 @@ func diskSourceID(ds *grpcviewstorev1.DescriptorSource) string {
 		return reflectionSourceID(s.Reflection.GetAddress(), s.Reflection.GetTls())
 	case *grpcviewstorev1.DescriptorSource_Upload:
 		return uploadSourceID(s.Upload.GetFileName())
+	case *grpcviewstorev1.DescriptorSource_Bazel:
+		return bazelSourceID(s.Bazel.GetLabel())
 	default:
 		return ""
 	}
@@ -42,6 +47,36 @@ func reflectionSourceID(address string, tls bool) string {
 }
 
 func uploadSourceID(fileName string) string { return "upload:" + fileName }
+
+// The label goes in verbatim — "bazel://pkg:target" — because a canonical label is already a
+// unique name for a build target. It is assumed canonical: whoever accepts a label from a human
+// canonicalizes it there, so that two spellings of one target cannot become two sources, and this
+// stays the pure config -> id function every other kind's is.
+func bazelSourceID(label string) string { return "bazel:" + label }
+
+// canonicalizeBazelLabel rewrites a manifest-authored bazel label to its canonical spelling, IN
+// PLACE so the next write persists it, and it runs everywhere an id is derived from disk — because
+// this is the OTHER door a label comes through. The add path canonicalizes before deriving an id;
+// a `grpcview.json` a colleague hand-wrote does not, and "//pkg" would otherwise become the source
+// "bazel://pkg" while `sources add //pkg` produces "bazel://pkg:pkg" — one target, two sources,
+// which is exactly the refresh-in-place invariant canonicalization exists to protect.
+//
+// A label that will NOT canonicalize keeps its raw spelling, and therefore its raw-derived id: it
+// is committed config, and the row has to stay visible (with its resolve error on it) rather than
+// vanish from the list a user has to edit.
+func canonicalizeBazelLabel(ds *grpcviewstorev1.DescriptorSource, logger *slog.Logger) {
+	bazel, ok := ds.GetSource().(*grpcviewstorev1.DescriptorSource_Bazel)
+	if !ok || bazel.Bazel.GetLabel() == "" {
+		return
+	}
+	canon, err := bazelbuild.CanonicalLabel(bazel.Bazel.GetLabel())
+	if err != nil {
+		logger.Warn("keeping a bazel label that will not canonicalize as it stands",
+			"label", bazel.Bazel.GetLabel(), "error", err)
+		return
+	}
+	bazel.Bazel.Label = canon
+}
 
 // normalizeSources runs on every manifest read: it fills in missing ids and drops entries that
 // cannot be addressed at all.
@@ -62,6 +97,8 @@ func normalizeSources(
 	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(in))
 	seen := make(map[string]bool, len(in))
 	for _, ds := range in {
+		// Before any id is derived from it: see canonicalizeBazelLabel.
+		canonicalizeBazelLabel(ds, logger)
 		if ds.GetId() == "" {
 			ds.Id = diskSourceID(ds)
 		}
@@ -98,6 +135,20 @@ func (s *Store) readWorkspaceManifest() (*grpcviewstorev1.Workspace, error) {
 	return ws, nil
 }
 
+// WorkspaceBazel is the manifest's bazel settings. It is exported because the build itself lives in
+// the workspace service (that is where the trust gate and the resolve path are) while the one reader
+// of grpcview.work.json lives here — so this is a getter, not a second reader.
+//
+// A workspace with no bazel block gets the zero config, which every field reads as its default:
+// discover the bazel root, use the default timeout.
+func (s *Store) WorkspaceBazel() (*grpcviewstorev1.BazelConfig, error) {
+	ws, err := s.readWorkspaceManifest()
+	if err != nil {
+		return nil, err
+	}
+	return ws.GetBazel(), nil
+}
+
 // workspaceDefinitions is the shared definition set a collection's references resolve against,
 // keyed by source id.
 //
@@ -120,6 +171,9 @@ func (s *Store) workspaceDefinitions() (map[string]*grpcviewstorev1.DescriptorSo
 func (s *Store) definitionSet(in []*grpcviewstorev1.DescriptorSource) map[string]*grpcviewstorev1.DescriptorSource {
 	defs := make(map[string]*grpcviewstorev1.DescriptorSource, len(in))
 	for _, ds := range in {
+		// A shared DEFINITION is disk-authored too, and a collection's reference to it carries the
+		// canonical id, so the same canonicalization has to happen here or the reference dangles.
+		canonicalizeBazelLabel(ds, s.logger)
 		if ds.GetId() == "" {
 			ds.Id = diskSourceID(ds)
 		}
@@ -130,6 +184,10 @@ func (s *Store) definitionSet(in []*grpcviewstorev1.DescriptorSource) map[string
 		case ds.GetUpload() != nil:
 			// An upload has no pointer to re-acquire from, and its bytes are owned by the
 			// collection that supplied them — a workspace-level upload has nowhere to live.
+			// The rule is about the missing pointer and not about locality, which is why a
+			// Bazel definition is fine: a label re-produces its own bytes, so five
+			// collections can share one, and an upload that happens to know a path is
+			// deliberately still excluded rather than half-shareable.
 			s.logger.Warn("ignoring a workspace definition that is an upload: an upload's bytes belong to the collection that supplied them",
 				"id", ds.GetId(), "manifest", WorkspaceFileName)
 			continue

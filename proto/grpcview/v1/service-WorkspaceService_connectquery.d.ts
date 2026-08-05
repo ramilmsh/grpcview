@@ -52,6 +52,18 @@ export const get: typeof WorkspaceService["method"]["get"];
  */
 export const listCollections: typeof WorkspaceService["method"]["listCollections"];
 /**
+ * SetWorkspaceTrust trusts or un-trusts this workspace ROOT — the same decision VS Code's
+ * Workspace Trust makes, for the same reason: a committed bazel label means opening a repo
+ * could run `bazel build`, i.e. arbitrary code. Trust is on the folder and not on its
+ * content, so a manifest that changes tomorrow is still trusted.
+ *
+ * Revoking un-resolves NOTHING: the descriptors already stored stay, every collection keeps
+ * loading, describing and invoking from them, and only a future build is refused.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.SetWorkspaceTrust
+ */
+export const setWorkspaceTrust: typeof WorkspaceService["method"]["setWorkspaceTrust"];
+/**
  * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
  */
 export const createCollection: typeof WorkspaceService["method"]["createCollection"];

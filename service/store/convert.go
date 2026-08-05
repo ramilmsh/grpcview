@@ -101,8 +101,18 @@ func diskToWireSource(
 	case *grpcviewstorev1.DescriptorSource_Reflection:
 		out.Source = &grpcviewv1.DescriptorSource_Reflection{Reflection: reflectionToServer(src.Reflection)}
 	case *grpcviewstorev1.DescriptorSource_Upload:
+		// path rides along in both directions: it is authored config (a refresh recipe), not a
+		// resolve result, so dropping it on a round trip would make the next reorder silently
+		// turn a refreshable upload back into a dead end.
 		out.Source = &grpcviewv1.DescriptorSource_Upload{
-			Upload: &grpcviewv1.Upload{FileName: src.Upload.GetFileName()},
+			Upload: &grpcviewv1.Upload{
+				FileName: src.Upload.GetFileName(),
+				Path:     src.Upload.GetPath(),
+			},
+		}
+	case *grpcviewstorev1.DescriptorSource_Bazel:
+		out.Source = &grpcviewv1.DescriptorSource_Bazel{
+			Bazel: &grpcviewv1.Bazel{Label: src.Bazel.GetLabel()},
 		}
 	}
 	return out
@@ -144,7 +154,14 @@ func wireToDiskSource(
 		out.Source = &grpcviewstorev1.DescriptorSource_Reflection{Reflection: serverToReflection(src.Reflection)}
 	case *grpcviewv1.DescriptorSource_Upload:
 		out.Source = &grpcviewstorev1.DescriptorSource_Upload{
-			Upload: &grpcviewstorev1.Upload{FileName: src.Upload.GetFileName()},
+			Upload: &grpcviewstorev1.Upload{
+				FileName: src.Upload.GetFileName(),
+				Path:     src.Upload.GetPath(),
+			},
+		}
+	case *grpcviewv1.DescriptorSource_Bazel:
+		out.Source = &grpcviewstorev1.DescriptorSource_Bazel{
+			Bazel: &grpcviewstorev1.Bazel{Label: src.Bazel.GetLabel()},
 		}
 	}
 	return out

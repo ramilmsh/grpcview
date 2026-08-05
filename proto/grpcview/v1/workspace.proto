@@ -57,13 +57,14 @@ enum SourceOrigin {
 
 // Priority-ordered: the first source to define a file, or serve a service, wins.
 message DescriptorSource {
-  // "reflection:<address>" (+"+tls") or "upload:<file name>"; adding an existing
-  // id refreshes that source in place.
+  // "reflection:<address>" (+"+tls"), "upload:<file name>" or "bazel:<//pkg:target>";
+  // adding an existing id refreshes that source in place.
   string id = 3;
 
   oneof source {
     Upload upload     = 1;
     Server reflection = 2;
+    Bazel  bazel      = 7;
   }
 
   Resolved resolved = 4;
@@ -90,6 +91,19 @@ message DescriptorSource {
 // The descriptor bytes are never sent to the client, only this file name.
 message Upload {
   string file_name = 1;
+  // Workspace-root-relative path the bytes were last read from, empty when they came
+  // from a browser file picker. Identity is still the file name — a git mv changes the
+  // recipe and not the source — so this is ONLY a refresh recipe: a path that has gone
+  // costs a refresh and nothing else, since the collection still links, describes and
+  // invokes from the bytes already stored.
+  string path = 2;
+}
+
+// A canonical bazel label ("//pkg:target") whose default outputs are descriptor sets.
+// Unlike an upload it knows how to PRODUCE its bytes: refreshing it builds the label and
+// then reads what the build wrote.
+message Bazel {
+  string label = 1;
 }
 
 message Resolved {

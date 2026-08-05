@@ -42,6 +42,48 @@ func TestNormalizeSourcesDropsAmbiguity(t *testing.T) {
 	}
 }
 
+// TestManifestBazelLabelIsCanonicalized is the other door a label comes through: `sources add //pkg`
+// canonicalizes before deriving an id, and a hand-written manifest must reach the same id — or one
+// target becomes two sources and refresh-in-place breaks.
+func TestManifestBazelLabelIsCanonicalized(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	manifest := `{
+  "schemaVersion": 1,
+  "name": "test",
+  "sources": [
+    {"bazel": {"label": "//pkg"}},
+    {"bazel": {"label": "//x --output_base=/tmp"}}
+  ]
+}
+`
+	if err := os.WriteFile(coll.collectionFilePath(), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	got, err := coll.Sources(ctx)
+	if err != nil {
+		t.Fatalf("Sources: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("sources = %d, want 2 (an uncanonicalizable label stays visible): %v", len(got), got)
+	}
+
+	// The id `sources add //pkg` produces: the add path canonicalizes first, so the two must agree.
+	want := SourceID(&grpcviewv1.DescriptorSource{
+		Source: &grpcviewv1.DescriptorSource_Bazel{Bazel: &grpcviewv1.Bazel{Label: "//pkg:pkg"}},
+	})
+	if id := got[0].GetId(); id != want {
+		t.Errorf("manifest label id = %q, want %q — the id the add path derives for one target", id, want)
+	}
+	if label := got[0].GetBazel().GetLabel(); label != "//pkg:pkg" {
+		t.Errorf("label = %q, want it canonicalized in place so the next write persists it", label)
+	}
+	// A label that will not canonicalize keeps its raw spelling AND its raw-derived id: it is
+	// committed config, and the row has to stay in the list carrying its own resolve error.
+	if id := got[1].GetId(); id != "bazel://x --output_base=/tmp" {
+		t.Errorf("uncanonicalizable label id = %q, want it kept raw", id)
+	}
+}
+
 func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -71,6 +113,28 @@ func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 			wire: &grpcviewv1.DescriptorSource{
 				Source: &grpcviewv1.DescriptorSource_Upload{
 					Upload: &grpcviewv1.Upload{FileName: "buf_image.binpb"},
+				},
+			},
+			want: "upload:buf_image.binpb",
+		},
+		{
+			// A canonical label is already a unique name for a target, so it goes into the id
+			// verbatim: the scheme prefix and the label's own leading slashes both stay.
+			name: "bazel label",
+			wire: &grpcviewv1.DescriptorSource{
+				Source: &grpcviewv1.DescriptorSource_Bazel{
+					Bazel: &grpcviewv1.Bazel{Label: "//proto/echo/v1:echov1_proto"},
+				},
+			},
+			want: "bazel://proto/echo/v1:echov1_proto",
+		},
+		{
+			// The path is a refresh recipe, never identity: the same file name from a different
+			// directory is the same source, so re-adding it after a git mv refreshes in place.
+			name: "upload with a path keeps the file name as its id",
+			wire: &grpcviewv1.DescriptorSource{
+				Source: &grpcviewv1.DescriptorSource_Upload{
+					Upload: &grpcviewv1.Upload{FileName: "buf_image.binpb", Path: "gen/buf_image.binpb"},
 				},
 			},
 			want: "upload:buf_image.binpb",
@@ -283,6 +347,108 @@ func TestWorkspaceDefinitionRejectsAnUpload(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].GetSource() != nil {
 		t.Fatalf("want one row with no kind, got %v", got)
+	}
+}
+
+// TestWorkspaceDefinitionAcceptsBazelNotUpload pins WHY an upload is skipped: the rule is the
+// missing pointer, not locality. A label re-produces its own bytes, so five collections can share
+// one definition of it — while an upload that happens to know a path is still skipped, because
+// sharing bytes a collection handed over is deliberately unbuilt.
+func TestWorkspaceDefinitionAcceptsBazelNotUpload(t *testing.T) {
+	s := newTestStore(t)
+	const label = "//proto/echo/v1:echov1_proto"
+	defs := s.definitionSet([]*grpcviewstorev1.DescriptorSource{
+		{Source: &grpcviewstorev1.DescriptorSource_Bazel{
+			Bazel: &grpcviewstorev1.Bazel{Label: label},
+		}},
+		{Source: &grpcviewstorev1.DescriptorSource_Upload{
+			Upload: &grpcviewstorev1.Upload{FileName: "image.binpb", Path: "gen/image.binpb"},
+		}},
+	})
+	if len(defs) != 1 {
+		t.Fatalf("definitions = %v, want only the bazel one", defs)
+	}
+	def := defs["bazel:"+label]
+	if def == nil {
+		t.Fatalf("a bazel definition must be usable at the workspace level: %v", defs)
+	}
+	if got := def.GetBazel().GetLabel(); got != label {
+		t.Errorf("definition label = %q, want %q", got, label)
+	}
+	if defs["upload:image.binpb"] != nil {
+		t.Errorf("an upload with a path is still not a shareable definition: %v", defs)
+	}
+}
+
+// TestUploadPathRoundTrips: the recipe is authored config, and every mutation rewrites the whole
+// list through the wire form, so dropping it here would make the next reorder quietly turn a
+// refreshable upload back into a dead end.
+func TestUploadPathRoundTrips(t *testing.T) {
+	disk := &grpcviewstorev1.DescriptorSource{
+		Id: "upload:image.binpb",
+		Source: &grpcviewstorev1.DescriptorSource_Upload{
+			Upload: &grpcviewstorev1.Upload{FileName: "image.binpb", Path: "gen/image.binpb"},
+		},
+	}
+	wire := diskToWireSource(disk, nil)
+	if got := wire.GetUpload().GetPath(); got != "gen/image.binpb" {
+		t.Fatalf("wire path = %q, want gen/image.binpb", got)
+	}
+	back := wireToDiskSource(wire, nil)
+	if got := back.GetUpload().GetPath(); got != "gen/image.binpb" {
+		t.Errorf("disk path after the round trip = %q, want gen/image.binpb", got)
+	}
+	if got := back.GetUpload().GetFileName(); got != "image.binpb" {
+		t.Errorf("disk file name after the round trip = %q, want image.binpb", got)
+	}
+}
+
+func TestBazelSourceRoundTrips(t *testing.T) {
+	const label = "//proto/echo/v1:echov1_proto"
+	disk := &grpcviewstorev1.DescriptorSource{
+		Id:     "bazel:" + label,
+		Source: &grpcviewstorev1.DescriptorSource_Bazel{Bazel: &grpcviewstorev1.Bazel{Label: label}},
+	}
+	wire := diskToWireSource(disk, nil)
+	if got := wire.GetBazel().GetLabel(); got != label {
+		t.Fatalf("wire label = %q, want %q", got, label)
+	}
+	back := wireToDiskSource(wire, nil)
+	if got := back.GetBazel().GetLabel(); got != label {
+		t.Errorf("disk label after the round trip = %q, want %q", got, label)
+	}
+	if got := back.GetId(); got != "bazel:"+label {
+		t.Errorf("id after the round trip = %q, want %q", got, "bazel:"+label)
+	}
+}
+
+// TestBazelSourceTheWorkspaceDefinesStaysABareReference is the definition tier applied to the new
+// kind: a shared label must collapse to id-only on write and pick its config back up on read, so a
+// reorder in one collection cannot copy the label into every collection referencing it.
+func TestBazelSourceTheWorkspaceDefinesStaysABareReference(t *testing.T) {
+	const label = "//proto/echo/v1:echov1_proto"
+	const id = "bazel:" + label
+	defs := map[string]*grpcviewstorev1.DescriptorSource{
+		id: {
+			Id:     id,
+			Source: &grpcviewstorev1.DescriptorSource_Bazel{Bazel: &grpcviewstorev1.Bazel{Label: label}},
+		},
+	}
+
+	got := wireToDiskSource(&grpcviewv1.DescriptorSource{
+		Id:     id,
+		Source: &grpcviewv1.DescriptorSource_Bazel{Bazel: &grpcviewv1.Bazel{Label: label}},
+	}, defs)
+	if got.GetId() != id || got.GetSource() != nil {
+		t.Fatalf("want a bare reference, got %+v", got)
+	}
+
+	wire := diskToWireSource(got, defs)
+	if l := wire.GetBazel().GetLabel(); l != label {
+		t.Errorf("the reference did not pick up the definition's label: %q", l)
+	}
+	if wire.GetOrigin() != grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+		t.Errorf("origin = %v, want WORKSPACE", wire.GetOrigin())
 	}
 }
 

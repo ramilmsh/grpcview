@@ -178,8 +178,8 @@ export declare const ServiceSchema: GenMessage<Service>;
  */
 export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource"> & {
   /**
-   * "reflection:<address>" (+"+tls") or "upload:<file name>"; adding an existing
-   * id refreshes that source in place.
+   * "reflection:<address>" (+"+tls"), "upload:<file name>" or "bazel:<//pkg:target>";
+   * adding an existing id refreshes that source in place.
    *
    * @generated from field: string id = 3;
    */
@@ -200,6 +200,12 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
      */
     value: Server;
     case: "reflection";
+  } | {
+    /**
+     * @generated from field: grpcview.v1.Bazel bazel = 7;
+     */
+    value: Bazel;
+    case: "bazel";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -250,6 +256,17 @@ export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
    * @generated from field: string file_name = 1;
    */
   fileName: string;
+
+  /**
+   * Workspace-root-relative path the bytes were last read from, empty when they came
+   * from a browser file picker. Identity is still the file name — a git mv changes the
+   * recipe and not the source — so this is ONLY a refresh recipe: a path that has gone
+   * costs a refresh and nothing else, since the collection still links, describes and
+   * invokes from the bytes already stored.
+   *
+   * @generated from field: string path = 2;
+   */
+  path: string;
 };
 
 /**
@@ -257,6 +274,26 @@ export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
  * Use `create(UploadSchema)` to create a new message.
  */
 export declare const UploadSchema: GenMessage<Upload>;
+
+/**
+ * A canonical bazel label ("//pkg:target") whose default outputs are descriptor sets.
+ * Unlike an upload it knows how to PRODUCE its bytes: refreshing it builds the label and
+ * then reads what the build wrote.
+ *
+ * @generated from message grpcview.v1.Bazel
+ */
+export declare type Bazel = Message$1<"grpcview.v1.Bazel"> & {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label: string;
+};
+
+/**
+ * Describes the message grpcview.v1.Bazel.
+ * Use `create(BazelSchema)` to create a new message.
+ */
+export declare const BazelSchema: GenMessage<Bazel>;
 
 /**
  * @generated from message grpcview.v1.Resolved

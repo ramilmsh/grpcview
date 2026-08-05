@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Collection, Request_Response, ScriptKind, Server } from "./workspace_pb";
+import type { Bazel, Collection, Request_Response, ScriptKind, Server } from "./workspace_pb";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -35,6 +35,12 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
      */
     value: Server;
     case: "reflection";
+  } | {
+    /**
+     * @generated from field: grpcview.v1.Bazel bazel = 6;
+     */
+    value: Bazel;
+    case: "bazel";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -43,6 +49,16 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
    * @generated from field: string file_name = 4;
    */
   fileName: string;
+
+  /**
+   * Where a descriptor_set upload's bytes were read from, so the source can be refreshed
+   * later. Absolute or workspace-relative is accepted; the server stores it root-relative.
+   * Empty from a browser, which has a file picker and no path — the upload then keeps
+   * working and only its refresh is unavailable.
+   *
+   * @generated from field: string path = 7;
+   */
+  path: string;
 
   /**
    * Commit this source's descriptors to the repo instead of caching them in
@@ -676,6 +692,17 @@ export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectio
    * @generated from field: repeated grpcview.v1.CollectionSummary collections = 2;
    */
   collections: CollectionSummary[];
+
+  /**
+   * Whether this workspace root is trusted, so a client can show a banner before anything
+   * needs it. Trust gates ONLY the source kinds that EXECUTE — a bazel label, today — because
+   * opening a repo whose grpcview.json names one would otherwise be enough to run its BUILD
+   * files. Everything else (reflection, uploads) loads and resolves regardless, and nothing
+   * already resolved is hidden by an untrusted workspace.
+   *
+   * @generated from field: bool trusted = 3;
+   */
+  trusted: boolean;
 };
 
 /**
@@ -683,6 +710,40 @@ export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectio
  * Use `create(ListCollectionsResponseSchema)` to create a new message.
  */
 export declare const ListCollectionsResponseSchema: GenMessage<ListCollectionsResponse>;
+
+/**
+ * @generated from message grpcview.v1.SetWorkspaceTrustRequest
+ */
+export declare type SetWorkspaceTrustRequest = Message<"grpcview.v1.SetWorkspaceTrustRequest"> & {
+  /**
+   * @generated from field: bool trusted = 1;
+   */
+  trusted: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.SetWorkspaceTrustRequest.
+ * Use `create(SetWorkspaceTrustRequestSchema)` to create a new message.
+ */
+export declare const SetWorkspaceTrustRequestSchema: GenMessage<SetWorkspaceTrustRequest>;
+
+/**
+ * @generated from message grpcview.v1.SetWorkspaceTrustResponse
+ */
+export declare type SetWorkspaceTrustResponse = Message<"grpcview.v1.SetWorkspaceTrustResponse"> & {
+  /**
+   * The resulting state, so a client never has to guess whether the flip took.
+   *
+   * @generated from field: bool trusted = 1;
+   */
+  trusted: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.SetWorkspaceTrustResponse.
+ * Use `create(SetWorkspaceTrustResponseSchema)` to create a new message.
+ */
+export declare const SetWorkspaceTrustResponseSchema: GenMessage<SetWorkspaceTrustResponse>;
 
 /**
  * A collection is only ever created by an explicit act — this RPC, or `grpcview
@@ -1433,6 +1494,22 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof ListCollectionsRequestSchema;
     output: typeof ListCollectionsResponseSchema;
+  },
+  /**
+   * SetWorkspaceTrust trusts or un-trusts this workspace ROOT — the same decision VS Code's
+   * Workspace Trust makes, for the same reason: a committed bazel label means opening a repo
+   * could run `bazel build`, i.e. arbitrary code. Trust is on the folder and not on its
+   * content, so a manifest that changes tomorrow is still trusted.
+   *
+   * Revoking un-resolves NOTHING: the descriptors already stored stay, every collection keeps
+   * loading, describing and invoking from them, and only a future build is refused.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.SetWorkspaceTrust
+   */
+  setWorkspaceTrust: {
+    methodKind: "unary";
+    input: typeof SetWorkspaceTrustRequestSchema;
+    output: typeof SetWorkspaceTrustResponseSchema;
   },
   /**
    * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
