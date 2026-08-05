@@ -1,13 +1,14 @@
 // connect-query data layer: every server read/write goes through here.
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import {
   useQuery,
   useMutation,
   useTransport,
   createConnectQueryKey,
+  createQueryOptions,
   skipToken,
 } from "@connectrpc/connect-query";
-import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQueries, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { createClient, ConnectError, Code, type Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { WorkspaceService } from "@grpcview/v1/service_pb";
@@ -72,7 +73,10 @@ export const hostLabel = (s: Server | null): string => s?.address ?? "";
 
 // The Get key for ONE collection. Per-collection by construction, so switching the
 // active collection reads a different cache entry instead of clobbering a shared one.
-function keyForCollection(transport: Transport, id: string): QueryKey {
+// Exported so a test can pin it against the key connect-query's own builders produce —
+// useCollectionItems and every write's cache seed have to agree on it or a seeded snapshot
+// never reaches the tier.
+export function keyForCollection(transport: Transport, id: string): QueryKey {
   return createConnectQueryKey({
     schema: get,
     transport,
@@ -169,6 +173,63 @@ export function useCreateCollection() {
 // of whatever snapshot is in hand is keyed correctly with no extra argument.
 export function useRootItems(workspace?: Collection): ItemWithPath[] {
   return useMemo(() => rootItemsOf(workspace?.item, workspace?.id ?? ""), [workspace]);
+}
+
+// The root items of each of `ids`, one Get per collection — what the panel's collection tier
+// renders. A dynamic number of queries, so it cannot be a loop of useWorkspace calls; it is
+// TanStack's useQueries over connect-query's own options builder.
+//
+// The key is therefore IDENTICAL to useWorkspace's: `useQuery(get, {collection})` is
+// literally `useQuery(createQueryOptions(get, input, {transport}))`, and createQueryOptions
+// derives its key with `createConnectQueryKey({schema, input, transport, cardinality:
+// "finite"})` — the same call keyForCollection makes. So the active collection is fetched
+// ONCE however many hooks watch it, and every write RPC's cache seed (useSeedGetCache)
+// lands in these queries too.
+//
+// A collection whose Get has not landed is ABSENT from the map — which the panel renders as
+// a "Loading…" row, distinct from a collection that loaded and is empty ([]).
+export function useCollectionItems(
+  ids: readonly string[]
+): ReadonlyMap<string, ItemWithPath[]> {
+  const transport = useTransport();
+  const results = useQueries({
+    queries: ids.map((id) => createQueryOptions(get, { collection: id }, { transport })),
+  });
+
+  // The map's IDENTITY has to survive a render that changed nothing: usePanelTreeAdapter
+  // memoizes on it, and a fresh Map per render would rebuild the adapter and cost the tree
+  // its node identity. useQueries hands back a new array of new result objects every render,
+  // but `data` is the query cache's own object (connect-query's structuralSharing keeps it
+  // stable across refetches that changed nothing), so (ids, those references) is the whole
+  // signature. A ref rather than useMemo because the dependency list is variable-length.
+  const cache = useRef<{
+    signature: readonly unknown[];
+    map: ReadonlyMap<string, ItemWithPath[]>;
+  }>();
+  const signature: unknown[] = [];
+  for (const [i, id] of ids.entries()) signature.push(id, results[i]?.data?.collection);
+
+  const previous = cache.current;
+  if (
+    previous !== undefined &&
+    previous.signature.length === signature.length &&
+    previous.signature.every((value, i) => value === signature[i])
+  ) {
+    return previous.map;
+  }
+
+  const map = new Map<string, ItemWithPath[]>();
+  for (const [i, id] of ids.entries()) {
+    const collection = results[i]?.data?.collection;
+    // Keyed by the id we asked for (the same id ListCollections reported, which is what the
+    // tier looks up), while the ITEMS carry the id off the response — exactly as
+    // useRootItems does, so both paths build identical keys for the same request.
+    if (collection !== undefined) {
+      map.set(id, rootItemsOf(collection.item, collection.id || id));
+    }
+  }
+  cache.current = { signature, map };
+  return map;
 }
 
 // Seeds the Get cache off `res.collection.id`, never off the id the caller happened to

@@ -7,62 +7,54 @@ import { Input } from "@/components/ui/Input";
 import { Menu } from "@/components/ui/Menu";
 import { Tree, isEditableTarget } from "@/components/tree/Tree";
 import type { TreeHandle, TreeRowState } from "@/components/tree/types";
-import { useActiveWorkspace, useRootItems, useWorkspaceMutations } from "@/lib/workspace-query";
+import {
+  useActiveWorkspace,
+  useCollectionItems,
+  useCollections,
+  useWorkspaceMutations,
+} from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import {
   childPathOf,
-  findByKey,
   itemKey,
   pruneNestedSelections,
   serviceName,
   slugKeyIn,
   type ItemWithPath,
 } from "@/lib/format";
-import { renderRequestRow, useRequestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
+import type { RequestRowCallbacks } from "./request-tree";
+import {
+  panelItems,
+  panelNodeId,
+  panelTiered,
+  renderPanelRow,
+  usePanelTreeAdapter,
+  type PanelNode,
+} from "./panel-tree";
+import {
+  collectionsToQuery,
+  countAllRequests,
+  filterItemsByCollection,
+  panelCanDrop,
+  panelDropCollection,
+  panelDropParentItem,
+} from "./panel-wiring";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import type { GeneratorDef } from "./generator-libs";
 import { deleteConfirmCopy } from "./delete-confirm";
 import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
 
-const countRequests = (items: ItemWithPath[]): number =>
-  items.reduce(
-    (n, it) =>
-      it.item.content.case === "folder"
-        ? n + countRequests(it.children ?? [])
-        : n + 1,
-    0
-  );
-
-const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => {
-  if (!q) return items;
-  const lower = q.toLowerCase();
-  const walk = (list: ItemWithPath[]): ItemWithPath[] => {
-    const out: ItemWithPath[] = [];
-    for (const it of list) {
-      if (it.item.content.case === "folder") {
-        const kids = walk(it.children ?? []);
-        if (kids.length || it.item.name.toLowerCase().includes(lower)) {
-          out.push({ ...it, children: kids });
-        }
-      } else if (it.item.name.toLowerCase().includes(lower)) {
-        out.push(it);
-      }
-    }
-    return out;
-  };
-  return walk(items);
-};
-
 export function CollectionPanel() {
   const { collection: activeCollection, workspace, services } = useActiveWorkspace();
   // Non-null everywhere this panel renders: App gates all three views behind the
   // collection listing, so "" is the unreachable pre-gate value rather than a default.
   const collection = activeCollection ?? "";
-  const rootItems = useRootItems(workspace);
+  const { collections } = useCollections();
   const { createFolder, createRequest, deleteRequest, updateRequest, updateFolder, moveItem } =
     useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
+  const setActiveCollection = useUIStore((s) => s.setActiveCollection);
   const activeKey = useUIStore((s) => s.activeKey);
   const moveSubtree = useUIStore((s) => s.moveSubtree);
   const treeExpanded = useUIStore((s) => s.treeExpanded);
@@ -81,13 +73,30 @@ export function CollectionPanel() {
   const [pickerParent, setPickerParent] = useState<ItemWithPath | null | undefined>(undefined);
   const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
   const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
-  const treeRef = useRef<TreeHandle<ItemWithPath>>(null);
+  const treeRef = useRef<TreeHandle<PanelNode>>(null);
   // Empty `nodes` = a right-click on the panel's empty space, i.e. the collection root.
-  const [menu, setMenu] = useState<{ x: number; y: number; nodes: ItemWithPath[] } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; nodes: PanelNode[] } | null>(null);
 
-  const filtered = useMemo(() => filterTree(rootItems, filter), [rootItems, filter]);
-  const total = useMemo(() => countRequests(rootItems), [rootItems]);
-  const adapter = useRequestTreeAdapter(filtered);
+  // One Get per collection the tree needs items from — the active one plus every expanded
+  // collection row. Absent from the map = not landed yet, which is a "Loading…" row.
+  const queryIds = useMemo(
+    () => collectionsToQuery(activeCollection, treeExpanded, collections),
+    [activeCollection, treeExpanded, collections]
+  );
+  const loaded = useCollectionItems(queryIds);
+  const itemsByCollection = useMemo(
+    () => filterItemsByCollection(loaded, filter),
+    [loaded, filter]
+  );
+
+  const tiered = panelTiered(collections);
+  const adapter = usePanelTreeAdapter({ collections, itemsByCollection, activeCollection });
+  // Untiered, the sole collection IS the active one (resolveActiveCollection), and these are
+  // the tree's roots. Unfiltered, because the empty state asks what the collection HOLDS.
+  const soloItems = tiered ? [] : loaded.get(collections[0]?.id ?? "") ?? [];
+  // Tiered, the strip counts the whole workspace: no row carries a per-collection count, so
+  // an active-collection count next to several collection rows would name none of them.
+  const total = useMemo(() => countAllRequests(loaded), [loaded]);
 
   const generators = useMemo<GeneratorDef[]>(
     () =>
@@ -124,11 +133,13 @@ export function CollectionPanel() {
     setPickerParent(undefined);
   };
 
+  // Addressed at the ITEM's own collection, not the active one: with the tier on screen, the
+  // rows of a collection that is not active are renameable and deletable too.
   const doRename = (item: ItemWithPath, newName: string) => {
     const next = newName.trim();
     if (!next || next === item.item.name) return;
     const args = {
-      collection,
+      collection: item.collection,
       path: item.path,
       itemName: item.item.name,
       name: next,
@@ -141,7 +152,7 @@ export function CollectionPanel() {
   const doDelete = () => {
     for (const item of confirm) {
       deleteRequest.mutate({
-        collection,
+        collection: item.collection,
         path: item.path,
         itemName: item.item.name,
       });
@@ -149,59 +160,45 @@ export function CollectionPanel() {
     setConfirm([]);
   };
 
-  const onTreeDelete = (nodes: ItemWithPath[]): void => setConfirm(pruneNestedSelections(nodes));
-
-  // Resolved out of the UNFILTERED rootItems: `parent.children` is pruned to whatever
-  // the filter box left visible, so a collision test against it would miss a hidden
-  // sibling the server will reject.
-  const destinationChildren = (parent: ItemWithPath | null): ItemWithPath[] =>
-    parent ? findByKey(rootItems, itemKey(parent))?.children ?? [] : rootItems;
-
-  const samePath = (a: readonly string[], b: readonly string[]): boolean =>
-    a.length === b.length && a.every((segment, i) => segment === b[i]);
-
-  // Covers only what the tree cannot see (collapsed or filtered-out siblings); the
-  // tree rejects everything structural itself. Collection.Move refuses a reparent onto
-  // an existing display name, so this mirrors that rule early.
-  const canDropHere = (
-    nodes: ItemWithPath[],
-    to: { parent: ItemWithPath | null; before?: ItemWithPath }
-  ): boolean => {
-    const newPath = childPathOf(to.parent);
-    const taken = new Set(destinationChildren(to.parent).map((child) => child.item.name));
-    for (const node of pruneNestedSelections(nodes)) {
-      if (samePath(node.path, newPath)) continue; // pure reorder in its own parent
-      if (taken.has(node.item.name)) return false;
-      taken.add(node.item.name);
-    }
-    return true;
-  };
+  // The tiers the item callbacks cannot speak are dropped: a collection row is neither
+  // renameable nor deletable here (creating and deleting collections is `grpcview init` and
+  // the empty state), and a status row is not a thing at all.
+  const onTreeDelete = (nodes: PanelNode[]): void =>
+    setConfirm(pruneNestedSelections(panelItems(nodes)));
 
   // Sequenced through onSuccess, not fired concurrently: every call carries the same
   // `before`, so the order the server processes them in becomes the sibling order on
   // disk.
   const onTreeMove = (
-    nodes: ItemWithPath[],
-    to: { parent: ItemWithPath | null; before?: ItemWithPath }
+    nodes: PanelNode[],
+    to: { parent: PanelNode | null; before?: PanelNode }
   ): void => {
-    const newPath = childPathOf(to.parent);
-    const batch = pruneNestedSelections(nodes);
+    const batch = pruneNestedSelections(panelItems(nodes));
+    // The DESTINATION's collection, never the panel's active one. panelDropAllowed has
+    // already guaranteed every dragged item is in it, so the two agree today — writing the
+    // destination is what keeps this correct if that rule ever loosens.
+    const destination = panelDropCollection(batch, to.parent);
+    if (destination === null) return;
+    const parentItem = panelDropParentItem(to.parent);
+    const newPath = childPathOf(parentItem);
+    // A `before` can only be a sibling item; the tiers have no name to position against.
+    const before = to.before?.kind === "item" ? to.before.item.item.name : undefined;
     const fire = (i: number): void => {
       const node = batch[i];
       if (node === undefined) return;
       moveItem.mutate(
         {
-          collection,
+          collection: destination,
           path: node.path,
           itemName: node.item.name,
           newPath,
-          before: to.before?.item.name,
+          before,
         },
         {
           // The new key comes from the response, never from names: Move allocates a
           // fresh slug when the destination already has one by that name.
           onSuccess: (res) => {
-            const newKey = slugKeyIn(collection, res.collection?.item, newPath, node.item.name);
+            const newKey = slugKeyIn(destination, res.collection?.item, newPath, node.item.name);
             if (newKey) moveSubtree(itemKey(node), newKey);
             fire(i + 1);
           },
@@ -209,7 +206,7 @@ export function CollectionPanel() {
       );
     };
     fire(0);
-    if (to.parent) expandFolder(to.parent);
+    if (parentItem) expandFolder(parentItem);
   };
 
   const rowCallbacks: RequestRowCallbacks = {
@@ -223,8 +220,8 @@ export function CollectionPanel() {
     onDelete: (item) => setConfirm([item]),
     onEditMetadata: setMetadataFolder,
   };
-  const renderRow = (item: ItemWithPath, state: TreeRowState): ReactNode =>
-    renderRequestRow(item, state, rowCallbacks);
+  const renderRow = (node: PanelNode, state: TreeRowState): ReactNode =>
+    renderPanelRow(node, state, rowCallbacks);
 
   const menuActions: CollectionMenuActions = {
     newRequest: (parent) => {
@@ -236,7 +233,7 @@ export function CollectionPanel() {
       if (parent) expandFolder(parent);
     },
     startRename: (item) => treeRef.current?.startRename(itemKey(item)),
-    requestDelete: onTreeDelete,
+    requestDelete: (items) => setConfirm(pruneNestedSelections(items)),
     editFolderMetadata: setMetadataFolder,
   };
 
@@ -293,7 +290,7 @@ export function CollectionPanel() {
               color: "var(--color-neutral-600)",
             }}
           >
-            Collection
+            {tiered ? "Collections" : "Collection"}
           </span>
           <span
             className="font-mono"
@@ -303,7 +300,9 @@ export function CollectionPanel() {
           </span>
         </div>
 
-        {rootItems.length === 0 ? (
+        {/* Untiered only: with the tier on, panel-tree already puts a status row under each
+            collection, so a panel-wide empty state would speak for collections it cannot see. */}
+        {!tiered && soloItems.length === 0 ? (
           <div
             className="text-muted"
             style={{ fontSize: 12, padding: "16px 6px", lineHeight: 1.6 }}
@@ -324,11 +323,19 @@ export function CollectionPanel() {
             focused={treeFocused}
             onFocusedChange={setTreeFocused}
             activeId={activeKey}
-            onOpen={openTab}
-            onRenameCommit={doRename}
+            // A collection row opens nothing — it makes that collection the active one, which
+            // is what scopes Sources, Scripts and the pickers. A status row does nothing.
+            onOpen={(node) => {
+              if (node.kind === "item") openTab(node.item);
+              else if (node.kind === "collection") setActiveCollection(node.collection.id);
+            }}
+            onRenameCommit={(node, next) => {
+              if (node.kind === "item") doRename(node.item, next);
+            }}
             onDelete={onTreeDelete}
             onMove={onTreeMove}
-            canDrop={canDropHere}
+            // The UNFILTERED map: the collision check must see siblings the filter hid.
+            canDrop={(dragged, to) => panelCanDrop(dragged, to, { tiered, itemsByCollection: loaded })}
             // clientX/clientY, not pageX/pageY: .menu is position: fixed.
             onContextMenu={(nodes, ev) =>
               setMenu({ x: ev.clientX, y: ev.clientY, nodes })
@@ -361,13 +368,15 @@ export function CollectionPanel() {
         </div>
       </Dialog>
 
-      {/* Keyed on the summon point plus the row set so a second right-click remounts. */}
+      {/* Keyed on the summon point plus the row set so a second right-click remounts.
+          panelNodeId, not itemKey: an empty-space right-click and a collection right-click
+          both unwrap to no items, and would otherwise share one key. */}
       {menu ? (
         <Menu
-          key={`${menu.x},${menu.y},${menu.nodes.map(itemKey).join("|")}`}
+          key={`${menu.x},${menu.y},${menu.nodes.map(panelNodeId).join("|")}`}
           x={menu.x}
           y={menu.y}
-          items={collectionMenuItems(menu.nodes, menuActions, {
+          items={collectionMenuItems(panelItems(menu.nodes), menuActions, {
             canCreateRequest: services.length > 0,
           })}
           onClose={() => setMenu(null)}
