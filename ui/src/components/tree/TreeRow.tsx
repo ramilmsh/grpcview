@@ -75,6 +75,11 @@ export function TreeRow<T>({
 
   let content: ReactNode;
   let tooltip: string | undefined;
+  // The rich tier gets first refusal per row, and may DECLINE by returning null —
+  // which falls this row back to the portable getTreeItem renderer below. That is
+  // what lets a tree mix tiers: one kind of node renders rich React, another stays
+  // portable (and therefore renderable by a VS Code TreeItem too).
+  const rich = renaming || renderRow === undefined ? null : renderRow(row.node, state);
   if (renaming) {
     // The input replaces the whole row content, renderRow included — hence first.
     content = (
@@ -86,8 +91,8 @@ export function TreeRow<T>({
         ariaLabel="New name"
       />
     );
-  } else if (renderRow) {
-    content = renderRow(row.node, state);
+  } else if (rich !== null && rich !== undefined) {
+    content = rich;
   } else {
     const item = adapter.getTreeItem(row.node);
     tooltip = item.tooltip;

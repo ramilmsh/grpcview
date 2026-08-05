@@ -29,8 +29,10 @@ export interface TreeItemLike {
   kind?: string;
 }
 
+// Names match VS Code's codicons, which is the point of the token layer: a portable
+// provider picks a token here and a VS Code TreeItem resolves the same name.
 export type IconToken =
-  | "folder" | "file"
+  | "folder" | "root-folder" | "file"
   | "symbol-class" | "symbol-enum" | "symbol-field" | "symbol-method";
 
 export interface TreeHandle<T> {
@@ -53,7 +55,10 @@ export interface TreeRowState {
 export interface TreeProps<T> {
   adapter: TreeAdapter<T>;
   handle?: Ref<TreeHandle<T>>;
-  // Rich tier: overrides getTreeItem, and makes the tree standalone-only.
+  // Rich tier: overrides getTreeItem per row, and makes the tree standalone-only.
+  // Returning null/undefined DECLINES that row back to the portable getTreeItem
+  // renderer — which is how a mixed tree keeps one tier portable (and so usable by a
+  // VS Code TreeProvider) while another tier renders arbitrary React.
   renderRow?(node: T, state: TreeRowState): ReactNode;
 
   // Controlled state — omit any pair to fall back to internal state.

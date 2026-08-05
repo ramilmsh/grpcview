@@ -29,6 +29,7 @@ export const FileArchive = Ph.FileArchive as unknown as Icon;
 export const Flask = Ph.Flask as unknown as Icon;
 export const FloppyDisk = Ph.FloppyDisk as unknown as Icon;
 export const Folder = Ph.Folder as unknown as Icon;
+export const FolderOpen = Ph.FolderOpen as unknown as Icon;
 export const FolderPlus = Ph.FolderPlus as unknown as Icon;
 export const Function = Ph.Function as unknown as Icon;
 export const Gear = Ph.Gear as unknown as Icon;

@@ -3,6 +3,7 @@ import {
   Cube,
   File,
   Folder,
+  FolderOpen,
   Function,
   ListNumbers,
   Square,
@@ -17,6 +18,10 @@ interface IconEntry {
 
 const ICON_BY_TOKEN: Record<IconToken, IconEntry> = {
   folder: { Icon: Folder, weight: "fill" },
+  // An OPEN folder outline, deliberately unfilled: a root row must not read as just
+  // another folder, and outline-vs-fill plus the angled front panel are two clearly
+  // different silhouettes at 14px.
+  "root-folder": { Icon: FolderOpen },
   file: { Icon: File },
   "symbol-class": { Icon: Cube },
   "symbol-enum": { Icon: ListNumbers },

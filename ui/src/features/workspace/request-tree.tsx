@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Folder, Gear, PencilSimple, Plus, Trash } from "@/components/ui/icons";
 import type { Service } from "@grpcview/v1/workspace_pb";
-import type { TreeAdapter, TreeRowState } from "@/components/tree/types";
+import type { TreeAdapter, TreeItemLike, TreeRowState } from "@/components/tree/types";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { itemKey, methodKind, resolveMethod, type ItemWithPath } from "@/lib/format";
 
@@ -19,6 +19,19 @@ function buildParentIndex(roots: ItemWithPath[]): Map<string, ItemWithPath> {
   return parentOf;
 }
 
+// The PORTABLE description of an item row, shared with the panel tree's item tier
+// (panel-tree.tsx) so there is one answer per item, not two that can drift.
+export function requestTreeItem(node: ItemWithPath): TreeItemLike {
+  const folder = node.item.content.case === "folder";
+  const kind: RequestTreeKind = folder ? "folder" : "request";
+  return {
+    label: node.item.name,
+    description: folder ? String(node.children?.length ?? 0) : undefined,
+    icon: folder ? "folder" : "file",
+    kind,
+  };
+}
+
 export function requestTreeAdapter(roots: ItemWithPath[]): TreeAdapter<ItemWithPath> {
   const parentOf = buildParentIndex(roots);
 
@@ -27,16 +40,7 @@ export function requestTreeAdapter(roots: ItemWithPath[]): TreeAdapter<ItemWithP
     getChildren: (node) => (node ? node.children ?? [] : roots),
     getCollapsibleState: (node) => (node.item.content.case === "folder" ? "expanded" : "none"),
     getParent: (node) => parentOf.get(itemKey(node)),
-    getTreeItem: (node) => {
-      const folder = node.item.content.case === "folder";
-      const kind: RequestTreeKind = folder ? "folder" : "request";
-      return {
-        label: node.item.name,
-        description: folder ? String(node.children?.length ?? 0) : undefined,
-        icon: folder ? "folder" : "file",
-        kind,
-      };
-    },
+    getTreeItem: requestTreeItem,
     getTypeaheadLabel: (node) => node.item.name,
   };
 }
