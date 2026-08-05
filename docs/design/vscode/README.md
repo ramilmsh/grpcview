@@ -1,6 +1,11 @@
 # grpcview — VS Code compatibility track
 
-**Status:** Planning only. **Not started.**
+**Status:** Phase 1 is **shipped** — sub-phases 1a through 1e are all on trunk and their
+behavior is documented in `AGENTS.md`. Phases 2–6 are planning only.
+
+Every phase doc, phase 1 included, is written in the present tense about the code as it
+stood when the doc was written. Its `file.go:line` citations are the *premise* of a
+decision, not a description of trunk — for what the code does now, read `AGENTS.md`.
 
 **Goal.** Run grpcview as a VS Code extension while keeping the standalone web UI as
 a first-class frontend, and borrow VS Code's *request management* model (document
@@ -11,7 +16,7 @@ two architecture decisions every phase depends on.
 
 | Phase | Doc | Summary |
 |---|---|---|
-| 1 | [`phase-1-workspace.md`](./phase-1-workspace.md) | The workspace is the repo; collections are what's in it |
+| 1 | [`phase-1-workspace.md`](./phase-1-workspace.md) | The workspace is the repo; collections are what's in it — **shipped (1a–1e)** |
 | 2 | [`phase-2-body-files.md`](./phase-2-body-files.md) | Body + metadata become real `.ts` files on disk |
 | 3 | [`phase-3-type-sinks.md`](./phase-3-type-sinks.md) | Extract the type producer/sink seam |
 | 4 | [`phase-4-request-management.md`](./phase-4-request-management.md) | Document identity, dirty state, preview tabs, commands |

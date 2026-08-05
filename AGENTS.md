@@ -228,14 +228,16 @@ descriptor set changes, so a rename retargets the paths.
 ## Definition sources (where schemas come from)
 
 A workspace's services and `descriptor_set` are **derived**, never authored. They
-come from a **priority-ordered list of descriptor sources** — reflection targets
-and uploaded `FileDescriptorSet`s — merged by `service/workspace/sources.go`.
+come from a **priority-ordered list of descriptor sources** — reflection targets,
+uploaded `FileDescriptorSet`s and bazel labels that *build* one — merged by
+`service/workspace/sources.go`.
 
 The layering is the whole point, so don't collapse it:
 
 1. **Each source resolves independently** to its own `FileDescriptorSet` plus the
    list of services it serves. A reflection source resolves by dialing; an upload
-   resolves from the bytes its add call carried. Where that resolve is *stored* is a
+   from the bytes its add call carried, or by re-reading the file that add recorded;
+   a bazel source by **building** its label. Where that resolve is *stored* is a
    per-source flag, `commit_descriptors`, and it changes only the location — never
    how anything resolves, merges or dials:
    - **off (the default, every kind)** — a **content-addressed blob** under the
@@ -265,8 +267,12 @@ The layering is the whole point, so don't collapse it:
    sidecar from the bytes already stored, off drops the sidecar and writes the blob.
    Turning it on for a source that has never resolved is `InvalidArgument` naming
    `refresh`, because resolve-then-commit would be acquisition triggered by a config
-   change. Descriptors are never inline in `grpcview.json`, for any kind: that file
-   also holds root ordering, the source list and script ordering, so an inline
+   change. The flag is also **sticky across a re-add**: since re-adding an id is the
+   documented refresh gesture — and the browser's only way to refresh an upload — an
+   add can turn committing on but never off, or re-adding with the box unticked
+   would silently delete a sidecar the repo carries. `sources commit --off` is the
+   one way off. Descriptors are never inline in `grpcview.json`, for any kind: that
+   file also holds root ordering, the source list and script ordering, so an inline
    multi-megabyte descriptor set would mean dragging one request rewrites megabytes.
 2. **The merged view is derived in memory, per collection, on first touch** —
    `mergeSources`, walking the list front to back: the first source to define a
@@ -294,11 +300,12 @@ Consequences worth preserving, each of which was a bug before:
   that fails to resolve stays listed with the reason in `Resolved.error` and
   contributes nothing, rather than being dropped or failing the mutation.
 - **Identity is config-derived** (`store.SourceID`, the one definition of the
-  format): `reflection:<address>[+tls]` or `upload:<file name>`. Re-adding the same
-  id **refreshes in place at its existing priority**; a genuinely new source appends
-  at lowest priority. Keying an upload by file name (not by a content hash) is
-  deliberate — rebuilding the image must refresh the source it came from, not spawn
-  a second one.
+  format): `reflection:<address>[+tls]`, `upload:<file name>` or
+  `bazel:<canonical label>`. Re-adding the same id **refreshes in place at its
+  existing priority**; a genuinely new source appends at lowest priority. Keying an
+  upload by file name (not by a content hash) is deliberate — rebuilding the image
+  must refresh the source it came from, not spawn a second one — and it is the same
+  reason a label is canonicalized *before* an id is derived from it (below).
 - **Every source has a unique, non-empty id, guaranteed at load**
   (`store.normalizeSources`, run from `readCollection`). Refresh, remove and
   reorder all address a source *by id*, so two rows sharing one id — as a manifest
@@ -323,13 +330,13 @@ Consequences worth preserving, each of which was a bug before:
   descriptor set. The five source-writing RPCs invalidate (the four plus
   `SetDescriptorSourceCommit`); nothing else can change a collection's descriptors.
 - **A service's dial target is independent of who won its descriptors**:
-  `Service.source` is the first *reflection* source that serves it. An upload has
-  no address, so without that split, placing one first for its comments would
-  strand every request it claimed with no target. The UI keeps the two questions
-  visually separate too: the request header's chip names the source the **schema**
-  came from (`schemaSourceFor`, off `Resolved.won_service_names`), while the target
-  bar under it shows where the request is **sent**. Neither is "no source" merely
-  because the other is absent.
+  `Service.source` is the first *reflection* source that serves it. Neither an
+  upload nor a bazel label has an address, so without that split, placing one first
+  for its comments would strand every request it claimed with no target. The UI
+  keeps the two questions visually separate too: the request header's chip names
+  the source the **schema** came from (`schemaSourceFor`, off
+  `Resolved.won_service_names`), while the target bar under it shows where the
+  request is **sent**. Neither is "no source" merely because the other is absent.
 
 **Definitions are shared; the order stays per collection.** Five collections pointing
 at one target must not mean five copies of its config, but precedence is per
@@ -345,12 +352,14 @@ bare reference, and a reorder in one collection cannot inline shared config into
 five. It also *is* the dedup — re-adding an address the workspace already declares
 produces a reference, because the same id is the same config by construction. Blobs
 need no scheme of their own: the CAS is already per workspace, so one resolve serves
-every collection referencing it. A definition may not be an upload (no pointer, and
-its bytes belong to the collection that supplied them), and `commit_descriptors` on a
-definition is ignored — a sidecar can only live inside a collection, so the flag
-belongs to the referencing *entry*, which carries its own. Both rules warn and skip
-on read rather than failing: this is committed config a colleague wrote, and one bad
-entry must not stop a workspace loading.
+every collection referencing it. A definition may not be an upload — not even one that
+recorded a path, because its bytes belong to the collection that supplied them and a
+digest is content rather than config — while a bazel label is a fine definition, since
+it re-produces its own bytes for every collection that references it, and
+`commit_descriptors` on a definition is ignored — a sidecar can only live inside a
+collection, so the flag belongs to the referencing *entry*, which carries its own. Both
+rules warn and skip on read rather than failing: this is committed config a colleague
+wrote, and one bad entry must not stop a workspace loading.
 
 The wire `DescriptorSource.origin` (`COLLECTION` | `WORKSPACE`) is read-only,
 server-set from where the config was found, and `sources ls` spells it out in its own
@@ -366,14 +375,36 @@ bare references to those ids, in order, skipping any the manifest does not defin
 **pointers only**, so a seeded collection resolves nothing until something acquires,
 which is why `grpcview init` says so on stderr when it seeded any.
 
-An upload is the **null-pointer kind**: the file name is only its identity, so there
-is nothing to re-read and `RefreshDescriptorSource` on one is `FailedPrecondition`
-telling you to upload the file again (a bare `grpcview sources refresh` skips
-uploads rather than failing the run). It follows that an uncommitted upload's only
-copy lives in local state — a clone of a repo whose upload was not committed has no
-schema for it until someone uploads the file again. That is accepted deliberately,
-given a durable state root: forcing the flag on for uploads is unnecessary, and it
-stays a real choice.
+**An upload's identity is its file name; its `path` is only a refresh recipe.** The two
+are deliberately different jobs: the file name is what makes re-adding a rebuilt image
+refresh the source it came from, and the path — workspace-root-relative, so it reads the
+same in every checkout — is merely how to get new bytes without being handed them, so a
+`git mv` of the file changes the recipe and not which source this is. The CLI records it
+(`sources add ./image.binpb` sends the absolute path and the store keeps the root-relative
+form); a browser has a file picker and never learns a path, so a browser upload records
+none. `RefreshDescriptorSource` on an upload **with** a path re-reads that file; on a
+pathless one it is still `FailedPrecondition`, now worded around the case that produces one:
+hand the file over again — that *is* its refresh, since the same file name is the same id and
+a re-add refreshes in place. A bare `grpcview sources refresh` therefore skips only
+**pathless** uploads, rather than every upload.
+
+The two ends of that recipe are confined differently, and on purpose. At **add** time a
+path that does not confine to the workspace root is not an error: the bytes are already in
+the request and already valid, so the source lands with **no recipe** and a warning that it
+is not refreshable — failing the add over a `buf build` image in `~/Downloads` would break
+the ordinary workflow, and a dead or unknown path costs a refresh and nothing else. On the
+**read** side confinement is strict, because a recorded path is wire input all over again —
+it lives in a `grpcview.json` a colleague committed — so a refresh refuses an absolute path
+outside the root, a `..` escape and a *symlink* escape, and then reads the
+`EvalSymlinks`-resolved path rather than the one it checked, which is what closes the
+check-then-read window. `service/workspace/paths.go` is the one confinement helper, so
+there is a single place to be right about all of that.
+
+An uncommitted upload's only copy still lives in local state, so a clone of a repo whose
+upload was not committed has no schema for it until someone hands the file over again — or,
+when the recipe names a file the repo itself carries, until a refresh re-reads it. That is
+accepted deliberately, given a durable state root: forcing `commit_descriptors` on for
+uploads is unnecessary, and it stays a real choice.
 
 Descriptor bytes are normalized once, at the store's write boundary
 (`normalizeDescriptorSet`): re-encode with `DiscardUnknown` and marshal
@@ -382,6 +413,82 @@ of the *schema* rather than of the encoder that produced it. That drops a
 `buf build` image's buf-specific extension fields, which nothing reads, while
 `source_code_info` (the doc comments) round-trips intact; and it is what makes
 refreshing twice against an unchanged upstream leave `git status` clean.
+
+### The bazel kind, and workspace trust
+
+A `Bazel{label}` source — id `bazel:<canonical label>` — is the one kind that **produces**
+its own bytes, which is exactly what a monorepo needs: the descriptors are a build output
+of the repo the collection lives in, and they change on every proto edit. So refreshing it
+**builds**: `bazel build --curses=no --color=no --noshow_progress -- <label>`, then
+`bazel cquery --output=files` with *identical* flags, because cquery reports the output
+path of the configuration it is asked about and a flag differing between the two would name
+a path the build never wrote. Both run as an argv slice and never as a shell string, with
+`--` before the label so a label can never arrive as a flag (`//x --output_base=/tmp`) —
+a label is untrusted text out of a committed manifest. cquery hands back
+workspace-root-relative paths, which are read from disk as they come rather than assembled
+as `bazel-bin/<pkg>/<name>-descriptor-set.proto.bin`, which would bake in both the rule's
+output naming and `--symlink_prefix`. Several outputs, and the same proto file name in more
+than one of them, are the expected case and not an error — a merging rule concatenates its
+inputs' per-target sets — so the sets are deduped by file name, first spelling winning,
+before anything links, because `desc.CreateFileDescriptorsFromSet` rejects a duplicate.
+Deduping by name is safe *here* precisely because every copy came out of one build of one
+target; two different sources disagreeing is `mergeSources`' problem, not this one's.
+
+Downstream, a bazel source behaves like an upload in the two ways that matter. It has no
+`ListServices` to narrow it, so what it **serves** is every service the built set defines
+(which is why it shares an upload's resolve), and it has no dial target at all (`server` is
+nil), so a service whose descriptors it wins still dials the first *reflection* source
+serving it.
+
+Labels are canonicalized before any id is derived from them — `//pkg` becomes
+`//pkg:<last segment>`, `pkg:target` becomes `//pkg:target`, and `@repo//pkg:target` and
+`@@canonical_repo+//pkg:target` are kept as written — in `AddDescriptorSource` and again on
+**every manifest read**, because a colleague's `grpcview.json` saying `//pkg` must not
+become a second source alongside `//pkg:pkg`. Target patterns (`:all`, `:all-targets`, `*`,
+`...`) are refused outright: a source names one target, and a pattern would resolve it to
+whatever the package happens to contain. So is an output that parses but defines no proto
+files, naming both the file and the label — `proto.Unmarshal` succeeds on nearly any bytes,
+so a source pointed at a `go_binary` has to fail loudly instead of resolving to nothing.
+The bazel root is the nearest ancestor of the workspace root holding `MODULE.bazel`,
+`WORKSPACE` or `WORKSPACE.bazel` (walked, not asked of `bazel info`, which would start a
+server), overridable as `bazel.root` in `grpcview.work.json` next to
+`bazel.timeout_seconds` (default 600). A build that succeeds while leaving its output only
+on a remote cache gets an error of its own naming `--remote_download_toplevel`, because
+`--remote_download_minimal` is a real configuration and grpcview must never silently add
+download flags to somebody's build; every other failure carries the tail of bazel's stderr,
+which is where a bazel failure's reason actually lives.
+
+**There is still no load-time acquisition, and that is the invariant to keep.** Only the
+source-mutating RPCs build, so a bazel source's descriptors change on an explicit refresh
+and never because a terminal `bazel build` happened. Opening a collection stats no recipe
+and rebuilds no label; a source with no stored resolve is reported as unresolved instead.
+
+Because a build runs arbitrary code out of the repo's own BUILD files — with the user's
+privileges, since bazel actions are not guaranteed to be sandboxed — the bazel kind is
+gated on **workspace trust**, copied from VS Code's Workspace Trust because the threat is
+the same class as VS Code tasks: a committed `grpcview.json` naming a label means that
+merely opening a repo can run `bazel build`. Trust is per workspace **root**, granted once,
+and stored in user state (`<UserConfigDir>/grpcview/trust.json`) rather than in the repo,
+where a `trusted: true` a repo commits about itself would say nothing. It is on the
+**folder**, not on its content: a workspace trusted yesterday whose manifest changed today
+is still trusted, because content-hashing the manifest would mean a prompt on every
+`git pull` — which trains people to click through it — and would be theater anyway, since
+the BUILD files a label reaches are not in the manifest.
+
+The check lives inside the **one** constructor of a builder (`Workspace.bazelBuilder`),
+i.e. next to the exec, so no future caller can reach a build by another path; and
+`bazel.root` must be an ancestor of, or inside, the trusted root, since trust covers one
+root and a build whose cwd is an unrelated repo would run *that* repo's BUILD files.
+Untrusted is a working state and not a broken one: everything still loads, reflection and
+upload sources still resolve, and only a build is refused — with the reason on that
+source's `Resolved.error`, the existing channel for a source that cannot resolve. Revoking
+un-resolves nothing: the bytes already acquired stay exactly where they are and only future
+builds are refused, which is what makes revoking a safe thing to do. The wire surface is
+two names, `ListCollectionsResponse.trusted` (it rides along on the call a client makes
+first) and `SetWorkspaceTrust`; and both the UI's banner and `sources ls`' note appear only
+when the workspace is untrusted **and** a bazel source is actually listed, because a
+permission prompt for a capability nobody is using is what teaches users to click through
+one.
 
 ## The collection tree
 
@@ -473,16 +580,13 @@ host.
   scroll, virtualization, and the async `getChildren` promise path (`flatten` and
   `reveal` both throw loudly on a thenable rather than silently dropping a branch).
 
-## The CLI
-
-`grpcview` with no subcommand still serves the UI + API. Everything else is a
 ## The workspace and its collections
 
 **A workspace is a repository; the collections are what's in it.** Three tiers:
 the workspace root owns no requests, a collection is the unchanged unit
 (`grpcview.json`, `tree/`, `scripts/`), and a request is unchanged. The plan is
-`docs/design/vscode/phase-1-workspace.md`; sub-phases 1a and 1b are shipped, 1c–1e
-are not.
+`docs/design/vscode/phase-1-workspace.md`, and all of it — sub-phases 1a through 1e —
+is shipped.
 
 - **The root is found by walking up** (`service/wsroot`): `--workspace <path>`
   wins, else the nearest ancestor of the cwd holding `.git`, else the cwd with a
@@ -531,6 +635,9 @@ are not.
   trees. Never `Get` every collection eagerly — `Collection.descriptor_set` is a
   merged `FileDescriptorSet` in bytes.
 
+## The CLI
+
+`grpcview` with no subcommand still serves the UI + API. Everything else is a
 cobra verb in `service/cli/`, on the **same binary** — the embedded UI is 26.9 MB
 of the 51.5 MB binary, so a second CLI binary would duplicate ~20 MB of Go.
 
@@ -541,7 +648,8 @@ grpcview invoke <request-path>|<service>/<method>
 grpcview describe <service>/<method>    [-o proto|json]
 grpcview ls [<folder-path>]             [-o text|json]
 grpcview get
-grpcview sources ls | add | refresh | rm | reorder
+grpcview sources ls | add | commit | refresh | rm | reorder
+grpcview trust [--off]                  allow sources that run a build
 grpcview request create | rm | mv        grpcview folder create
 grpcview script ls | run                 grpcview completion bash|zsh|fish
 grpcview init [dir] [--name]            create a collection
@@ -573,6 +681,9 @@ Every verb takes `--workspace <root>` and `--collection <id>`.
 - **Exit codes are the contract.** `0` = the call returned status OK; `1` = it
   returned any other gRPC status (which arrives *inside* `Request.Response.status`
   with a nil error); `2` = grpcview's own failure, nothing invoked. That 1-vs-2
+  line is exactly the Connect-error-vs-status-in-payload line the backend already
+  draws, so it needs no new classification — but it does need the invariant to
+  hold, which `invoke_saved_test.go` pins directly.
 - **Where you stand decides what you address**, like `git` and `bazel`. With no
   `--collection`, a verb resolves one: the nearest collection at or above the cwd
   bounded by the workspace root, else the workspace's only collection, else **exit
@@ -582,9 +693,6 @@ Every verb takes `--workspace <root>` and `--collection <id>`.
   resolves its own address, because it runs in a workspace that may hold zero
   collections. `collections ls` marks the row the cwd resolves to with `*`, and
   marks nothing when the answer is ambiguous.
-  line is exactly the Connect-error-vs-status-in-payload line the backend already
-  draws, so it needs no new classification — but it does need the invariant to
-  hold, which `invoke_saved_test.go` pins directly.
 - **stdout is data, stderr is everything else.** Latency, status text, warnings
   and `describe`'s source id are stderr. `-o body` (default) prints nothing on a
   failed call; `-o json` prints the whole `Request.Response` either way, because
@@ -617,6 +725,32 @@ Every verb takes `--workspace <root>` and `--collection <id>`.
   empty-comment result must be attributable. `-o json` is the protojson of a
   `FileDescriptorSet` — the descriptors themselves, not an invented flat field
   list, which would be a lossy re-encoding of a standard format.
+- **`sources add` reads its kind out of the argument**, and the first test is the
+  filesystem: an argument that stats as a file is uploaded as a `FileDescriptorSet`,
+  with its **absolute** path riding along as the refresh recipe (the server confines
+  that against the workspace root and stores it root-relative, so it cannot be
+  resolved against this process's cwd); one that starts with `//` or `@` is a bazel
+  label; anything else is dialed as a reflection address. Bazel's `pkg:target`
+  shorthand is deliberately **not** accepted and cannot be — `localhost:8080` is
+  indistinguishable from it, so whichever way the verb guessed, it would sometimes
+  dial a label and sometimes try to build an address.
+- **`grpcview trust [--off]`** grants or revokes trust for the workspace root and
+  prints nothing on success. It resolves no collection, deliberately: trust is a
+  property of the root, and a repo with no collection in it yet is a perfectly good
+  thing to trust. The *note* about an untrusted workspace lands where it is
+  actionable — `sources ls` prints one line after the table when the workspace is
+  untrusted **and** at least one listed source is a bazel source, which costs it one
+  extra (cheap) `ListCollections`. `collections ls` says nothing about trust at all,
+  also deliberately: it reads manifests and never source lists, so it cannot know
+  whether anything here would build, and a permission prompt for a capability nobody
+  is using teaches people to click through it.
+- **`--timeout` defaults per verb, because one of them builds.** 30s everywhere,
+  except that `sources refresh` and `sources add` of a bazel *label* default to 10
+  minutes when the flag was not passed — a cold build of a large target is minutes,
+  and a bare refresh spends that one budget across every source it walks. `sources
+  add` of an *address* keeps the 30s default: the reflection dial has no timeout of
+  its own and would otherwise hang. Passing `--timeout` explicitly always wins, in
+  either direction.
 - **Two processes can write one collection directory without a lock**
   (`Collection.mu` is in-process only). Accepted: `--server` is the opt-out and
   `--no-history` removes the only write `invoke` performs. If a lost update ever

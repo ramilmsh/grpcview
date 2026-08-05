@@ -283,7 +283,7 @@ of what the code already does, written down so it stops being drifted away from.
 
 **Two disconnected systems.**
 
-1. **Acquisition** — reflection, upload, `file`, `bazel`, later a buf registry. These are
+1. **Acquisition** — reflection, upload, `bazel`, later a buf registry. These are
    *mechanisms for populating and updating the descriptor store*, nothing more. They are
    allowed to be unavailable: prod is unreachable, the file is gone, bazel isn't installed.
 2. **Everything downstream** — the merge, the link, the services list, `describe`,
@@ -296,9 +296,8 @@ in the store, and the kinds differ only in the pointer:
 | kind | pointer | what an update does |
 |---|---|---|
 | `reflection:<addr>` | an address | re-dial |
-| `file:<path>` | a path relative to the workspace root | re-read |
+| `upload:<file name>` | a path relative to the workspace root, **when one is known** | re-read; with no path, a human hands over new bytes |
 | `bazel:<//pkg:target>` | a label | **build**, then read |
-| `upload:<file name>` | *none* | impossible without a human handing over new bytes |
 
 **Acquisition happens on add and refresh only.** This is already true and worth pinning:
 `putDescriptorState`/`resolveOne` are reachable from exactly four RPCs —
@@ -311,9 +310,16 @@ is picked up automatically"; that is deleted. A bazel source exists precisely be
 knows how to *build*, so a refresh builds, and noticing a source change is a separate
 mechanism (see the note at the end of Decision 8).
 
-**Upload keeps its file name for identity, not for storage.** A browser file picker hands
-JS bytes and a filename and never a path (`AddSourceModal.tsx:17`), so the filename is the
-only thing an upload can be identified and labelled by. It is the null-pointer kind.
+**Upload keeps its file name for identity, and a path only as a refresh recipe.** A
+browser file picker hands JS bytes and a filename and never a path
+(`AddSourceModal.tsx:17`); the CLI, adding the same bytes, does know the path. Both must
+produce **the same source** — so identity is the file name in either case, and the path is
+optional metadata that says how to re-read. There is no second kind for "an upload that
+remembered where it came from": that is one kind with the field filled in.
+
+The corollary is the point of this whole decision: **the bytes are in the store, so a
+missing, dead or never-known path costs you a refresh and nothing else.** Merge, link,
+`describe` and `invoke` are unaffected, because none of them ever look at a pointer.
 
 **The source id and the content key are different keys.** The id is the pointer, and it is
 stable across content changes — that is what makes re-adding a source a refresh instead of
@@ -378,9 +384,11 @@ precedence is per-collection by design ("order is precedence, and only order" �
   the workspace manifest. `normalizeSources` (`sources.go:45`) currently drops a contentless
   entry — that rule becomes "contentless + id = a workspace reference", an error only when
   the workspace does not define it.
-- **Workspace-level definitions are reflection / file / bazel only.** An upload has no
-  pointer, and its bytes are owned by the collection that declared them, so a
-  workspace-level upload would have nowhere to live.
+- **A workspace-level definition must carry a pointer**, so a *pathless* upload cannot be
+  one: there is nothing to declare but a digest, and a digest is content, not config.
+  Reflection and bazel qualify; an upload that knows its path qualifies in principle, and
+  sharing it is left unbuilt because nothing yet asks for it (`storage.proto:41` says
+  "may not be an Upload" and stays true of the shipped shape).
 - Blobs are shared by construction: CAS is per workspace, so one build serves every
   collection referencing it with no id-keyed sharing scheme needed.
 - The wire message gains a read-only `origin` (`COLLECTION` | `WORKSPACE`) so the Sources
@@ -404,41 +412,58 @@ reflection source and immediately invoke" still works, and a collection whose sc
 only from bazel gets a target set once instead of a `FailedPrecondition`. Arguably its own
 change rather than this phase's; recorded here as the intended end state.
 
-## Decision 8 — two new acquisition kinds: a file, and a bazel label that produces one
+## Decision 8 — upload learns its path, and bazel is a label that produces one
 
-Today a schema that is not reflected must be **uploaded**, which commits a
-`FileDescriptorSet` as protojson into `grpcview.json`. In a monorepo that is backwards:
-the descriptors are a *build output* of the repo the collection lives in, and they change
-on every proto edit. Two kinds fix it, and the first is the general case:
+Today a schema that is not reflected must be **uploaded**, and an upload is a dead end: it
+cannot be refreshed, because the bytes arrived without any record of where they came from.
+In a monorepo that is doubly backwards — the descriptors are a *build output* of the repo
+the collection lives in, and they change on every proto edit.
+
+Two changes, and neither of them is a new "file" kind:
 
 ```proto
-// A descriptor set read from a path relative to the workspace root.
-message File   { string path = 1; }                 // id: "file:<path>"
+// Upload gains a refresh recipe. Empty when the bytes came from a browser picker.
+message Upload { string file_name = 1; string path = 2; }   // id: "upload:<file name>"
 // A label whose default outputs are descriptor sets; built, then read.
-message Bazel  { string label = 1; }                // id: "bazel://pkg:target"
+message Bazel  { string label = 1; }                        // id: "bazel://pkg:target"
 ```
 
-`File` is what every non-bazel monorepo needs — buf, protoc, gradle, pants all write a
-descriptor set somewhere. `Bazel` is `File` plus knowing how to produce it. Both are
-**refreshable** (unlike an upload), so the pointer is the config and it is thirty
-characters.
+An earlier draft added a separate `File { path }` kind and demoted upload to browser-only.
+That was wrong, and the reason it was wrong is Decision 7's own layering: **a source is
+bytes in the store plus an optional recipe for getting new ones.** "Bytes with a path" and
+"bytes without a path" are one kind with a field set or unset — not two kinds — and the
+CLI and the browser must produce the same thing when a human adds the same descriptor set
+from each. Naming the with-path case `file:` would also have made the two adds two
+different sources with two different ids, so re-adding from the other surface would
+duplicate instead of refresh.
+
+`path` is what every non-bazel monorepo needs — buf, protoc, gradle and pants all write a
+descriptor set somewhere, and pointing at it makes the upload refreshable. `Bazel` is that
+plus knowing how to *produce* the file.
+
+Consequences, which are mostly things that do **not** change:
+
+- **`sources add <path>` keeps meaning what it means** — read the bytes, store them, and
+  now also record the path. One positional argument, one reading; the earlier draft's
+  disambiguation problem never arises because there is nothing to disambiguate against.
+- **`--commit-descriptors` is orthogonal.** It picks where the store writes (CAS blob vs
+  committed sidecar) and nothing else, for uploads exactly as for every other kind.
+- **A dead path costs a refresh and nothing else.** The collection loads, links, describes
+  and invokes from the stored bytes, so `/tmp/x.binpb` disappearing overnight degrades to
+  "refresh errors" — which is strictly better than today's upload, where refresh was never
+  possible at all.
+- **A browser upload refreshes by re-dropping the file.** Same file name is the same id, so
+  the existing re-add-is-a-refresh path already covers it; the UI should say that rather
+  than disabling the refresh button.
+- `id` is the file name, never the path, so a `git mv` of the source file changes the
+  recipe and not the source's identity.
 
 Surface this actually touches, which the two message stubs understate:
-`AddDescriptorSourceRequest`'s own differently-shaped oneof (`service.proto:10-18` —
-`bytes descriptor_set | Server reflection`, plus `file_name`), the disk oneof
-(`storage.proto:108-117`), `SourceID` **and** `diskSourceID` (`sources.go:11,23`),
-`diskToWireSource`/`wireToDiskSource` (`convert.go:75,104`), `resolveOne`'s default arm,
-and `grpcview sources add`.
-
-**`sources add <path>` now means `file`, and upload becomes browser-only.** Today a
-positional path creates an upload: read the bytes, commit them, discard where they came
-from. With `file` + `--commit-descriptors` the same command reads the same bytes, commits
-them, **and keeps the pointer** — strictly more information for the same result, so nothing
-on the CLI side would construct an upload again. The ambiguity between the two readings of
-one positional argument disappears rather than needing a disambiguating flag. The
-temp-path objection resolves the same way: with the flag on, resolves read the sidecar and
-the pointer is consulted only on an explicit refresh, so a dead path degrades to "refresh
-errors, everything else works" — upload's behaviour plus a hint about provenance.
+`AddDescriptorSourceRequest`'s own differently-shaped oneof (`service.proto:10-21` —
+`bytes descriptor_set | Server reflection`, plus `file_name` and `commit_descriptors`), the
+disk oneof (`storage.proto:169-193`), `SourceID` **and** `diskSourceID`
+(`store/sources.go:14,25`), `diskToWireSource`/`wireToDiskSource` (`convert.go`),
+`resolveOne`'s arms, and `grpcview sources add`.
 
 ### The bazel source, concretely
 
@@ -479,11 +504,12 @@ Verified in this repo before writing this down:
 **Three rules about paths and symlinks, which read as contradictory until they are
 separated.** They govern different things:
 
-1. **A `File` path comes off the wire**, authored by a human. Confine reads to the
+1. **An upload's `path` comes off the wire**, authored by a human. Confine reads to the
    workspace root and refuse symlink escape — same guard, same reason, as `store.Open`.
-   Unconfined, `file:../../../../home/other/secret.binpb` is an arbitrary-file-read
-   primitive whose contents surface in the UI's descriptor set and possibly in a committed
-   sidecar.
+   Unconfined, `../../../../home/other/secret.binpb` is an arbitrary-file-read primitive
+   whose contents surface in the UI's descriptor set and possibly in a committed sidecar.
+   Note this applies to the *recorded* path on refresh too, not only at add time: a
+   committed `grpcview.json` a colleague pushed is wire input like any other.
 2. **A `Bazel` source takes no path from anyone.** It takes a label; the paths come back
    from bazel itself, so they are trusted and are resolved through the `bazel-out`
    convenience symlink (or via the `bazel-bin`/execroot `bazel info` reports, which sidesteps
@@ -529,7 +555,7 @@ opening it — the same class as VS Code tasks, which is why VS Code has Workspa
 
 Copy it, since the project rule is to copy VS Code where an equivalent exists: trust is
 per workspace root, remembered in user state, granted by a UI banner or `--trust`.
-Untrusted: everything loads and reflection/upload/file sources resolve; a source that would
+Untrusted: everything loads and reflection/upload sources resolve; a source that would
 execute a build does not, and shows its reason in `Resolved.error` — the existing channel
 for a source that cannot resolve.
 
@@ -673,13 +699,37 @@ internal services.
 
 Each is independently verifiable and independently useful.
 
-| | Step | Contents |
-|---|---|---|
-| **1a** | Addressing | `--workspace`, root discovery, `store.Open` by relative path + both guards, id/display-name split, local state out of the collection dir (Decision 6), auto-create deleted + UI empty state, the `Workspace`→`Collection` wire rename (and `--workspace`→`--collection`), `grpcview init`, loopback + CORS (Decision 12). Single collection, passed explicitly. |
-| **1b** | Discovery | Bounded scan + prune rules + go-git ignore matching + cap + cache, manifest `collections`, non-nesting enforced, `ListCollections`, CLI cwd resolution, `collections ls`. |
-| **1c** | Multi-collection UI | Collection tier, per-collection query keys, `Item.slug` + slug-based `itemKey`, `moveSubtree`-on-rename deleted, scoped Sources/Scripts, cross-collection drop rejected. |
-| **1d** | The descriptor store | Decision 7 and 9 together: blobs + CAS, `commit_descriptors` + sidecars, upload's special case deleted, in-memory merged view keyed by collection with writer invalidation, `services.json` deleted, lazy first-touch merge, workspace-level definitions + references + `origin`. |
-| **1e** | `File` and `Bazel` kinds | The two pointers, bazel root discovery, argv exec, cquery output resolution, dedupe-before-link, timeout/output handling, the three path/symlink rules, trust gate, `sources add <path>` → `file`. |
+**1a–1e are all shipped, so phase 1 is done.** Everything below is still written as it was
+planned — the decisions above cite the code as it stood *before* any of this landed, so
+treat those `file.go:line` references as the premise of a decision rather than a
+description of trunk. `AGENTS.md` is where shipped behavior lives.
+
+| | Step | Status | Contents |
+|---|---|---|---|
+| **1a** | Addressing | shipped | `--workspace`, root discovery, `store.Open` by relative path + both guards, id/display-name split, local state out of the collection dir (Decision 6), auto-create deleted + UI empty state, the `Workspace`→`Collection` wire rename (and `--workspace`→`--collection`), `grpcview init`, loopback + CORS (Decision 12). Single collection, passed explicitly. |
+| **1b** | Discovery | shipped | Bounded scan + prune rules + go-git ignore matching + cap + cache, manifest `collections`, non-nesting enforced, `ListCollections`, CLI cwd resolution, `collections ls`. |
+| **1c** | Multi-collection UI | shipped | Collection tier, per-collection query keys, `Item.slug` + slug-based `itemKey`, `moveSubtree`-on-rename deleted, scoped Sources/Scripts, cross-collection drop rejected. |
+| **1d** | The descriptor store | shipped | Decision 7 and 9 together: blobs + CAS, `commit_descriptors` + sidecars, upload's special case deleted, in-memory merged view keyed by collection with writer invalidation, `services.json` deleted, lazy first-touch merge, workspace-level definitions + references + `origin`. |
+| **1e** | `Upload.path` and the `Bazel` kind | shipped | A refresh recipe on upload (CLI records it, browser leaves it empty, refresh re-reads), bazel root discovery, argv exec, cquery output resolution, dedupe-before-link, timeout/output handling, the three path/symlink rules, trust gate. |
+
+**What 1e shipped differently from the text above.** The decisions held; five details did
+not survive contact, and this is the list:
+
+- **The CLI takes only a full `//`-prefixed (or `@`-prefixed) label**, never bazel's
+  `proto:foo` shorthand this doc uses in passing. `localhost:8080` is indistinguishable from
+  it, so accepting it would sometimes dial a label and sometimes build an address. The
+  *server* still canonicalizes the shorthand, so a hand-written manifest may use it.
+- **An upload path that does not confine to the workspace root records no recipe instead of
+  failing the add.** The bytes are already in the request, so the source lands, unrefreshable,
+  with a warning — which is the "a dead path costs a refresh and nothing else" rule applied to
+  the add as well. Confinement is strict on the read side, where it matters.
+- **Trust is a verb, `grpcview trust [--off]`**, not the `--trust` flag suggested above: it is
+  a decision about a workspace root and not a modifier of some other operation.
+- **The untrusted note lives on `sources ls`**, which this doc left open. `collections ls` was
+  the other candidate and says nothing: it reads manifests and never source lists, so it
+  cannot know whether anything in the workspace would build.
+- **`invoke --refresh` was not built.** The CI pipeline is
+  `grpcview sources refresh && grpcview invoke …`, which is this doc's own first option.
 
 **1a moves the state files; 1d restructures them.** 1a relocates
 `cache/sources/*.binpb`, `cache/services.json` and `history/` to the new state root
@@ -710,7 +760,7 @@ Code extension is its second customer.
   holds every other managed name) rather than spelling them at each use site.
 - **Uploads keep working unchanged from the user's side.** A drag-and-drop `buf build`
   image is still the right answer for a schema that is not built in this repo; what changes
-  is where its bytes are stored, not what it does.
+  is where its bytes are stored and that it can now be refreshed when a path is known.
 - **`ui:dev` breaks on a non-fixed port** — `client.ts:4` hardcodes `127.0.0.1:10000` for
   non-PROD. Relevant to the daemon rather than to 1a, but whoever touches the port must run
   the vite flow, not just the prod binary.
@@ -765,15 +815,15 @@ Code extension is its second customer.
 - **`descriptor_set` on `Get`.** Serving it from memory is cheap, but it is still megabytes
   per collection **over the wire**, so this stays a wire-size question: split into
   `GetDescriptors(collection)` now, or when it hurts?
-- **Toggling `--commit-descriptors` on for a never-resolved source** — resolve first, or
-  reject?
 - **Multi-root workspaces.** VS Code has them; nothing here needs them. Ids are
   root-relative paths, so a later multi-root would prefix `<root-name>:`. Left unbuilt on
   purpose.
 
 Closed since the first draft: **async resolve** (no — 1e ships the synchronous build; the
 async `Resolved.state` machine lands with the ibazel-style watcher, since nothing else needs
-it and there is no polling in this phase).
+it and there is no polling in this phase). **Toggling `--commit-descriptors` on for a
+never-resolved source** (reject — it is `InvalidArgument` naming `refresh`, because
+resolving as a side effect of a config change is acquisition by another name).
 
 ## What changed from the original plan
 
