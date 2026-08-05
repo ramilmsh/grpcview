@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bazelbuild",
+    srcs = ["bazelbuild.go"],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/bazelbuild",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)
+
+go_test(
+    name = "bazelbuild_test",
+    srcs = ["bazelbuild_test.go"],
+    embed = [":bazelbuild"],
+    deps = [
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)
