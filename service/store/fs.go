@@ -56,6 +56,9 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 
 	name := cmp.Or(col.GetName(), c.defaultName())
 	return &grpcviewv1.Collection{
+		// Addressing only: the id is where this collection lives, so a response says
+		// which collection it is about without the caller having to remember.
+		Id:   c.id,
 		Name: name,
 		Item: &grpcviewv1.Item{
 			Name:    name,

@@ -12,7 +12,7 @@ import {
 import { Button, IconButton } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
 import { Dialog } from "@/components/ui/Dialog";
-import { useWorkspace, useWorkspaceMutations, hostLabel, COLLECTION_ID } from "@/lib/workspace-query";
+import { useActiveWorkspace, useWorkspaceMutations, hostLabel } from "@/lib/workspace-query";
 import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
 import { AddSourceModal } from "./AddSourceModal";
 
@@ -42,7 +42,11 @@ function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted"
 
 // SourcesView lists the definition sources in priority order — the highest wins.
 export function SourcesView() {
-  const { sources } = useWorkspace();
+  // Scoped to the active collection: each collection has its own source list, and the
+  // merged descriptor set it produces is what the collection's requests resolve against.
+  const { collection: activeCollection, sources } = useActiveWorkspace();
+  // Non-null everywhere this view renders (App gates on the collection listing).
+  const collection = activeCollection ?? "";
   const {
     addDescriptorSource,
     removeDescriptorSource,
@@ -55,7 +59,7 @@ export function SourcesView() {
   const onAdd = (address: string, tls: boolean) => {
     addDescriptorSource.mutate(
       {
-        collection: COLLECTION_ID,
+        collection,
         source: { case: "reflection", value: { address, tls: tls ? {} : undefined } },
       },
       { onSuccess: () => setModalOpen(false) }
@@ -64,7 +68,7 @@ export function SourcesView() {
 
   const onAddDescriptorSet = (bytes: Uint8Array, fileName: string) => {
     addDescriptorSource.mutate(
-      { collection: COLLECTION_ID, source: { case: "descriptorSet", value: bytes }, fileName },
+      { collection, source: { case: "descriptorSet", value: bytes }, fileName },
       { onSuccess: () => setModalOpen(false) }
     );
   };
@@ -72,7 +76,7 @@ export function SourcesView() {
   const doRemove = () => {
     if (!confirm) return;
     removeDescriptorSource.mutate(
-      { collection: COLLECTION_ID, id: confirm.id },
+      { collection, id: confirm.id },
       { onSuccess: () => setConfirm(null) }
     );
   };
@@ -83,7 +87,7 @@ export function SourcesView() {
     const ids = sources.map((s) => s.id);
     const [id] = ids.splice(from, 1);
     ids.splice(to, 0, id);
-    reorderDescriptorSources.mutate({ collection: COLLECTION_ID, ids });
+    reorderDescriptorSources.mutate({ collection, ids });
   };
 
   const busy =
@@ -224,7 +228,7 @@ export function SourcesView() {
                     }
                     aria-label={`Refresh ${sourceLabel(s)}`}
                     onClick={() =>
-                      refreshDescriptorSource.mutate({ collection: COLLECTION_ID, id: s.id })
+                      refreshDescriptorSource.mutate({ collection, id: s.id })
                     }
                     disabled={busy}
                   >

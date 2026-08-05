@@ -11,7 +11,7 @@ import {
 import { Button, IconButton } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Tag } from "@/components/ui/Tag";
-import { useWorkspace } from "@/lib/workspace-query";
+import { useActiveWorkspace } from "@/lib/workspace-query";
 import { ScriptKind, type Script } from "@grpcview/v1/workspace_pb";
 
 // Middleware is attached by display name, so a renamed script leaves a "missing" row
@@ -23,7 +23,7 @@ export function MiddlewareTab({
   middleware: string[];
   onChange: (next: string[]) => void;
 }) {
-  const { workspace } = useWorkspace();
+  const { workspace } = useActiveWorkspace();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const middlewareScripts = (workspace?.scripts ?? []).filter(

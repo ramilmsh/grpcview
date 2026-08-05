@@ -8,13 +8,18 @@ const OLD = "./users/get-user";
 const NEW = "./archive/get-user";
 const OTHER = "./users/admin/ban";
 
+// Every fixture key lives in the "." collection, and OpenTab now carries that id
+// alongside the key: a collection id may contain slashes, so it is never parsed out of
+// the key.
+const tab = (key: string, name: string): OpenTab => ({ key, name, collection: "." });
+
 const seed = (): void => {
-  const tab: OpenTab = { key: OLD, name: "GetUser" };
-  const otherTab: OpenTab = { key: OTHER, name: "Ban" };
+  const userTab = tab(OLD, "GetUser");
+  const otherTab = tab(OTHER, "Ban");
   const draft: Draft = { body: "{}", metadata: "" };
   const invoke: InvokeState = { error: "boom" };
   useUIStore.setState({
-    openTabs: [tab, otherTab],
+    openTabs: [userTab, otherTab],
     activeKey: OLD,
     drafts: { [OLD]: draft, [OTHER]: draft },
     invokes: { [OLD]: invoke, [OTHER]: invoke },
@@ -24,15 +29,38 @@ const seed = (): void => {
   });
 };
 
+describe("the active collection", () => {
+  beforeEach(() => {
+    useUIStore.setState({ activeCollection: null, activeKey: null });
+  });
+
+  it("setActiveCollection records the choice", () => {
+    useUIStore.getState().setActiveCollection("services/payments/requests");
+    expect(useUIStore.getState().activeCollection).toBe("services/payments/requests");
+  });
+
+  it("setActiveKey switches the collection when the tab's one is supplied", () => {
+    useUIStore.getState().setActiveKey("services/payments/requests/charge", "services/payments/requests");
+    const s = useUIStore.getState();
+    expect(s.activeKey).toBe("services/payments/requests/charge");
+    expect(s.activeCollection).toBe("services/payments/requests");
+  });
+
+  it("setActiveKey leaves the collection alone when none is supplied", () => {
+    useUIStore.setState({ activeCollection: "requests" });
+    useUIStore.getState().setActiveKey(null);
+    const s = useUIStore.getState();
+    expect(s.activeKey).toBeNull();
+    expect(s.activeCollection).toBe("requests");
+  });
+});
+
 describe("moveSubtree: the moved item itself", () => {
   beforeEach(seed);
 
   it("remaps the open tab's key, keeping its display name — a move never renames", () => {
     useUIStore.getState().moveSubtree(OLD, NEW);
-    expect(useUIStore.getState().openTabs).toEqual([
-      { key: NEW, name: "GetUser" },
-      { key: OTHER, name: "Ban" },
-    ]);
+    expect(useUIStore.getState().openTabs).toEqual([tab(NEW, "GetUser"), tab(OTHER, "Ban")]);
   });
 
   it("remaps activeKey when the moved item was the active tab", () => {
@@ -135,10 +163,7 @@ describe("moveSubtree: descendants of a moved folder", () => {
     const draft: Draft = { body: "{}", metadata: "" };
     const invoke: InvokeState = { error: "boom" };
     useUIStore.setState({
-      openTabs: [
-        { key: CHILD, name: "GetUser" },
-        { key: DEEP, name: "Ban" },
-      ],
+      openTabs: [tab(CHILD, "GetUser"), tab(DEEP, "Ban")],
       activeKey: DEEP,
       drafts: { [CHILD]: draft, [DEEP]: draft },
       invokes: { [CHILD]: invoke, [DEEP]: invoke },
@@ -151,7 +176,7 @@ describe("moveSubtree: descendants of a moved folder", () => {
   it("moves a one-level descendant's tab, draft and invoke, keeping its OWN display name", () => {
     useUIStore.getState().moveSubtree(FOLDER, MOVED);
     const { openTabs, drafts, invokes } = useUIStore.getState();
-    expect(openTabs[0]).toEqual({ key: CHILD_MOVED, name: "GetUser" });
+    expect(openTabs[0]).toEqual(tab(CHILD_MOVED, "GetUser"));
     expect(drafts[CHILD]).toBeUndefined();
     expect(drafts[CHILD_MOVED]).toEqual({ body: "{}", metadata: "" });
     expect(invokes[CHILD_MOVED]).toEqual({ error: "boom" });
@@ -160,7 +185,7 @@ describe("moveSubtree: descendants of a moved folder", () => {
   it("moves a TWO-level descendant, rewriting only the prefix and keeping the whole tail", () => {
     useUIStore.getState().moveSubtree(FOLDER, MOVED);
     const { openTabs, drafts, activeKey, treeFocused } = useUIStore.getState();
-    expect(openTabs[1]).toEqual({ key: DEEP_MOVED, name: "Ban" });
+    expect(openTabs[1]).toEqual(tab(DEEP_MOVED, "Ban"));
     expect(drafts[DEEP_MOVED]).toEqual({ body: "{}", metadata: "" });
     expect(activeKey).toBe(DEEP_MOVED);
     expect(treeFocused).toBe(DEEP_MOVED);
@@ -182,7 +207,7 @@ describe("moveSubtree: descendants of a moved folder", () => {
     const sibling = "./users2/get-user";
     const draft: Draft = { body: "sibling", metadata: "" };
     useUIStore.setState({
-      openTabs: [{ key: sibling, name: "GetUser" }],
+      openTabs: [tab(sibling, "GetUser")],
       activeKey: sibling,
       drafts: { [sibling]: draft },
       invokes: {},
@@ -192,7 +217,7 @@ describe("moveSubtree: descendants of a moved folder", () => {
     });
     useUIStore.getState().moveSubtree(FOLDER, MOVED);
     const s = useUIStore.getState();
-    expect(s.openTabs).toEqual([{ key: sibling, name: "GetUser" }]);
+    expect(s.openTabs).toEqual([tab(sibling, "GetUser")]);
     expect(s.activeKey).toBe(sibling);
     expect(s.drafts[sibling]).toEqual(draft);
     expect(s.treeSelection).toEqual([sibling]);
@@ -203,18 +228,12 @@ describe("moveSubtree: descendants of a moved folder", () => {
   it("leaves an unrelated subtree's keys untouched while remapping the moved one", () => {
     const unrelated = "./orders/list";
     useUIStore.setState({
-      openTabs: [
-        { key: CHILD, name: "GetUser" },
-        { key: unrelated, name: "List" },
-      ],
+      openTabs: [tab(CHILD, "GetUser"), tab(unrelated, "List")],
       drafts: { [CHILD]: { body: "a", metadata: "" }, [unrelated]: { body: "b", metadata: "" } },
     });
     useUIStore.getState().moveSubtree(FOLDER, MOVED);
     const { openTabs, drafts } = useUIStore.getState();
-    expect(openTabs).toEqual([
-      { key: CHILD_MOVED, name: "GetUser" },
-      { key: unrelated, name: "List" },
-    ]);
+    expect(openTabs).toEqual([tab(CHILD_MOVED, "GetUser"), tab(unrelated, "List")]);
     expect(drafts[unrelated]).toEqual({ body: "b", metadata: "" });
   });
 });

@@ -3,7 +3,7 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import { ScriptKind } from "@grpcview/v1/workspace_pb";
 import type { History, Server } from "@grpcview/v1/workspace_pb";
 import {
-  useWorkspace,
+  useActiveWorkspace,
   useRootItems,
   useWorkspaceMutations,
   useInvoke,
@@ -11,7 +11,6 @@ import {
   useRefreshWorkspace,
   sourceForService,
   schemaSourceFor,
-  COLLECTION_ID,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { findByKey, methodKind, prettyBody, resolveMethod } from "@/lib/format";
@@ -27,12 +26,14 @@ import type { GeneratorDef } from "./generator-libs";
 const DEBOUNCE_MS = 400;
 
 export function RequestWorkspace() {
-  const { workspace, services } = useWorkspace();
+  const { collection: activeCollection, workspace, services } = useActiveWorkspace();
+  // Non-null everywhere this view renders (App gates on the collection listing).
+  const collection = activeCollection ?? "";
   const rootItems = useRootItems(workspace);
   const { updateRequest } = useWorkspaceMutations();
   const invokeMut = useInvoke();
   const streamClient = useStreamingClient();
-  const refreshWorkspace = useRefreshWorkspace();
+  const refreshWorkspace = useRefreshWorkspace(activeCollection);
 
   const activeKey = useUIStore((s) => s.activeKey);
   const draft = useUIStore((s) => (activeKey ? s.drafts[activeKey] : undefined));
@@ -129,7 +130,7 @@ export function RequestWorkspace() {
     const timerKey = `${key}:${slot}`;
     window.clearTimeout(timers.current[timerKey]);
     timers.current[timerKey] = window.setTimeout(() => {
-      updateRequest.mutate({ collection: COLLECTION_ID, path, itemName, ...fields });
+      updateRequest.mutate({ collection, path, itemName, ...fields });
     }, DEBOUNCE_MS);
   };
 
@@ -151,7 +152,7 @@ export function RequestWorkspace() {
   };
 
   const onChangeMethod = (service: string, method: string) => {
-    updateRequest.mutate({ collection: COLLECTION_ID, path, itemName, service, method });
+    updateRequest.mutate({ collection, path, itemName, service, method });
   };
 
   const onTargetChange = (t: Server) => {
@@ -163,7 +164,7 @@ export function RequestWorkspace() {
   // cache flows the fresh request.middleware back down, so there is no local copy.
   const onMiddlewareChange = (next: string[]) => {
     updateRequest.mutate({
-      collection: COLLECTION_ID,
+      collection,
       path,
       itemName,
       updateMiddleware: true,
@@ -175,7 +176,7 @@ export function RequestWorkspace() {
     const next = nextName.trim();
     if (!next || next === itemName) return;
     // No key remap: keys are slug-based, and a rename leaves the slug alone.
-    updateRequest.mutate({ collection: COLLECTION_ID, path, itemName, name: next });
+    updateRequest.mutate({ collection, path, itemName, name: next });
   };
 
   // Takes body/metadata/messages explicitly so a history re-run can pass historical
@@ -186,7 +187,7 @@ export function RequestWorkspace() {
       invokeMut.mutate(
         {
           spec: {
-            collection: COLLECTION_ID,
+            collection,
             path,
             itemName,
             service: request.service,
@@ -215,7 +216,7 @@ export function RequestWorkspace() {
     const messagesToSend = (kind === "ss" ? [b] : msgs).map(migrateBodyToTs);
     const req = {
       spec: {
-        collection: COLLECTION_ID,
+        collection,
         path,
         itemName,
         service: request.service,

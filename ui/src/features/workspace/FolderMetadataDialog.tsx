@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { useWorkspaceMutations, COLLECTION_ID } from "@/lib/workspace-query";
+import { useWorkspaceMutations } from "@/lib/workspace-query";
 import { itemKey, type ItemWithPath } from "@/lib/format";
 import { MetadataEditor } from "./MetadataEditor";
 import { defaultMetadataModule } from "./metadata-wrapper";
@@ -31,7 +31,9 @@ export function FolderMetadataDialog({
     if (!folder) return;
     updateFolder.mutate(
       {
-        collection: COLLECTION_ID,
+        // The folder's own collection, which is by construction the active one — the
+        // dialog needs no separate route to a collection id.
+        collection: folder.collection,
         path: folder.path,
         itemName: folder.item.name,
         draftMetadataScript: draft,

@@ -13,11 +13,11 @@ import { Kbd } from "@/components/ui/Kbd";
 import { Subtab } from "@/components/ui/Subtab";
 import { EditableName } from "@/components/ui/EditableName";
 import {
-  useWorkspace,
+  useActiveCollectionId,
+  useActiveWorkspace,
   useUpdateScript,
   useDeleteScript,
   useRunScript,
-  COLLECTION_ID,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
@@ -60,6 +60,8 @@ interface ScriptDraft {
 // The whole mutable half of the detail pane: the draft buffer against the saved
 // script, and the four mutations that act on it.
 function useScriptDraft(script: Script): ScriptDraft {
+  // Scripts belong to a collection, so every mutation here addresses the active one.
+  const collection = useActiveCollectionId() ?? "";
   const draftSource = useUIStore((s) => s.scriptDrafts[script.name]);
   const seedScriptDraft = useUIStore((s) => s.seedScriptDraft);
   const setScriptDraft = useUIStore((s) => s.setScriptDraft);
@@ -82,22 +84,22 @@ function useScriptDraft(script: Script): ScriptDraft {
 
   const save = () => {
     if (!dirty || updateScript.isPending) return;
-    updateScript.mutate({ collection: COLLECTION_ID, name: script.name, source });
+    updateScript.mutate({ collection, name: script.name, source });
   };
   const testRun = () => {
     if (!source.trim() || runScript.isPending) return;
     setOutputOpen(true);
-    runScript.mutate({ collection: COLLECTION_ID, source, kind: script.kind });
+    runScript.mutate({ collection, source, kind: script.kind });
   };
   const rename = (next: string) => {
     updateScript.mutate(
-      { collection: COLLECTION_ID, name: script.name, newName: next },
+      { collection, name: script.name, newName: next },
       { onSuccess: () => renameScript(script.name, next) }
     );
   };
   const doDelete = () => {
     deleteScript.mutate(
-      { collection: COLLECTION_ID, name: script.name },
+      { collection, name: script.name },
       {
         onSuccess: () => {
           forgetScript(script.name);
@@ -142,7 +144,7 @@ function useScriptDraft(script: Script): ScriptDraft {
 // Registers the OTHER generators as ambient libs, so this buffer gets IntelliSense
 // for the ones it can call by name.
 function useGeneratorLibs(scriptName: string) {
-  const { workspace } = useWorkspace();
+  const { workspace } = useActiveWorkspace();
   const monaco = useMonaco();
 
   const otherGenerators = useMemo<GeneratorDef[]>(() => {

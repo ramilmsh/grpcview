@@ -5,13 +5,15 @@ import {
   useMutation,
   useTransport,
   createConnectQueryKey,
+  skipToken,
 } from "@connectrpc/connect-query";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { createClient, ConnectError, Code } from "@connectrpc/connect";
+import { createClient, ConnectError, Code, type Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { WorkspaceService } from "@grpcview/v1/service_pb";
 import {
   get,
+  listCollections,
   createCollection,
   createFolder,
   createRequest,
@@ -30,22 +32,11 @@ import {
   deleteScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
+import type { CollectionSummary } from "@grpcview/v1/service_pb";
 import type { Collection, Server } from "@grpcview/v1/workspace_pb";
 import { rootItemsOf, type ItemWithPath } from "./format";
-
-const COLLECTION_STORAGE_KEY = "grpcview.collection";
-
-// 1a addresses ONE collection per load. Phase 1c adds the multi-collection tier and
-// turns this into state; until then, switching collections is a reload, which also
-// guarantees every connect-query key is rebuilt.
-export const COLLECTION_ID = localStorage.getItem(COLLECTION_STORAGE_KEY) ?? ".";
-
-// Switches the active collection and reloads, so every connect-query key (all of
-// which close over COLLECTION_ID at module load) is rebuilt against the new one.
-export function openCollection(id: string): void {
-  localStorage.setItem(COLLECTION_STORAGE_KEY, id);
-  window.location.reload();
-}
+import { resolveActiveCollection } from "./active-collection";
+import { useUIStore } from "./ui-store";
 
 export const firstReflectionSource = (ws?: Collection): Server | null => {
   for (const s of ws?.sources ?? []) {
@@ -79,18 +70,60 @@ export const schemaSourceFor = (
 
 export const hostLabel = (s: Server | null): string => s?.address ?? "";
 
-function useWorkspaceKey(): QueryKey {
-  const transport = useTransport();
+// The Get key for ONE collection. Per-collection by construction, so switching the
+// active collection reads a different cache entry instead of clobbering a shared one.
+function keyForCollection(transport: Transport, id: string): QueryKey {
   return createConnectQueryKey({
     schema: get,
     transport,
-    input: { collection: COLLECTION_ID },
+    input: { collection: id },
     cardinality: "finite",
   });
 }
 
-export function useWorkspace() {
-  const query = useQuery(get, { collection: COLLECTION_ID });
+function useCollectionsKey(): QueryKey {
+  const transport = useTransport();
+  return createConnectQueryKey({
+    schema: listCollections,
+    transport,
+    input: {},
+    cardinality: "finite",
+  });
+}
+
+// Every collection in the workspace, plus the workspace root's absolute path. Cheap by
+// construction (ListCollections reads manifests, never trees), so it is the one query
+// that runs before anything knows which collection to Get.
+export function useCollections(): {
+  root: string;
+  collections: CollectionSummary[];
+  isPending: boolean;
+  error: ConnectError | null;
+} {
+  const query = useQuery(listCollections, {});
+  return {
+    root: query.data?.root ?? "",
+    collections: query.data?.collections ?? [],
+    isPending: query.isPending,
+    error: query.error,
+  };
+}
+
+// The collection every scoped view addresses: the user's explicit choice while it still
+// exists in the workspace, else the first collection listed. Null only when the
+// workspace holds none, which is what puts <NoCollection> on screen. A pure derivation —
+// no effect, no write-back (see active-collection.ts).
+export function useActiveCollectionId(): string | null {
+  const stored = useUIStore((s) => s.activeCollection);
+  const { collections } = useCollections();
+  return resolveActiveCollection(stored, collections);
+}
+
+// Takes the id explicitly, because the collection tier needs to Get one that is not
+// active. Null means there is nothing to Get: skipToken idles the query rather than
+// firing a request for the empty collection id.
+export function useWorkspace(collection: string | null) {
+  const query = useQuery(get, collection === null ? skipToken : { collection });
   const workspace = query.data?.collection;
   const notFound = query.isError && ConnectError.from(query.error).code === Code.NotFound;
   return {
@@ -102,23 +135,57 @@ export function useWorkspace() {
   };
 }
 
-// Creates a collection at a workspace-relative directory. Not wired to the Get
-// cache: the caller (NoCollection) always follows success with openCollection,
-// which reloads and re-seeds everything against the new COLLECTION_ID.
+// What every scoped view uses: the active collection's snapshot, plus the id itself so
+// the view can address its mutations at it.
+export function useActiveWorkspace() {
+  const collection = useActiveCollectionId();
+  const ws = useWorkspace(collection);
+  return { collection, ...ws };
+}
+
+// Creates a collection at a workspace-relative directory, then makes it the active one
+// with no reload: the Get cache is seeded off the Collection the RPC returns, the
+// listing it must now appear in is invalidated, and the choice is persisted.
 export function useCreateCollection() {
-  return useMutation(createCollection);
+  const qc = useQueryClient();
+  const transport = useTransport();
+  const listKey = useCollectionsKey();
+  const setActiveCollection = useUIStore((s) => s.setActiveCollection);
+  return useMutation(createCollection, {
+    onSuccess: (res) => {
+      const id = res.collection?.id;
+      if (!id) return;
+      qc.setQueryData(
+        keyForCollection(transport, id),
+        create(GetResponseSchema, { collection: res.collection })
+      );
+      void qc.invalidateQueries({ queryKey: listKey });
+      setActiveCollection(id);
+    },
+  });
 }
 
+// Keys are collection-prefixed, and the collection comes off the RESPONSE, so the tree
+// of whatever snapshot is in hand is keyed correctly with no extra argument.
 export function useRootItems(workspace?: Collection): ItemWithPath[] {
-  return useMemo(() => rootItemsOf(workspace?.item, COLLECTION_ID), [workspace]);
+  return useMemo(() => rootItemsOf(workspace?.item, workspace?.id ?? ""), [workspace]);
 }
 
+// Seeds the Get cache off `res.collection.id`, never off the id the caller happened to
+// send: that is the only identifier guaranteed to name the collection the fresh snapshot
+// describes, and it is why Collection.id exists. Consequence: none of the write hooks
+// below need a collection argument.
 function useSeedGetCache() {
   const qc = useQueryClient();
-  const key = useWorkspaceKey();
+  const transport = useTransport();
   return {
     onSuccess: (res: { collection?: Collection }) => {
-      if (res.collection) qc.setQueryData(key, create(GetResponseSchema, { collection: res.collection }));
+      const id = res.collection?.id;
+      if (!id) return;
+      qc.setQueryData(
+        keyForCollection(transport, id),
+        create(GetResponseSchema, { collection: res.collection })
+      );
     },
   };
 }
@@ -156,12 +223,19 @@ export function useInvoke() {
   return useMutation(invoke);
 }
 
-// Invalidates the Get query: Invoke persists run history server-side but does not
-// return the fresh Collection the History timeline rides on.
-export function useRefreshWorkspace() {
+// Invalidates one collection's Get query: Invoke persists run history server-side but
+// does not return the fresh Collection the History timeline rides on. A no-op with no
+// collection, since there is then no key to invalidate.
+export function useRefreshWorkspace(collection: string | null) {
   const qc = useQueryClient();
-  const key = useWorkspaceKey();
-  return useMemo(() => () => void qc.invalidateQueries({ queryKey: key }), [qc, key]);
+  const transport = useTransport();
+  return useMemo(
+    () => () => {
+      if (collection === null) return;
+      void qc.invalidateQueries({ queryKey: keyForCollection(transport, collection) });
+    },
+    [qc, transport, collection]
+  );
 }
 
 // The raw connect client: connect-query has no streaming hook, so InvokeStreaming

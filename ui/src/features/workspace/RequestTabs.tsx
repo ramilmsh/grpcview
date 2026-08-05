@@ -2,12 +2,12 @@ import clsx from "clsx";
 import { X } from "@/components/ui/icons";
 import { useUIStore } from "@/lib/ui-store";
 import { MethodKindTag } from "@/components/ui/Tag";
-import { useWorkspace, useRootItems } from "@/lib/workspace-query";
+import { useActiveWorkspace, useRootItems } from "@/lib/workspace-query";
 import { findByKey, methodKind, resolveMethod } from "@/lib/format";
 
 // RequestTabs is the open-request tab strip. Frontend-only state; no persistence.
 export function RequestTabs() {
-  const { workspace, services } = useWorkspace();
+  const { workspace, services } = useActiveWorkspace();
   const rootItems = useRootItems(workspace);
   const openTabs = useUIStore((s) => s.openTabs);
   const activeKey = useUIStore((s) => s.activeKey);
@@ -48,7 +48,9 @@ export function RequestTabs() {
               borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
               background: active ? "var(--color-bg)" : "transparent",
             }}
-            onClick={() => setActiveKey(tab.key)}
+            // The collection rides on the tab, so activating one in another collection
+            // switches to it without anyone parsing a collection out of the key.
+            onClick={() => setActiveKey(tab.key, tab.collection)}
           >
             <MethodKindTag kind={kind} />
             {/* Live name, not the stored one: the key is slug-based, so a rename no

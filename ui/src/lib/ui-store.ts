@@ -6,9 +6,26 @@ import { itemKey } from "./format";
 
 export type ActiveView = "workspace" | "sources" | "scripts";
 
+// The user's explicit collection choice, persisted so a reload restores it. Read
+// through resolveActiveCollection (active-collection.ts), which drops it if the
+// workspace no longer lists it. Guarded because //ui:test runs these modules under
+// node, where there is no localStorage.
+const COLLECTION_STORAGE_KEY = "grpcview.collection";
+
+const readStoredCollection = (): string | null =>
+  typeof localStorage === "undefined" ? null : localStorage.getItem(COLLECTION_STORAGE_KEY);
+
+const writeStoredCollection = (id: string): void => {
+  if (typeof localStorage !== "undefined") localStorage.setItem(COLLECTION_STORAGE_KEY, id);
+};
+
 export interface OpenTab {
   key: string;
   name: string;
+  // The collection this request lives in, carried alongside the key rather than parsed
+  // out of it: a collection id may itself contain slashes ("services/payments/requests"),
+  // so key.split("/")[0] is not the collection and nothing may pretend otherwise.
+  collection: string;
 }
 
 export interface Draft {
@@ -39,6 +56,10 @@ export type ScriptSubtab = "code" | "deps" | "caps";
 
 interface UIState {
   activeView: ActiveView;
+  // The collection the scoped views address, or null when nothing has been chosen yet.
+  // Every connect-query key is built from the id this resolves to, so switching
+  // collections is state, not a reload.
+  activeCollection: string | null;
   openTabs: OpenTab[];
   activeKey: string | null;
   drafts: Record<string, Draft | undefined>;
@@ -50,14 +71,19 @@ interface UIState {
   treeSelection: readonly string[];
   treeFocused: string | null;
 
+  // Keyed by bare script name, so NOT yet collection-scoped — a later slice fixes that.
   selectedScript: string | null;
   scriptDrafts: Record<string, string | undefined>;
   scriptSubtab: ScriptSubtab;
 
   setView: (view: ActiveView) => void;
+  setActiveCollection: (id: string) => void;
   openTab: (item: ItemWithPath) => void;
   closeTab: (key: string) => void;
-  setActiveKey: (key: string | null) => void;
+  // `collection` is optional only because a caller that has no tab in hand (there is
+  // one: clearing to null) cannot supply it. Pass it whenever it is known — that is
+  // what stops anyone parsing a collection out of `key`.
+  setActiveKey: (key: string | null, collection?: string) => void;
   // Remaps every slug-keyed slice after a real MOVE (the only thing that changes a
   // key). A move never renames, so `OpenTab.name` needs no fixing up here.
   moveSubtree: (oldKey: string, newKey: string) => void;
@@ -90,6 +116,7 @@ interface UIState {
 
 export const useUIStore = create<UIState>()((set) => ({
   activeView: "workspace",
+  activeCollection: readStoredCollection(),
   openTabs: [],
   activeKey: null,
   drafts: {},
@@ -106,14 +133,23 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setView: (activeView) => set({ activeView }),
 
+  setActiveCollection: (id) => {
+    writeStoredCollection(id);
+    set({ activeCollection: id });
+  },
+
+  // Opening a request in another collection makes that collection the active one: every
+  // keyed slice is already collection-prefixed (itemKey), so nothing has to be cleared.
   openTab: (item) => {
     const key = itemKey(item);
+    writeStoredCollection(item.collection);
     set((s) => {
       const exists = s.openTabs.some((t) => t.key === key);
-      const tab: OpenTab = { key, name: item.item.name };
+      const tab: OpenTab = { key, name: item.item.name, collection: item.collection };
       return {
         openTabs: exists ? s.openTabs : [...s.openTabs, tab],
         activeKey: key,
+        activeCollection: item.collection,
         activeView: "workspace",
       };
     });
@@ -131,7 +167,14 @@ export const useUIStore = create<UIState>()((set) => ({
       return { openTabs, activeKey };
     }),
 
-  setActiveKey: (activeKey) => set({ activeKey }),
+  setActiveKey: (activeKey, collection) => {
+    if (collection === undefined) {
+      set({ activeKey });
+      return;
+    }
+    writeStoredCollection(collection);
+    set({ activeKey, activeCollection: collection });
+  },
 
   moveSubtree: (oldKey, newKey) =>
     set((s) => {

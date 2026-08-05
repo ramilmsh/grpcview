@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TransportProvider } from "@connectrpc/connect-query";
 import { transport } from "@/lib/client";
 import { AppShell } from "@/components/shell/AppShell";
+import { Centered } from "@/components/ui/Centered";
 import { useUIStore } from "@/lib/ui-store";
-import { useWorkspace } from "@/lib/workspace-query";
+import { useActiveWorkspace, useCollections } from "@/lib/workspace-query";
 import { WorkspaceView } from "@/features/workspace/WorkspaceView";
 import { NoCollection } from "@/features/workspace/NoCollection";
 import { SourcesView } from "@/features/sources/SourcesView";
@@ -28,10 +29,19 @@ const queryClient = new QueryClient({
 
 function CurrentView() {
   const activeView = useUIStore((s) => s.activeView);
-  const { notFound } = useWorkspace();
+  const { collections, isPending, error } = useCollections();
+  const { notFound } = useActiveWorkspace();
+  // Nothing at all until the listing resolves: a flash of "No collection here" over a
+  // workspace that has one reads as data loss.
+  if (isPending) return null;
+  // A listing that FAILED is not a workspace without collections — the scan may have hit
+  // the size cap, or the root may be unreadable. Say so, because offering to create one
+  // would be advice based on an answer we never got.
+  if (error) return <Centered>Could not list this workspace: {error.message}</Centered>;
   // Sources and Scripts are equally meaningless without a collection: one gate
-  // in front of the switch covers all three views.
-  if (notFound) return <NoCollection />;
+  // in front of the switch covers all three views. Two ways to have none — the
+  // workspace lists nothing, or the collection we address is not there anymore.
+  if (collections.length === 0 || notFound) return <NoCollection />;
   switch (activeView) {
     case "sources":
       return <SourcesView />;

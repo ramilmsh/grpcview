@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { BracketsCurly, Plus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
-import { useWorkspace, useCreateScript, COLLECTION_ID } from "@/lib/workspace-query";
+import { useActiveWorkspace, useCreateScript } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import type { ScriptKind } from "@grpcview/v1/workspace_pb";
 import { ScriptSidebar } from "./ScriptSidebar";
@@ -9,7 +9,9 @@ import { ScriptDetail } from "./ScriptDetail";
 import { NewScriptDialog } from "./NewScriptDialog";
 
 export function ScriptsView() {
-  const { workspace } = useWorkspace();
+  // Scoped to the active collection: the merged descriptor set, and therefore what a
+  // script can call, differs per collection.
+  const { collection, workspace } = useActiveWorkspace();
   const scripts = workspace?.scripts ?? [];
 
   const selectedName = useUIStore((s) => s.selectedScript);
@@ -23,7 +25,7 @@ export function ScriptsView() {
 
   const onCreate = (name: string, kind: ScriptKind) => {
     createScript.mutate(
-      { collection: COLLECTION_ID, name, kind },
+      { collection: collection ?? "", name, kind },
       {
         onSuccess: () => {
           selectScript(name);

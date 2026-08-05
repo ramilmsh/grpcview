@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Menu } from "@/components/ui/Menu";
 import { Tree, isEditableTarget } from "@/components/tree/Tree";
 import type { TreeHandle, TreeRowState } from "@/components/tree/types";
-import { useWorkspace, useRootItems, useWorkspaceMutations, COLLECTION_ID } from "@/lib/workspace-query";
+import { useActiveWorkspace, useRootItems, useWorkspaceMutations } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import {
   childPathOf,
@@ -55,7 +55,10 @@ const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => {
 };
 
 export function CollectionPanel() {
-  const { workspace, services } = useWorkspace();
+  const { collection: activeCollection, workspace, services } = useActiveWorkspace();
+  // Non-null everywhere this panel renders: App gates all three views behind the
+  // collection listing, so "" is the unreachable pre-gate value rather than a default.
+  const collection = activeCollection ?? "";
   const rootItems = useRootItems(workspace);
   const { createFolder, createRequest, deleteRequest, updateRequest, updateFolder, moveItem } =
     useWorkspaceMutations();
@@ -101,7 +104,7 @@ export function CollectionPanel() {
     const name = folderName.trim();
     if (name) {
       createFolder.mutate({
-        collection: COLLECTION_ID,
+        collection,
         path: childPathOf(newFolderParent ?? null),
         itemName: name,
       });
@@ -112,7 +115,7 @@ export function CollectionPanel() {
 
   const onPick = (service: Service, method: Method) => {
     createRequest.mutate({
-      collection: COLLECTION_ID,
+      collection,
       path: childPathOf(pickerParent ?? null),
       itemName: method.name,
       service: serviceName(service),
@@ -125,7 +128,7 @@ export function CollectionPanel() {
     const next = newName.trim();
     if (!next || next === item.item.name) return;
     const args = {
-      collection: COLLECTION_ID,
+      collection,
       path: item.path,
       itemName: item.item.name,
       name: next,
@@ -138,7 +141,7 @@ export function CollectionPanel() {
   const doDelete = () => {
     for (const item of confirm) {
       deleteRequest.mutate({
-        collection: COLLECTION_ID,
+        collection,
         path: item.path,
         itemName: item.item.name,
       });
@@ -188,7 +191,7 @@ export function CollectionPanel() {
       if (node === undefined) return;
       moveItem.mutate(
         {
-          collection: COLLECTION_ID,
+          collection,
           path: node.path,
           itemName: node.item.name,
           newPath,
@@ -198,7 +201,7 @@ export function CollectionPanel() {
           // The new key comes from the response, never from names: Move allocates a
           // fresh slug when the destination already has one by that name.
           onSuccess: (res) => {
-            const newKey = slugKeyIn(COLLECTION_ID, res.collection?.item, newPath, node.item.name);
+            const newKey = slugKeyIn(collection, res.collection?.item, newPath, node.item.name);
             if (newKey) moveSubtree(itemKey(node), newKey);
             fire(i + 1);
           },

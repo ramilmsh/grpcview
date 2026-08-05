@@ -149,6 +149,11 @@ message Script {
 
 message Collection {
   string                    name     = 1;
+  // The workspace-relative path this collection is addressed by; "." is the root.
+  // Echoed back so a response identifies which collection it is about — the write
+  // RPCs seed the Get cache off it rather than off the id the caller happened to send.
+  // Addressing only, and never written to disk: the id IS the disk location.
+  string                    id       = 7;
   Item                      item     = 2;
   repeated DescriptorSource sources  = 3;
   // Derived by the priority merge: one entry per fully-qualified service.

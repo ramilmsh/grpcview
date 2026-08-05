@@ -2,29 +2,29 @@ import { useState, type KeyboardEvent } from "react";
 import { FolderPlus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Input, Field } from "@/components/ui/Input";
-import { useCreateCollection, openCollection, COLLECTION_ID } from "@/lib/workspace-query";
+import { useActiveCollectionId, useCreateCollection } from "@/lib/workspace-query";
 import { collectionBaseName, normalizeCollectionPath } from "./collection-path";
 
-// The directory to offer: the address that just came back not_found, so "create" means
-// "create the collection I asked for". The one exception is ".", which every load falls
-// back to when nothing named a collection — there, offering to scatter grpcview.json
-// across the repo root is a worse guess than suggesting a subdirectory for it.
-const suggestedDir = COLLECTION_ID === "." ? "requests" : COLLECTION_ID;
-
 // Replaces the workspace view (and Sources/Scripts, equally meaningless without a
-// collection) when Get comes back not_found: this workspace has no grpcview
-// collection at the addressed path, and nothing creates one implicitly anymore.
+// collection) when the workspace lists none, or when Get comes back not_found for the
+// one we address: nothing creates a collection implicitly anymore.
 export function NoCollection() {
+  const activeCollection = useActiveCollectionId();
+  // The directory to offer: the address that just came back not_found, so "create" means
+  // "create the collection I asked for". The exceptions are "." and no collection at all
+  // — there, offering to scatter grpcview.json across the repo root is a worse guess than
+  // suggesting a subdirectory for it.
+  const suggestedDir =
+    !activeCollection || activeCollection === "." ? "requests" : activeCollection;
+
   const [dir, setDir] = useState(suggestedDir);
   const [name, setName] = useState("");
+  // The hook activates the new collection and refreshes the listing itself, so success
+  // here needs no follow-up (and certainly no reload).
   const createCollection = useCreateCollection();
 
   const submit = () => {
-    const collection = normalizeCollectionPath(dir);
-    createCollection.mutate(
-      { collection, name: name.trim() },
-      { onSuccess: () => openCollection(collection) }
-    );
+    createCollection.mutate({ collection: normalizeCollectionPath(dir), name: name.trim() });
   };
 
   const onEnter = (e: KeyboardEvent) => {

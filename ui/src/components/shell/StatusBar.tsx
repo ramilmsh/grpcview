@@ -1,9 +1,9 @@
-import { useWorkspace } from "@/lib/workspace-query";
+import { useActiveWorkspace } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { latencyLabel } from "@/lib/format";
 
 export function StatusBar() {
-  const { sources, reflection } = useWorkspace();
+  const { sources, reflection } = useActiveWorkspace();
   const activeKey = useUIStore((s) => s.activeKey);
   const invoke = useUIStore((s) => (activeKey ? s.invokes[activeKey] : undefined));
   const latency = invoke?.response?.latency;

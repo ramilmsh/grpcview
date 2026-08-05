@@ -555,6 +555,16 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   name: string;
 
   /**
+   * The workspace-relative path this collection is addressed by; "." is the root.
+   * Echoed back so a response identifies which collection it is about — the write
+   * RPCs seed the Get cache off it rather than off the id the caller happened to send.
+   * Addressing only, and never written to disk: the id IS the disk location.
+   *
+   * @generated from field: string id = 7;
+   */
+  id: string;
+
+  /**
    * @generated from field: grpcview.v1.Item item = 2;
    */
   item?: Item | undefined;

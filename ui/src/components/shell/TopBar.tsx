@@ -1,10 +1,13 @@
 import { Broadcast, CaretDown, MagnifyingGlass, Gear } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
-import { useWorkspace, hostLabel, COLLECTION_ID } from "@/lib/workspace-query";
+import { useActiveWorkspace, hostLabel } from "@/lib/workspace-query";
 
 export function TopBar() {
-  const { reflection, sources } = useWorkspace();
+  const { collection, workspace, reflection, sources } = useActiveWorkspace();
+  // The NAME, disambiguated by the id in the tooltip: a collection is addressed by its
+  // path and named separately, so five of them may all be called "requests".
+  const collectionLabel = workspace?.name || collection || "";
   const connected = !!reflection;
   const sourceCount = `${sources.length} source${sources.length === 1 ? "" : "s"}`;
 
@@ -40,11 +43,11 @@ export function TopBar() {
       <Button
         className="text-neutral-200"
         style={{ padding: "4px 9px", fontSize: 13, gap: 7, cursor: "default" }}
-        title="Single collection in Phase 1"
+        title={collection ?? "No collection"}
         disabled
       >
         <span className="text-accent" style={{ fontSize: 13 }}>❯</span>
-        {COLLECTION_ID}
+        {collectionLabel}
         <CaretDown size={11} style={{ opacity: 0.5 }} />
       </Button>
 
