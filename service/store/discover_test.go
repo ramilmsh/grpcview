@@ -34,7 +34,7 @@ func writeCollectionAt(t *testing.T, root, rel, name string, addresses ...string
 func writeWorkspaceManifest(t *testing.T, root string, collections ...string) {
 	t.Helper()
 	ws := &grpcviewstorev1.Workspace{SchemaVersion: schemaVersion, Name: "acme", Collections: collections}
-	if err := writeMessage(filepath.Join(root, workspaceFileName), ws); err != nil {
+	if err := writeMessage(filepath.Join(root, WorkspaceFileName), ws); err != nil {
 		t.Fatalf("write workspace manifest: %v", err)
 	}
 }

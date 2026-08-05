@@ -13,14 +13,15 @@ import (
 )
 
 const (
-	// workspaceFileName and CollectionFileName differ by five characters in a listing,
+	// WorkspaceFileName and CollectionFileName differ by five characters in a listing,
 	// which is accepted (after go.work) — but only because both names live HERE, so a
 	// product rename edits one place rather than every use site.
 	//
-	// CollectionFileName alone is exported: it is also what marks a directory as a
-	// collection to a caller OUTSIDE the store, since the CLI walks up from the cwd looking
-	// for one (service/cli/collection.go).
-	workspaceFileName  = "grpcview.work.json"
+	// Both are exported because both are named OUTSIDE the store: CollectionFileName is what
+	// marks a directory as a collection to the CLI walking up from the cwd
+	// (service/cli/collection.go), and WorkspaceFileName is named in the error a reference to
+	// an undefined shared source reports, which has to say which file to fix.
+	WorkspaceFileName  = "grpcview.work.json"
 	CollectionFileName = "grpcview.json"
 	folderFileName     = "folder.json"
 	requestFileName    = "request.json"

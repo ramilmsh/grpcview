@@ -56,20 +56,48 @@ func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
 // Both source conversions preserve priority order, and neither carries descriptor bytes: a
 // source is a pointer plus authored config on both sides of the boundary, and its bytes live in
 // the descriptor store (see blobs.go).
-func diskToWireSources(in []*grpcviewstorev1.DescriptorSource) []*grpcviewv1.DescriptorSource {
+//
+// Both also take the workspace's shared definitions (Store.workspaceDefinitions), because the
+// collection/workspace tiering is a property of the BOUNDARY and of nothing else: a collection's
+// manifest holds the ordered list, an entry in it may be a bare reference into that set, and the
+// wire form is where the two are joined.
+func diskToWireSources(
+	in []*grpcviewstorev1.DescriptorSource,
+	defs map[string]*grpcviewstorev1.DescriptorSource,
+) []*grpcviewv1.DescriptorSource {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make([]*grpcviewv1.DescriptorSource, 0, len(in))
 	for _, ds := range in {
-		out = append(out, diskToWireSource(ds))
+		out = append(out, diskToWireSource(ds, defs))
 	}
 	return out
 }
 
-func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) *grpcviewv1.DescriptorSource {
-	out := &grpcviewv1.DescriptorSource{Id: ds.GetId(), CommitDescriptors: ds.GetCommitDescriptors()}
-	switch src := ds.GetSource().(type) {
+// diskToWireSource resolves a REFERENCE — a disk entry with an id and no oneof arm — against the
+// workspace's definitions as it builds the wire form. Only the arm comes from the definition: the
+// entry keeps its own position in this collection's list and its own commit_descriptors, which is
+// what makes precedence and storage location per collection while the config is shared.
+//
+// A reference the workspace does not define keeps its row, arm and all left empty. It must be
+// visible and removable rather than silently absent, and the layer above turns "origin WORKSPACE,
+// no kind" into the error naming the manifest that should define it.
+func diskToWireSource(
+	ds *grpcviewstorev1.DescriptorSource,
+	defs map[string]*grpcviewstorev1.DescriptorSource,
+) *grpcviewv1.DescriptorSource {
+	out := &grpcviewv1.DescriptorSource{
+		Id:                ds.GetId(),
+		CommitDescriptors: ds.GetCommitDescriptors(),
+		Origin:            grpcviewv1.SourceOrigin_SOURCE_ORIGIN_COLLECTION,
+	}
+	source := ds.GetSource()
+	if source == nil {
+		out.Origin = grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE
+		source = defs[ds.GetId()].GetSource()
+	}
+	switch src := source.(type) {
 	case *grpcviewstorev1.DescriptorSource_Reflection:
 		out.Source = &grpcviewv1.DescriptorSource_Reflection{Reflection: reflectionToServer(src.Reflection)}
 	case *grpcviewstorev1.DescriptorSource_Upload:
@@ -80,19 +108,37 @@ func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) *grpcviewv1.Descript
 	return out
 }
 
-func wireToDiskSources(in []*grpcviewv1.DescriptorSource) []*grpcviewstorev1.DescriptorSource {
+func wireToDiskSources(
+	in []*grpcviewv1.DescriptorSource,
+	defs map[string]*grpcviewstorev1.DescriptorSource,
+) []*grpcviewstorev1.DescriptorSource {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(in))
 	for _, ws := range in {
-		out = append(out, wireToDiskSource(ws))
+		out = append(out, wireToDiskSource(ws, defs))
 	}
 	return out
 }
 
-func wireToDiskSource(ws *grpcviewv1.DescriptorSource) *grpcviewstorev1.DescriptorSource {
+// wireToDiskSource writes a source back as the BARE reference the manifest should hold whenever the
+// workspace defines its id — id plus this collection's own commit_descriptors, no arm.
+//
+// This is the load-bearing invariant of the shared-definition tier: every mutation round-trips the
+// whole list through the wire form, so inlining here would copy shared config into all five
+// collections on the first reorder and quietly undo the sharing. Collapsing an inline entry whose
+// id the workspace already defines loses nothing, because identity is config-derived — the same id
+// IS the same config — and it is what makes re-adding a target the workspace already declares
+// produce a reference rather than a duplicate copy.
+func wireToDiskSource(
+	ws *grpcviewv1.DescriptorSource,
+	defs map[string]*grpcviewstorev1.DescriptorSource,
+) *grpcviewstorev1.DescriptorSource {
 	out := &grpcviewstorev1.DescriptorSource{Id: ws.GetId(), CommitDescriptors: ws.GetCommitDescriptors()}
+	if defs[ws.GetId()] != nil || ws.GetOrigin() == grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+		return out
+	}
 	switch src := ws.GetSource().(type) {
 	case *grpcviewv1.DescriptorSource_Reflection:
 		out.Source = &grpcviewstorev1.DescriptorSource_Reflection{Reflection: serverToReflection(src.Reflection)}

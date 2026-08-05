@@ -63,9 +63,14 @@ func newSourcesLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comma
 		Use:   "ls",
 		Short: "List the definition sources in priority order",
 		Long: "List every definition source in PRIORITY order, one per line: priority, id,\n" +
-			"kind, whether its descriptors are committed to the repo or cached in local\n" +
-			"state, resolved file count, how many services the source serves, how many it\n" +
-			"won, and its status.\n\n" +
+			"kind, whether its config is this collection's own or a definition shared by\n" +
+			"the whole workspace, whether its descriptors are committed to the repo or\n" +
+			"cached in local state, resolved file count, how many services the source\n" +
+			"serves, how many it won, and its status.\n\n" +
+			"A `workspace` source is defined once in grpcview.work.json and referenced from\n" +
+			"this collection's list by id. Its priority here, its removal from here and\n" +
+			"where its descriptors are stored are all still this collection's own choices;\n" +
+			"its address is not, and is edited in that manifest.\n\n" +
 			"Serving and winning are different numbers, and the difference is the point.\n" +
 			"Walking the list front to back, the first source to define a proto file or\n" +
 			"serve a service wins it, so a source can serve five services and win none\n" +
@@ -312,6 +317,9 @@ func newSourcesRmCmd(g *globalFlags, open clientFactory) *cobra.Command {
 			"The sources that remain keep their relative order and the merged view is\n" +
 			"re-derived from their caches, so removing reaches no network and an\n" +
 			"unreachable sibling cannot block it.\n\n" +
+			"Removing a `workspace` source removes THIS collection's reference to it and\n" +
+			"never the shared definition in grpcview.work.json: every other collection\n" +
+			"referencing it is untouched, and re-adding it here restores the reference.\n\n" +
 			"Nothing is printed on success.",
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
@@ -375,6 +383,7 @@ type sourceRow struct {
 	priority string
 	id       string
 	kind     string
+	origin   string
 	stored   string
 	files    string
 	serves   string
@@ -390,6 +399,7 @@ func sourceRows(sources []*grpcviewv1.DescriptorSource) []sourceRow {
 			priority: strconv.Itoa(i + 1),
 			id:       src.GetId(),
 			kind:     sourceKind(src),
+			origin:   sourceOrigin(src),
 			stored:   sourceStorage(src),
 			files:    fileCount(resolved.GetFileCount()),
 			serves:   fmt.Sprintf("serves %d", len(resolved.GetServiceNames())),
@@ -398,6 +408,17 @@ func sourceRows(sources []*grpcviewv1.DescriptorSource) []sourceRow {
 		})
 	}
 	return rows
+}
+
+// sourceOrigin names where this row's CONFIG lives, spelled out for the same reason the stored
+// column is: a shared definition and a collection's own are equally normal answers, so neither
+// gets a blank. A workspace source's priority, its presence in this list and where its descriptors
+// are stored are all still this collection's own; only its address is edited elsewhere.
+func sourceOrigin(src *grpcviewv1.DescriptorSource) string {
+	if src.GetOrigin() == grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+		return "workspace"
+	}
+	return "collection"
 }
 
 // sourceStorage names where this source's descriptors live. Both values are spelled out rather
@@ -452,11 +473,12 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 func renderSources(w io.Writer, sources []*grpcviewv1.DescriptorSource) error {
 	rows := sourceRows(sources)
 
-	var priorityWidth, idWidth, kindWidth, storedWidth, filesWidth, servesWidth, winsWidth int
+	var priorityWidth, idWidth, kindWidth, originWidth, storedWidth, filesWidth, servesWidth, winsWidth int
 	for _, row := range rows {
 		priorityWidth = max(priorityWidth, len(row.priority))
 		idWidth = max(idWidth, len(row.id))
 		kindWidth = max(kindWidth, len(row.kind))
+		originWidth = max(originWidth, len(row.origin))
 		storedWidth = max(storedWidth, len(row.stored))
 		filesWidth = max(filesWidth, len(row.files))
 		servesWidth = max(servesWidth, len(row.serves))
@@ -464,10 +486,11 @@ func renderSources(w io.Writer, sources []*grpcviewv1.DescriptorSource) error {
 	}
 
 	for _, row := range rows {
-		line := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s",
+		line := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s",
 			priorityWidth, row.priority,
 			idWidth, row.id,
 			kindWidth, row.kind,
+			originWidth, row.origin,
 			storedWidth, row.stored,
 			filesWidth, row.files,
 			servesWidth, row.serves,

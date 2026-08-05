@@ -30,14 +30,22 @@ func committed(src *grpcviewv1.DescriptorSource) *grpcviewv1.DescriptorSource {
 	return src
 }
 
+// shared marks a row as coming from a definition in grpcview.work.json rather than from this
+// collection's own manifest — the read-only origin the server stamps.
+func shared(src *grpcviewv1.DescriptorSource) *grpcviewv1.DescriptorSource {
+	src.Origin = grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE
+	return src
+}
+
 func sourcesWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Sources = []*grpcviewv1.DescriptorSource{
-		reflectionSource("localhost:50055", &grpcviewv1.Resolved{
+		// A monorepo's shared reflection target: listed here, defined once for the workspace.
+		shared(reflectionSource("localhost:50055", &grpcviewv1.Resolved{
 			FileCount:       4,
 			ServiceNames:    []string{"auth.v1.AuthService", "echo.v1.EchoService"},
 			WonServiceNames: []string{"auth.v1.AuthService", "echo.v1.EchoService"},
-		}),
+		})),
 		// The upload is the kind that most wants committing: it cannot be re-fetched.
 		committed(uploadSource("echo.binpb", &grpcviewv1.Resolved{
 			FileCount:    3,
@@ -50,9 +58,9 @@ func sourcesWorkspace() *grpcviewv1.Collection {
 	return ws
 }
 
-const sourcesGolden = `1  reflection:localhost:50055    reflection  cached     4 files  serves 2  wins 2
-2  upload:echo.binpb             upload      committed  3 files  serves 1  wins 0  shadowed
-3  reflection:gone.example:9999  reflection  cached     0 files  serves 0  wins 0  error: dial tcp 10.0.0.1:9999: connect: connection refused
+const sourcesGolden = `1  reflection:localhost:50055    reflection  workspace   cached     4 files  serves 2  wins 2
+2  upload:echo.binpb             upload      collection  committed  3 files  serves 1  wins 0  shadowed
+3  reflection:gone.example:9999  reflection  collection  cached     0 files  serves 0  wins 0  error: dial tcp 10.0.0.1:9999: connect: connection refused
 `
 
 func TestSourcesLs(t *testing.T) {

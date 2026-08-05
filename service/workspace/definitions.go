@@ -205,7 +205,7 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 		if blob, ok := stored[rs.id]; ok {
 			rs.files, rs.services = blob.GetDescriptorSet(), blob.GetServiceNames()
 		} else {
-			rs.err = errUnresolvedSource
+			rs.err = unresolvedReason(src)
 		}
 		resolved = append(resolved, rs)
 	}

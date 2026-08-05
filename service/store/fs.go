@@ -47,6 +47,10 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 	if err != nil {
 		return nil, err
 	}
+	defs, err := c.store.workspaceDefinitions()
+	if err != nil {
+		return nil, err
+	}
 
 	name := cmp.Or(col.GetName(), c.defaultName())
 	return &grpcviewv1.Collection{
@@ -58,7 +62,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 			Name:    name,
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: rootItems}},
 		},
-		Sources: diskToWireSources(col.GetSources()),
+		Sources: diskToWireSources(col.GetSources(), defs),
 		Scripts: scripts,
 	}, nil
 }
@@ -84,7 +88,8 @@ func (c *Collection) Summary(_ context.Context) (name string, sourceCount int, e
 	return cmp.Or(col.GetName(), c.defaultName()), len(col.GetSources()), nil
 }
 
-// Sources returns just the manifest's descriptor-source list, in priority order.
+// Sources returns just the manifest's descriptor-source list, in priority order, with any bare
+// reference in it joined to the workspace definition it names.
 func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -95,7 +100,11 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 	if err != nil {
 		return nil, err
 	}
-	return diskToWireSources(col.GetSources()), nil
+	defs, err := c.store.workspaceDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	return diskToWireSources(col.GetSources(), defs), nil
 }
 
 func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
@@ -130,7 +139,49 @@ func (c *Collection) Create(_ context.Context, name string) error {
 	if name == "" {
 		name = c.defaultName()
 	}
-	return c.writeCollection(&grpcviewstorev1.Collection{Name: name})
+	seeded, err := c.seededSources()
+	if err != nil {
+		return err
+	}
+	return c.writeCollection(&grpcviewstorev1.Collection{Name: name, Sources: seeded})
+}
+
+// seededSources is the source list a new collection starts with: bare REFERENCES to the ids the
+// workspace manifest's defaults.sources names, in that order.
+//
+// References rather than copies, so a monorepo's shared target stays one definition however many
+// collections are created against it. And pointers only: nothing here acquires, so a seeded
+// collection lists sources and still resolves nothing until something refreshes them — which is
+// what `grpcview init` says on stderr when it seeded any.
+//
+// An id no definition matches is skipped with a warning rather than seeded, because a brand-new
+// collection carrying a broken row nobody typed is noise; a reference that BREAKS later is the
+// different case, and that one keeps its row.
+func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error) {
+	ws, err := c.store.readWorkspaceManifest()
+	if err != nil {
+		return nil, err
+	}
+	ids := ws.GetDefaults().GetSources()
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	defs := c.store.definitionSet(ws.GetSources())
+	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(ids))
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if defs[id] == nil {
+			c.logger.Warn("skipping a default descriptor source the workspace manifest does not define",
+				"id", id, "manifest", WorkspaceFileName)
+			continue
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, &grpcviewstorev1.DescriptorSource{Id: id})
+	}
+	return out, nil
 }
 
 // CreateFolder creates a folder inside the folder addressed by the display-name path parent.
@@ -531,7 +582,13 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 	if err != nil {
 		return err
 	}
-	col.Sources = wireToDiskSources(state.Sources)
+	// The definitions are consulted on the WRITE too, not only on the read: a source the workspace
+	// declares goes back as a bare reference, so no mutation can inline shared config here.
+	defs, err := c.store.workspaceDefinitions()
+	if err != nil {
+		return err
+	}
+	col.Sources = wireToDiskSources(state.Sources, defs)
 	if err := c.writeCollection(col); err != nil {
 		return err
 	}

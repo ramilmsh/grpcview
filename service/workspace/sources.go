@@ -106,8 +106,29 @@ func resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSource) (*resolve
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"source %q is an upload, which has no address or path to re-resolve from: refresh it by uploading the file again", id))
 	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q has no kind", id))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errMissingDefinition(id))
 	}
+}
+
+// errMissingDefinition is the one failure a REFERENCE has of its own. An entry in a collection's
+// list carrying an id and no config means "resolve this against the workspace manifest", so a
+// source that reaches any consumer with no kind at all is exactly that entry with nothing behind
+// it — a definition renamed, deleted, or (for an upload) never legal at the workspace level. The
+// message names the file to fix, because the row is in one manifest and the fix is in another.
+func errMissingDefinition(id string) error {
+	return fmt.Errorf(
+		"%s does not define the source %q this collection references: define it there, or remove the reference from this collection",
+		store.WorkspaceFileName, id)
+}
+
+// unresolvedReason is why a source in the list contributed nothing. Both cases contribute nothing
+// and neither is fatal, but only one is fixed by a refresh — a reference with no definition would
+// resolve forever without ever acquiring anything.
+func unresolvedReason(src *grpcviewv1.DescriptorSource) error {
+	if src.GetSource() == nil {
+		return errMissingDefinition(src.GetId())
+	}
+	return errUnresolvedSource
 }
 
 func (w Workspace) resolveConfigured(

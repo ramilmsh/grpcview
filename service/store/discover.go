@@ -109,11 +109,7 @@ func (s *Store) summarize(ctx context.Context, id string) CollectionInfo {
 // absent or pins nothing — nil meaning "scan", distinct from an empty non-nil slice meaning
 // "the workspace declares no collections".
 func (s *Store) declaredIDs() ([]string, error) {
-	ws := &grpcviewstorev1.Workspace{}
-	err := readMessage(filepath.Join(s.root, workspaceFileName), ws)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
+	ws, err := s.readWorkspaceManifest()
 	if err != nil {
 		return nil, err
 	}

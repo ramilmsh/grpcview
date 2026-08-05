@@ -28,6 +28,33 @@ message Workspace {
   string name = 2;
   // Workspace-relative paths or globs ("services/*/requests"); empty means "scan".
   repeated string collections = 3;
+  // sources are descriptor-source DEFINITIONS shared by every collection in the
+  // workspace, keyed by the same config-derived id a collection's own entry uses — so a
+  // source declared here and listed there is literally the same source, and five
+  // collections pointing at one target need one copy of its config.
+  //
+  // It is a SET, deliberately NOT an order: precedence is per collection and only per
+  // collection, so what the merge walks is the collection's list (Collection.sources).
+  // An entry there with an id and no oneof arm of its own is a REFERENCE resolved
+  // against this set, keeping its own position and its own commit_descriptors.
+  //
+  // A definition may not be an Upload: an upload is the null-pointer kind, and its bytes
+  // belong to whichever collection handed them over, so a workspace-level one would have
+  // nowhere to live. commit_descriptors on a definition is meaningless and ignored,
+  // because a sidecar can only live inside a collection — that flag belongs to the
+  // referencing collection's entry, which carries its own.
+  repeated DescriptorSource sources = 4;
+  Defaults defaults = 5;
+}
+
+// Defaults is what a NEW collection in this workspace starts from, so `grpcview init` in a
+// configured monorepo does not begin with an empty source list.
+message Defaults {
+  // sources are definition ids seeded into a new collection's list, in this order, as bare
+  // references; an id no definition matches is skipped. Seeding writes POINTERS and
+  // resolves nothing — a seeded collection has no descriptors until something acquires
+  // them.
+  repeated string sources = 1;
 }
 
 // CollectionIndex is the cached result of a workspace scan. Unlike every other

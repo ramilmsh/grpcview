@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -18,9 +19,11 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
@@ -825,5 +828,385 @@ func TestRefreshAnUploadFails(t *testing.T) {
 	}
 	if !hasService(got.Msg.GetCollection().GetServices(), "Health") {
 		t.Errorf("the upload lost its descriptors: %v", got.Msg.GetCollection().GetServices())
+	}
+}
+
+// Shared definitions (1d-C): the workspace manifest holds the source DEFINITIONS, each collection
+// holds the ordered LIST, and an entry in that list may be a bare reference by id.
+
+// writeWorkspaceDefinitions hand-writes grpcview.work.json the way a user commits it — one shared
+// reflection definition plus the defaults a new collection is seeded from — and returns the id that
+// definition is addressed by.
+func writeWorkspaceDefinitions(t *testing.T, root string, port int) string {
+	t.Helper()
+	id := fmt.Sprintf("reflection:127.0.0.1:%d", port)
+	manifest := fmt.Sprintf(`{
+  "schemaVersion": 1,
+  "name": "acme",
+  "sources": [{"reflection": {"address": "127.0.0.1:%d"}}],
+  "defaults": {"sources": [%q]}
+}
+`, port, id)
+	if err := os.WriteFile(filepath.Join(root, store.WorkspaceFileName), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write %s: %v", store.WorkspaceFileName, err)
+	}
+	return id
+}
+
+func manifestText(t *testing.T, w Workspace, collectionID string) string {
+	t.Helper()
+	coll, err := w.store.Open(context.Background(), collectionID)
+	if err != nil {
+		t.Fatalf("Open %s: %v", collectionID, err)
+	}
+	data, err := os.ReadFile(filepath.Join(coll.Root(), store.CollectionFileName))
+	if err != nil {
+		t.Fatalf("read %s manifest: %v", collectionID, err)
+	}
+	return string(data)
+}
+
+// assertBareReference parses the collection's own committed manifest, which is the only place the
+// sharing can be verified: a wire response looks identical either way, because a reference is
+// joined to its definition on the way out.
+func assertBareReference(t *testing.T, w Workspace, collectionID, id string) {
+	t.Helper()
+	col := &grpcviewstorev1.Collection{}
+	if err := protojson.Unmarshal([]byte(manifestText(t, w, collectionID)), col); err != nil {
+		t.Fatalf("parse %s manifest: %v", collectionID, err)
+	}
+	for _, entry := range col.GetSources() {
+		if entry.GetId() != id {
+			continue
+		}
+		if entry.GetSource() != nil {
+			t.Errorf("%s inlined the shared definition %q instead of referencing it: %+v", collectionID, id, entry)
+		}
+		return
+	}
+	t.Errorf("%s does not list %q at all:\n%s", collectionID, id, manifestText(t, w, collectionID))
+}
+
+func workspaceBlobNames(t *testing.T, w Workspace, collectionID string) []string {
+	t.Helper()
+	coll, err := w.store.Open(context.Background(), collectionID)
+	if err != nil {
+		t.Fatalf("Open %s: %v", collectionID, err)
+	}
+	// A collection's state dir is <state root>/collections/<hash>, so two levels up is the state
+	// root the blobs are shared in.
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(filepath.Dir(coll.State())), "blobs"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("ReadDir blobs: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+func refreshSource(t *testing.T, w Workspace, ctx context.Context, collectionID, id string) *grpcviewv1.Collection {
+	t.Helper()
+	resp, err := w.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
+		Collection: collectionID,
+		Id:         id,
+	}))
+	if err != nil {
+		t.Fatalf("RefreshDescriptorSource %s/%s: %v", collectionID, id, err)
+	}
+	return resp.Msg.GetCollection()
+}
+
+func createCollectionAt(t *testing.T, w Workspace, ctx context.Context, collectionID string) *grpcviewv1.Collection {
+	t.Helper()
+	resp, err := w.CreateCollection(ctx, connect.NewRequest(&grpcviewv1.CreateCollectionRequest{Collection: collectionID}))
+	if err != nil {
+		t.Fatalf("CreateCollection %s: %v", collectionID, err)
+	}
+	return resp.Msg.GetCollection()
+}
+
+// TestSharedDefinitionServesTwoCollections is the monorepo shape this tier exists for: one
+// definition in grpcview.work.json, two collections seeded with references to it, both resolving,
+// and ONE copy of the descriptor bytes for the two.
+//
+// It also pins the correction to the plan's claim that seeding "produces a collection that already
+// resolves": seeding writes pointers, so the freshly created collection's row carries an
+// unresolved error until something acquires.
+func TestSharedDefinitionServesTwoCollections(t *testing.T) {
+	root := t.TempDir()
+	w := newWorkspaceAt(t, root)
+	ctx := context.Background()
+	port := startReflectionServer(t, true)
+	id := writeWorkspaceDefinitions(t, root, port)
+
+	ids := []string{"services/payments/requests", "services/ledger/requests"}
+	for _, cid := range ids {
+		created := createCollectionAt(t, w, ctx, cid)
+		sources := created.GetSources()
+		if len(sources) != 1 || sources[0].GetId() != id {
+			t.Fatalf("%s was not seeded from defaults.sources: %v", cid, sources)
+		}
+		if sources[0].GetOrigin() != grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+			t.Errorf("%s seeded origin = %v, want WORKSPACE", cid, sources[0].GetOrigin())
+		}
+		if sources[0].GetResolved().GetError() == "" {
+			t.Errorf("%s: seeding writes pointers, so the seeded source must read as unresolved", cid)
+		}
+		if len(created.GetServices()) != 0 {
+			t.Errorf("%s resolved something on creation: %v", cid, created.GetServices())
+		}
+		assertBareReference(t, w, cid, id)
+
+		if got := refreshSource(t, w, ctx, cid, id); !hasService(got.GetServices(), "Health") {
+			t.Fatalf("%s did not resolve the shared definition: %v", cid, got.GetServices())
+		}
+		assertBareReference(t, w, cid, id)
+	}
+
+	for _, cid := range ids {
+		got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: cid}))
+		if err != nil {
+			t.Fatalf("Get %s: %v", cid, err)
+		}
+		if !hasService(got.Msg.GetCollection().GetServices(), "Health") {
+			t.Errorf("%s lost the shared definition's services on reload: %v", cid, got.Msg.GetCollection().GetServices())
+		}
+	}
+	if got := workspaceBlobNames(t, w, ids[0]); len(got) != 1 {
+		t.Errorf("two collections referencing one definition must share one blob, got %v", got)
+	}
+}
+
+// TestRemovingAReferenceLeavesTheDefinition: removing a shared source removes THIS collection's
+// reference. Nothing in that path may write the workspace manifest — no RPC in this sub-phase does.
+func TestRemovingAReferenceLeavesTheDefinition(t *testing.T) {
+	root := t.TempDir()
+	w := newWorkspaceAt(t, root)
+	ctx := context.Background()
+	port := startReflectionServer(t, true)
+	id := writeWorkspaceDefinitions(t, root, port)
+
+	const payments, ledger = "services/payments/requests", "services/ledger/requests"
+	for _, cid := range []string{payments, ledger} {
+		createCollectionAt(t, w, ctx, cid)
+		refreshSource(t, w, ctx, cid, id)
+	}
+	manifestPath := filepath.Join(root, store.WorkspaceFileName)
+	before, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", store.WorkspaceFileName, err)
+	}
+
+	removed, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RemoveDescriptorSourceRequest{
+		Collection: payments,
+		Id:         id,
+	}))
+	if err != nil {
+		t.Fatalf("RemoveDescriptorSource: %v", err)
+	}
+	if len(removed.Msg.GetCollection().GetSources()) != 0 {
+		t.Errorf("the reference survived its removal: %v", removed.Msg.GetCollection().GetSources())
+	}
+
+	after, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("re-read %s: %v", store.WorkspaceFileName, err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("%s was rewritten by a collection-level removal:\n%s\n---\n%s",
+			store.WorkspaceFileName, before, after)
+	}
+
+	still, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: ledger}))
+	if err != nil {
+		t.Fatalf("Get %s: %v", ledger, err)
+	}
+	if !hasService(still.Msg.GetCollection().GetServices(), "Health") {
+		t.Errorf("%s lost the shared definition when %s dropped its reference: %v",
+			ledger, payments, still.Msg.GetCollection().GetServices())
+	}
+}
+
+// TestAddingASourceTheWorkspaceDefinesReferencesIt: the dedup users actually hit. Adding the
+// address the workspace already declares must produce a reference, not a fifth copy of the config.
+func TestAddingASourceTheWorkspaceDefinesReferencesIt(t *testing.T) {
+	root := t.TempDir()
+	w := newWorkspaceAt(t, root)
+	ctx := context.Background()
+	port := startReflectionServer(t, true)
+	id := writeWorkspaceDefinitions(t, root, port)
+
+	// No defaults are involved: this collection is created, its seeded reference removed, and the
+	// same address then added by hand.
+	const cid = "services/payments/requests"
+	createCollectionAt(t, w, ctx, cid)
+	if _, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RemoveDescriptorSourceRequest{
+		Collection: cid,
+		Id:         id,
+	})); err != nil {
+		t.Fatalf("RemoveDescriptorSource (seeded): %v", err)
+	}
+
+	added, err := w.AddDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.AddDescriptorSourceRequest{
+		Collection: cid,
+		Source: &grpcviewv1.AddDescriptorSourceRequest_Reflection{
+			Reflection: &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource: %v", err)
+	}
+	sources := added.Msg.GetCollection().GetSources()
+	if len(sources) != 1 || sources[0].GetId() != id {
+		t.Fatalf("sources = %v, want the one shared id", sources)
+	}
+	if sources[0].GetOrigin() != grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+		t.Errorf("origin = %v, want WORKSPACE: an add of a defined id is a reference", sources[0].GetOrigin())
+	}
+	if !hasService(added.Msg.GetCollection().GetServices(), "Health") {
+		t.Errorf("the add resolved nothing: %v", added.Msg.GetCollection().GetServices())
+	}
+	assertBareReference(t, w, cid, id)
+}
+
+// TestReferenceWithNoDefinitionKeepsItsRow: a reference whose definition is missing must be
+// VISIBLE — that is what makes it removable — and its error has to name the manifest that should
+// define it, because the row is in one file and the fix is in another.
+func TestReferenceWithNoDefinitionKeepsItsRow(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	const id = "reflection:missing.example:50051"
+	coll, err := w.store.Open(ctx, testWorkspace)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	manifest := fmt.Sprintf(`{"schemaVersion": 1, "name": "test", "sources": [{"id": %q}]}`, id)
+	if err := os.WriteFile(filepath.Join(coll.Root(), store.CollectionFileName), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write collection manifest: %v", err)
+	}
+
+	got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	sources := got.Msg.GetCollection().GetSources()
+	if len(sources) != 1 || sources[0].GetId() != id {
+		t.Fatalf("sources = %v, want the dangling reference's row", sources)
+	}
+	if sources[0].GetOrigin() != grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+		t.Errorf("origin = %v, want WORKSPACE", sources[0].GetOrigin())
+	}
+	reason := sources[0].GetResolved().GetError()
+	if !strings.Contains(reason, store.WorkspaceFileName) || !strings.Contains(reason, id) {
+		t.Errorf("error = %q, want it to name both %s and the id", reason, store.WorkspaceFileName)
+	}
+
+	// Refreshing it says the same thing rather than dialing something that isn't configured.
+	_, err = w.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
+		Collection: testWorkspace,
+		Id:         id,
+	}))
+	if err == nil || !strings.Contains(err.Error(), store.WorkspaceFileName) {
+		t.Errorf("RefreshDescriptorSource error = %v, want it to name %s", err, store.WorkspaceFileName)
+	}
+}
+
+// TestCommitAndRefreshWorkOnAReference: neither RPC needs to know about the tier, but both have to
+// keep working through it — and committing a reference writes the sidecar into the COLLECTION,
+// which is exactly why commit_descriptors is meaningless on a shared definition.
+func TestCommitAndRefreshWorkOnAReference(t *testing.T) {
+	root := t.TempDir()
+	w := newWorkspaceAt(t, root)
+	ctx := context.Background()
+	port := startReflectionServer(t, true)
+	id := writeWorkspaceDefinitions(t, root, port)
+
+	const cid = "services/payments/requests"
+	createCollectionAt(t, w, ctx, cid)
+	refreshSource(t, w, ctx, cid, id)
+
+	on, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(&grpcviewv1.SetDescriptorSourceCommitRequest{
+		Collection: cid,
+		Id:         id,
+		Commit:     true,
+	}))
+	if err != nil {
+		t.Fatalf("SetDescriptorSourceCommit(on) on a reference: %v", err)
+	}
+	src := on.Msg.GetCollection().GetSources()[0]
+	if !src.GetCommitDescriptors() || src.GetOrigin() != grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
+		t.Errorf("want a committed WORKSPACE source, got %+v", src)
+	}
+	coll, err := w.store.Open(ctx, cid)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(coll.Root(), "descriptors"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("committing a reference must write one sidecar in the collection: %v, %v", entries, err)
+	}
+	// The flag is the collection's own, so it rides on the reference and the config still isn't here.
+	assertBareReference(t, w, cid, id)
+
+	if got := refreshSource(t, w, ctx, cid, id); !hasService(got.GetServices(), "Health") {
+		t.Errorf("refreshing a committed reference lost its services: %v", got.GetServices())
+	}
+	off, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(&grpcviewv1.SetDescriptorSourceCommitRequest{
+		Collection: cid,
+		Id:         id,
+	}))
+	if err != nil {
+		t.Fatalf("SetDescriptorSourceCommit(off) on a reference: %v", err)
+	}
+	if off.Msg.GetCollection().GetSources()[0].GetCommitDescriptors() {
+		t.Errorf("the flag did not come back off: %+v", off.Msg.GetCollection().GetSources()[0])
+	}
+	assertBareReference(t, w, cid, id)
+}
+
+// TestReorderKeepsAReferenceShared: a reorder rewrites the whole list, which is the mutation most
+// likely to inline shared config by accident.
+func TestReorderKeepsAReferenceShared(t *testing.T) {
+	root := t.TempDir()
+	w := newWorkspaceAt(t, root)
+	ctx := context.Background()
+	shared := startReflectionServer(t, true)
+	own := startReflectionServer(t, false)
+	id := writeWorkspaceDefinitions(t, root, shared)
+
+	const cid = "services/payments/requests"
+	createCollectionAt(t, w, ctx, cid)
+	refreshSource(t, w, ctx, cid, id)
+	added, err := w.AddDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.AddDescriptorSourceRequest{
+		Collection: cid,
+		Source: &grpcviewv1.AddDescriptorSourceRequest_Reflection{
+			Reflection: &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", own)},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource: %v", err)
+	}
+	ownID := added.Msg.GetCollection().GetSources()[1].GetId()
+
+	reordered, err := w.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
+		Collection: cid,
+		Ids:        []string{ownID, id},
+	}))
+	if err != nil {
+		t.Fatalf("ReorderDescriptorSources: %v", err)
+	}
+	if got := sourceIDsOf(reordered.Msg.GetCollection().GetSources()); got[0] != ownID || got[1] != id {
+		t.Errorf("order = %v, want [%s %s]", got, ownID, id)
+	}
+	assertBareReference(t, w, cid, id)
+	if text := manifestText(t, w, cid); !strings.Contains(text, fmt.Sprintf("127.0.0.1:%d", own)) {
+		t.Errorf("the collection's own source lost its config:\n%s", text)
 	}
 }

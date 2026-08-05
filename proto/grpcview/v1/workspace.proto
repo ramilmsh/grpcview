@@ -47,6 +47,14 @@ message Service {
   optional Server source  = 4;
 }
 
+// Where a source's config lives: inline in this collection's own grpcview.json, or in the
+// workspace manifest with the collection's list holding only a reference to it by id.
+enum SourceOrigin {
+  SOURCE_ORIGIN_UNSPECIFIED = 0;
+  SOURCE_ORIGIN_COLLECTION  = 1;
+  SOURCE_ORIGIN_WORKSPACE   = 2;
+}
+
 // Priority-ordered: the first source to define a file, or serve a service, wins.
 message DescriptorSource {
   // "reflection:<address>" (+"+tls") or "upload:<file name>"; adding an existing
@@ -59,6 +67,18 @@ message DescriptorSource {
   }
 
   Resolved resolved = 4;
+
+  // Read-only: server-set from where the config was found, and ignored on input.
+  //
+  // Everything a client may do to a WORKSPACE source is per collection — reorder it, remove
+  // it (which drops THIS collection's reference, never the shared definition), refresh it,
+  // toggle commit_descriptors. What it may not do is edit its address, which lives in
+  // grpcview.work.json. No RPC edits a definition in place, deliberately: identity is
+  // config-derived, so a different address is a different source.
+  //
+  // A WORKSPACE source with no oneof arm is a reference the manifest does not define; the
+  // row stays visible and Resolved.error says so.
+  SourceOrigin origin = 6;
 
   // The descriptors this source resolved to are committed to the repo as a
   // protojson sidecar (descriptors/<slug>-<hash of id>.json in the collection)

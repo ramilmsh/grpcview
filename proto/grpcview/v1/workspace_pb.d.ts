@@ -208,6 +208,22 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
   resolved?: Resolved | undefined;
 
   /**
+   * Read-only: server-set from where the config was found, and ignored on input.
+   *
+   * Everything a client may do to a WORKSPACE source is per collection — reorder it, remove
+   * it (which drops THIS collection's reference, never the shared definition), refresh it,
+   * toggle commit_descriptors. What it may not do is edit its address, which lives in
+   * grpcview.work.json. No RPC edits a definition in place, deliberately: identity is
+   * config-derived, so a different address is a different source.
+   *
+   * A WORKSPACE source with no oneof arm is a reference the manifest does not define; the
+   * row stays visible and Resolved.error says so.
+   *
+   * @generated from field: grpcview.v1.SourceOrigin origin = 6;
+   */
+  origin: SourceOrigin;
+
+  /**
    * The descriptors this source resolved to are committed to the repo as a
    * protojson sidecar (descriptors/<slug>-<hash of id>.json in the collection)
    * instead of cached in local state. It changes only WHERE the store writes,
@@ -609,6 +625,34 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
  * Use `create(CollectionSchema)` to create a new message.
  */
 export declare const CollectionSchema: GenMessage<Collection>;
+
+/**
+ * Where a source's config lives: inline in this collection's own grpcview.json, or in the
+ * workspace manifest with the collection's list holding only a reference to it by id.
+ *
+ * @generated from enum grpcview.v1.SourceOrigin
+ */
+export enum SourceOrigin {
+  /**
+   * @generated from enum value: SOURCE_ORIGIN_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SOURCE_ORIGIN_COLLECTION = 1;
+   */
+  COLLECTION = 1,
+
+  /**
+   * @generated from enum value: SOURCE_ORIGIN_WORKSPACE = 2;
+   */
+  WORKSPACE = 2,
+}
+
+/**
+ * Describes the enum grpcview.v1.SourceOrigin.
+ */
+export declare const SourceOriginSchema: GenEnum<SourceOrigin>;
 
 /**
  * @generated from enum grpcview.v1.ScriptKind

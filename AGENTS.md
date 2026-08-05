@@ -295,6 +295,41 @@ Consequences worth preserving, each of which was a bug before:
   bar under it shows where the request is **sent**. Neither is "no source" merely
   because the other is absent.
 
+**Definitions are shared; the order stays per collection.** Five collections pointing
+at one target must not mean five copies of its config, but precedence is per
+collection by design — so the split follows exactly that line. `grpcview.work.json`
+holds source **definitions**, keyed by the same config-derived `store.SourceID`, and
+that list is deliberately *not* an order: it is a set. A collection's `grpcview.json`
+holds the ordered **list**, and an entry in it is either an inline definition (as
+before) or a **reference** — an id with no oneof arm, resolved against the workspace
+manifest as the wire list is built (`diskToWireSource`). The disk entry stays bare,
+which is the load-bearing invariant: every mutation round-trips the list through the
+wire form, so `wireToDiskSource` writes any source the workspace defines back as a
+bare reference, and a reorder in one collection cannot inline shared config into all
+five. It also *is* the dedup — re-adding an address the workspace already declares
+produces a reference, because the same id is the same config by construction. Blobs
+need no scheme of their own: the CAS is already per workspace, so one resolve serves
+every collection referencing it. A definition may not be an upload (no pointer, and
+its bytes belong to the collection that supplied them), and `commit_descriptors` on a
+definition is ignored — a sidecar can only live inside a collection, so the flag
+belongs to the referencing *entry*, which carries its own. Both rules warn and skip
+on read rather than failing: this is committed config a colleague wrote, and one bad
+entry must not stop a workspace loading.
+
+The wire `DescriptorSource.origin` (`COLLECTION` | `WORKSPACE`) is read-only,
+server-set from where the config was found, and `sources ls` spells it out in its own
+column. Everything a client may do to a `WORKSPACE` source is **per collection**:
+reorder it, remove it (which drops *this* collection's reference, never the shared
+definition), refresh it, toggle its `commit_descriptors`. What it may not do is edit
+its address — no RPC edits a definition in place, deliberately, because identity is
+config-derived and a different address is a different source. A reference the manifest
+does not define keeps its row with no kind, and its `Resolved.error` names
+`grpcview.work.json`: a reference whose definition was renamed must be visible and
+removable, not silently absent. `defaults.sources` seeds a new collection's list with
+bare references to those ids, in order, skipping any the manifest does not define —
+**pointers only**, so a seeded collection resolves nothing until something acquires,
+which is why `grpcview init` says so on stderr when it seeded any.
+
 An upload is the **null-pointer kind**: the file name is only its identity, so there
 is nothing to re-read and `RefreshDescriptorSource` on one is `FailedPrecondition`
 telling you to upload the file again (a bare `grpcview sources refresh` skips

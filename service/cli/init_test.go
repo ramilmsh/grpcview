@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
 func TestInitEndToEnd(t *testing.T) {
@@ -95,4 +97,39 @@ func TestResolveInitCollection(t *testing.T) {
 			t.Errorf("error = %v, want it to name both %q and %q", err, other, cwd)
 		}
 	})
+}
+
+// TestInitReportsSeededSources: defaults.sources gives a new collection POINTERS, and nothing
+// resolves them, so the verb has to say what still has to happen. It goes on stderr, which keeps
+// stdout the one created-collection line.
+func TestInitReportsSeededSources(t *testing.T) {
+	fc := newFake()
+	fc.writes.createdCollection = &grpcviewv1.Collection{
+		Name: "requests",
+		Sources: []*grpcviewv1.DescriptorSource{
+			shared(reflectionSource("shared.example:50051", nil)),
+		},
+	}
+
+	out, errOut, code := runCLI(fc, "", "init", "services/payments/requests")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, out, errOut)
+	}
+	if !strings.Contains(out, "services/payments/requests") {
+		t.Errorf("stdout = %q, want the created collection", out)
+	}
+	if !strings.Contains(errOut, "sources refresh") {
+		t.Errorf("stderr = %q, want it to name the refresh that makes a seeded collection resolve", errOut)
+	}
+
+	// Nothing seeded, nothing to say.
+	quiet := newFake()
+	quiet.writes.createdCollection = &grpcviewv1.Collection{Name: "requests"}
+	_, quietErr, quietCode := runCLI(quiet, "", "init", "requests")
+	if quietCode != 0 {
+		t.Fatalf("exit code = %d, want 0", quietCode)
+	}
+	if quietErr != "" {
+		t.Errorf("stderr = %q, want empty when nothing was seeded", quietErr)
+	}
 }

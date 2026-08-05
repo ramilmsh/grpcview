@@ -33,7 +33,12 @@ func newInitCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 			"it but the repo root) makes the whole repo the collection.\n\n" +
 			"Unlike every other verb, a collection that already exists at that address is\n" +
 			"an error, not a silent no-op or a silent reuse: this is the one place a\n" +
-			"collection is meant to come into being.",
+			"collection is meant to come into being.\n\n" +
+			"If the workspace manifest declares defaults.sources, the new collection's\n" +
+			"definition-source list is seeded with REFERENCES to those shared definitions, in\n" +
+			"that order. That seeds pointers and nothing else — no target is dialed and no\n" +
+			"descriptors are acquired — so `grpcview sources refresh` is still what makes the\n" +
+			"collection resolve, and this verb says so when it seeded any.",
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -70,7 +75,27 @@ func runInit(ctx context.Context, s Streams, g *globalFlags, open clientFactory,
 	if err != nil {
 		return err
 	}
-	return writeLine(s.Out, []byte(fmt.Sprintf("%s  %s", collection, created.GetName())))
+	if err := writeLine(s.Out, []byte(fmt.Sprintf("%s  %s", collection, created.GetName()))); err != nil {
+		return err
+	}
+	return reportSeededSources(s, created.GetSources())
+}
+
+// reportSeededSources tells the user what a seeded list does NOT include. defaults.sources writes
+// references, and a reference is a pointer: the collection lists sources and resolves nothing until
+// something acquires their descriptors, and `init` is not that. Saying it on stderr keeps stdout
+// the one created-collection line while still putting the next step where the user is looking.
+func reportSeededSources(s Streams, seeded []*grpcviewv1.DescriptorSource) error {
+	if len(seeded) == 0 {
+		return nil
+	}
+	noun := "definition sources"
+	if len(seeded) == 1 {
+		noun = "definition source"
+	}
+	return writeLine(s.Err, []byte(fmt.Sprintf(
+		"seeded %d %s from the workspace defaults; run `grpcview sources refresh` to resolve them",
+		len(seeded), noun)))
 }
 
 // resolveInitCollection is dir verbatim when given, or else the current directory's own
