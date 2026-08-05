@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "name": "DescribeMethod"
+  },
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "DescribeMethod",
+  "draftBody": "export default async (): Promise<RequestMessage> => (\n{\n  collection: (\n    await gv.invoke(\n      \"Collections/ListCollections\",\n      {\n        \"refresh\": true,\n      }\n    )\n  ).body.collections[0].id,\n  service: \"grpcview.v1.WorkspaceService\",\n  method: \"DescribeMethod\"\n}\n)",
+  "middleware": [],
+  "draftMetadataScript": ""
+}

@@ -1,0 +1,3008 @@
+{
+  "id": "reflection:localhost:10000",
+  "descriptorSet": {
+    "file": [
+      {
+        "name": "google/protobuf/struct.proto",
+        "package": "google.protobuf",
+        "dependency": [],
+        "publicDependency": [],
+        "weakDependency": [],
+        "optionDependency": [],
+        "messageType": [
+          {
+            "name": "Struct",
+            "field": [
+              {
+                "name": "fields",
+                "number": 1,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Struct.FieldsEntry",
+                "jsonName": "fields"
+              }
+            ],
+            "extension": [],
+            "nestedType": [
+              {
+                "name": "FieldsEntry",
+                "field": [
+                  {
+                    "name": "key",
+                    "number": 1,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_STRING",
+                    "jsonName": "key"
+                  },
+                  {
+                    "name": "value",
+                    "number": 2,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Value",
+                    "jsonName": "value"
+                  }
+                ],
+                "extension": [],
+                "nestedType": [],
+                "enumType": [],
+                "extensionRange": [],
+                "oneofDecl": [],
+                "options": {
+                  "mapEntry": true,
+                  "uninterpretedOption": []
+                },
+                "reservedRange": [],
+                "reservedName": []
+              }
+            ],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Value",
+            "field": [
+              {
+                "name": "null_value",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_ENUM",
+                "typeName": ".google.protobuf.NullValue",
+                "oneofIndex": 0,
+                "jsonName": "nullValue"
+              },
+              {
+                "name": "number_value",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_DOUBLE",
+                "oneofIndex": 0,
+                "jsonName": "numberValue"
+              },
+              {
+                "name": "string_value",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 0,
+                "jsonName": "stringValue"
+              },
+              {
+                "name": "bool_value",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "oneofIndex": 0,
+                "jsonName": "boolValue"
+              },
+              {
+                "name": "struct_value",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Struct",
+                "oneofIndex": 0,
+                "jsonName": "structValue"
+              },
+              {
+                "name": "list_value",
+                "number": 6,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.ListValue",
+                "oneofIndex": 0,
+                "jsonName": "listValue"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "kind"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ListValue",
+            "field": [
+              {
+                "name": "values",
+                "number": 1,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Value",
+                "jsonName": "values"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "enumType": [
+          {
+            "name": "NullValue",
+            "value": [
+              {
+                "name": "NULL_VALUE",
+                "number": 0
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "service": [],
+        "extension": [],
+        "options": {
+          "javaPackage": "com.google.protobuf",
+          "javaOuterClassname": "StructProto",
+          "javaMultipleFiles": true,
+          "goPackage": "google.golang.org/protobuf/types/known/structpb",
+          "ccEnableArenas": true,
+          "objcClassPrefix": "GPB",
+          "csharpNamespace": "Google.Protobuf.WellKnownTypes",
+          "uninterpretedOption": []
+        },
+        "syntax": "proto3"
+      },
+      {
+        "name": "google/protobuf/any.proto",
+        "package": "google.protobuf",
+        "dependency": [],
+        "publicDependency": [],
+        "weakDependency": [],
+        "optionDependency": [],
+        "messageType": [
+          {
+            "name": "Any",
+            "field": [
+              {
+                "name": "type_url",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "typeUrl"
+              },
+              {
+                "name": "value",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BYTES",
+                "jsonName": "value"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "enumType": [],
+        "service": [],
+        "extension": [],
+        "options": {
+          "javaPackage": "com.google.protobuf",
+          "javaOuterClassname": "AnyProto",
+          "javaMultipleFiles": true,
+          "goPackage": "google.golang.org/protobuf/types/known/anypb",
+          "objcClassPrefix": "GPB",
+          "csharpNamespace": "Google.Protobuf.WellKnownTypes",
+          "uninterpretedOption": []
+        },
+        "syntax": "proto3"
+      },
+      {
+        "name": "google/protobuf/duration.proto",
+        "package": "google.protobuf",
+        "dependency": [],
+        "publicDependency": [],
+        "weakDependency": [],
+        "optionDependency": [],
+        "messageType": [
+          {
+            "name": "Duration",
+            "field": [
+              {
+                "name": "seconds",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT64",
+                "jsonName": "seconds"
+              },
+              {
+                "name": "nanos",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "nanos"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "enumType": [],
+        "service": [],
+        "extension": [],
+        "options": {
+          "javaPackage": "com.google.protobuf",
+          "javaOuterClassname": "DurationProto",
+          "javaMultipleFiles": true,
+          "goPackage": "google.golang.org/protobuf/types/known/durationpb",
+          "ccEnableArenas": true,
+          "objcClassPrefix": "GPB",
+          "csharpNamespace": "Google.Protobuf.WellKnownTypes",
+          "uninterpretedOption": []
+        },
+        "syntax": "proto3"
+      },
+      {
+        "name": "google/protobuf/timestamp.proto",
+        "package": "google.protobuf",
+        "dependency": [],
+        "publicDependency": [],
+        "weakDependency": [],
+        "optionDependency": [],
+        "messageType": [
+          {
+            "name": "Timestamp",
+            "field": [
+              {
+                "name": "seconds",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT64",
+                "jsonName": "seconds"
+              },
+              {
+                "name": "nanos",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "nanos"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "enumType": [],
+        "service": [],
+        "extension": [],
+        "options": {
+          "javaPackage": "com.google.protobuf",
+          "javaOuterClassname": "TimestampProto",
+          "javaMultipleFiles": true,
+          "goPackage": "google.golang.org/protobuf/types/known/timestamppb",
+          "ccEnableArenas": true,
+          "objcClassPrefix": "GPB",
+          "csharpNamespace": "Google.Protobuf.WellKnownTypes",
+          "uninterpretedOption": []
+        },
+        "syntax": "proto3"
+      },
+      {
+        "name": "proto/grpcview/v1/workspace.proto",
+        "package": "grpcview.v1",
+        "dependency": [
+          "google/protobuf/any.proto",
+          "google/protobuf/duration.proto",
+          "google/protobuf/struct.proto",
+          "google/protobuf/timestamp.proto"
+        ],
+        "publicDependency": [],
+        "weakDependency": [],
+        "optionDependency": [],
+        "messageType": [
+          {
+            "name": "Status",
+            "field": [
+              {
+                "name": "code",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "code"
+              },
+              {
+                "name": "message",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "message"
+              },
+              {
+                "name": "details",
+                "number": 3,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Any",
+                "jsonName": "details"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Server",
+            "field": [
+              {
+                "name": "address",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "address"
+              },
+              {
+                "name": "tls",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server.TLS",
+                "oneofIndex": 0,
+                "jsonName": "tls",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [
+              {
+                "name": "TLS",
+                "field": [],
+                "extension": [],
+                "nestedType": [],
+                "enumType": [],
+                "extensionRange": [],
+                "oneofDecl": [],
+                "reservedRange": [],
+                "reservedName": []
+              }
+            ],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_tls"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Message",
+            "field": [
+              {
+                "name": "package",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "package"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "file",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "file"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Method",
+            "field": [
+              {
+                "name": "name",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "input",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Message",
+                "jsonName": "input"
+              },
+              {
+                "name": "output",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Message",
+                "jsonName": "output"
+              },
+              {
+                "name": "client_streaming",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "clientStreaming"
+              },
+              {
+                "name": "server_streaming",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "serverStreaming"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Service",
+            "field": [
+              {
+                "name": "package",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "package"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "methods",
+                "number": 3,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Method",
+                "jsonName": "methods"
+              },
+              {
+                "name": "source",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 0,
+                "jsonName": "source",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_source"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DescriptorSource",
+            "field": [
+              {
+                "name": "id",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "id"
+              },
+              {
+                "name": "upload",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Upload",
+                "oneofIndex": 0,
+                "jsonName": "upload"
+              },
+              {
+                "name": "reflection",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 0,
+                "jsonName": "reflection"
+              },
+              {
+                "name": "resolved",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Resolved",
+                "jsonName": "resolved"
+              },
+              {
+                "name": "origin",
+                "number": 6,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_ENUM",
+                "typeName": ".grpcview.v1.SourceOrigin",
+                "jsonName": "origin"
+              },
+              {
+                "name": "commit_descriptors",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "commitDescriptors"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "source"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Upload",
+            "field": [
+              {
+                "name": "file_name",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "fileName"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Resolved",
+            "field": [
+              {
+                "name": "file_count",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "fileCount"
+              },
+              {
+                "name": "service_names",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "serviceNames"
+              },
+              {
+                "name": "won_service_names",
+                "number": 3,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "wonServiceNames"
+              },
+              {
+                "name": "error",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "error"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Folder",
+            "field": [
+              {
+                "name": "items",
+                "number": 1,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Item",
+                "jsonName": "items"
+              },
+              {
+                "name": "draft_metadata_script",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "draftMetadataScript"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "History",
+            "field": [
+              {
+                "name": "request",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.History.Request",
+                "jsonName": "request"
+              },
+              {
+                "name": "response",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.History.Response",
+                "jsonName": "response"
+              }
+            ],
+            "extension": [],
+            "nestedType": [
+              {
+                "name": "Request",
+                "field": [
+                  {
+                    "name": "service",
+                    "number": 1,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_STRING",
+                    "jsonName": "service"
+                  },
+                  {
+                    "name": "method",
+                    "number": 2,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_STRING",
+                    "jsonName": "method"
+                  },
+                  {
+                    "name": "body",
+                    "number": 3,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_BYTES",
+                    "jsonName": "body"
+                  },
+                  {
+                    "name": "metadata",
+                    "number": 4,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Struct",
+                    "jsonName": "metadata"
+                  }
+                ],
+                "extension": [],
+                "nestedType": [],
+                "enumType": [],
+                "extensionRange": [],
+                "oneofDecl": [],
+                "reservedRange": [],
+                "reservedName": []
+              },
+              {
+                "name": "Response",
+                "field": [
+                  {
+                    "name": "status",
+                    "number": 1,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".grpcview.v1.Status",
+                    "jsonName": "status"
+                  },
+                  {
+                    "name": "response",
+                    "number": 2,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_BYTES",
+                    "jsonName": "response"
+                  },
+                  {
+                    "name": "metadata",
+                    "number": 3,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Struct",
+                    "jsonName": "metadata"
+                  },
+                  {
+                    "name": "latency",
+                    "number": 4,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Duration",
+                    "jsonName": "latency"
+                  },
+                  {
+                    "name": "timestamp",
+                    "number": 5,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Timestamp",
+                    "jsonName": "timestamp"
+                  }
+                ],
+                "extension": [],
+                "nestedType": [],
+                "enumType": [],
+                "extensionRange": [],
+                "oneofDecl": [],
+                "reservedRange": [],
+                "reservedName": []
+              }
+            ],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Request",
+            "field": [
+              {
+                "name": "name",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "service",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "service"
+              },
+              {
+                "name": "method",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "method"
+              },
+              {
+                "name": "draft_body",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "draftBody"
+              },
+              {
+                "name": "history",
+                "number": 6,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.History",
+                "jsonName": "history"
+              },
+              {
+                "name": "middleware",
+                "number": 7,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "middleware"
+              },
+              {
+                "name": "draft_metadata_script",
+                "number": 9,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "draftMetadataScript"
+              },
+              {
+                "name": "target",
+                "number": 10,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 0,
+                "jsonName": "target",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [
+              {
+                "name": "Response",
+                "field": [
+                  {
+                    "name": "status",
+                    "number": 1,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".grpcview.v1.Status",
+                    "jsonName": "status"
+                  },
+                  {
+                    "name": "response",
+                    "number": 2,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_BYTES",
+                    "jsonName": "response"
+                  },
+                  {
+                    "name": "request_metadata",
+                    "number": 3,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Struct",
+                    "jsonName": "requestMetadata"
+                  },
+                  {
+                    "name": "response_metadata",
+                    "number": 4,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Struct",
+                    "jsonName": "responseMetadata"
+                  },
+                  {
+                    "name": "latency",
+                    "number": 5,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Duration",
+                    "jsonName": "latency"
+                  },
+                  {
+                    "name": "timestamp",
+                    "number": 6,
+                    "label": "LABEL_OPTIONAL",
+                    "type": "TYPE_MESSAGE",
+                    "typeName": ".google.protobuf.Timestamp",
+                    "jsonName": "timestamp"
+                  }
+                ],
+                "extension": [],
+                "nestedType": [],
+                "enumType": [],
+                "extensionRange": [],
+                "oneofDecl": [],
+                "reservedRange": [],
+                "reservedName": []
+              }
+            ],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_target"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Item",
+            "field": [
+              {
+                "name": "name",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "slug",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "slug"
+              },
+              {
+                "name": "folder",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Folder",
+                "oneofIndex": 0,
+                "jsonName": "folder"
+              },
+              {
+                "name": "request",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Request",
+                "oneofIndex": 0,
+                "jsonName": "request"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "content"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Script",
+            "field": [
+              {
+                "name": "name",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "kind",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_ENUM",
+                "typeName": ".grpcview.v1.ScriptKind",
+                "jsonName": "kind"
+              },
+              {
+                "name": "source",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "source"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "Collection",
+            "field": [
+              {
+                "name": "name",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "id",
+                "number": 7,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "id"
+              },
+              {
+                "name": "item",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Item",
+                "jsonName": "item"
+              },
+              {
+                "name": "sources",
+                "number": 3,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.DescriptorSource",
+                "jsonName": "sources"
+              },
+              {
+                "name": "services",
+                "number": 4,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Service",
+                "jsonName": "services"
+              },
+              {
+                "name": "scripts",
+                "number": 5,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Script",
+                "jsonName": "scripts"
+              },
+              {
+                "name": "descriptor_set",
+                "number": 6,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BYTES",
+                "jsonName": "descriptorSet"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "enumType": [
+          {
+            "name": "SourceOrigin",
+            "value": [
+              {
+                "name": "SOURCE_ORIGIN_UNSPECIFIED",
+                "number": 0
+              },
+              {
+                "name": "SOURCE_ORIGIN_COLLECTION",
+                "number": 1
+              },
+              {
+                "name": "SOURCE_ORIGIN_WORKSPACE",
+                "number": 2
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ScriptKind",
+            "value": [
+              {
+                "name": "SCRIPT_KIND_UNSPECIFIED",
+                "number": 0
+              },
+              {
+                "name": "SCRIPT_KIND_GENERATOR",
+                "number": 1
+              },
+              {
+                "name": "SCRIPT_KIND_MIDDLEWARE",
+                "number": 2
+              },
+              {
+                "name": "SCRIPT_KIND_SCENARIO",
+                "number": 3
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "service": [],
+        "extension": [],
+        "options": {
+          "goPackage": "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1",
+          "uninterpretedOption": []
+        },
+        "syntax": "proto3"
+      },
+      {
+        "name": "proto/grpcview/v1/service.proto",
+        "package": "grpcview.v1",
+        "dependency": [
+          "google/protobuf/struct.proto",
+          "proto/grpcview/v1/workspace.proto"
+        ],
+        "publicDependency": [],
+        "weakDependency": [],
+        "optionDependency": [],
+        "messageType": [
+          {
+            "name": "AddDescriptorSourceRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "descriptor_set",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BYTES",
+                "oneofIndex": 0,
+                "jsonName": "descriptorSet"
+              },
+              {
+                "name": "reflection",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 0,
+                "jsonName": "reflection"
+              },
+              {
+                "name": "file_name",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "fileName"
+              },
+              {
+                "name": "commit_descriptors",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "commitDescriptors"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "source"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "AddDescriptorSourceResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "RemoveDescriptorSourceRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "id",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "id"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "RemoveDescriptorSourceResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "RefreshDescriptorSourceRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "id",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "id"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "RefreshDescriptorSourceResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ReorderDescriptorSourcesRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "ids",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "ids"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ReorderDescriptorSourcesResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "SetDescriptorSourceCommitRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "id",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "id"
+              },
+              {
+                "name": "commit",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "commit"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "SetDescriptorSourceCommitResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateFolderRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateFolderResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateRequestRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              },
+              {
+                "name": "service",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "service"
+              },
+              {
+                "name": "method",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "method"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateRequestResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DeleteRequestRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DeleteRequestResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "UpdateRequestRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              },
+              {
+                "name": "service",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 0,
+                "jsonName": "service",
+                "proto3Optional": true
+              },
+              {
+                "name": "method",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 1,
+                "jsonName": "method",
+                "proto3Optional": true
+              },
+              {
+                "name": "draft_body",
+                "number": 6,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 2,
+                "jsonName": "draftBody",
+                "proto3Optional": true
+              },
+              {
+                "name": "name",
+                "number": 8,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 3,
+                "jsonName": "name",
+                "proto3Optional": true
+              },
+              {
+                "name": "update_middleware",
+                "number": 9,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "oneofIndex": 4,
+                "jsonName": "updateMiddleware",
+                "proto3Optional": true
+              },
+              {
+                "name": "middleware",
+                "number": 10,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "middleware"
+              },
+              {
+                "name": "draft_metadata_script",
+                "number": 12,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 5,
+                "jsonName": "draftMetadataScript",
+                "proto3Optional": true
+              },
+              {
+                "name": "update_target",
+                "number": 13,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "oneofIndex": 6,
+                "jsonName": "updateTarget",
+                "proto3Optional": true
+              },
+              {
+                "name": "target",
+                "number": 14,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 7,
+                "jsonName": "target",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_service"
+              },
+              {
+                "name": "_method"
+              },
+              {
+                "name": "_draft_body"
+              },
+              {
+                "name": "_name"
+              },
+              {
+                "name": "_update_middleware"
+              },
+              {
+                "name": "_draft_metadata_script"
+              },
+              {
+                "name": "_update_target"
+              },
+              {
+                "name": "_target"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "UpdateRequestResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "UpdateFolderRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              },
+              {
+                "name": "draft_metadata_script",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 0,
+                "jsonName": "draftMetadataScript",
+                "proto3Optional": true
+              },
+              {
+                "name": "name",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 1,
+                "jsonName": "name",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_draft_metadata_script"
+              },
+              {
+                "name": "_name"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "UpdateFolderResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "MoveItemRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              },
+              {
+                "name": "new_path",
+                "number": 4,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "newPath"
+              },
+              {
+                "name": "before",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 0,
+                "jsonName": "before",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_before"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "MoveItemResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "GetRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "GetResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ListCollectionsRequest",
+            "field": [
+              {
+                "name": "refresh",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "refresh"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CollectionSummary",
+            "field": [
+              {
+                "name": "id",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "id"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "source_count",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "sourceCount"
+              },
+              {
+                "name": "error",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "error"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ListCollectionsResponse",
+            "field": [
+              {
+                "name": "root",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "root"
+              },
+              {
+                "name": "collections",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.CollectionSummary",
+                "jsonName": "collections"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateCollectionRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateCollectionResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeSpec",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              },
+              {
+                "name": "service",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "service"
+              },
+              {
+                "name": "method",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "method"
+              },
+              {
+                "name": "metadata",
+                "number": 6,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Struct",
+                "jsonName": "metadata"
+              },
+              {
+                "name": "target",
+                "number": 7,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 0,
+                "jsonName": "target",
+                "proto3Optional": true
+              },
+              {
+                "name": "metadata_script",
+                "number": 8,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "metadataScript"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_target"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeRequest",
+            "field": [
+              {
+                "name": "spec",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.InvokeSpec",
+                "jsonName": "spec"
+              },
+              {
+                "name": "body",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "body"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeResponse",
+            "field": [
+              {
+                "name": "response",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Request.Response",
+                "jsonName": "response"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeStreamRequest",
+            "field": [
+              {
+                "name": "spec",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.InvokeSpec",
+                "jsonName": "spec"
+              },
+              {
+                "name": "messages",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "messages"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeStreamingResponse",
+            "field": [
+              {
+                "name": "message",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BYTES",
+                "oneofIndex": 0,
+                "jsonName": "message"
+              },
+              {
+                "name": "result",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Request.Response",
+                "oneofIndex": 0,
+                "jsonName": "result"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "event"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "SavedInvokeSpec",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "path",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "path"
+              },
+              {
+                "name": "item_name",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "itemName"
+              },
+              {
+                "name": "params",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Struct",
+                "jsonName": "params"
+              },
+              {
+                "name": "target",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "oneofIndex": 0,
+                "jsonName": "target",
+                "proto3Optional": true
+              },
+              {
+                "name": "messages",
+                "number": 6,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "messages"
+              },
+              {
+                "name": "record_history",
+                "number": 7,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "oneofIndex": 1,
+                "jsonName": "recordHistory",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_target"
+              },
+              {
+                "name": "_record_history"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeSavedRequest",
+            "field": [
+              {
+                "name": "spec",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.SavedInvokeSpec",
+                "jsonName": "spec"
+              },
+              {
+                "name": "dry_run",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "dryRun"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeSavedStreamRequest",
+            "field": [
+              {
+                "name": "spec",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.SavedInvokeSpec",
+                "jsonName": "spec"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeSavedResponse",
+            "field": [
+              {
+                "name": "response",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Request.Response",
+                "jsonName": "response"
+              },
+              {
+                "name": "resolved",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.ResolvedRequest",
+                "oneofIndex": 0,
+                "jsonName": "resolved",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_resolved"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ResolvedRequest",
+            "field": [
+              {
+                "name": "service",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "service"
+              },
+              {
+                "name": "method",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "method"
+              },
+              {
+                "name": "target",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Server",
+                "jsonName": "target"
+              },
+              {
+                "name": "messages",
+                "number": 4,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_STRING",
+                "jsonName": "messages"
+              },
+              {
+                "name": "metadata",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Struct",
+                "jsonName": "metadata"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DescribeMethodRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "service",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "service"
+              },
+              {
+                "name": "method",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "method"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DescribeMethodResponse",
+            "field": [
+              {
+                "name": "proto_text",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "protoText"
+              },
+              {
+                "name": "descriptor_set",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BYTES",
+                "jsonName": "descriptorSet"
+              },
+              {
+                "name": "source_id",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "sourceId"
+              },
+              {
+                "name": "client_streaming",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "clientStreaming"
+              },
+              {
+                "name": "server_streaming",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "serverStreaming"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateScriptRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "kind",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_ENUM",
+                "typeName": ".grpcview.v1.ScriptKind",
+                "jsonName": "kind"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "CreateScriptResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "UpdateScriptRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              },
+              {
+                "name": "source",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 0,
+                "jsonName": "source",
+                "proto3Optional": true
+              },
+              {
+                "name": "new_name",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 1,
+                "jsonName": "newName",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_source"
+              },
+              {
+                "name": "_new_name"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "UpdateScriptResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DeleteScriptRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "name",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "name"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "DeleteScriptResponse",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Collection",
+                "jsonName": "collection"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "RunScriptRequest",
+            "field": [
+              {
+                "name": "collection",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "collection"
+              },
+              {
+                "name": "source",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "source"
+              },
+              {
+                "name": "kind",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_ENUM",
+                "typeName": ".grpcview.v1.ScriptKind",
+                "oneofIndex": 0,
+                "jsonName": "kind",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_kind"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ScriptLog",
+            "field": [
+              {
+                "name": "level",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "level"
+              },
+              {
+                "name": "message",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "message"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ScriptError",
+            "field": [
+              {
+                "name": "message",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "message"
+              },
+              {
+                "name": "stack",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "stack"
+              },
+              {
+                "name": "line",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "line"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "RunScriptResponse",
+            "field": [
+              {
+                "name": "value",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "oneofIndex": 0,
+                "jsonName": "value",
+                "proto3Optional": true
+              },
+              {
+                "name": "logs",
+                "number": 2,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.ScriptLog",
+                "jsonName": "logs"
+              },
+              {
+                "name": "error",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.ScriptError",
+                "oneofIndex": 1,
+                "jsonName": "error",
+                "proto3Optional": true
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "_value"
+              },
+              {
+                "name": "_error"
+              }
+            ],
+            "reservedRange": [],
+            "reservedName": []
+          }
+        ],
+        "enumType": [],
+        "service": [
+          {
+            "name": "WorkspaceService",
+            "method": [
+              {
+                "name": "AddDescriptorSource",
+                "inputType": ".grpcview.v1.AddDescriptorSourceRequest",
+                "outputType": ".grpcview.v1.AddDescriptorSourceResponse"
+              },
+              {
+                "name": "RemoveDescriptorSource",
+                "inputType": ".grpcview.v1.RemoveDescriptorSourceRequest",
+                "outputType": ".grpcview.v1.RemoveDescriptorSourceResponse"
+              },
+              {
+                "name": "RefreshDescriptorSource",
+                "inputType": ".grpcview.v1.RefreshDescriptorSourceRequest",
+                "outputType": ".grpcview.v1.RefreshDescriptorSourceResponse"
+              },
+              {
+                "name": "ReorderDescriptorSources",
+                "inputType": ".grpcview.v1.ReorderDescriptorSourcesRequest",
+                "outputType": ".grpcview.v1.ReorderDescriptorSourcesResponse"
+              },
+              {
+                "name": "SetDescriptorSourceCommit",
+                "inputType": ".grpcview.v1.SetDescriptorSourceCommitRequest",
+                "outputType": ".grpcview.v1.SetDescriptorSourceCommitResponse"
+              },
+              {
+                "name": "Get",
+                "inputType": ".grpcview.v1.GetRequest",
+                "outputType": ".grpcview.v1.GetResponse"
+              },
+              {
+                "name": "ListCollections",
+                "inputType": ".grpcview.v1.ListCollectionsRequest",
+                "outputType": ".grpcview.v1.ListCollectionsResponse"
+              },
+              {
+                "name": "CreateCollection",
+                "inputType": ".grpcview.v1.CreateCollectionRequest",
+                "outputType": ".grpcview.v1.CreateCollectionResponse"
+              },
+              {
+                "name": "CreateFolder",
+                "inputType": ".grpcview.v1.CreateFolderRequest",
+                "outputType": ".grpcview.v1.CreateFolderResponse"
+              },
+              {
+                "name": "CreateRequest",
+                "inputType": ".grpcview.v1.CreateRequestRequest",
+                "outputType": ".grpcview.v1.CreateRequestResponse"
+              },
+              {
+                "name": "DeleteRequest",
+                "inputType": ".grpcview.v1.DeleteRequestRequest",
+                "outputType": ".grpcview.v1.DeleteRequestResponse"
+              },
+              {
+                "name": "UpdateRequest",
+                "inputType": ".grpcview.v1.UpdateRequestRequest",
+                "outputType": ".grpcview.v1.UpdateRequestResponse"
+              },
+              {
+                "name": "UpdateFolder",
+                "inputType": ".grpcview.v1.UpdateFolderRequest",
+                "outputType": ".grpcview.v1.UpdateFolderResponse"
+              },
+              {
+                "name": "MoveItem",
+                "inputType": ".grpcview.v1.MoveItemRequest",
+                "outputType": ".grpcview.v1.MoveItemResponse"
+              },
+              {
+                "name": "Invoke",
+                "inputType": ".grpcview.v1.InvokeRequest",
+                "outputType": ".grpcview.v1.InvokeResponse"
+              },
+              {
+                "name": "InvokeStreaming",
+                "inputType": ".grpcview.v1.InvokeStreamRequest",
+                "outputType": ".grpcview.v1.InvokeStreamingResponse",
+                "serverStreaming": true
+              },
+              {
+                "name": "InvokeSaved",
+                "inputType": ".grpcview.v1.InvokeSavedRequest",
+                "outputType": ".grpcview.v1.InvokeSavedResponse"
+              },
+              {
+                "name": "InvokeSavedStreaming",
+                "inputType": ".grpcview.v1.InvokeSavedStreamRequest",
+                "outputType": ".grpcview.v1.InvokeStreamingResponse",
+                "serverStreaming": true
+              },
+              {
+                "name": "DescribeMethod",
+                "inputType": ".grpcview.v1.DescribeMethodRequest",
+                "outputType": ".grpcview.v1.DescribeMethodResponse"
+              },
+              {
+                "name": "RunScript",
+                "inputType": ".grpcview.v1.RunScriptRequest",
+                "outputType": ".grpcview.v1.RunScriptResponse"
+              },
+              {
+                "name": "CreateScript",
+                "inputType": ".grpcview.v1.CreateScriptRequest",
+                "outputType": ".grpcview.v1.CreateScriptResponse"
+              },
+              {
+                "name": "UpdateScript",
+                "inputType": ".grpcview.v1.UpdateScriptRequest",
+                "outputType": ".grpcview.v1.UpdateScriptResponse"
+              },
+              {
+                "name": "DeleteScript",
+                "inputType": ".grpcview.v1.DeleteScriptRequest",
+                "outputType": ".grpcview.v1.DeleteScriptResponse"
+              }
+            ]
+          }
+        ],
+        "extension": [],
+        "options": {
+          "goPackage": "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1",
+          "uninterpretedOption": []
+        },
+        "syntax": "proto3"
+      }
+    ]
+  },
+  "serviceNames": [
+    "grpcview.v1.WorkspaceService"
+  ]
+}

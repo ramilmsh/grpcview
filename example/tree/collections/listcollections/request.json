@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "name": "ListCollections"
+  },
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "ListCollections",
+  "draftBody": "export default async (): Promise<RequestMessage> => (\n{\n  refresh: gv.request.params[\"refresh\"] ?? true,\n}\n)",
+  "middleware": [],
+  "draftMetadataScript": ""
+}

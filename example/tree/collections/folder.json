@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "name": "Collections"
+  },
+  "items": [
+    "listcollections",
+    "describemethod"
+  ],
+  "draftMetadataScript": ""
+}
