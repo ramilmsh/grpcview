@@ -34,10 +34,11 @@ type fakeClient struct {
 	describeErr error
 	gotDescribe []*grpcviewv1.DescribeMethodRequest
 
-	listing  []*grpcviewv1.CollectionSummary
-	listRoot string
-	listErr  error
-	gotList  []*grpcviewv1.ListCollectionsRequest
+	listing     []*grpcviewv1.CollectionSummary
+	listRoot    string
+	listTrusted bool
+	listErr     error
+	gotList     []*grpcviewv1.ListCollectionsRequest
 
 	gotGet         []*grpcviewv1.GetRequest
 	gotSaved       []*grpcviewv1.InvokeSavedRequest
@@ -64,6 +65,7 @@ func (f *fakeClient) ListCollections(_ context.Context, r *connect.Request[grpcv
 	return connect.NewResponse(&grpcviewv1.ListCollectionsResponse{
 		Root:        f.listRoot,
 		Collections: f.listing,
+		Trusted:     f.listTrusted,
 	}), nil
 }
 
@@ -110,12 +112,15 @@ func (f *fakeClient) invokeCalls() int {
 }
 
 // newFake's workspace holds one collection at its root, so resolveCollection's
-// single-collection rule answers "." — the address the verbs used to default to.
+// single-collection rule answers "." — the address the verbs used to default to. It is
+// TRUSTED, because that is the unremarkable state every other verb's test should not have to
+// think about; the untrusted listing is exercised explicitly in TestCollectionsLsTrust.
 func newFake() *fakeClient {
 	return &fakeClient{
-		snapshot: testWorkspace(),
-		response: okResponse(`{"token":"t"}`),
-		listing:  []*grpcviewv1.CollectionSummary{{Id: ".", Name: "default"}},
+		snapshot:    testWorkspace(),
+		response:    okResponse(`{"token":"t"}`),
+		listing:     []*grpcviewv1.CollectionSummary{{Id: ".", Name: "default"}},
+		listTrusted: true,
 	}
 }
 

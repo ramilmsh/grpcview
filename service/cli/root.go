@@ -17,6 +17,18 @@ var version = "dev"
 
 const defaultPort = 10000
 
+const (
+	// defaultTimeout bounds a verb that dials or reads — which is every verb but two.
+	defaultTimeout = 30 * time.Second
+	// buildTimeout is what the two verbs that may run `bazel build` default to instead.
+	// 30 seconds is a guaranteed failure there: a COLD build of a real monorepo target is
+	// minutes, and the wait is the normal case rather than the pathological one. It is the
+	// same order as the server's own bazelbuild.DefaultTimeout (10 minutes), deliberately —
+	// a workspace that raised bazel.timeout_seconds past this wants an explicit --timeout,
+	// because the server's message about its own limit is the more useful of the two.
+	buildTimeout = 10 * time.Minute
+)
+
 // Streams are the process's stdio, injected so every verb is table-testable.
 type Streams struct {
 	In  io.Reader
@@ -80,8 +92,23 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	// point every invocation at the workspace root, which in a monorepo holds no collection.
 	f.StringVar(&g.Collection, "collection", "", "collection to operate on; empty resolves from the current directory")
 	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
-	f.DurationVar(&g.Timeout, "timeout", 30*time.Second, "per-request timeout")
+	f.DurationVar(&g.Timeout, "timeout", defaultTimeout,
+		"per-request timeout; a verb that may run a build — `sources refresh`, or `sources add` of a bazel label — defaults to "+buildTimeout.String()+" instead")
 	return g
+}
+
+// useBuildTimeout raises this invocation's deadline to buildTimeout for a verb that may BUILD,
+// and does nothing when the caller passed --timeout: an explicit value is an instruction, and
+// wins everywhere. "Passed" is read off the flag and never inferred by comparing against
+// defaultTimeout, which would silently ignore `--timeout 30s`.
+//
+// --timeout is registered on the ROOT's persistent flags, and cobra folds a parent's persistent
+// flags into the executing command's own set before RunE runs, so the subcommand can be asked.
+func useBuildTimeout(cmd *cobra.Command, g *globalFlags) {
+	if flag := cmd.Flags().Lookup("timeout"); flag != nil && flag.Changed {
+		return
+	}
+	g.Timeout = buildTimeout
 }
 
 func releaseVersion() string {
@@ -132,6 +159,7 @@ func newRootCmd(
 	root.AddCommand(newScriptCmd(s, globals, open))
 	root.AddCommand(newInitCmd(s, globals, open))
 	root.AddCommand(newCollectionsCmd(s, globals, open))
+	root.AddCommand(newTrustCmd(globals, open))
 	root.AddCommand(newServeCmd(serve, globals))
 	root.AddCommand(newVersionCmd())
 

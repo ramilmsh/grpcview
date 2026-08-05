@@ -78,6 +78,10 @@ func newSourcesLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comma
 			"shadowed, not idle, and reordering the list is what changes it.\n\n" +
 			"A source whose last resolve failed stays listed with the reason and\n" +
 			"contributes nothing. That is a normal state, not a failure of this command.\n\n" +
+			"When the workspace is UNTRUSTED and one of these rows is a bazel source, a line\n" +
+			"after the table says so — this listing is where that fact is actionable, and a\n" +
+			"workspace with no bazel source anywhere is never nagged about a capability\n" +
+			"nothing is using.\n\n" +
 			"There is no -o: `grpcview get | jq .collection.sources` is the JSON form, and\n" +
 			"it is the same bytes the UI's Sources view reads.",
 		Args:          cobra.NoArgs,
@@ -96,38 +100,111 @@ func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			return err
 		}
 		// Collection.sources is already in priority order; never sort it.
-		return renderSources(s.Out, ws.GetSources())
+		if err := renderSources(s.Out, ws.GetSources()); err != nil {
+			return err
+		}
+		return renderSourceTrust(ctx, s.Out, sess, ws.GetSources())
 	})
+}
+
+// renderSourceTrust names an untrusted workspace after the rows, and ONLY when one of those rows
+// is a source that would have to execute a build to resolve. A permission request for a
+// capability nobody is using is noise that teaches people to click through, which is the rule the
+// UI's trust banner already follows — so `collections ls`, which reads manifests and never source
+// lists, deliberately says nothing about trust at all. This listing is the surface that holds the
+// information, so it is the one that carries the note.
+//
+// The trust bit costs a second call: it is a property of the workspace ROOT and the collection
+// snapshot carries nothing about it, so it comes from the same ListCollections that
+// resolveCollection consults. That is paid only when a bazel row is actually present.
+func renderSourceTrust(ctx context.Context, w io.Writer, sess session, sources []*grpcviewv1.DescriptorSource) error {
+	building := 0
+	for _, src := range sources {
+		if src.GetBazel() != nil {
+			building++
+		}
+	}
+	if building == 0 {
+		return nil
+	}
+
+	listing, err := listCollections(ctx, sess, false)
+	if err != nil {
+		return err
+	}
+	if listing.GetTrusted() {
+		return nil
+	}
+	return writeLine(w, []byte(fmt.Sprintf(
+		"! %s is not trusted: %s above cannot build here — `grpcview trust` allows it",
+		listing.GetRoot(), bazelSourceCount(building))))
+}
+
+func bazelSourceCount(n int) string {
+	if n == 1 {
+		return "1 bazel source"
+	}
+	return fmt.Sprintf("%d bazel sources", n)
 }
 
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	var tls, commit bool
 
 	cmd := &cobra.Command{
-		Use:   "add <host:port>|<file.binpb>",
-		Short: "Add a reflection target or a descriptor-set file as a definition source",
+		Use:   "add <host:port>|<file.binpb>|//pkg:target",
+		Short: "Add a reflection target, a descriptor-set file, or a bazel label as a definition source",
 		Long: "Add one definition source at LOWEST priority, so adding never moves an\n" +
 			"existing service to a different source — `sources reorder` is what does that.\n\n" +
-			"The argument decides the kind, and the test is the filesystem: an argument that\n" +
-			"stats as a file is uploaded as a FileDescriptorSet, and anything else is dialed\n" +
-			"as a reflection target. So a relative path only works from the directory that\n" +
-			"holds the file, which is the same rule every other tool's file argument follows.\n\n" +
+			"The argument decides the kind, and the first test is the filesystem: an argument\n" +
+			"that stats as a file is uploaded as a FileDescriptorSet, one that does not and\n" +
+			"begins with `//` or `@` is a bazel LABEL, and anything else is dialed as a\n" +
+			"reflection target. So a relative path only works from the directory that holds\n" +
+			"the file, which is the same rule every other tool's file argument follows, and a\n" +
+			"label must be written in FULL — `//pkg:target`, never bazel's `pkg:target`\n" +
+			"shorthand, because `localhost:8080` is indistinguishable from that shorthand and\n" +
+			"guessing wrong would dial a label or try to build an address.\n\n" +
 			"A file's BASENAME is the upload's identity, not its path: re-adding a rebuilt\n" +
 			"image of the same name REFRESHES that source in place at its existing priority\n" +
-			"instead of adding a second, indistinguishable row. A reflection source is\n" +
-			"identified by its address (and whether it is dialed with --tls) the same way.\n\n" +
+			"instead of adding a second, indistinguishable row. The path is recorded next to\n" +
+			"it as a refresh recipe — that is all it is — so `sources refresh` re-reads the\n" +
+			"file instead of asking to be handed it again. A reflection source is identified\n" +
+			"by its address (and whether it is dialed with --tls), and a bazel source by its\n" +
+			"canonical label, the same way.\n\n" +
+			"A BAZEL source is a label whose DEFAULT OUTPUTS are descriptor sets. Unlike an\n" +
+			"upload it knows how to produce its own bytes, so refreshing it runs a build —\n" +
+			"and a build runs arbitrary code out of this repository's BUILD files, so it is\n" +
+			"refused unless the workspace is TRUSTED. `grpcview trust` grants that, once, per\n" +
+			"workspace root. --commit-descriptors applies to a bazel source exactly as to any\n" +
+			"other kind, and is the answer to a fresh clone with no bazel installed.\n\n" +
 			"Adding resolves the new source immediately — it is the one operation here that\n" +
-			"touches the network — so a target that cannot be dialed, or bytes that do not\n" +
-			"parse, FAIL the add and nothing is added. That is deliberate: a listed source\n" +
-			"that silently provides nothing is worse than an error. A source that resolved\n" +
-			"once and whose target later goes away is the different case — it stays listed\n" +
-			"with the reason, contributing nothing, and `sources ls` shows it.\n\n" +
+			"touches the network, or bazel — so a target that cannot be dialed, bytes that do\n" +
+			"not parse, and a label that cannot be built (an untrusted workspace included)\n" +
+			"FAIL the add and nothing is added. That is deliberate: a listed source that\n" +
+			"silently provides nothing is worse than an error. A source that resolved once\n" +
+			"and whose target later goes away is the different case — it stays listed with\n" +
+			"the reason, contributing nothing, and `sources ls` shows it.\n\n" +
+			"Because it resolves, this is one of the two verbs that WAITS. A LABEL therefore gets\n" +
+			"a " + buildTimeout.String() + " deadline instead of the usual one: a cold build of a large target is\n" +
+			"minutes, so waiting is the normal case and not the pathological one. A dial and a\n" +
+			"file read keep the ordinary deadline. `--timeout` overrides either way — for a build\n" +
+			"slower still, or to give up sooner.\n\n" +
 			"Nothing is printed on success.",
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSourcesAdd(cmd.Context(), g, open, args[0], tls, commit)
+			// Built here, before any session opens, so a bad argument — or an unreadable file —
+			// fails without touching the workspace; only the address it carries is filled in
+			// later. It also decides the deadline, since the KIND is what says whether this add
+			// runs a build.
+			msg, err := buildAddSource(args[0], tls, commit)
+			if err != nil {
+				return err
+			}
+			if msg.GetBazel() != nil {
+				useBuildTimeout(cmd, g)
+			}
+			return runSourcesAdd(cmd.Context(), g, open, msg, args[0])
 		},
 	}
 	cmd.Flags().BoolVar(&tls, "tls", false,
@@ -138,13 +215,9 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	return cmd
 }
 
-func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg string, tls, commit bool) error {
-	// Built before any session opens, so a bad argument — or an unreadable file — fails
-	// without touching the workspace; only the address it carries is filled in later.
-	msg, err := buildAddSource(arg, tls, commit)
-	if err != nil {
-		return err
-	}
+// runSourcesAdd sends a request its caller already built; arg is carried along only to name the
+// source in an error, in the spelling the user typed.
+func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, msg *grpcviewv1.AddDescriptorSourceRequest, arg string) error {
 	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		msg.Collection = collection
 		if _, err := sess.AddDescriptorSource(ctx, connect.NewRequest(msg)); err != nil {
@@ -156,7 +229,7 @@ func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg 
 
 func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
 	if arg == "" {
-		return nil, errors.New("no definition source given: `sources add` takes a reflection address or the path of a descriptor-set file")
+		return nil, errors.New("no definition source given: `sources add` takes a reflection address, the path of a descriptor-set file, or a bazel label")
 	}
 
 	info, statErr := os.Stat(arg)
@@ -174,10 +247,30 @@ func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSour
 		if err != nil {
 			return nil, fmt.Errorf("failed to read the descriptor set: %w", err)
 		}
+		// Absolute, because the server resolves the path against the WORKSPACE ROOT and not
+		// against this process's cwd; it confines it there and stores it root-relative.
+		abs, err := filepath.Abs(arg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve the path of the descriptor set %q: %w", arg, err)
+		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
 			Source: &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
 			// The basename, deliberately: file_name is the source's identity.
-			FileName:          filepath.Base(arg),
+			FileName: filepath.Base(arg),
+			// The path is only a refresh recipe, never the identity — a `git mv` changes what
+			// gets re-read and not which source this is.
+			Path:              abs,
+			CommitDescriptors: commit,
+		}, nil
+
+	case isBazelLabel(arg):
+		if tls {
+			return nil, fmt.Errorf(
+				"--tls does not apply to %q: it names a bazel label, and TLS selects how a reflection TARGET is dialed", arg)
+		}
+		// Verbatim: the server canonicalizes, so `//pkg` and `//pkg:pkg` are one source.
+		return &grpcviewv1.AddDescriptorSourceRequest{
+			Source:            &grpcviewv1.AddDescriptorSourceRequest_Bazel{Bazel: &grpcviewv1.Bazel{Label: arg}},
 			CommitDescriptors: commit,
 		}, nil
 
@@ -191,6 +284,18 @@ func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSour
 			CommitDescriptors: commit,
 		}, nil
 	}
+}
+
+// isBazelLabel decides, from argv alone, whether an argument that is not a file is a bazel
+// label rather than a dial address. Only the two unambiguous spellings count: `//pkg:target`
+// and `@repo//pkg:target`.
+//
+// Bazel's `pkg:target` shorthand is deliberately NOT accepted here, and cannot be: it is
+// indistinguishable from `localhost:8080`. Whichever way this command guessed, it would
+// sometimes dial a label and sometimes try to build an address — so the CLI requires the full
+// spelling and the ambiguity never arises. `sources add` help says so.
+func isBazelLabel(arg string) bool {
+	return strings.HasPrefix(arg, "//") || strings.HasPrefix(arg, "@")
 }
 
 func newSourcesCommitCmd(g *globalFlags, open clientFactory) *cobra.Command {
@@ -249,25 +354,35 @@ func newSourcesRefreshCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "refresh [<id>]",
 		Short: "Re-resolve one definition source, or every source in priority order",
-		Long: "Re-resolve a definition source from its pointer: re-dial a reflection target to\n" +
-			"pick up a redeployed schema.\n\n" +
-			"An UPLOAD cannot be refreshed. It has no address or path to re-read — the file\n" +
-			"name is only its identity — so the way to update one is `sources add` with the\n" +
-			"rebuilt file, which refreshes that source in place. Asking to refresh one fails\n" +
+		Long: "Re-resolve a definition source from its pointer, whatever that pointer is: a\n" +
+			"reflection target is re-dialed to pick up a redeployed schema, a BAZEL source is\n" +
+			"BUILT and its outputs re-read, and an upload that recorded a path when it was\n" +
+			"added re-reads that file.\n\n" +
+			"A PATHLESS upload — bytes that arrived through the browser's file picker, which\n" +
+			"has a file and no path — is the one kind that cannot be refreshed. Nothing here\n" +
+			"knows where those bytes came from, so the way to update one is `sources add` with\n" +
+			"the rebuilt file, which refreshes that source in place. Naming its id fails\n" +
 			"rather than reporting a refresh that fetched nothing.\n\n" +
 			"Given no id, every REFRESHABLE source is refreshed in PRIORITY order — the order\n" +
 			"`sources ls` prints, which is also the order the merge walks — one RPC per\n" +
-			"source, since the RPC refreshes exactly one. Uploads are skipped there, because\n" +
-			"'refresh everything that can be re-fetched' is the useful reading of a bare\n" +
-			"refresh; naming an upload's id is the request that fails. The run stops at the\n" +
-			"first failure and reports it, so a later source is never quietly skipped.\n\n" +
-			"An unreachable target fails this command, unlike the passive listing: you\n" +
-			"named the source and asked for it to resolve.\n\n" +
+			"source, since the RPC refreshes exactly one. Pathless uploads are the only rows\n" +
+			"skipped there, because 'refresh everything that has a way to re-acquire itself'\n" +
+			"is the useful reading of a bare refresh. The run stops at the first failure and\n" +
+			"reports it, so a later source is never quietly skipped.\n\n" +
+			"An unreachable target, or a build that fails, fails this command, unlike the\n" +
+			"passive listing: you named the source and asked for it to resolve.\n\n" +
+			"This verb WAITS, so it runs with a " + buildTimeout.String() + " deadline instead of the usual one: a cold\n" +
+			"bazel build of a large target is minutes, and a bare refresh pays for every source\n" +
+			"in the list inside that one budget. `--timeout` is the knob either way — for a build\n" +
+			"slower than this, or for giving up sooner.\n\n" +
 			"Nothing is printed on success.",
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// A bazel source in the list makes this a build, and a build is not a 30-second
+			// operation. A bare refresh spends this budget across every source it walks.
+			useBuildTimeout(cmd, g)
 			var id string
 			if len(args) == 1 {
 				id = args[0]
@@ -287,9 +402,10 @@ func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, 
 			}
 			ids = make([]string, 0, len(ws.GetSources()))
 			for _, src := range ws.GetSources() {
-				// An upload has no pointer to re-read, so a bare refresh passes over it instead
-				// of failing the whole run on a source nothing could have re-fetched.
-				if src.GetUpload() != nil {
+				// An upload that recorded no path has no pointer to re-read, so a bare refresh
+				// passes over it instead of failing the whole run on a source nothing could have
+				// re-acquired. An upload WITH a path, and a bazel source, both have one.
+				if src.GetUpload() != nil && src.GetUpload().GetPath() == "" {
 					continue
 				}
 				ids = append(ids, src.GetId())
@@ -437,6 +553,8 @@ func sourceKind(src *grpcviewv1.DescriptorSource) string {
 		return "reflection"
 	case src.GetUpload() != nil:
 		return "upload"
+	case src.GetBazel() != nil:
+		return "bazel"
 	default:
 		return "unknown"
 	}

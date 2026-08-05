@@ -186,6 +186,13 @@ func newCollectionsLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.C
 
 // runCollectionsLs deliberately does NOT resolve a collection: a workspace with none, or with
 // too many to decide between, is precisely when this listing is worth reading.
+//
+// The text form also says NOTHING about workspace trust, though the response it was handed
+// carries the bit and `-o json` passes it straight through. This listing reads manifests and
+// never source lists — CollectionSummary carries a source COUNT and nothing about the kinds — so
+// it cannot tell a workspace that would really build something from one where no source has ever
+// needed the permission, and a warning on every listing of the latter is noise that teaches
+// people to ignore it. `sources ls` holds the full list, and prints the note there.
 func runCollectionsLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, output string, refresh bool) error {
 	switch output {
 	case outputText, outputJSON:

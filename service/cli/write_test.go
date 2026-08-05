@@ -27,6 +27,7 @@ type writeCalls struct {
 	deleteRequest    []*grpcviewv1.DeleteRequestRequest
 	moveItem         []*grpcviewv1.MoveItemRequest
 	runScript        []*grpcviewv1.RunScriptRequest
+	setTrust         []*grpcviewv1.SetWorkspaceTrustRequest
 
 	order []string
 
@@ -91,6 +92,17 @@ func (f *fakeClient) SetDescriptorSourceCommit(_ context.Context, r *connect.Req
 		return nil, f.writes.err
 	}
 	return connect.NewResponse(&grpcviewv1.SetDescriptorSourceCommitResponse{Collection: f.snapshot}), nil
+}
+
+// SetWorkspaceTrust answers with the state it was asked for, the way the server does after
+// re-reading it: the CLI ignores the response, and a test that wants a mismatch sets writes.err.
+func (f *fakeClient) SetWorkspaceTrust(_ context.Context, r *connect.Request[grpcviewv1.SetWorkspaceTrustRequest]) (*connect.Response[grpcviewv1.SetWorkspaceTrustResponse], error) {
+	f.writes.setTrust = append(f.writes.setTrust, r.Msg)
+	f.writes.order = append(f.writes.order, "SetWorkspaceTrust")
+	if f.writes.err != nil {
+		return nil, f.writes.err
+	}
+	return connect.NewResponse(&grpcviewv1.SetWorkspaceTrustResponse{Trusted: r.Msg.GetTrusted()}), nil
 }
 
 func (f *fakeClient) CreateFolder(_ context.Context, r *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
@@ -194,8 +206,15 @@ func TestSourcesAdd(t *testing.T) {
 					t.Errorf("file_name = %q, want %q: the identity is the basename, never the path",
 						got.GetFileName(), "image.binpb")
 				}
+				// The path rides along so the upload is refreshable; the server rel-izes it.
+				if got.GetPath() != file {
+					t.Errorf("path = %q, want the file's absolute path %q", got.GetPath(), file)
+				}
 				if got.GetReflection() != nil {
 					t.Errorf("reflection = %v, want nil: a file is not a dial address", got.GetReflection())
+				}
+				if got.GetBazel() != nil {
+					t.Errorf("bazel = %v, want nil: a file is not a label", got.GetBazel())
 				}
 				if got.GetCommitDescriptors() {
 					t.Error("commit_descriptors = true without the flag; committing is opt-in for every kind, uploads included")
@@ -223,6 +242,55 @@ func TestSourcesAdd(t *testing.T) {
 			},
 		},
 		{
+			name: "a full label is a bazel source",
+			arg:  "//proto/echo/v1:echov1_proto",
+			check: func(t *testing.T, fc *fakeClient) {
+				got := onlyAdd(t, fc)
+				if got.GetBazel().GetLabel() != "//proto/echo/v1:echov1_proto" {
+					t.Errorf("bazel.label = %q, want the label passed through verbatim: the server canonicalizes",
+						got.GetBazel().GetLabel())
+				}
+				if got.GetReflection() != nil || got.GetDescriptorSet() != nil {
+					t.Errorf("reflection = %v / descriptor_set = %q, want a label to be neither",
+						got.GetReflection(), got.GetDescriptorSet())
+				}
+				if got.GetFileName() != "" || got.GetPath() != "" {
+					t.Errorf("file_name = %q / path = %q, want both unset: a label is its own recipe",
+						got.GetFileName(), got.GetPath())
+				}
+			},
+		},
+		{
+			name: "an external repository's label is one too",
+			arg:  "@buf_deps//acme/payments:payments_proto",
+			check: func(t *testing.T, fc *fakeClient) {
+				if got := onlyAdd(t, fc).GetBazel().GetLabel(); got != "@buf_deps//acme/payments:payments_proto" {
+					t.Errorf("bazel.label = %q, want the @repo spelling kept", got)
+				}
+			},
+		},
+		{
+			name:   "--commit-descriptors rides along on a bazel source: the fresh-clone-without-bazel answer",
+			arg:    "//proto/echo/v1:echov1_proto",
+			commit: true,
+			check: func(t *testing.T, fc *fakeClient) {
+				got := onlyAdd(t, fc)
+				if !got.GetCommitDescriptors() {
+					t.Error("commit_descriptors = false, want it set by --commit-descriptors")
+				}
+				if got.GetBazel() == nil {
+					t.Error("bazel = nil, want the label arm: --commit-descriptors must not change the kind")
+				}
+			},
+		},
+		{
+			name:       "--tls on a label is refused the same way it is on a file",
+			arg:        "//proto/echo/v1:echov1_proto",
+			tls:        true,
+			wantErrHas: "--tls does not apply",
+			wantCode:   2,
+		},
+		{
 			name: "anything that does not stat is a reflection target",
 			arg:  "localhost:50055",
 			check: func(t *testing.T, fc *fakeClient) {
@@ -236,6 +304,33 @@ func TestSourcesAdd(t *testing.T) {
 				if got.GetDescriptorSet() != nil || got.GetFileName() != "" {
 					t.Errorf("descriptor_set = %q / file_name = %q, want both unset for a reflection source",
 						got.GetDescriptorSet(), got.GetFileName())
+				}
+			},
+		},
+		{
+			// The reason the CLI refuses bazel's `pkg:target` shorthand: it is this, exactly.
+			name: "a host:port is an ADDRESS and never the `pkg:target` shorthand",
+			arg:  "localhost:8080",
+			check: func(t *testing.T, fc *fakeClient) {
+				got := onlyAdd(t, fc)
+				if got.GetReflection().GetAddress() != "localhost:8080" {
+					t.Errorf("reflection.address = %q, want %q", got.GetReflection().GetAddress(), "localhost:8080")
+				}
+				if got.GetBazel() != nil {
+					t.Errorf("bazel = %v, want nil: a colon does not make a label", got.GetBazel())
+				}
+			},
+		},
+		{
+			name: "a public host:port is an address too",
+			arg:  "example.com:443",
+			check: func(t *testing.T, fc *fakeClient) {
+				got := onlyAdd(t, fc)
+				if got.GetReflection().GetAddress() != "example.com:443" {
+					t.Errorf("reflection.address = %q, want %q", got.GetReflection().GetAddress(), "example.com:443")
+				}
+				if got.GetBazel() != nil {
+					t.Errorf("bazel = %v, want nil", got.GetBazel())
 				}
 			},
 		},
@@ -334,6 +429,7 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"sources", "add", file, "--tls"},
+		{"sources", "add", "//proto/echo/v1:echov1_proto", "--tls"},
 		{"sources", "add", dir},
 		{"sources", "add"},
 	} {
@@ -347,10 +443,32 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 	}
 }
 
+// A relative argument is resolved against THIS process's cwd before it is sent, because the
+// server resolves the recorded path against the workspace root instead.
+func TestSourcesAddRecordsAnAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "image.binpb"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write the fixture: %v", err)
+	}
+	t.Chdir(dir)
+
+	fc := newFake()
+	out, errOut, code := runCLI(fc, "", "sources", "add", "image.binpb")
+	assertSilent(t, out, errOut, code)
+
+	got := onlyAdd(t, fc).GetPath()
+	if !filepath.IsAbs(got) {
+		t.Fatalf("path = %q, want an absolute path", got)
+	}
+	if filepath.Base(got) != "image.binpb" {
+		t.Errorf("path = %q, want it to end at the file named on the command line", got)
+	}
+}
+
 func TestSourcesRefresh(t *testing.T) {
-	t.Run("no id refreshes every refreshable source, in priority order, skipping uploads", func(t *testing.T) {
+	t.Run("no id refreshes every refreshable source, in priority order, skipping only pathless uploads", func(t *testing.T) {
 		fc := newFake()
-		fc.snapshot = sourcesWorkspace()
+		fc.snapshot = refreshableWorkspace()
 
 		out, errOut, code := runCLI(fc, "", "sources", "refresh")
 		assertSilent(t, out, errOut, code)
@@ -359,9 +477,14 @@ func TestSourcesRefresh(t *testing.T) {
 		for _, msg := range fc.writes.refreshSource {
 			got = append(got, msg.GetId())
 		}
-		// The upload in the middle is passed over: it has no pointer to re-read, so the RPC
-		// refuses it, and a bare refresh means "everything that can be re-fetched".
-		want := []string{"reflection:localhost:50055", "reflection:gone.example:9999"}
+		// Only the browser upload is passed over: it alone has no pointer to re-acquire itself,
+		// so the RPC refuses it, and a bare refresh means "everything that can re-acquire". The
+		// upload that recorded a path re-reads that file and a bazel label builds.
+		want := []string{
+			"reflection:localhost:50055",
+			"upload:built.binpb",
+			"bazel://proto/echo/v1:echov1_proto",
+		}
 		if !slices.Equal(got, want) {
 			t.Errorf("refreshed %v, want %v in that order", got, want)
 		}

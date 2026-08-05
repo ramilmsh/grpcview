@@ -203,6 +203,40 @@ func TestCollectionsLsText(t *testing.T) {
 	}
 }
 
+// This listing cannot see what KIND a collection's sources are, so it says nothing about trust in
+// either shape: the untrusted note belongs to `sources ls`, which holds the list — see
+// TestSourcesLsTrust. `-o json` still carries the `trusted` field it was handed.
+func TestCollectionsLsSaysNothingAboutTrust(t *testing.T) {
+	for _, shape := range [][]string{
+		{"collections", "ls"},
+		{"collections", "ls", "-o", "json"},
+	} {
+		t.Run(strings.Join(shape, " "), func(t *testing.T) {
+			root := t.TempDir()
+			t.Chdir(mustCollectionDir(t, filepath.Join(root, "svc", "requests")))
+
+			fc := newFake()
+			fc.listRoot = root
+			fc.listTrusted = false
+			fc.listing = summaries("svc/requests")
+
+			out, errOut, code := runCLI(fc, "", shape...)
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, out, errOut)
+			}
+			if errOut != "" {
+				t.Errorf("stderr = %q, want empty", errOut)
+			}
+			if lines := strings.Count(out, "\n"); lines != 1 {
+				t.Errorf("stdout = %q, want exactly one line: the row alone, with no trust note", out)
+			}
+			if strings.Contains(out, "grpcview trust") || strings.Contains(out, "not trusted") {
+				t.Errorf("stdout = %q, want no trust nag: this listing cannot know a bazel source exists", out)
+			}
+		})
+	}
+}
+
 func TestCollectionsLsJSONAndRefresh(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
