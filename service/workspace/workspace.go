@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/bazelbuild"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
@@ -109,10 +110,47 @@ func (w Workspace) ListCollections(ctx context.Context, request *connect.Request
 			Error:       info.Err,
 		})
 	}
+	// Trust rides along on the listing because this is the call a client makes first, before it
+	// knows anything else about the workspace — and it is read only for the banner: nothing in the
+	// listing, or in any read, is gated on it.
+	trusted, err := wsroot.IsTrusted(w.store.Root())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal,
+			fmt.Errorf("failed to read whether this workspace is trusted: %w", err))
+	}
 	return connect.NewResponse(&grpcviewv1.ListCollectionsResponse{
 		Root:        w.store.Root(),
 		Collections: collections,
+		Trusted:     trusted,
 	}), nil
+}
+
+// SetWorkspaceTrust trusts or un-trusts the workspace ROOT, which is what gates resolving a source
+// kind that EXECUTES (a bazel label builds). It is stored in user state, never in the repo: a
+// `trusted: true` a repo could commit about itself would say nothing.
+//
+// Revoking un-resolves nothing. The descriptors every source already produced stay exactly where
+// they are and every collection keeps loading, describing and invoking from them; only the next
+// build is refused. Dropping them instead would make revoke a destructive act nobody would risk.
+func (w Workspace) SetWorkspaceTrust(_ context.Context, request *connect.Request[grpcviewv1.SetWorkspaceTrustRequest]) (*connect.Response[grpcviewv1.SetWorkspaceTrustResponse], error) {
+	root := w.store.Root()
+	var err error
+	if request.Msg.GetTrusted() {
+		err = wsroot.Trust(root)
+	} else {
+		err = wsroot.Revoke(root)
+	}
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to record workspace trust: %w", err))
+	}
+	// The resulting state is re-read rather than echoed back, so the response is what the next
+	// build will actually see.
+	trusted, err := wsroot.IsTrusted(root)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal,
+			fmt.Errorf("failed to read whether this workspace is trusted: %w", err))
+	}
+	return connect.NewResponse(&grpcviewv1.SetWorkspaceTrustResponse{Trusted: trusted}), nil
 }
 
 // CreateCollection is the one place a collection legitimately comes into existence: every
@@ -163,8 +201,30 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 		if err != nil {
 			return nil, err
 		}
+		// The path is only the RECIPE for next time — the bytes the caller sent are this resolve,
+		// and re-reading the file here could disagree with them. So a path that does not confine
+		// to the workspace costs the RECIPE and nothing else: the upload still lands, it is simply
+		// not refreshable. Failing the whole add instead would break the ordinary workflow — a
+		// `buf build` image in ~/Downloads, or a bazel-bin/ path that is a symlink out of the repo
+		// — over bytes that are already here and already valid. The confinement that matters is on
+		// the READ side (resolveOne), which is the only place a recorded path is ever traversed.
+		var recipe string
+		if p := request.Msg.GetPath(); p != "" {
+			_, rel, err := resolveWorkspaceFile(w.store.Root(), p)
+			if err != nil {
+				slog.Default().Warn("upload is not refreshable: its file is outside the workspace",
+					"file_name", fileName, "path", p, "root", w.store.Root(), "error", err)
+			} else {
+				recipe = rel
+			}
+		}
 		src = &grpcviewv1.DescriptorSource{
-			Source:            &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: fileName}},
+			Source: &grpcviewv1.DescriptorSource_Upload{
+				// Root-relative, so the recipe survives a colleague's checkout at another path.
+				// Identity is still the file name alone, which is what makes re-adding the same
+				// upload from a moved file edit this recipe instead of spawning a second source.
+				Upload: &grpcviewv1.Upload{FileName: fileName, Path: recipe},
+			},
 			CommitDescriptors: request.Msg.GetCommitDescriptors(),
 		}
 		src.Id = sourceID(src)
@@ -180,8 +240,38 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 		if fresh, err = resolveReflection(ctx, src.GetId(), src.GetReflection()); err != nil {
 			return nil, err
 		}
+	case *grpcviewv1.AddDescriptorSourceRequest_Bazel:
+		// Canonicalize BEFORE the id is derived: "//pkg" and "//pkg:pkg" are one target, so the
+		// stored label — and therefore the id — has to be the canonical spelling, or re-adding the
+		// other spelling would duplicate the source instead of refreshing it.
+		label, err := bazelbuild.CanonicalLabel(source.Bazel.GetLabel())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		src = &grpcviewv1.DescriptorSource{
+			Source:            &grpcviewv1.DescriptorSource_Bazel{Bazel: &grpcviewv1.Bazel{Label: label}},
+			CommitDescriptors: request.Msg.GetCommitDescriptors(),
+		}
+		src.Id = sourceID(src)
+		// An add that cannot build FAILS, exactly as an undialable reflection target does: the user
+		// is asking for this source right now, so a row that silently resolves to nothing would be
+		// a worse answer than the build's error.
+		if fresh, err = w.resolveBazel(ctx, src.GetId(), label); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
+	}
+
+	// commit_descriptors is STICKY across a re-add: an add whose id already exists is the documented
+	// refresh gesture (and the browser's only way to refresh an upload or a bazel label), so
+	// re-adding with the box unticked must not silently un-commit a committed source and delete the
+	// sidecar the repo carries. A re-add can therefore turn committing ON but never off;
+	// SetDescriptorSourceCommit (`grpcview sources commit --off`) is the one and only way off.
+	if i := slices.IndexFunc(ws.GetSources(), func(s *grpcviewv1.DescriptorSource) bool {
+		return s.GetId() == src.GetId()
+	}); i != -1 && ws.GetSources()[i].GetCommitDescriptors() {
+		src.CommitDescriptors = true
 	}
 
 	sources := upsertSource(slices.Clone(ws.GetSources()), src)
@@ -207,7 +297,7 @@ func (w Workspace) RefreshDescriptorSource(ctx context.Context, request *connect
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("unknown source id %q", request.Msg.GetId()))
 	}
 
-	fresh, err := resolveOne(ctx, sources[index])
+	fresh, err := w.resolveOne(ctx, sources[index])
 	if err != nil {
 		return nil, err
 	}

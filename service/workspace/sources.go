@@ -2,10 +2,14 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -16,7 +20,9 @@ import (
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/bazelbuild"
 	"codeberg.org/ramilmsh/grpcview/service/store"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 // Descriptor sources: each resolves independently to its own descriptors (cached per source),
@@ -64,6 +70,9 @@ func resolveReflection(ctx context.Context, id string, server *grpcviewv1.Server
 	}, nil
 }
 
+// resolveUpload resolves from bytes that ARE the answer: an upload's payload, or what a bazel build
+// wrote (see resolveBazel). Neither has a ListServices to narrow it, so every service the set
+// defines is served — the one place a reflection source is different.
 func resolveUpload(id string, fds *descriptorpb.FileDescriptorSet) (*resolvedSource, error) {
 	files, err := desc.CreateFileDescriptorsFromSet(fds)
 	if err != nil {
@@ -93,18 +102,176 @@ func parseUpload(raw []byte) (*descriptorpb.FileDescriptorSet, error) {
 	return fds, nil
 }
 
-// resolveOne re-acquires one source from its POINTER, which makes it reflection-only: an upload
-// is the null-pointer kind, so there is nothing to re-read and refreshing it means handing over
-// the file again. Saying so is the point — silently succeeding would report a refresh that
+// bazelBuilder is the ONLY place a bazelbuild.Builder is constructed, which is what makes the
+// trust check unskippable: a build can only be started through a Builder, so every future caller
+// that wants one comes through this door and cannot add a second one that forgets to ask. Putting
+// the gate in bazelbuild itself was the alternative and is worse — that package is the mechanism and
+// knows nothing about workspaces, manifests or roots.
+func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
+	root := w.store.Root()
+
+	trusted, err := wsroot.IsTrusted(root)
+	if err != nil {
+		return bazelbuild.Builder{}, connect.NewError(connect.CodeInternal,
+			fmt.Errorf("failed to read whether this workspace is trusted: %w", err))
+	}
+	if !trusted {
+		// FailedPrecondition, not PermissionDenied: nothing is refusing the user, the workspace is
+		// simply in a state where building is not allowed yet, and the fix is one call away.
+		return bazelbuild.Builder{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"the workspace %s is not trusted, and resolving a bazel source runs `bazel build` — arbitrary code from this repo's BUILD files: trust the workspace first if it is yours", root))
+	}
+
+	cfg, err := w.store.WorkspaceBazel()
+	if err != nil {
+		return bazelbuild.Builder{}, toConnectError(err)
+	}
+
+	// bazel.root is authored config naming a build cwd, not a file whose bytes are read back, so it
+	// is NOT confined to the workspace root the way an upload's path is: a grpcview workspace opened
+	// at a subdirectory of a monorepo has its bazel root ABOVE it, which is the common case and the
+	// only reason the field exists.
+	//
+	// It is still bounded, because the trust decision is about ONE root: the value is repo state a
+	// colleague commits, and without a bound trusting this workspace would authorize a build whose
+	// cwd is inside a DIFFERENT, untrusted repo — whose BUILD files then execute. So the resolved
+	// root has to be on the same line as the trusted one, an ancestor (the monorepo case) or a
+	// descendant (a nested bazel tree inside the workspace); anything sideways is refused.
+	bazelRoot := cfg.GetRoot()
+	switch {
+	case bazelRoot == "":
+		bazelRoot = bazelbuild.FindRoot(root)
+		if bazelRoot == "" {
+			return bazelbuild.Builder{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+				"no bazel workspace found at or above %s (no MODULE.bazel, WORKSPACE or WORKSPACE.bazel): set bazel.root in %s",
+				root, store.WorkspaceFileName))
+		}
+	case !filepath.IsAbs(bazelRoot):
+		bazelRoot = filepath.Join(root, bazelRoot)
+	}
+	bazelRoot = filepath.Clean(bazelRoot)
+	if err := relatedToRoot(root, bazelRoot); err != nil {
+		return bazelbuild.Builder{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"bazel.root in %s resolves to %s, which is neither inside the trusted workspace %s nor an ancestor of it: trust covers one workspace root, and building with a cwd in an unrelated repo would run that repo's BUILD files instead",
+			store.WorkspaceFileName, bazelRoot, root))
+	}
+
+	// A zero timeout_seconds means "the default", which Builder already spells; passing 0 through
+	// keeps that one definition rather than duplicating the number here.
+	return bazelbuild.Builder{
+		Root:    bazelRoot, // cleaned above, before the bound was checked against it
+		Timeout: time.Duration(cfg.GetTimeoutSeconds()) * time.Second,
+	}, nil
+}
+
+// resolveBazel builds label and resolves this source from what the build wrote.
+//
+// The label is canonicalized FIRST, before anything derives an id from it, so "//pkg" and
+// "//pkg:pkg" cannot become two sources (see bazelbuild.CanonicalLabel).
+func (w Workspace) resolveBazel(ctx context.Context, id, label string) (*resolvedSource, error) {
+	canon, err := bazelbuild.CanonicalLabel(label)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	builder, err := w.bazelBuilder()
+	if err != nil {
+		return nil, err
+	}
+	sets, err := builder.DescriptorSets(ctx, canon)
+	if err != nil {
+		return nil, bazelResolveError(ctx, err)
+	}
+	// A bazel source has no ListServices to narrow it, so what it SERVES is every service the built
+	// set defines — exactly an upload's rule, which is why this shares an upload's resolve.
+	return resolveUpload(id, dedupeFiles(sets))
+}
+
+// dedupeFiles concatenates the built sets, first spelling of each proto file name winning, in the
+// order cquery printed them. It is not an optimization: a merging rule (a proto_descriptor_set over
+// several proto_librarys) emits its inputs' per-target sets, so one file name legitimately appears
+// in more than one of them, and desc.CreateFileDescriptorsFromSet REJECTS a duplicate file name.
+// Deduping by name alone is safe because every copy came out of one build of one target — they are
+// the same file by construction, not two sources disagreeing (that is mergeSources' problem).
+func dedupeFiles(sets []*descriptorpb.FileDescriptorSet) *descriptorpb.FileDescriptorSet {
+	out := &descriptorpb.FileDescriptorSet{}
+	seen := make(map[string]bool)
+	for _, set := range sets {
+		for _, f := range set.GetFile() {
+			if seen[f.GetName()] {
+				continue
+			}
+			seen[f.GetName()] = true
+			out.File = append(out.File, f)
+		}
+	}
+	return out
+}
+
+// bazelResolveError is the ONE seam where bazelbuild's plain errors become connect codes — that
+// package returns plain errors on purpose so it stays usable outside an RPC. The message is passed
+// through untouched: each one already names its own fix (--remote_download_toplevel,
+// bazel.timeout_seconds, the stderr tail), and rewording it here would lose that.
+//
+// FailedPrecondition is the default because it describes every remaining case: the label is fine
+// and the request is fine, the workspace is simply not in a state where it can produce descriptors —
+// an unbuildable target, a target that is not a descriptor set, outputs left on a remote cache. A
+// build that ran out of its own timeout lands here too, carrying the message that names
+// bazel.timeout_seconds; only a deadline that arrives as a real context error is reported as one.
+func bazelResolveError(ctx context.Context, err error) error {
+	switch {
+	case ctx.Err() != nil:
+		// The caller went away, so this is not the workspace's fault at all.
+		return connect.NewError(connect.CodeCanceled, err)
+	case errors.Is(err, context.DeadlineExceeded):
+		return connect.NewError(connect.CodeDeadlineExceeded, err)
+	default:
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+}
+
+// resolveOne re-acquires one source from its POINTER. Reflection dials, bazel builds, and an upload
+// re-reads the file its add recorded — an upload with NO path is the only kind with nothing to
+// re-acquire from, and saying so is the point: silently succeeding would report a refresh that
 // re-fetched nothing.
-func resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSource) (*resolvedSource, error) {
+//
+// Every path into it is a source-MUTATING RPC: add and refresh call it directly, and the rest reach
+// it through resolveConfigured when a listed source has no stored resolve yet. Nothing on the READ
+// path stats a recipe or rebuilds a label — deriveDefinitions reports an unresolved source with
+// unresolvedReason instead — so an untrusted or unbuildable bazel source still LOADS, with the reason
+// in its Resolved.error and no acquisition triggered by somebody opening a collection.
+func (w Workspace) resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSource) (*resolvedSource, error) {
 	id := src.GetId()
 	switch s := src.GetSource().(type) {
 	case *grpcviewv1.DescriptorSource_Reflection:
 		return resolveReflection(ctx, id, s.Reflection)
+	case *grpcviewv1.DescriptorSource_Bazel:
+		return w.resolveBazel(ctx, id, s.Bazel.GetLabel())
 	case *grpcviewv1.DescriptorSource_Upload:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"source %q is an upload, which has no address or path to re-resolve from: refresh it by uploading the file again", id))
+		path := s.Upload.GetPath()
+		if path == "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+				"source %q was uploaded with no path — a browser has a file picker and never learns one — so there is nothing to re-read: refresh it by handing the file over again", id))
+		}
+		// The recorded path is wire input too (a colleague's grpcview.json wrote it), so it is
+		// confined here exactly as it was on the add — and the READ side is where the confinement
+		// has to be STRICT: an add may decline to record a recipe it cannot confine, but nothing
+		// may ever re-read one that leaves the workspace. What comes back is the symlink-resolved
+		// path, which is what closes the check-then-read window on it.
+		real, _, err := resolveWorkspaceFile(w.store.Root(), path)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("cannot refresh source %q: %w", id, err))
+		}
+		raw, err := os.ReadFile(real)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("cannot refresh source %q: %w", id, err))
+		}
+		fds, err := parseUpload(raw)
+		if err != nil {
+			return nil, err
+		}
+		return resolveUpload(id, fds)
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, errMissingDefinition(id))
 	}
@@ -158,7 +325,7 @@ func (w Workspace) resolveConfigured(
 			})
 			continue
 		}
-		rs, err := resolveOne(ctx, src)
+		rs, err := w.resolveOne(ctx, src)
 		if err != nil {
 			slog.Default().Warn("descriptor source unresolved", "source", id, "error", err)
 			out = append(out, &resolvedSource{id: id, server: src.GetReflection(), err: err})

@@ -763,6 +763,63 @@ func TestCommittedDescriptorsResolveInAFreshClone(t *testing.T) {
 	}
 }
 
+// TestReAddNeverUnCommits: an add whose id already exists IS the refresh gesture — it is how the
+// browser refreshes an upload or a bazel label — so re-adding with the checkbox off must not flip a
+// committed source back to cached and DELETE the sidecar the repo carries. A re-add can turn
+// committing on, never off; SetDescriptorSourceCommit is the one way off.
+func TestReAddNeverUnCommits(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	set := fileDescriptorSet(t, "grpc/health/v1/health.proto")
+	add := descriptorSetAddReq(set)
+	add.CommitDescriptors = true
+	added, err := w.AddDescriptorSource(ctx, connect.NewRequest(add))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource (committed): %v", err)
+	}
+	id := added.Msg.GetCollection().GetSources()[0].GetId()
+	if got := committedSidecars(t, w); len(got) != 1 {
+		t.Fatalf("want one sidecar after a committed add, got %v", got)
+	}
+
+	// The same source again, with the flag unset — a plain refresh.
+	again, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(set)))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource (re-add): %v", err)
+	}
+	if !sourceByID(again.Msg.GetCollection(), id).GetCommitDescriptors() {
+		t.Errorf("a re-add un-committed the source: %+v", again.Msg.GetCollection().GetSources())
+	}
+	if got := committedSidecars(t, w); len(got) != 1 {
+		t.Errorf("a re-add deleted the committed sidecar, got %v", got)
+	}
+
+	// Turning it off is still possible — through the RPC that exists for it.
+	off, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(commitReq(id, false)))
+	if err != nil {
+		t.Fatalf("SetDescriptorSourceCommit(off): %v", err)
+	}
+	if sourceByID(off.Msg.GetCollection(), id).GetCommitDescriptors() {
+		t.Errorf("commit_descriptors still set after --off: %+v", off.Msg.GetCollection().GetSources())
+	}
+	if got := committedSidecars(t, w); len(got) != 0 {
+		t.Errorf("--off must delete the sidecar, got %v", got)
+	}
+
+	// And a re-add can still turn it ON.
+	on := descriptorSetAddReq(set)
+	on.CommitDescriptors = true
+	backOn, err := w.AddDescriptorSource(ctx, connect.NewRequest(on))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource (re-add with the flag on): %v", err)
+	}
+	if !sourceByID(backOn.Msg.GetCollection(), id).GetCommitDescriptors() {
+		t.Errorf("a re-add could not turn committing on: %+v", backOn.Msg.GetCollection().GetSources())
+	}
+}
+
 // TestUploadsAreNotStoredInTheManifest pins the deletion of upload's special case: the bytes go into
 // the descriptor store like every other kind's, so grpcview.json stays a small file that a request
 // reorder can rewrite.
@@ -797,8 +854,10 @@ func TestUploadsAreNotStoredInTheManifest(t *testing.T) {
 	}
 }
 
-// TestRefreshAnUploadFails: an upload is the null-pointer kind, so there is nothing to re-resolve
-// from. Failing is deliberate — a silent success would report a refresh that re-fetched nothing.
+// TestRefreshAnUploadFails: an upload with no path is the null-pointer kind, so there is nothing to
+// re-resolve from. Failing is deliberate — a silent success would report a refresh that re-fetched
+// nothing. An upload that DOES carry a path re-reads it instead; see
+// TestRefreshUploadRereadsItsPath.
 func TestRefreshAnUploadFails(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -817,8 +876,10 @@ func TestRefreshAnUploadFails(t *testing.T) {
 	if code := connect.CodeOf(err); code != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition (err=%v)", code, err)
 	}
-	if !strings.Contains(err.Error(), "uploading the file again") {
-		t.Errorf("the error must name the fix, got %v", err)
+	for _, want := range []string{"no path", "handing the file over again"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error must say why (%q) and name the fix, got %v", want, err)
+		}
 	}
 
 	// The failed refresh changed nothing: the upload still resolves from what the add stored.
