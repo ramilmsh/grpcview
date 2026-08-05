@@ -135,14 +135,10 @@ message ItemMeta {
 // the PRIORITY order the merge respects (earlier wins) — see the wire
 // grpcview.v1.DescriptorSource.
 //
-// Unlike the wire message (which never carries descriptor bytes to the client),
-// the on-disk form stores an upload as a typed FileDescriptorSet, so a committed
-// schema is readable, diffable protojson instead of a base64 blob — descriptors
-// are proto definitions too, so we encode them the same way. An upload's
-// descriptors live HERE and nowhere else: unlike a reflection target they cannot
-// be re-fetched, so they are committed rather than cached. protojson drops the
-// buf-specific image extensions a `buf build` output carries; nothing here reads
-// them, and source_code_info (the doc comments) round-trips intact.
+// It is a POINTER plus authored config, never descriptor bytes: every kind's
+// bytes go into the descriptor store (a local blob, or a committed sidecar when
+// commit_descriptors is set), so grpcview.json stays a small file that a request
+// reorder can rewrite cheaply.
 message DescriptorSource {
   // id is the source's stable identity, mirroring the wire field: "upload:<file
   // name>" or "reflection:<address>[+tls]". It keys the per-source resolve cache
@@ -152,13 +148,20 @@ message DescriptorSource {
     Upload upload = 1;
     Reflection reflection = 2;
   }
+  // commit_descriptors puts what this source resolves to in the repo — a
+  // protojson ResolvedSource sidecar under the collection's descriptors/ — rather
+  // than in the workspace's local blob store. It is authored config, so it
+  // belongs here; it changes only where the store writes.
+  bool commit_descriptors = 4;
 }
 
-// Upload is an uploaded FileDescriptorSet: the descriptors plus the file name
-// they came from, which is the source's identity.
+// Upload is a FileDescriptorSet a human handed over, identified by the file name
+// it came from. It is the null-pointer kind: the name is all there is to identify
+// and label it by, and its bytes live in the descriptor store like every other
+// kind's — so an upload whose descriptors are not committed has its only copy in
+// local state.
 message Upload {
   string file_name = 1;
-  google.protobuf.FileDescriptorSet descriptor_set = 2;
 }
 
 // DescriptorIndex is descriptors.json in a collection's state directory. Like
@@ -166,7 +169,12 @@ message Upload {
 // it lives under the workspace state root, and losing it costs a re-resolve of
 // every source rather than any authored content.
 //
-// It is the `id -> current digest` half of the descriptor store. The other half is
+// It is the `id -> current digest` half of the descriptor store, and it covers
+// exactly the sources whose descriptors are NOT committed: a source with
+// commit_descriptors set is written to its sidecar instead, and has no entry here
+// and no blob.
+//
+// The other half is
 // the content-addressed blob (`<state root>/blobs/<sha256>.binpb`, the binary
 // FileDescriptorSet the digest names), which is workspace-scoped so five
 // collections pointing at one source hold one copy of its bytes. The two keys stay
@@ -200,18 +208,21 @@ message DescriptorIndexEntry {
   repeated string service_names = 3;
 }
 
-// ResolvedSource is what one descriptor source last resolved to: it is NOT a file
-// on disk, it is the assembled pair of a DescriptorIndexEntry and the blob that
-// entry's digest names, which is the shape the store hands to and takes from the
-// layer above.
+// ResolvedSource is what one descriptor source last resolved to, and it is the
+// shape the store hands to and takes from the layer above whichever of the two
+// locations holds it: for an uncommitted source it is the assembled pair of a
+// DescriptorIndexEntry and the blob that entry's digest names, and for a source
+// with commit_descriptors set it IS the committed file —
+// <collection>/descriptors/<slug>-<hash of id>.json, protojson like every other
+// committed file, named by source id rather than by digest so a refresh is a diff
+// instead of an add plus a delete.
 //
 // It exists so the merged view can be rebuilt for ANY mutation — remove, reorder,
 // or adding an unrelated source — and on any first touch of a collection, without
-// re-dialing every reflection target. Reflection sources are re-dialed only on an
-// explicit add/refresh, so between refreshes the blob is the workspace's only copy
-// of their schema. Uploads go through the same path to keep one re-derivation
-// route, but for them it is pure cache: losing it costs a re-parse of the
-// committed manifest.
+// re-dialing every reflection target. Acquisition happens only on an explicit
+// add/refresh, so between refreshes this is the workspace's only copy of a
+// source's schema — and for an upload, which has no pointer to re-acquire from, it
+// is the only copy there will ever be.
 message ResolvedSource {
   string id = 1;
   google.protobuf.FileDescriptorSet descriptor_set = 2;

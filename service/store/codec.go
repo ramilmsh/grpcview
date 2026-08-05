@@ -17,12 +17,22 @@ var marshalOpts = protojson.MarshalOptions{Multiline: true, Indent: "  ", EmitDe
 // DiscardUnknown so a file written by a newer grpcview still loads.
 var unmarshalOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 
-func writeMessage(path string, m proto.Message) error {
+// marshalMessage is the exact bytes of a managed file, newline included, so a caller that wants
+// to compare them against what is already on disk sees the same thing writeMessage would write.
+func marshalMessage(m proto.Message) ([]byte, error) {
 	data, err := marshalOpts.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
+}
+
+func writeMessage(path string, m proto.Message) error {
+	data, err := marshalMessage(m)
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
-	return writeFileAtomic(path, append(data, '\n'), 0o644)
+	return writeFileAtomic(path, data, 0o644)
 }
 
 // readMessage returns the read error unwrapped, so callers can test os.ErrNotExist.

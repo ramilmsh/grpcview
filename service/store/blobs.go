@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,17 +16,23 @@ import (
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 )
 
-// The descriptor store: content-addressed blobs holding what each source resolved to, plus one
-// per-collection index pointing source ids at digests.
+// The descriptor store: what each source last resolved to, in one of two locations chosen by
+// that source's commit_descriptors flag.
 //
-// The blobs live under the WORKSPACE state root rather than a collection's, because that is the
-// whole point of addressing them by content: five collections in a monorepo pointing at one
-// schema hold one copy of its bytes. The index is per collection because priority order and
-// which sources are configured are per collection.
+// Off (the default) is a content-addressed blob plus one per-collection index pointing source
+// ids at digests. The blobs live under the WORKSPACE state root rather than a collection's,
+// because that is the whole point of addressing them by content: five collections in a monorepo
+// pointing at one schema hold one copy of its bytes. The index is per collection because
+// priority order and which sources are configured are per collection.
+//
+// On is a protojson sidecar inside the collection, named by SOURCE ID. The asymmetry is
+// deliberate and the reasons are opposite: content-addressing is right for a cache (dedup,
+// immutability), while a digest-named committed file would turn every refresh into an add plus
+// a delete instead of a diff, which is the whole readable-protojson rationale for committing.
 //
 // Nothing here stores the merged view (services, the merged descriptor set, per-source
-// summaries). That is a pure function of these blobs plus the manifest's source order, and it is
-// derived in memory on first touch — see service/workspace/definitions.go.
+// summaries). That is a pure function of these resolves plus the manifest's source order, and
+// it is derived in memory on first touch — see service/workspace/definitions.go.
 
 func (s *Store) blobsRoot() string { return filepath.Join(s.stateRoot, blobsDir) }
 
@@ -218,12 +225,139 @@ func (c *Collection) writeDescriptorIndex(entries []*grpcviewstorev1.DescriptorI
 	})
 }
 
-// DescriptorBlobs returns what each of this collection's sources last resolved to, keyed by
-// source id: the index entry and the blob its digest names, assembled. A source with no entry —
-// or whose blob has gone missing — is simply absent from the map, which reads as "not resolved
-// yet"; that is never an error, because a load must survive a half-collected state root and a
-// refresh repairs it.
-func (c *Collection) DescriptorBlobs(_ context.Context) (map[string]*grpcviewstorev1.ResolvedSource, error) {
+func (c *Collection) descriptorSidecarsRoot() string {
+	return filepath.Join(c.root, descriptorsDir)
+}
+
+// descriptorSidecarPath names a committed sidecar after the SOURCE ID — hashedName, so two ids
+// that slugify alike never share a file — and never after the content's digest, which would make
+// every refresh a rename and cost the readable diff committing is for.
+func (c *Collection) descriptorSidecarPath(id string) string {
+	return filepath.Join(c.descriptorSidecarsRoot(), hashedName(id)+descriptorSidecarExt)
+}
+
+// writeDescriptorSidecar commits one resolve as protojson, through the same codec every other
+// committed file uses so it is formatted and diffed like them.
+//
+// The descriptor set goes through normalizeDescriptorSet's canonical form first, for the same
+// reason the digest does and with a harder requirement: refreshing twice against an unchanged
+// upstream must leave `git status` clean, so the bytes must depend on the schema and not on
+// which encoder — a `buf build` image, a reflection round trip — produced this copy of it.
+//
+// service_names is committed alongside the descriptors because it is not derivable: a reflection
+// server's ListServices is authoritative and narrower than "every service these files define".
+// That is also what makes a sidecar self-sufficient in a fresh clone with no local state.
+//
+// Like putBlob the write is skipped when the bytes already on disk match, so a mutation that
+// re-resolved nothing — a reorder, a remove, a refresh against an unchanged upstream — moves no
+// mtime on a file that can be megabytes.
+func (c *Collection) writeDescriptorSidecar(r *grpcviewstorev1.ResolvedSource) error {
+	canonical, _, err := normalizeDescriptorSet(r.GetDescriptorSet())
+	if err != nil {
+		return err
+	}
+	fds := &descriptorpb.FileDescriptorSet{}
+	if err := proto.Unmarshal(canonical, fds); err != nil {
+		return err
+	}
+	data, err := marshalMessage(&grpcviewstorev1.ResolvedSource{
+		Id:            r.GetId(),
+		DescriptorSet: fds,
+		ServiceNames:  r.GetServiceNames(),
+	})
+	if err != nil {
+		return err
+	}
+	path := c.descriptorSidecarPath(r.GetId())
+	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, data) {
+		return nil
+	}
+	if err := os.MkdirAll(c.descriptorSidecarsRoot(), 0o755); err != nil {
+		return err
+	}
+	return writeFileAtomic(path, data, 0o644)
+}
+
+// readDescriptorSidecar returns the resolve a source's committed sidecar holds, or nil when
+// there is none. An unparseable sidecar is nil too, with a warning: the source reads as
+// unresolved and a refresh rewrites the file, which is strictly better than failing every load
+// of a collection because someone hand-edited a committed descriptor set.
+func (c *Collection) readDescriptorSidecar(id string) (*grpcviewstorev1.ResolvedSource, error) {
+	path := c.descriptorSidecarPath(id)
+	r := &grpcviewstorev1.ResolvedSource{}
+	err := readMessage(path, r)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		c.logger.Warn("ignoring unreadable committed descriptor sidecar", "path", path, "error", err)
+		return nil, nil
+	}
+	r.Id = id
+	return r, nil
+}
+
+// pruneDescriptorSidecars deletes every sidecar in the committed directory that keep — the file
+// names of the sources that just wrote one — does not name, so a source that left the list or
+// had its flag turned off loses its file. It is per collection, unlike gcBlobs, because a
+// sidecar belongs to exactly one; and the directory itself goes when it empties, so a collection
+// that commits no descriptors has no empty directory sitting in git.
+func (c *Collection) pruneDescriptorSidecars(keep map[string]bool) error {
+	root := c.descriptorSidecarsRoot()
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	remaining := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), descriptorSidecarExt) || keep[e.Name()] {
+			remaining++
+			continue
+		}
+		if err := os.Remove(filepath.Join(root, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if remaining > 0 {
+		return nil
+	}
+	if err := os.Remove(root); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// blobResolve assembles the uncommitted form of one source's resolve: the index entry plus the
+// blob its digest names. A missing blob is (nil, nil) — the source reads as unresolved and a
+// refresh repairs it — because a load must survive a half-collected state root.
+func (c *Collection) blobResolve(id string, entry *grpcviewstorev1.DescriptorIndexEntry) (*grpcviewstorev1.ResolvedSource, error) {
+	fds, err := c.store.readBlob(entry.GetDigest())
+	if err != nil {
+		return nil, err
+	}
+	if fds == nil {
+		c.logger.Warn("descriptor blob missing for source", "source", id, "digest", entry.GetDigest())
+		return nil, nil
+	}
+	return &grpcviewstorev1.ResolvedSource{
+		Id:            id,
+		DescriptorSet: fds,
+		ServiceNames:  entry.GetServiceNames(),
+	}, nil
+}
+
+// DescriptorResolves returns what each of this collection's sources last resolved to, keyed by
+// source id, from whichever location holds it — a committed sidecar for a source whose flag is
+// on, the index entry plus its blob otherwise. A source with neither is simply absent from the
+// map, which reads as "not resolved yet" and is never an error.
+//
+// The sidecar half is what makes a fresh clone work with no refresh at all, which is the whole
+// reason the flag exists: the committed file is read straight out of the collection, and the
+// empty state root a clone has costs nothing.
+func (c *Collection) DescriptorResolves(_ context.Context) (map[string]*grpcviewstorev1.ResolvedSource, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	index, err := c.readDescriptorIndex()
@@ -232,18 +366,32 @@ func (c *Collection) DescriptorBlobs(_ context.Context) (map[string]*grpcviewsto
 	}
 	out := make(map[string]*grpcviewstorev1.ResolvedSource, len(index))
 	for id, entry := range index {
-		fds, err := c.store.readBlob(entry.GetDigest())
+		r, err := c.blobResolve(id, entry)
 		if err != nil {
 			return nil, err
 		}
-		if fds == nil {
-			c.logger.Warn("descriptor blob missing for source", "source", id, "digest", entry.GetDigest())
+		if r != nil {
+			out[id] = r
+		}
+	}
+
+	// The manifest is what says which sources committed their descriptors, so the sidecars can
+	// only be found through it. A collection with no readable manifest has no sources at all,
+	// and answering from the index alone is then exactly right.
+	col, err := c.readCollection()
+	if err != nil {
+		return out, nil
+	}
+	for _, ds := range col.GetSources() {
+		if !ds.GetCommitDescriptors() {
 			continue
 		}
-		out[id] = &grpcviewstorev1.ResolvedSource{
-			Id:            id,
-			DescriptorSet: fds,
-			ServiceNames:  entry.GetServiceNames(),
+		r, err := c.readDescriptorSidecar(ds.GetId())
+		if err != nil {
+			return nil, err
+		}
+		if r != nil {
+			out[ds.GetId()] = r
 		}
 	}
 	return out, nil

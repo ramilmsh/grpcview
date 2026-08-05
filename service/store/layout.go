@@ -2,6 +2,8 @@ package store
 
 import (
 	"cmp"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strings"
@@ -28,6 +30,13 @@ const (
 	treeDir    = "tree"
 	scriptsDir = "scripts"
 	historyDir = "history"
+
+	// descriptorsDir holds the COMMITTED descriptor sidecars, one per source whose
+	// commit_descriptors is set. It sits in the collection directory (next to tree/), not
+	// under the state root, because that is the whole difference the flag makes; a sidecar
+	// belongs to exactly one collection, unlike a blob.
+	descriptorsDir       = "descriptors"
+	descriptorSidecarExt = ".json"
 
 	// descriptorIndexFileName is a collection's `source id -> blob digest` index; the blobs
 	// it points at are shared, so it sits in the collection's state dir while they do not.
@@ -92,6 +101,17 @@ var reservedSlugs = map[string]bool{
 
 func isReserved(slug string) bool {
 	return reservedSlugs[strings.ToLower(slug)]
+}
+
+// hashedName names a file or directory after an arbitrary KEY: a slug so a human reading a
+// listing recognizes which key it belongs to, plus a hash of the whole key so keys that
+// slugify alike ("localhost:8080" and "localhost.8080", "reflection:a/b" and
+// "reflection:a-b") can never collide on one name. Both a collection's state directory and a
+// committed descriptor sidecar are named this way, off the collection id and the source id
+// respectively.
+func hashedName(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return slugify(key) + "-" + hex.EncodeToString(sum[:6])
 }
 
 func slugify(name string) string {

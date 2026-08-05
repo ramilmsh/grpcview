@@ -15,6 +15,9 @@ message AddDescriptorSourceRequest {
   }
   // Identity of a descriptor_set upload; re-uploading the same name refreshes it.
   string file_name = 4;
+  // Commit this source's descriptors to the repo instead of caching them in
+  // local state — see DescriptorSource.commit_descriptors.
+  bool commit_descriptors = 5;
 }
 
 message AddDescriptorSourceResponse {
@@ -46,6 +49,16 @@ message ReorderDescriptorSourcesRequest {
 }
 
 message ReorderDescriptorSourcesResponse {
+  Collection collection = 1;
+}
+
+message SetDescriptorSourceCommitRequest {
+  string collection = 1;
+  string id = 2;
+  bool commit = 3;
+}
+
+message SetDescriptorSourceCommitResponse {
   Collection collection = 1;
 }
 
@@ -349,6 +362,11 @@ service WorkspaceService {
   // ReorderDescriptorSources sets which source wins when several describe the
   // same protos.
   rpc ReorderDescriptorSources(ReorderDescriptorSourcesRequest) returns (ReorderDescriptorSourcesResponse);
+  // SetDescriptorSourceCommit moves one source's descriptors between the
+  // committed sidecar and the local blob store. It never dials or builds: the
+  // bytes it writes are the ones already stored, so committing a source that has
+  // never resolved is InvalidArgument rather than a resolve.
+  rpc SetDescriptorSourceCommit(SetDescriptorSourceCommitRequest) returns (SetDescriptorSourceCommitResponse);
   // Get reports NOTHING implicitly: a collection that does not exist is NotFound,
   // never created on demand.
   rpc Get(GetRequest) returns (GetResponse);

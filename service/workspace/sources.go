@@ -82,31 +82,29 @@ func resolveUpload(id string, fds *descriptorpb.FileDescriptorSet) (*resolvedSou
 	return &resolvedSource{id: id, files: fds, services: names}, nil
 }
 
+// parseUpload is a plain parse: normalizing a `buf build` image's extension fields away belongs
+// at the store's write boundary (normalizeDescriptorSet), where it applies to every kind rather
+// than only to the bytes that happen to arrive through this door.
 func parseUpload(raw []byte) (*descriptorpb.FileDescriptorSet, error) {
-	// DiscardUnknown drops a `buf build` image's extension fields, which the committed protojson
-	// form cannot hold — without it a reload of the same source would yield different bytes.
 	fds := &descriptorpb.FileDescriptorSet{}
-	if err := (proto.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(raw, fds); err != nil {
+	if err := proto.Unmarshal(raw, fds); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parse descriptor set: %w", err))
 	}
 	return fds, nil
 }
 
-func (w Workspace) resolveOne(ctx context.Context, coll *store.Collection, src *grpcviewv1.DescriptorSource) (*resolvedSource, error) {
+// resolveOne re-acquires one source from its POINTER, which makes it reflection-only: an upload
+// is the null-pointer kind, so there is nothing to re-read and refreshing it means handing over
+// the file again. Saying so is the point — silently succeeding would report a refresh that
+// re-fetched nothing.
+func resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSource) (*resolvedSource, error) {
 	id := src.GetId()
 	switch s := src.GetSource().(type) {
 	case *grpcviewv1.DescriptorSource_Reflection:
 		return resolveReflection(ctx, id, s.Reflection)
 	case *grpcviewv1.DescriptorSource_Upload:
-		fds, err := coll.UploadDescriptors(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if fds == nil {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("upload source %q has no stored descriptors", id))
-		}
-		return resolveUpload(id, fds)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"source %q is an upload, which has no address or path to re-resolve from: refresh it by uploading the file again", id))
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q has no kind", id))
 	}
@@ -118,7 +116,7 @@ func (w Workspace) resolveConfigured(
 	sources []*grpcviewv1.DescriptorSource,
 	fresh map[string]*resolvedSource,
 ) ([]*resolvedSource, error) {
-	cached, err := coll.DescriptorBlobs(ctx)
+	cached, err := coll.DescriptorResolves(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +137,7 @@ func (w Workspace) resolveConfigured(
 			})
 			continue
 		}
-		rs, err := w.resolveOne(ctx, coll, src)
+		rs, err := resolveOne(ctx, src)
 		if err != nil {
 			slog.Default().Warn("descriptor source unresolved", "source", id, "error", err)
 			out = append(out, &resolvedSource{id: id, server: src.GetReflection(), err: err})
@@ -277,7 +275,6 @@ func (w Workspace) putDescriptorState(
 	coll *store.Collection,
 	sources []*grpcviewv1.DescriptorSource,
 	fresh map[string]*resolvedSource,
-	uploads map[string]*descriptorpb.FileDescriptorSet,
 ) error {
 	resolved, err := w.resolveConfigured(ctx, coll, sources, fresh)
 	if err != nil {
@@ -311,7 +308,6 @@ func (w Workspace) putDescriptorState(
 
 	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
 		Sources:  stored,
-		Uploads:  uploads,
 		Resolves: resolves,
 	}); err != nil {
 		return err

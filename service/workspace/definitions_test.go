@@ -297,7 +297,6 @@ func TestGetSurvivesAnUnmergeableSourceList(t *testing.T) {
 			{Id: oneID, Source: &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: "one.binpb"}}},
 			{Id: twoID, Source: &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: "two.binpb"}}},
 		},
-		Uploads: map[string]*descriptorpb.FileDescriptorSet{oneID: one, twoID: two},
 		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
 			oneID: {Id: oneID, DescriptorSet: one},
 			twoID: {Id: twoID, DescriptorSet: two},

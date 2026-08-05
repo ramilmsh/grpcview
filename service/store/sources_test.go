@@ -4,8 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"google.golang.org/protobuf/types/descriptorpb"
-
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
@@ -80,13 +78,7 @@ func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 			if got := SourceID(tc.wire); got != tc.want {
 				t.Errorf("SourceID = %q, want %q", got, tc.want)
 			}
-			disk, err := wireToDiskSource(tc.wire, func(string) *descriptorpb.FileDescriptorSet {
-				return &descriptorpb.FileDescriptorSet{}
-			})
-			if err != nil {
-				t.Fatalf("wireToDiskSource: %v", err)
-			}
-			if got := diskSourceID(disk); got != tc.want {
+			if got := diskSourceID(wireToDiskSource(tc.wire)); got != tc.want {
 				t.Errorf("diskSourceID = %q, want %q", got, tc.want)
 			}
 		})

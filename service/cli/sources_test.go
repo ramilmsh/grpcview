@@ -25,6 +25,11 @@ func uploadSource(fileName string, resolved *grpcviewv1.Resolved) *grpcviewv1.De
 	}
 }
 
+func committed(src *grpcviewv1.DescriptorSource) *grpcviewv1.DescriptorSource {
+	src.CommitDescriptors = true
+	return src
+}
+
 func sourcesWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Sources = []*grpcviewv1.DescriptorSource{
@@ -33,10 +38,11 @@ func sourcesWorkspace() *grpcviewv1.Collection {
 			ServiceNames:    []string{"auth.v1.AuthService", "echo.v1.EchoService"},
 			WonServiceNames: []string{"auth.v1.AuthService", "echo.v1.EchoService"},
 		}),
-		uploadSource("echo.binpb", &grpcviewv1.Resolved{
+		// The upload is the kind that most wants committing: it cannot be re-fetched.
+		committed(uploadSource("echo.binpb", &grpcviewv1.Resolved{
 			FileCount:    3,
 			ServiceNames: []string{"echo.v1.EchoService"},
-		}),
+		})),
 		reflectionSource("gone.example:9999", &grpcviewv1.Resolved{
 			Error: "dial tcp 10.0.0.1:9999:\n  connect: connection refused",
 		}),
@@ -44,9 +50,9 @@ func sourcesWorkspace() *grpcviewv1.Collection {
 	return ws
 }
 
-const sourcesGolden = `1  reflection:localhost:50055    reflection  4 files  serves 2  wins 2
-2  upload:echo.binpb             upload      3 files  serves 1  wins 0  shadowed
-3  reflection:gone.example:9999  reflection  0 files  serves 0  wins 0  error: dial tcp 10.0.0.1:9999: connect: connection refused
+const sourcesGolden = `1  reflection:localhost:50055    reflection  cached     4 files  serves 2  wins 2
+2  upload:echo.binpb             upload      committed  3 files  serves 1  wins 0  shadowed
+3  reflection:gone.example:9999  reflection  cached     0 files  serves 0  wins 0  error: dial tcp 10.0.0.1:9999: connect: connection refused
 `
 
 func TestSourcesLs(t *testing.T) {

@@ -25,7 +25,10 @@ func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command
 			"These verbs show that list and change it.\n\n" +
 			"Order is precedence and only order: the outcome is a pure function of the\n" +
 			"list, never of which source was added or refreshed last. So `add` appends at\n" +
-			"lowest priority and `reorder` is the switch that changes who wins.",
+			"lowest priority and `reorder` is the switch that changes who wins.\n\n" +
+			"Where each source's resolved descriptors are STORED is a separate, per-source\n" +
+			"choice: cached in local state by default, or committed to the repo as a\n" +
+			"sidecar so a fresh clone resolves with no network — `sources commit`.",
 		// ArbitraryArgs plus an explicit RunE: without one, cobra prints help on stdout and exits 0.
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
@@ -34,11 +37,12 @@ func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command
 			if len(args) > 0 {
 				return unknownCommand(cmd, args[0])
 			}
-			return missingSubcommand(cmd, "ls", "add", "refresh", "rm", "reorder")
+			return missingSubcommand(cmd, "ls", "add", "commit", "refresh", "rm", "reorder")
 		},
 	}
 	cmd.AddCommand(newSourcesLsCmd(s, g, open))
 	cmd.AddCommand(newSourcesAddCmd(g, open))
+	cmd.AddCommand(newSourcesCommitCmd(g, open))
 	cmd.AddCommand(newSourcesRefreshCmd(g, open))
 	cmd.AddCommand(newSourcesRmCmd(g, open))
 	cmd.AddCommand(newSourcesReorderCmd(g, open))
@@ -59,7 +63,8 @@ func newSourcesLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comma
 		Use:   "ls",
 		Short: "List the definition sources in priority order",
 		Long: "List every definition source in PRIORITY order, one per line: priority, id,\n" +
-			"kind, resolved file count, how many services the source serves, how many it\n" +
+			"kind, whether its descriptors are committed to the repo or cached in local\n" +
+			"state, resolved file count, how many services the source serves, how many it\n" +
 			"won, and its status.\n\n" +
 			"Serving and winning are different numbers, and the difference is the point.\n" +
 			"Walking the list front to back, the first source to define a proto file or\n" +
@@ -91,7 +96,7 @@ func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFac
 }
 
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
-	var tls bool
+	var tls, commit bool
 
 	cmd := &cobra.Command{
 		Use:   "add <host:port>|<file.binpb>",
@@ -117,19 +122,21 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSourcesAdd(cmd.Context(), g, open, args[0], tls)
+			return runSourcesAdd(cmd.Context(), g, open, args[0], tls, commit)
 		},
 	}
 	cmd.Flags().BoolVar(&tls, "tls", false,
 		"dial the reflection target over TLS; it is part of the source's identity, so the same address with and without it are two sources")
+	cmd.Flags().BoolVar(&commit, "commit-descriptors", false,
+		"commit what this source resolves to, as a protojson sidecar in the collection, instead of caching it in local state; `sources commit` toggles it afterwards")
 
 	return cmd
 }
 
-func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg string, tls bool) error {
+func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg string, tls, commit bool) error {
 	// Built before any session opens, so a bad argument — or an unreadable file — fails
 	// without touching the workspace; only the address it carries is filled in later.
-	msg, err := buildAddSource(arg, tls)
+	msg, err := buildAddSource(arg, tls, commit)
 	if err != nil {
 		return err
 	}
@@ -142,7 +149,7 @@ func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, arg 
 	})
 }
 
-func buildAddSource(arg string, tls bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
+func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
 	if arg == "" {
 		return nil, errors.New("no definition source given: `sources add` takes a reflection address or the path of a descriptor-set file")
 	}
@@ -165,7 +172,8 @@ func buildAddSource(arg string, tls bool) (*grpcviewv1.AddDescriptorSourceReques
 		return &grpcviewv1.AddDescriptorSourceRequest{
 			Source: &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
 			// The basename, deliberately: file_name is the source's identity.
-			FileName: filepath.Base(arg),
+			FileName:          filepath.Base(arg),
+			CommitDescriptors: commit,
 		}, nil
 
 	default:
@@ -174,21 +182,80 @@ func buildAddSource(arg string, tls bool) (*grpcviewv1.AddDescriptorSourceReques
 			server.Tls = &grpcviewv1.Server_TLS{}
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			Source: &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
+			Source:            &grpcviewv1.AddDescriptorSourceRequest_Reflection{Reflection: server},
+			CommitDescriptors: commit,
 		}, nil
 	}
+}
+
+func newSourcesCommitCmd(g *globalFlags, open clientFactory) *cobra.Command {
+	var off bool
+
+	cmd := &cobra.Command{
+		Use:   "commit <id>",
+		Short: "Commit a definition source's descriptors to the repo, or stop committing them",
+		Long: "Commit what this source resolved to as a protojson sidecar inside the\n" +
+			"collection — descriptors/<slug>-<hash of the id>.json — instead of caching it in\n" +
+			"the workspace's local state. `--off` moves it back to the local cache and\n" +
+			"deletes the sidecar. `sources ls` shows which sources are committed.\n\n" +
+			"This changes only WHERE the descriptors are stored. It never dials and never\n" +
+			"builds: committing writes the bytes the store already holds, so a source that\n" +
+			"has never resolved is refused — refresh it first — rather than resolved as a\n" +
+			"side effect of a config change.\n\n" +
+			"The point of committing is a fresh clone that resolves with no local state and\n" +
+			"no network: a colleague who checks the repo out can describe and invoke\n" +
+			"immediately. The cost is a large file in git history, so it is a per-source\n" +
+			"choice. An UPLOAD is the case where it matters most — it has no address to\n" +
+			"re-fetch from, so an uncommitted upload's only copy is in local state, and a\n" +
+			"clone has no schema for it until someone uploads the file again.\n\n" +
+			"Nothing is printed on success.",
+		Args:          cobra.ExactArgs(1),
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSourcesCommit(cmd.Context(), g, open, args[0], !off)
+		},
+	}
+	cmd.Flags().BoolVar(&off, "off", false,
+		"stop committing this source's descriptors: delete the sidecar and keep the bytes in the local cache")
+
+	return cmd
+}
+
+func runSourcesCommit(ctx context.Context, g *globalFlags, open clientFactory, id string, commit bool) error {
+	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
+		_, err := sess.SetDescriptorSourceCommit(ctx, connect.NewRequest(&grpcviewv1.SetDescriptorSourceCommitRequest{
+			Collection: collection,
+			Id:         id,
+			Commit:     commit,
+		}))
+		if err != nil {
+			verb := "commit"
+			if !commit {
+				verb = "stop committing"
+			}
+			return fmt.Errorf("failed to %s the descriptors of the definition source %q: %w", verb, id, err)
+		}
+		return nil
+	})
 }
 
 func newSourcesRefreshCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "refresh [<id>]",
 		Short: "Re-resolve one definition source, or every source in priority order",
-		Long: "Re-resolve a definition source: re-dial a reflection target to pick up a\n" +
-			"redeployed schema, or re-link an upload's committed bytes.\n\n" +
-			"Given no id, every source is refreshed in PRIORITY order — the order\n" +
+		Long: "Re-resolve a definition source from its pointer: re-dial a reflection target to\n" +
+			"pick up a redeployed schema.\n\n" +
+			"An UPLOAD cannot be refreshed. It has no address or path to re-read — the file\n" +
+			"name is only its identity — so the way to update one is `sources add` with the\n" +
+			"rebuilt file, which refreshes that source in place. Asking to refresh one fails\n" +
+			"rather than reporting a refresh that fetched nothing.\n\n" +
+			"Given no id, every REFRESHABLE source is refreshed in PRIORITY order — the order\n" +
 			"`sources ls` prints, which is also the order the merge walks — one RPC per\n" +
-			"source, since the RPC refreshes exactly one. The run stops at the first\n" +
-			"failure and reports it, so a later source is never quietly skipped.\n\n" +
+			"source, since the RPC refreshes exactly one. Uploads are skipped there, because\n" +
+			"'refresh everything that can be re-fetched' is the useful reading of a bare\n" +
+			"refresh; naming an upload's id is the request that fails. The run stops at the\n" +
+			"first failure and reports it, so a later source is never quietly skipped.\n\n" +
 			"An unreachable target fails this command, unlike the passive listing: you\n" +
 			"named the source and asked for it to resolve.\n\n" +
 			"Nothing is printed on success.",
@@ -215,6 +282,11 @@ func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, 
 			}
 			ids = make([]string, 0, len(ws.GetSources()))
 			for _, src := range ws.GetSources() {
+				// An upload has no pointer to re-read, so a bare refresh passes over it instead
+				// of failing the whole run on a source nothing could have re-fetched.
+				if src.GetUpload() != nil {
+					continue
+				}
 				ids = append(ids, src.GetId())
 			}
 		}
@@ -303,6 +375,7 @@ type sourceRow struct {
 	priority string
 	id       string
 	kind     string
+	stored   string
 	files    string
 	serves   string
 	wins     string
@@ -317,6 +390,7 @@ func sourceRows(sources []*grpcviewv1.DescriptorSource) []sourceRow {
 			priority: strconv.Itoa(i + 1),
 			id:       src.GetId(),
 			kind:     sourceKind(src),
+			stored:   sourceStorage(src),
 			files:    fileCount(resolved.GetFileCount()),
 			serves:   fmt.Sprintf("serves %d", len(resolved.GetServiceNames())),
 			wins:     fmt.Sprintf("wins %d", len(resolved.GetWonServiceNames())),
@@ -324,6 +398,16 @@ func sourceRows(sources []*grpcviewv1.DescriptorSource) []sourceRow {
 		})
 	}
 	return rows
+}
+
+// sourceStorage names where this source's descriptors live. Both values are spelled out rather
+// than one being a blank marker: "where the bytes are" is the question the column answers, and a
+// committed source and an uncommitted one are equally normal answers to it.
+func sourceStorage(src *grpcviewv1.DescriptorSource) string {
+	if src.GetCommitDescriptors() {
+		return "committed"
+	}
+	return "cached"
 }
 
 func sourceKind(src *grpcviewv1.DescriptorSource) string {
@@ -368,21 +452,23 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 func renderSources(w io.Writer, sources []*grpcviewv1.DescriptorSource) error {
 	rows := sourceRows(sources)
 
-	var priorityWidth, idWidth, kindWidth, filesWidth, servesWidth, winsWidth int
+	var priorityWidth, idWidth, kindWidth, storedWidth, filesWidth, servesWidth, winsWidth int
 	for _, row := range rows {
 		priorityWidth = max(priorityWidth, len(row.priority))
 		idWidth = max(idWidth, len(row.id))
 		kindWidth = max(kindWidth, len(row.kind))
+		storedWidth = max(storedWidth, len(row.stored))
 		filesWidth = max(filesWidth, len(row.files))
 		servesWidth = max(servesWidth, len(row.serves))
 		winsWidth = max(winsWidth, len(row.wins))
 	}
 
 	for _, row := range rows {
-		line := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s",
+		line := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %-*s  %s",
 			priorityWidth, row.priority,
 			idWidth, row.id,
 			kindWidth, row.kind,
+			storedWidth, row.stored,
 			filesWidth, row.files,
 			servesWidth, row.serves,
 			winsWidth, row.wins,

@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/descriptorpb"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
@@ -44,10 +43,6 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 	if err != nil {
 		return nil, err
 	}
-	sources, err := diskToWireSources(col.GetSources())
-	if err != nil {
-		return nil, err
-	}
 	scripts, err := c.loadScripts(col.GetScripts())
 	if err != nil {
 		return nil, err
@@ -63,7 +58,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 			Name:    name,
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{Items: rootItems}},
 		},
-		Sources: sources,
+		Sources: diskToWireSources(col.GetSources()),
 		Scripts: scripts,
 	}, nil
 }
@@ -89,7 +84,7 @@ func (c *Collection) Summary(_ context.Context) (name string, sourceCount int, e
 	return cmp.Or(col.GetName(), c.defaultName()), len(col.GetSources()), nil
 }
 
-// Sources returns just the committed descriptor sources from the manifest.
+// Sources returns just the manifest's descriptor-source list, in priority order.
 func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -100,7 +95,7 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 	if err != nil {
 		return nil, err
 	}
-	return diskToWireSources(col.GetSources())
+	return diskToWireSources(col.GetSources()), nil
 }
 
 func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
@@ -513,15 +508,18 @@ func insertSlug(slugs []string, slug string, before *string, siblings []childEnt
 type DescriptorState struct {
 	// Sources is in PRIORITY order (earlier wins).
 	Sources []*grpcviewv1.DescriptorSource
-	// Keyed by source id; an absent id keeps whatever the manifest already stores.
-	Uploads map[string]*descriptorpb.FileDescriptorSet
-	// Keyed by source id; an absent id leaves the existing index entry alone, so a mutation
-	// that re-resolved nothing (a reorder, a remove) keeps every surviving source's schema.
+	// Keyed by source id; an absent id keeps whatever the store already holds for that source,
+	// so a mutation that re-resolved nothing (a reorder, a remove, a commit_descriptors
+	// toggle) keeps every surviving source's schema.
 	Resolves map[string]*grpcviewstorev1.ResolvedSource
 }
 
 // PutDescriptorState writes the whole state under one lock — so a reader never sees a source
-// list and a descriptor index that disagree — and collects the blobs nothing points at any more.
+// list and a descriptor store that disagree — and collects what nothing points at any more.
+//
+// Each source is written to exactly ONE place, chosen by its commit_descriptors flag: a
+// committed sidecar, or a blob plus an index entry. That is what makes toggling the flag a move
+// rather than a copy, and it is why a source whose flag is on has no index entry at all.
 func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -533,22 +531,7 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 	if err != nil {
 		return err
 	}
-	existing := make(map[string]*descriptorpb.FileDescriptorSet, len(col.GetSources()))
-	for _, ds := range col.GetSources() {
-		if up := ds.GetUpload(); up != nil {
-			existing[ds.GetId()] = up.GetDescriptorSet()
-		}
-	}
-	diskSources, err := wireToDiskSources(state.Sources, func(id string) *descriptorpb.FileDescriptorSet {
-		if fds, ok := state.Uploads[id]; ok {
-			return fds
-		}
-		return existing[id]
-	})
-	if err != nil {
-		return err
-	}
-	col.Sources = diskSources
+	col.Sources = wireToDiskSources(state.Sources)
 	if err := c.writeCollection(col); err != nil {
 		return err
 	}
@@ -564,30 +547,79 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 		return err
 	}
 	entries := make([]*grpcviewstorev1.DescriptorIndexEntry, 0, len(state.Sources))
+	keepSidecars := make(map[string]bool, len(state.Sources))
 	for _, src := range state.Sources {
 		id := src.GetId()
-		if r, ok := state.Resolves[id]; ok {
-			digest, err := c.store.putBlob(r.GetDescriptorSet())
-			if err != nil {
+		fresh := state.Resolves[id]
+
+		if src.GetCommitDescriptors() {
+			// With no fresh resolve the bytes come from wherever the last write put them: this
+			// source's own sidecar (a byte-identical rewrite, so nothing changes) or, when the
+			// flag has just been turned on, the blob the index still names. That is the whole of
+			// "toggling never acquires". A source that has never resolved either way has
+			// nothing to commit and gets no file; the workspace layer refuses to turn the flag
+			// on in that state, so what lands here is an add whose resolve failed.
+			r := fresh
+			if r == nil {
+				if r, err = c.storedResolve(id, existingIndex); err != nil {
+					return err
+				}
+			}
+			if r == nil {
+				continue
+			}
+			if err := c.writeDescriptorSidecar(r); err != nil {
 				return err
 			}
-			entries = append(entries, &grpcviewstorev1.DescriptorIndexEntry{
-				SourceId:     id,
-				Digest:       digest,
-				ServiceNames: r.GetServiceNames(),
-			})
+			keepSidecars[filepath.Base(c.descriptorSidecarPath(id))] = true
 			continue
 		}
-		// No fresh resolve: carry the previous entry forward. A source with neither simply has
-		// no entry and reads as unresolved until it is refreshed.
-		if prev, ok := existingIndex[id]; ok {
-			entries = append(entries, prev)
+
+		if fresh == nil {
+			// No fresh resolve: carry the previous index entry forward untouched, which is what
+			// keeps a reorder or an unrelated add from reading, re-hashing and rewriting every
+			// blob in the collection. A source whose flag has just been turned OFF has no entry
+			// to carry, and its bytes are in the sidecar this write is about to prune.
+			if prev, ok := existingIndex[id]; ok {
+				entries = append(entries, prev)
+				continue
+			}
+			if fresh, err = c.readDescriptorSidecar(id); err != nil {
+				return err
+			}
+			if fresh == nil {
+				continue
+			}
 		}
+		digest, err := c.store.putBlob(fresh.GetDescriptorSet())
+		if err != nil {
+			return err
+		}
+		entries = append(entries, &grpcviewstorev1.DescriptorIndexEntry{
+			SourceId:     id,
+			Digest:       digest,
+			ServiceNames: fresh.GetServiceNames(),
+		})
 	}
 	if err := c.writeDescriptorIndex(entries); err != nil {
 		return err
 	}
+	if err := c.pruneDescriptorSidecars(keepSidecars); err != nil {
+		return err
+	}
 	return c.store.gcBlobs()
+}
+
+// storedResolve returns what a source last resolved to from whichever location the previous write
+// used, or nil when it has never resolved. Callers must hold c.mu.
+func (c *Collection) storedResolve(id string, index map[string]*grpcviewstorev1.DescriptorIndexEntry) (*grpcviewstorev1.ResolvedSource, error) {
+	if sidecar, err := c.readDescriptorSidecar(id); err != nil || sidecar != nil {
+		return sidecar, err
+	}
+	if entry, ok := index[id]; ok {
+		return c.blobResolve(id, entry)
+	}
+	return nil, nil
 }
 
 func (c *Collection) resolveFolder(namePath []string) (string, error) {

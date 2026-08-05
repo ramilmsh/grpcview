@@ -199,14 +199,39 @@ The layering is the whole point, so don't collapse it:
 
 1. **Each source resolves independently** to its own `FileDescriptorSet` plus the
    list of services it serves. A reflection source resolves by dialing; an upload
-   resolves by linking its committed bytes. Each resolve is stored as a
-   **content-addressed blob** under the workspace state root
-   (`blobs/<sha256>.binpb`, binary, never in the repo), and each collection keeps a
-   `descriptors.json` index pointing its source **ids** at digests. The two keys are
-   different on purpose — an id is a pointer and survives its content changing,
-   which is what makes re-adding a source a refresh — and the blobs are shared, so
-   five collections resolving one target hold one copy of its bytes and a blob is
-   collected only when no collection in the workspace references it.
+   resolves from the bytes its add call carried. Where that resolve is *stored* is a
+   per-source flag, `commit_descriptors`, and it changes only the location — never
+   how anything resolves, merges or dials:
+   - **off (the default, every kind)** — a **content-addressed blob** under the
+     workspace state root (`blobs/<sha256>.binpb`, binary, never in the repo), with
+     each collection keeping a `descriptors.json` index pointing its source **ids**
+     at digests. The two keys are different on purpose — an id is a pointer and
+     survives its content changing, which is what makes re-adding a source a
+     refresh — and the blobs are shared, so five collections resolving one target
+     hold one copy of its bytes and a blob is collected only when no collection in
+     the workspace references it.
+   - **on** — protojson **in the collection**, one sidecar per source at
+     `descriptors/<slug>-<hash of the id>.json`, holding the descriptor set *and*
+     the served service names (those are not derivable: a reflection server's
+     `ListServices` is authoritative and narrower than "every service these files
+     define"). That is what makes a fresh clone resolve with **no refresh and no
+     network** — the point of the flag.
+
+   The naming asymmetry is deliberate and the reasons are opposite. Content
+   addressing is right for a cache: dedup across collections, immutability, and
+   "same digest, no write". A **digest**-named committed file would make every
+   refresh an add plus a delete instead of a diff, destroying the readable-protojson
+   rationale for committing at all — so a sidecar is named by **source id** (hashed
+   as well as slugified, so `localhost:8080` and `localhost.8080` cannot collide).
+   Each source is written to exactly ONE of the two places, which is what makes
+   **toggling the flag a move that acquires nothing**
+   (`SetDescriptorSourceCommit`, `grpcview sources commit [--off]`): on writes the
+   sidecar from the bytes already stored, off drops the sidecar and writes the blob.
+   Turning it on for a source that has never resolved is `InvalidArgument` naming
+   `refresh`, because resolve-then-commit would be acquisition triggered by a config
+   change. Descriptors are never inline in `grpcview.json`, for any kind: that file
+   also holds root ordering, the source list and script ordering, so an inline
+   multi-megabyte descriptor set would mean dragging one request rewrites megabytes.
 2. **The merged view is derived in memory, per collection, on first touch** —
    `mergeSources`, walking the list front to back: the first source to define a
    proto **file** (by name) wins it, the first to serve a **service** (by full
@@ -259,8 +284,8 @@ Consequences worth preserving, each of which was a bug before:
   derived view — linked descriptors, services, merged bytes, per-source summaries —
   keyed by collection and by nothing else, so a hit is a plain map lookup with no
   read, no stat and no hash. It is a small LRU because one entry is a fully linked
-  descriptor set. The four acquisition RPCs invalidate; nothing else can change a
-  collection's descriptors.
+  descriptor set. The five source-writing RPCs invalidate (the four plus
+  `SetDescriptorSourceCommit`); nothing else can change a collection's descriptors.
 - **A service's dial target is independent of who won its descriptors**:
   `Service.source` is the first *reflection* source that serves it. An upload has
   no address, so without that split, placing one first for its comments would
@@ -270,10 +295,22 @@ Consequences worth preserving, each of which was a bug before:
   bar under it shows where the request is **sent**. Neither is "no source" merely
   because the other is absent.
 
-An upload's descriptors are committed to `grpcview.json` (typed protojson) because
-unlike a reflection target they cannot be re-fetched; the resolve caches are
-disposable. protojson drops `buf`'s image extensions, which nothing reads —
-`source_code_info` round-trips intact.
+An upload is the **null-pointer kind**: the file name is only its identity, so there
+is nothing to re-read and `RefreshDescriptorSource` on one is `FailedPrecondition`
+telling you to upload the file again (a bare `grpcview sources refresh` skips
+uploads rather than failing the run). It follows that an uncommitted upload's only
+copy lives in local state — a clone of a repo whose upload was not committed has no
+schema for it until someone uploads the file again. That is accepted deliberately,
+given a durable state root: forcing the flag on for uploads is unnecessary, and it
+stays a real choice.
+
+Descriptor bytes are normalized once, at the store's write boundary
+(`normalizeDescriptorSet`): re-encode with `DiscardUnknown` and marshal
+deterministically, so the digest — and a committed sidecar's bytes — are a function
+of the *schema* rather than of the encoder that produced it. That drops a
+`buf build` image's buf-specific extension fields, which nothing reads, while
+`source_code_info` (the doc comments) round-trips intact; and it is what makes
+refreshing twice against an unchanged upstream leave `git status` clean.
 
 ## The collection tree
 

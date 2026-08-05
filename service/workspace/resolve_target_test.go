@@ -52,7 +52,6 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	}
 	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
 		Sources: sources,
-		Uploads: map[string]*descriptorpb.FileDescriptorSet{uploadID: legacy},
 		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
 			"reflection:" + serverA.GetAddress(): {Id: "reflection:" + serverA.GetAddress()},
 			"reflection:" + serverB.GetAddress(): {

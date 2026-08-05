@@ -27,6 +27,15 @@ export const refreshDescriptorSource: typeof WorkspaceService["method"]["refresh
  */
 export const reorderDescriptorSources: typeof WorkspaceService["method"]["reorderDescriptorSources"];
 /**
+ * SetDescriptorSourceCommit moves one source's descriptors between the
+ * committed sidecar and the local blob store. It never dials or builds: the
+ * bytes it writes are the ones already stored, so committing a source that has
+ * never resolved is InvalidArgument rather than a resolve.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.SetDescriptorSourceCommit
+ */
+export const setDescriptorSourceCommit: typeof WorkspaceService["method"]["setDescriptorSourceCommit"];
+/**
  * Get reports NOTHING implicitly: a collection that does not exist is NotFound,
  * never created on demand.
  *

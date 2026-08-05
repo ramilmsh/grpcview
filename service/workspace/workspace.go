@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/proto"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
@@ -145,8 +145,13 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 		return nil, err
 	}
 
-	var src *grpcviewv1.DescriptorSource
-	uploads := map[string]*descriptorpb.FileDescriptorSet{}
+	// The add call is the only place an upload's bytes ever arrive, so they are resolved here and
+	// handed to the store as this source's fresh resolve — the same path a dialed reflection
+	// target takes. commit_descriptors then decides only where the store puts them.
+	var (
+		src   *grpcviewv1.DescriptorSource
+		fresh *resolvedSource
+	)
 	switch source := request.Msg.GetSource().(type) {
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
 		fileName := request.Msg.GetFileName()
@@ -159,31 +164,28 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 			return nil, err
 		}
 		src = &grpcviewv1.DescriptorSource{
-			Source: &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: fileName}},
+			Source:            &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: fileName}},
+			CommitDescriptors: request.Msg.GetCommitDescriptors(),
 		}
 		src.Id = sourceID(src)
-		uploads[src.GetId()] = fds
+		if fresh, err = resolveUpload(src.GetId(), fds); err != nil {
+			return nil, err
+		}
 	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
 		src = &grpcviewv1.DescriptorSource{
-			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection},
+			Source:            &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection},
+			CommitDescriptors: request.Msg.GetCommitDescriptors(),
 		}
 		src.Id = sourceID(src)
+		if fresh, err = resolveReflection(ctx, src.GetId(), src.GetReflection()); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}
 
-	var fresh *resolvedSource
-	if fds, ok := uploads[src.GetId()]; ok {
-		fresh, err = resolveUpload(src.GetId(), fds)
-	} else {
-		fresh, err = resolveReflection(ctx, src.GetId(), src.GetReflection())
-	}
-	if err != nil {
-		return nil, err
-	}
-
 	sources := upsertSource(slices.Clone(ws.GetSources()), src)
-	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{src.GetId(): fresh}, uploads); err != nil {
+	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{src.GetId(): fresh}); err != nil {
 		return nil, err
 	}
 	reloaded, err := w.loadCollection(ctx, coll)
@@ -205,11 +207,11 @@ func (w Workspace) RefreshDescriptorSource(ctx context.Context, request *connect
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("unknown source id %q", request.Msg.GetId()))
 	}
 
-	fresh, err := w.resolveOne(ctx, coll, sources[index])
+	fresh, err := resolveOne(ctx, sources[index])
 	if err != nil {
 		return nil, err
 	}
-	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{fresh.id: fresh}, nil); err != nil {
+	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{fresh.id: fresh}); err != nil {
 		return nil, err
 	}
 	reloaded, err := w.loadCollection(ctx, coll)
@@ -230,7 +232,7 @@ func (w Workspace) ReorderDescriptorSources(ctx context.Context, request *connec
 	if err != nil {
 		return nil, err
 	}
-	if err := w.putDescriptorState(ctx, coll, sources, nil, nil); err != nil {
+	if err := w.putDescriptorState(ctx, coll, sources, nil); err != nil {
 		return nil, err
 	}
 	reloaded, err := w.loadCollection(ctx, coll)
@@ -238,6 +240,53 @@ func (w Workspace) ReorderDescriptorSources(ctx context.Context, request *connec
 		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Collection: reloaded}), nil
+}
+
+// SetDescriptorSourceCommit turns one source's commit_descriptors flag on or off, which moves what
+// it last resolved to between a committed protojson sidecar and the local blob store and changes
+// nothing else.
+//
+// It exists rather than "re-add with the flag set" because toggling must never dial or build: on
+// writes the sidecar from the bytes the store already holds, off drops the sidecar and keeps the
+// blob. That is why it is implemented as a flag flip plus putDescriptorState with NO fresh
+// resolves — by construction there is nothing in that path that can acquire.
+//
+// Turning it on for a source that has never resolved is refused instead of resolved: acquisition
+// triggered by a config change is exactly what the two-systems split forbids, and the message
+// names the refresh that fixes it.
+func (w Workspace) SetDescriptorSourceCommit(ctx context.Context, request *connect.Request[grpcviewv1.SetDescriptorSourceCommitRequest]) (*connect.Response[grpcviewv1.SetDescriptorSourceCommitResponse], error) {
+	coll, ws, err := w.openWithSources(ctx, request.Msg.GetCollection())
+	if err != nil {
+		return nil, err
+	}
+	id := request.Msg.GetId()
+	sources := slices.Clone(ws.GetSources())
+	index := slices.IndexFunc(sources, func(s *grpcviewv1.DescriptorSource) bool { return s.GetId() == id })
+	if index == -1 {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("unknown source id %q", id))
+	}
+
+	if request.Msg.GetCommit() {
+		resolves, err := coll.DescriptorResolves(ctx)
+		if err != nil {
+			return nil, toConnectError(err)
+		}
+		if _, ok := resolves[id]; !ok {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+				"source %q has never resolved, so there are no descriptors to commit: refresh it first", id))
+		}
+	}
+
+	sources[index] = proto.CloneOf(sources[index])
+	sources[index].CommitDescriptors = request.Msg.GetCommit()
+	if err := w.putDescriptorState(ctx, coll, sources, nil); err != nil {
+		return nil, err
+	}
+	reloaded, err := w.loadCollection(ctx, coll)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.SetDescriptorSourceCommitResponse{Collection: reloaded}), nil
 }
 
 // openWithSources deliberately loads WITHOUT the derived merged view (loadCollection): its
@@ -268,7 +317,7 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("unknown source id %q", request.Msg.GetId()))
 	}
 
-	if err := w.putDescriptorState(ctx, coll, slices.Delete(sources, index, index+1), nil, nil); err != nil {
+	if err := w.putDescriptorState(ctx, coll, slices.Delete(sources, index, index+1), nil); err != nil {
 		return nil, err
 	}
 	reloaded, err := w.loadCollection(ctx, coll)

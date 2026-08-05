@@ -186,13 +186,15 @@ func (w Workspace) definitionsOf(ctx context.Context, coll *store.Collection) (*
 // on a read would make opening a repo depend on every target in it being reachable, and it is why
 // resolveConfigured's dial-on-miss lives on the four acquisition RPCs and nowhere else.
 func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection) (*definitions, error) {
-	// The manifest owns which sources exist and in what priority order; the blobs only say what
-	// each one last resolved to.
+	// The manifest owns which sources exist and in what priority order; the store only says what
+	// each one last resolved to — out of a committed sidecar or a local blob, indifferently, which
+	// is what lets a fresh clone of a repo with committed descriptors resolve with no local state
+	// at all.
 	sources, err := coll.Sources(ctx)
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	blobs, err := coll.DescriptorBlobs(ctx)
+	stored, err := coll.DescriptorResolves(ctx)
 	if err != nil {
 		return nil, toConnectError(err)
 	}
@@ -200,7 +202,7 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 	resolved := make([]*resolvedSource, 0, len(sources))
 	for _, src := range sources {
 		rs := &resolvedSource{id: src.GetId(), server: src.GetReflection()}
-		if blob, ok := blobs[rs.id]; ok {
+		if blob, ok := stored[rs.id]; ok {
 			rs.files, rs.services = blob.GetDescriptorSet(), blob.GetServiceNames()
 		} else {
 			rs.err = errUnresolvedSource

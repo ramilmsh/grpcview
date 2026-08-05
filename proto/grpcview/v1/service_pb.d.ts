@@ -43,6 +43,14 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
    * @generated from field: string file_name = 4;
    */
   fileName: string;
+
+  /**
+   * Commit this source's descriptors to the repo instead of caching them in
+   * local state — see DescriptorSource.commit_descriptors.
+   *
+   * @generated from field: bool commit_descriptors = 5;
+   */
+  commitDescriptors: boolean;
 };
 
 /**
@@ -179,6 +187,48 @@ export declare type ReorderDescriptorSourcesResponse = Message<"grpcview.v1.Reor
  * Use `create(ReorderDescriptorSourcesResponseSchema)` to create a new message.
  */
 export declare const ReorderDescriptorSourcesResponseSchema: GenMessage<ReorderDescriptorSourcesResponse>;
+
+/**
+ * @generated from message grpcview.v1.SetDescriptorSourceCommitRequest
+ */
+export declare type SetDescriptorSourceCommitRequest = Message<"grpcview.v1.SetDescriptorSourceCommitRequest"> & {
+  /**
+   * @generated from field: string collection = 1;
+   */
+  collection: string;
+
+  /**
+   * @generated from field: string id = 2;
+   */
+  id: string;
+
+  /**
+   * @generated from field: bool commit = 3;
+   */
+  commit: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.SetDescriptorSourceCommitRequest.
+ * Use `create(SetDescriptorSourceCommitRequestSchema)` to create a new message.
+ */
+export declare const SetDescriptorSourceCommitRequestSchema: GenMessage<SetDescriptorSourceCommitRequest>;
+
+/**
+ * @generated from message grpcview.v1.SetDescriptorSourceCommitResponse
+ */
+export declare type SetDescriptorSourceCommitResponse = Message<"grpcview.v1.SetDescriptorSourceCommitResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Collection collection = 1;
+   */
+  collection?: Collection | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.SetDescriptorSourceCommitResponse.
+ * Use `create(SetDescriptorSourceCommitResponseSchema)` to create a new message.
+ */
+export declare const SetDescriptorSourceCommitResponseSchema: GenMessage<SetDescriptorSourceCommitResponse>;
 
 /**
  * @generated from message grpcview.v1.CreateFolderRequest
@@ -1346,6 +1396,19 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof ReorderDescriptorSourcesRequestSchema;
     output: typeof ReorderDescriptorSourcesResponseSchema;
+  },
+  /**
+   * SetDescriptorSourceCommit moves one source's descriptors between the
+   * committed sidecar and the local blob store. It never dials or builds: the
+   * bytes it writes are the ones already stored, so committing a source that has
+   * never resolved is InvalidArgument rather than a resolve.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.SetDescriptorSourceCommit
+   */
+  setDescriptorSourceCommit: {
+    methodKind: "unary";
+    input: typeof SetDescriptorSourceCommitRequestSchema;
+    output: typeof SetDescriptorSourceCommitResponseSchema;
   },
   /**
    * Get reports NOTHING implicitly: a collection that does not exist is NotFound,

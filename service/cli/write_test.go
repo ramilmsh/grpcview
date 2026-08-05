@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,7 @@ type writeCalls struct {
 	refreshSource    []*grpcviewv1.RefreshDescriptorSourceRequest
 	removeSource     []*grpcviewv1.RemoveDescriptorSourceRequest
 	reorderSource    []*grpcviewv1.ReorderDescriptorSourcesRequest
+	commitSource     []*grpcviewv1.SetDescriptorSourceCommitRequest
 	createFolder     []*grpcviewv1.CreateFolderRequest
 	createRequest    []*grpcviewv1.CreateRequestRequest
 	updateRequest    []*grpcviewv1.UpdateRequestRequest
@@ -80,6 +82,15 @@ func (f *fakeClient) ReorderDescriptorSources(_ context.Context, r *connect.Requ
 		return nil, f.writes.err
 	}
 	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Collection: f.snapshot}), nil
+}
+
+func (f *fakeClient) SetDescriptorSourceCommit(_ context.Context, r *connect.Request[grpcviewv1.SetDescriptorSourceCommitRequest]) (*connect.Response[grpcviewv1.SetDescriptorSourceCommitResponse], error) {
+	f.writes.commitSource = append(f.writes.commitSource, r.Msg)
+	f.writes.order = append(f.writes.order, "SetDescriptorSourceCommit")
+	if f.writes.err != nil {
+		return nil, f.writes.err
+	}
+	return connect.NewResponse(&grpcviewv1.SetDescriptorSourceCommitResponse{Collection: f.snapshot}), nil
 }
 
 func (f *fakeClient) CreateFolder(_ context.Context, r *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
@@ -165,6 +176,7 @@ func TestSourcesAdd(t *testing.T) {
 		name       string
 		arg        string
 		tls        bool
+		commit     bool
 		fake       func(*fakeClient)
 		wantErrHas string
 		wantCode   int
@@ -184,6 +196,29 @@ func TestSourcesAdd(t *testing.T) {
 				}
 				if got.GetReflection() != nil {
 					t.Errorf("reflection = %v, want nil: a file is not a dial address", got.GetReflection())
+				}
+				if got.GetCommitDescriptors() {
+					t.Error("commit_descriptors = true without the flag; committing is opt-in for every kind, uploads included")
+				}
+			},
+		},
+		{
+			name:   "--commit-descriptors rides along on an upload",
+			arg:    "{file}",
+			commit: true,
+			check: func(t *testing.T, fc *fakeClient) {
+				if !onlyAdd(t, fc).GetCommitDescriptors() {
+					t.Error("commit_descriptors = false, want it set by --commit-descriptors")
+				}
+			},
+		},
+		{
+			name:   "--commit-descriptors rides along on a reflection target too",
+			arg:    "localhost:50055",
+			commit: true,
+			check: func(t *testing.T, fc *fakeClient) {
+				if !onlyAdd(t, fc).GetCommitDescriptors() {
+					t.Error("commit_descriptors = false, want it set by --commit-descriptors")
 				}
 			},
 		},
@@ -253,6 +288,9 @@ func TestSourcesAdd(t *testing.T) {
 			if tc.tls {
 				args = append(args, "--tls")
 			}
+			if tc.commit {
+				args = append(args, "--commit-descriptors")
+			}
 			out, errOut, code := runCLI(fc, "", args...)
 
 			if tc.wantCode == 0 {
@@ -310,7 +348,7 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 }
 
 func TestSourcesRefresh(t *testing.T) {
-	t.Run("no id refreshes every source, in priority order", func(t *testing.T) {
+	t.Run("no id refreshes every refreshable source, in priority order, skipping uploads", func(t *testing.T) {
 		fc := newFake()
 		fc.snapshot = sourcesWorkspace()
 
@@ -321,7 +359,9 @@ func TestSourcesRefresh(t *testing.T) {
 		for _, msg := range fc.writes.refreshSource {
 			got = append(got, msg.GetId())
 		}
-		want := []string{"reflection:localhost:50055", "upload:echo.binpb", "reflection:gone.example:9999"}
+		// The upload in the middle is passed over: it has no pointer to re-read, so the RPC
+		// refuses it, and a bare refresh means "everything that can be re-fetched".
+		want := []string{"reflection:localhost:50055", "reflection:gone.example:9999"}
 		if !slices.Equal(got, want) {
 			t.Errorf("refreshed %v, want %v in that order", got, want)
 		}
@@ -415,6 +455,62 @@ func TestSourcesRmAndReorder(t *testing.T) {
 		}
 		if len(fc.writes.reorderSource) != 0 {
 			t.Errorf("ReorderDescriptorSources called %d time(s), want 0", len(fc.writes.reorderSource))
+		}
+	})
+}
+
+func TestSourcesCommit(t *testing.T) {
+	t.Run("commit asks for the flag on", func(t *testing.T) {
+		fc := newFake()
+		out, errOut, code := runCLI(fc, "", "sources", "commit", "upload:echo.binpb")
+		assertSilent(t, out, errOut, code)
+
+		if len(fc.writes.commitSource) != 1 {
+			t.Fatalf("SetDescriptorSourceCommit called %d time(s), want 1", len(fc.writes.commitSource))
+		}
+		got := fc.writes.commitSource[0]
+		if got.GetId() != "upload:echo.binpb" || got.GetCollection() != "." || !got.GetCommit() {
+			t.Errorf("got %+v, want id=upload:echo.binpb collection=. commit=true", got)
+		}
+	})
+
+	t.Run("--off asks for it off", func(t *testing.T) {
+		fc := newFake()
+		out, errOut, code := runCLI(fc, "", "sources", "commit", "upload:echo.binpb", "--off")
+		assertSilent(t, out, errOut, code)
+
+		if len(fc.writes.commitSource) != 1 {
+			t.Fatalf("SetDescriptorSourceCommit called %d time(s), want 1", len(fc.writes.commitSource))
+		}
+		if fc.writes.commitSource[0].GetCommit() {
+			t.Error("commit = true with --off")
+		}
+	})
+
+	t.Run("an id is required", func(t *testing.T) {
+		fc := newFake()
+		if _, _, code := runCLI(fc, "", "sources", "commit"); code != 2 {
+			t.Errorf("exit code = %d, want 2", code)
+		}
+		if len(fc.writes.commitSource) != 0 {
+			t.Errorf("SetDescriptorSourceCommit called %d time(s), want 0", len(fc.writes.commitSource))
+		}
+	})
+
+	t.Run("a refusal from the RPC is exit 2 and names the source", func(t *testing.T) {
+		fc := newFake()
+		fc.writes.err = connect.NewError(connect.CodeInvalidArgument, errors.New("has never resolved"))
+
+		out, errOut, code := runCLI(fc, "", "sources", "commit", "reflection:gone.example:9999")
+
+		if out != "" {
+			t.Errorf("stdout = %q, want empty", out)
+		}
+		if code != 2 {
+			t.Errorf("exit code = %d, want 2", code)
+		}
+		if !strings.Contains(errOut, `definition source "reflection:gone.example:9999"`) {
+			t.Errorf("stderr = %q, want it to name the source", errOut)
 		}
 	})
 }
@@ -870,7 +966,7 @@ func TestWriteParents(t *testing.T) {
 		{args: []string{"request"}, wantErrHas: `"grpcview request" needs a subcommand: create, rm, mv`},
 		{args: []string{"folder"}, wantErrHas: `"grpcview folder" needs a subcommand: create`},
 		{args: []string{"script"}, wantErrHas: `"grpcview script" needs a subcommand: ls, run`},
-		{args: []string{"sources"}, wantErrHas: `"grpcview sources" needs a subcommand: ls, add, refresh, rm, reorder`},
+		{args: []string{"sources"}, wantErrHas: `"grpcview sources" needs a subcommand: ls, add, commit, refresh, rm, reorder`},
 		{args: []string{"request", "delete", "A"}, wantErrHas: `unknown command "delete" for "grpcview request"`},
 		{args: []string{"folder", "rm", "A"}, wantErrHas: `unknown command "rm" for "grpcview folder"`},
 		{args: []string{"script", "create", "A"}, wantErrHas: `unknown command "create" for "grpcview script"`},

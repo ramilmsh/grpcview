@@ -6,8 +6,6 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -155,9 +153,7 @@ func cleanCollectionID(id string) (string, error) {
 // off the same identity as the s.colls handle map, because two different-case ids that name
 // one directory on a case-insensitive filesystem must not also get two different state dirs.
 func collectionStateDir(stateRoot, foldedID string) string {
-	sum := sha256.Sum256([]byte(foldedID))
-	key := slugify(foldedID) + "-" + hex.EncodeToString(sum[:6])
-	return filepath.Join(stateRoot, collectionsStateSubdir, key)
+	return filepath.Join(stateRoot, collectionsStateSubdir, hashedName(foldedID))
 }
 
 // Collection serializes its mutations, so concurrent RPCs for one workspace can't interleave writes.

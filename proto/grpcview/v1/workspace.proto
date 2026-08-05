@@ -59,6 +59,12 @@ message DescriptorSource {
   }
 
   Resolved resolved = 4;
+
+  // The descriptors this source resolved to are committed to the repo as a
+  // protojson sidecar (descriptors/<slug>-<hash of id>.json in the collection)
+  // instead of cached in local state. It changes only WHERE the store writes,
+  // never how anything resolves, and toggling it acquires nothing.
+  bool commit_descriptors = 5;
 }
 
 // The descriptor bytes are never sent to the client, only this file name.

@@ -1,7 +1,10 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -557,9 +560,9 @@ func TestDescriptorStatePersistence(t *testing.T) {
 			ws.GetServices(), len(ws.GetDescriptorSet()))
 	}
 
-	blobs, err := coll.DescriptorBlobs(ctx)
+	blobs, err := coll.DescriptorResolves(ctx)
 	if err != nil {
-		t.Fatalf("DescriptorBlobs: %v", err)
+		t.Fatalf("DescriptorResolves: %v", err)
 	}
 	blob, ok := blobs[id]
 	if !ok {
@@ -581,9 +584,9 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if got := blobNames(t, coll.store); len(got) != 0 {
 		t.Errorf("dropping the last source must collect its blob, still have %v", got)
 	}
-	blobs, err = coll.DescriptorBlobs(ctx)
+	blobs, err = coll.DescriptorResolves(ctx)
 	if err != nil {
-		t.Fatalf("DescriptorBlobs after removal: %v", err)
+		t.Fatalf("DescriptorResolves after removal: %v", err)
 	}
 	if len(blobs) != 0 {
 		t.Errorf("index not rewritten on removal: %v", blobs)
@@ -657,9 +660,9 @@ func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 	if got := blobNames(t, s); len(got) != 1 {
 		t.Fatalf("a blob another collection references must survive the drop, got %v", got)
 	}
-	blobs, err := colls[1].DescriptorBlobs(ctx)
+	blobs, err := colls[1].DescriptorResolves(ctx)
 	if err != nil {
-		t.Fatalf("DescriptorBlobs (ledger): %v", err)
+		t.Fatalf("DescriptorResolves (ledger): %v", err)
 	}
 	if _, ok := blobs[id]; !ok {
 		t.Errorf("ledger lost its source's descriptors when payments dropped its own: %v", blobs)
@@ -702,9 +705,9 @@ func TestPutDescriptorStateKeepsUnresolvedIDs(t *testing.T) {
 		t.Fatalf("PutDescriptorState (second): %v", err)
 	}
 
-	blobs, err := coll.DescriptorBlobs(ctx)
+	blobs, err := coll.DescriptorResolves(ctx)
 	if err != nil {
-		t.Fatalf("DescriptorBlobs: %v", err)
+		t.Fatalf("DescriptorResolves: %v", err)
 	}
 	if got := blobs[kept].GetServiceNames(); len(got) != 1 || got[0] != "one.One" {
 		t.Errorf("the untouched source lost its entry: %v", got)
@@ -714,6 +717,318 @@ func TestPutDescriptorStateKeepsUnresolvedIDs(t *testing.T) {
 	}
 	if got := blobNames(t, coll.store); len(got) != 2 {
 		t.Errorf("want both sources' blobs kept, got %v", got)
+	}
+}
+
+// sidecarNames lists a collection's COMMITTED descriptor sidecars. Unlike blobNames it reads the
+// collection directory, which is the whole difference commit_descriptors makes.
+func sidecarNames(t *testing.T, coll *Collection) []string {
+	t.Helper()
+	entries, err := os.ReadDir(coll.descriptorSidecarsRoot())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("ReadDir descriptors: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	slices.Sort(names)
+	return names
+}
+
+func indexEntryIDs(t *testing.T, coll *Collection) []string {
+	t.Helper()
+	index, err := coll.readDescriptorIndex()
+	if err != nil {
+		t.Fatalf("readDescriptorIndex: %v", err)
+	}
+	ids := make([]string, 0, len(index))
+	for id := range index {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func uploadSourceNamed(fileName string, commit bool) *grpcviewv1.DescriptorSource {
+	return &grpcviewv1.DescriptorSource{
+		Id:                "upload:" + fileName,
+		Source:            &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: fileName}},
+		CommitDescriptors: commit,
+	}
+}
+
+// TestCommitDescriptorsChoosesOneLocation pins the flag's whole contract: each source is written to
+// exactly one place, so a committed source has a sidecar and NO blob and no index entry, while an
+// uncommitted one has a blob and an entry and no sidecar.
+func TestCommitDescriptorsChoosesOneLocation(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+
+	const (
+		committed   = "upload:acme.binpb"
+		uncommitted = "reflection:localhost:50051"
+	)
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{
+			uploadSourceNamed("acme.binpb", true),
+			reflectionSourceAt("localhost:50051"),
+		},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			committed:   {Id: committed, DescriptorSet: fdsNamed("acme/v1/user.proto"), ServiceNames: []string{"acme.v1.UserService"}},
+			uncommitted: {Id: uncommitted, DescriptorSet: fdsNamed("acme/v1/order.proto"), ServiceNames: []string{"acme.v1.OrderService"}},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState: %v", err)
+	}
+
+	if got, want := sidecarNames(t, coll), []string{"upload-acme-binpb-" + hexPrefix(committed) + descriptorSidecarExt}; !slices.Equal(got, want) {
+		t.Errorf("committed sidecars = %v, want %v", got, want)
+	}
+	if got, want := indexEntryIDs(t, coll), []string{uncommitted}; !slices.Equal(got, want) {
+		t.Errorf("index entries = %v, want only the uncommitted source %v", got, want)
+	}
+	if got := blobNames(t, coll.store); len(got) != 1 {
+		t.Errorf("want one blob — the uncommitted source's — got %v", got)
+	}
+
+	// Both halves come back through one map, so nothing above the store has to know which
+	// location a given source used.
+	resolves, err := coll.DescriptorResolves(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorResolves: %v", err)
+	}
+	if got := resolves[committed].GetDescriptorSet().GetFile(); len(got) != 1 || got[0].GetName() != "acme/v1/user.proto" {
+		t.Errorf("the committed source's descriptors did not come back: %v", got)
+	}
+	if got := resolves[committed].GetServiceNames(); len(got) != 1 || got[0] != "acme.v1.UserService" {
+		t.Errorf("the sidecar lost the service names, which are not derivable: %v", got)
+	}
+	if got := resolves[uncommitted].GetDescriptorSet().GetFile(); len(got) != 1 || got[0].GetName() != "acme/v1/order.proto" {
+		t.Errorf("the uncommitted source's descriptors did not come back: %v", got)
+	}
+
+	// The manifest holds no descriptor bytes for any kind, uploads included: an inline
+	// FileDescriptorSet would mean dragging one request rewrites megabytes.
+	info, err := os.Stat(coll.collectionFilePath())
+	if err != nil {
+		t.Fatalf("Stat manifest: %v", err)
+	}
+	if info.Size() > 1024 {
+		t.Errorf("grpcview.json is %d bytes; descriptors must never be stored inline in it", info.Size())
+	}
+	col := &grpcviewstorev1.Collection{}
+	mustRead(t, coll.collectionFilePath(), col)
+	if got := col.GetSources()[0].GetUpload().GetFileName(); got != "acme.binpb" {
+		t.Errorf("manifest upload file name = %q, want acme.binpb", got)
+	}
+}
+
+func hexPrefix(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:6])
+}
+
+// TestCommitDescriptorsToggleMovesTheBytes is the reason SetDescriptorSourceCommit can promise it
+// never acquires: the store finds the bytes in whichever location the last write used, so flipping
+// the flag with no fresh resolve moves them.
+func TestCommitDescriptorsToggleMovesTheBytes(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+
+	const id = "reflection:localhost:50051"
+	resolved := map[string]*grpcviewstorev1.ResolvedSource{
+		id: {Id: id, DescriptorSet: fdsNamed("acme/v1/user.proto"), ServiceNames: []string{"acme.v1.UserService"}},
+	}
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources:  []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:50051")},
+		Resolves: resolved,
+	}); err != nil {
+		t.Fatalf("PutDescriptorState (uncommitted): %v", err)
+	}
+
+	on := reflectionSourceAt("localhost:50051")
+	on.CommitDescriptors = true
+	if err := coll.PutDescriptorState(ctx, DescriptorState{Sources: []*grpcviewv1.DescriptorSource{on}}); err != nil {
+		t.Fatalf("PutDescriptorState (commit on, no fresh resolve): %v", err)
+	}
+	if got := sidecarNames(t, coll); len(got) != 1 {
+		t.Fatalf("turning the flag on must write the sidecar from the stored bytes, got %v", got)
+	}
+	if got := indexEntryIDs(t, coll); len(got) != 0 {
+		t.Errorf("a committed source must have no index entry, got %v", got)
+	}
+	if got := blobNames(t, coll.store); len(got) != 0 {
+		t.Errorf("the blob nothing points at any more must be collected, got %v", got)
+	}
+	resolves, err := coll.DescriptorResolves(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorResolves (committed): %v", err)
+	}
+	if got := resolves[id].GetServiceNames(); len(got) != 1 || got[0] != "acme.v1.UserService" {
+		t.Errorf("the move lost the resolve: %v", resolves)
+	}
+
+	off := reflectionSourceAt("localhost:50051")
+	if err := coll.PutDescriptorState(ctx, DescriptorState{Sources: []*grpcviewv1.DescriptorSource{off}}); err != nil {
+		t.Fatalf("PutDescriptorState (commit off, no fresh resolve): %v", err)
+	}
+	if got := sidecarNames(t, coll); len(got) != 0 {
+		t.Errorf("turning the flag off must delete the sidecar, got %v", got)
+	}
+	if _, err := os.Stat(coll.descriptorSidecarsRoot()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the descriptors/ directory must go when the last sidecar does (Stat: %v)", err)
+	}
+	if got, want := indexEntryIDs(t, coll), []string{id}; !slices.Equal(got, want) {
+		t.Errorf("index entries = %v, want the source back in the local store %v", got, want)
+	}
+	if got := blobNames(t, coll.store); len(got) != 1 {
+		t.Fatalf("turning the flag off must put the bytes back in a blob, got %v", got)
+	}
+	resolves, err = coll.DescriptorResolves(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorResolves (uncommitted again): %v", err)
+	}
+	if got := resolves[id].GetDescriptorSet().GetFile(); len(got) != 1 || got[0].GetName() != "acme/v1/user.proto" {
+		t.Errorf("the round trip through the sidecar lost the descriptors: %v", got)
+	}
+}
+
+// TestCommittedSidecarIsByteStable is the hard requirement committing rests on: refreshing twice
+// against an unchanged upstream must leave `git status` clean, so identical content must produce
+// identical bytes — and not even move the mtime.
+func TestCommittedSidecarIsByteStable(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+
+	const id = "reflection:localhost:50051"
+	put := func() {
+		t.Helper()
+		src := reflectionSourceAt("localhost:50051")
+		src.CommitDescriptors = true
+		if err := coll.PutDescriptorState(ctx, DescriptorState{
+			Sources: []*grpcviewv1.DescriptorSource{src},
+			Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+				id: {Id: id, DescriptorSet: fdsNamed("acme/v1/user.proto"), ServiceNames: []string{"acme.v1.UserService"}},
+			},
+		}); err != nil {
+			t.Fatalf("PutDescriptorState: %v", err)
+		}
+	}
+
+	put()
+	path := coll.descriptorSidecarPath(id)
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat sidecar: %v", err)
+	}
+
+	put()
+	second, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("re-read sidecar: %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Errorf("re-resolving identical descriptors rewrote the sidecar differently:\n%s\n---\n%s", first, second)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat sidecar after rewrite: %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("an identical resolve rewrote the sidecar (mtime %v -> %v)", before.ModTime(), after.ModTime())
+	}
+}
+
+// TestCommittedSidecarSurvivesAFreshClone is what the flag is FOR: the collection directory alone,
+// with an empty state root — a clone on a machine that has never opened this repo — still knows
+// what the source resolved to, with no refresh and no network.
+func TestCommittedSidecarSurvivesAFreshClone(t *testing.T) {
+	root, ctx := t.TempDir(), context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	authored, err := New(root, t.TempDir(), logger).Open(ctx, "requests")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := authored.Create(ctx, ""); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	const id = "reflection:localhost:50051"
+	src := reflectionSourceAt("localhost:50051")
+	src.CommitDescriptors = true
+	if err := authored.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{src},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			id: {Id: id, DescriptorSet: fdsNamed("acme/v1/user.proto"), ServiceNames: []string{"acme.v1.UserService"}},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState: %v", err)
+	}
+
+	// Same committed content, a state root that has never been written to.
+	cloned, err := New(root, t.TempDir(), logger).Open(ctx, "requests")
+	if err != nil {
+		t.Fatalf("Open (clone): %v", err)
+	}
+	resolves, err := cloned.DescriptorResolves(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorResolves (clone): %v", err)
+	}
+	if got := resolves[id].GetDescriptorSet().GetFile(); len(got) != 1 || got[0].GetName() != "acme/v1/user.proto" {
+		t.Fatalf("a fresh clone did not resolve from the committed sidecar: %v", resolves)
+	}
+	if got := resolves[id].GetServiceNames(); len(got) != 1 || got[0] != "acme.v1.UserService" {
+		t.Errorf("service names lost in the clone: %v", got)
+	}
+}
+
+// TestRemovingACommittedSourceDeletesItsSidecar covers the other way a sidecar becomes garbage:
+// its source left the list entirely.
+func TestRemovingACommittedSourceDeletesItsSidecar(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+
+	const (
+		kept    = "upload:kept.binpb"
+		removed = "upload:removed.binpb"
+	)
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{
+			uploadSourceNamed("kept.binpb", true),
+			uploadSourceNamed("removed.binpb", true),
+		},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			kept:    {Id: kept, DescriptorSet: fdsNamed("one.proto")},
+			removed: {Id: removed, DescriptorSet: fdsNamed("two.proto")},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState: %v", err)
+	}
+	if got := sidecarNames(t, coll); len(got) != 2 {
+		t.Fatalf("want a sidecar per committed source, got %v", got)
+	}
+
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{uploadSourceNamed("kept.binpb", true)},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState (removal): %v", err)
+	}
+	if got, want := sidecarNames(t, coll), []string{"upload-kept-binpb-" + hexPrefix(kept) + descriptorSidecarExt}; !slices.Equal(got, want) {
+		t.Errorf("sidecars after removal = %v, want %v", got, want)
+	}
+
+	if err := coll.PutDescriptorState(ctx, DescriptorState{}); err != nil {
+		t.Fatalf("PutDescriptorState (drop the last one): %v", err)
+	}
+	if got := sidecarNames(t, coll); len(got) != 0 {
+		t.Errorf("sidecars after dropping every source = %v, want none", got)
+	}
+	if _, err := os.Stat(coll.descriptorSidecarsRoot()); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("an empty descriptors/ directory must not be left in the repo (Stat: %v)", err)
 	}
 }
 

@@ -1,13 +1,6 @@
 package store
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"os"
-
-	"google.golang.org/protobuf/types/descriptorpb"
-
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
@@ -60,20 +53,22 @@ func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
 	}
 }
 
-// diskToWireSources preserves priority order; an upload's descriptors stay on disk.
-func diskToWireSources(in []*grpcviewstorev1.DescriptorSource) ([]*grpcviewv1.DescriptorSource, error) {
+// Both source conversions preserve priority order, and neither carries descriptor bytes: a
+// source is a pointer plus authored config on both sides of the boundary, and its bytes live in
+// the descriptor store (see blobs.go).
+func diskToWireSources(in []*grpcviewstorev1.DescriptorSource) []*grpcviewv1.DescriptorSource {
 	if len(in) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make([]*grpcviewv1.DescriptorSource, 0, len(in))
 	for _, ds := range in {
 		out = append(out, diskToWireSource(ds))
 	}
-	return out, nil
+	return out
 }
 
 func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) *grpcviewv1.DescriptorSource {
-	out := &grpcviewv1.DescriptorSource{Id: ds.GetId()}
+	out := &grpcviewv1.DescriptorSource{Id: ds.GetId(), CommitDescriptors: ds.GetCommitDescriptors()}
 	switch src := ds.GetSource().(type) {
 	case *grpcviewstorev1.DescriptorSource_Reflection:
 		out.Source = &grpcviewv1.DescriptorSource_Reflection{Reflection: reflectionToServer(src.Reflection)}
@@ -85,59 +80,28 @@ func diskToWireSource(ds *grpcviewstorev1.DescriptorSource) *grpcviewv1.Descript
 	return out
 }
 
-// wireToDiskSources takes uploadFor because the wire form omits an upload's descriptors.
-func wireToDiskSources(in []*grpcviewv1.DescriptorSource, uploadFor func(id string) *descriptorpb.FileDescriptorSet) ([]*grpcviewstorev1.DescriptorSource, error) {
+func wireToDiskSources(in []*grpcviewv1.DescriptorSource) []*grpcviewstorev1.DescriptorSource {
 	if len(in) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(in))
 	for _, ws := range in {
-		d, err := wireToDiskSource(ws, uploadFor)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, d)
+		out = append(out, wireToDiskSource(ws))
 	}
-	return out, nil
+	return out
 }
 
-func wireToDiskSource(ws *grpcviewv1.DescriptorSource, uploadFor func(id string) *descriptorpb.FileDescriptorSet) (*grpcviewstorev1.DescriptorSource, error) {
-	out := &grpcviewstorev1.DescriptorSource{Id: ws.GetId()}
+func wireToDiskSource(ws *grpcviewv1.DescriptorSource) *grpcviewstorev1.DescriptorSource {
+	out := &grpcviewstorev1.DescriptorSource{Id: ws.GetId(), CommitDescriptors: ws.GetCommitDescriptors()}
 	switch src := ws.GetSource().(type) {
 	case *grpcviewv1.DescriptorSource_Reflection:
 		out.Source = &grpcviewstorev1.DescriptorSource_Reflection{Reflection: serverToReflection(src.Reflection)}
 	case *grpcviewv1.DescriptorSource_Upload:
-		fds := uploadFor(ws.GetId())
-		if fds == nil {
-			return nil, fmt.Errorf("upload source %q has no descriptors to store", ws.GetId())
-		}
 		out.Source = &grpcviewstorev1.DescriptorSource_Upload{
-			Upload: &grpcviewstorev1.Upload{
-				FileName:      src.Upload.GetFileName(),
-				DescriptorSet: fds,
-			},
+			Upload: &grpcviewstorev1.Upload{FileName: src.Upload.GetFileName()},
 		}
 	}
-	return out, nil
-}
-
-// UploadDescriptors returns an upload's committed FileDescriptorSet, or nil for a non-upload.
-func (c *Collection) UploadDescriptors(_ context.Context, id string) (*descriptorpb.FileDescriptorSet, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	col, err := c.readCollection()
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	for _, ds := range col.GetSources() {
-		if ds.GetId() == id {
-			return ds.GetUpload().GetDescriptorSet(), nil
-		}
-	}
-	return nil, nil
+	return out
 }
 
 // serverFromAddressTLS builds a wire Server from the address/tls pair on-disk messages carry.

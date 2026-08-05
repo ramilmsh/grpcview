@@ -206,6 +206,16 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
    * @generated from field: grpcview.v1.Resolved resolved = 4;
    */
   resolved?: Resolved | undefined;
+
+  /**
+   * The descriptors this source resolved to are committed to the repo as a
+   * protojson sidecar (descriptors/<slug>-<hash of id>.json in the collection)
+   * instead of cached in local state. It changes only WHERE the store writes,
+   * never how anything resolves, and toggling it acquires nothing.
+   *
+   * @generated from field: bool commit_descriptors = 5;
+   */
+  commitDescriptors: boolean;
 };
 
 /**

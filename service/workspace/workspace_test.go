@@ -2,11 +2,14 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -28,6 +31,13 @@ const testWorkspace = "default"
 func tsBody(obj string) string { return "export default () => (" + obj + ")" }
 
 func startReflectionServer(t *testing.T, withHealth bool) int {
+	port, _ := startStoppableReflectionServer(t, withHealth)
+	return port
+}
+
+// startStoppableReflectionServer also hands back the stop function, for tests that have to take
+// the target away mid-test to prove an operation does not dial.
+func startStoppableReflectionServer(t *testing.T, withHealth bool) (int, func()) {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -40,7 +50,7 @@ func startReflectionServer(t *testing.T, withHealth bool) int {
 	reflection.Register(srv)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
-	return lis.Addr().(*net.TCPAddr).Port
+	return lis.Addr().(*net.TCPAddr).Port, srv.Stop
 }
 
 func newTestWorkspace(t *testing.T) Workspace {
@@ -591,5 +601,229 @@ func TestMoveItemRPC(t *testing.T) {
 		NewPath:    []string{"Dst", "Inner"},
 	})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("move into own descendant = %v, want FailedPrecondition", err)
+	}
+}
+
+func commitReq(id string, commit bool) *grpcviewv1.SetDescriptorSourceCommitRequest {
+	return &grpcviewv1.SetDescriptorSourceCommitRequest{Collection: testWorkspace, Id: id, Commit: commit}
+}
+
+// sourceByID finds a row in the response's source list; the flag is round-tripped through the
+// manifest, so reading it back off a handler's Collection is the assertion that it persisted.
+func sourceByID(ws *grpcviewv1.Collection, id string) *grpcviewv1.DescriptorSource {
+	for _, src := range ws.GetSources() {
+		if src.GetId() == id {
+			return src
+		}
+	}
+	return nil
+}
+
+func collectionDir(t *testing.T, w Workspace) string {
+	t.Helper()
+	coll, err := w.store.Open(context.Background(), testWorkspace)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return coll.Root()
+}
+
+func committedSidecars(t *testing.T, w Workspace) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(collectionDir(t, w), "descriptors"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("ReadDir descriptors: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+// TestSetDescriptorSourceCommitNeverDials is the promise the RPC exists for: the toggle moves the
+// bytes the store already holds between the two locations, so it still works with the reflection
+// target gone — a dial would fail the call outright.
+func TestSetDescriptorSourceCommitNeverDials(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	port, stop := startStoppableReflectionServer(t, true)
+	added, err := w.AddDescriptorSource(ctx, connect.NewRequest(reflectionAddReq(port)))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource: %v", err)
+	}
+	id := added.Msg.GetCollection().GetSources()[0].GetId()
+	if got := committedSidecars(t, w); len(got) != 0 {
+		t.Fatalf("a source added without the flag must commit nothing, got %v", got)
+	}
+	stop()
+
+	on, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(commitReq(id, true)))
+	if err != nil {
+		t.Fatalf("SetDescriptorSourceCommit(on) with the target down: %v", err)
+	}
+	if got := committedSidecars(t, w); len(got) != 1 {
+		t.Fatalf("committing must write one sidecar, got %v", got)
+	}
+	if !sourceByID(on.Msg.GetCollection(), id).GetCommitDescriptors() {
+		t.Errorf("commit_descriptors did not come back set: %+v", on.Msg.GetCollection().GetSources())
+	}
+	if !hasService(on.Msg.GetCollection().GetServices(), "Health") {
+		t.Errorf("committing lost the resolved services: %v", on.Msg.GetCollection().GetServices())
+	}
+
+	off, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(commitReq(id, false)))
+	if err != nil {
+		t.Fatalf("SetDescriptorSourceCommit(off) with the target down: %v", err)
+	}
+	if got := committedSidecars(t, w); len(got) != 0 {
+		t.Errorf("un-committing must delete the sidecar, got %v", got)
+	}
+	if sourceByID(off.Msg.GetCollection(), id).GetCommitDescriptors() {
+		t.Errorf("commit_descriptors still set after --off: %+v", off.Msg.GetCollection().GetSources())
+	}
+	if !hasService(off.Msg.GetCollection().GetServices(), "Health") {
+		t.Errorf("un-committing lost the resolved services: %v", off.Msg.GetCollection().GetServices())
+	}
+}
+
+// TestSetDescriptorSourceCommitRejectsUnresolved answers the question the plan left open: an
+// unresolved source is refused, because resolve-then-commit would make a config change acquire.
+func TestSetDescriptorSourceCommitRejectsUnresolved(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	coll, err := w.store.Open(ctx, testWorkspace)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// Listed but never resolved — the state a fresh clone of an uncommitted source is in.
+	const id = "reflection:127.0.0.1:1"
+	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{{
+			Id:     id,
+			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "127.0.0.1:1"}},
+		}},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState: %v", err)
+	}
+
+	_, err = w.SetDescriptorSourceCommit(ctx, connect.NewRequest(commitReq(id, true)))
+	if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument (err=%v)", code, err)
+	}
+	if got := committedSidecars(t, w); len(got) != 0 {
+		t.Errorf("a refused commit must write nothing, got %v", got)
+	}
+	if _, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(commitReq("reflection:nope:1", true))); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("an unknown id = %v, want NotFound", err)
+	}
+}
+
+// TestCommittedDescriptorsResolveInAFreshClone is the whole point of the flag: the same collection
+// directory, opened with a state root that has never seen it — a colleague's clone — resolves with
+// no refresh and no network.
+func TestCommittedDescriptorsResolveInAFreshClone(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	add := descriptorSetAddReq(fileDescriptorSet(t, "grpc/health/v1/health.proto"))
+	add.CommitDescriptors = true
+	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(add)); err != nil {
+		t.Fatalf("AddDescriptorSource (committed upload): %v", err)
+	}
+	if got := committedSidecars(t, w); len(got) != 1 {
+		t.Fatalf("want the upload's sidecar committed, got %v", got)
+	}
+
+	clone := Workspace{
+		store: store.New(w.store.Root(), t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		defs:  newDefinitionsCache(),
+	}
+	got, err := clone.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get in a fresh clone: %v", err)
+	}
+	ws := got.Msg.GetCollection()
+	if !hasService(ws.GetServices(), "Health") {
+		t.Fatalf("a fresh clone did not resolve from the committed sidecar: %v", ws.GetServices())
+	}
+	if got := ws.GetSources()[0].GetResolved().GetError(); got != "" {
+		t.Errorf("the committed source reports an error in a clone: %q", got)
+	}
+}
+
+// TestUploadsAreNotStoredInTheManifest pins the deletion of upload's special case: the bytes go into
+// the descriptor store like every other kind's, so grpcview.json stays a small file that a request
+// reorder can rewrite.
+func TestUploadsAreNotStoredInTheManifest(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	set := fileDescriptorSet(t, "proto/grpcview/v1/service.proto")
+	if len(set) < 10_000 {
+		t.Fatalf("test descriptor set is only %d bytes; it must be big enough to notice inline", len(set))
+	}
+	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(set))); err != nil {
+		t.Fatalf("AddDescriptorSource: %v", err)
+	}
+
+	manifest := filepath.Join(collectionDir(t, w), store.CollectionFileName)
+	info, err := os.Stat(manifest)
+	if err != nil {
+		t.Fatalf("Stat manifest: %v", err)
+	}
+	if info.Size() > 1024 {
+		t.Errorf("grpcview.json is %d bytes for a %d-byte upload; descriptors must not be inline",
+			info.Size(), len(set))
+	}
+	raw, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	if strings.Contains(string(raw), "descriptorSet") || strings.Contains(string(raw), "\"file\"") {
+		t.Errorf("grpcview.json still carries descriptor content:\n%s", raw)
+	}
+}
+
+// TestRefreshAnUploadFails: an upload is the null-pointer kind, so there is nothing to re-resolve
+// from. Failing is deliberate — a silent success would report a refresh that re-fetched nothing.
+func TestRefreshAnUploadFails(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	added, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(fileDescriptorSet(t, "grpc/health/v1/health.proto"))))
+	if err != nil {
+		t.Fatalf("AddDescriptorSource: %v", err)
+	}
+	id := added.Msg.GetCollection().GetSources()[0].GetId()
+
+	_, err = w.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
+		Collection: testWorkspace,
+		Id:         id,
+	}))
+	if code := connect.CodeOf(err); code != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition (err=%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "uploading the file again") {
+		t.Errorf("the error must name the fix, got %v", err)
+	}
+
+	// The failed refresh changed nothing: the upload still resolves from what the add stored.
+	got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get after the failed refresh: %v", err)
+	}
+	if !hasService(got.Msg.GetCollection().GetServices(), "Health") {
+		t.Errorf("the upload lost its descriptors: %v", got.Msg.GetCollection().GetServices())
 	}
 }
