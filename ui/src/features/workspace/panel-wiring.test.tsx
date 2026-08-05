@@ -8,11 +8,14 @@ import { renderRequestRow, requestTreeAdapter, type RequestRowCallbacks } from "
 import {
   EMPTY_LABEL,
   LOADING_LABEL,
+  panelNodeId,
   panelTreeAdapter,
   renderPanelRow,
+  STATUS_SEPARATOR,
   type PanelNode,
 } from "./panel-tree";
 import {
+  collectionForNodeId,
   collectionsToQuery,
   countAllRequests,
   filterItemsByCollection,
@@ -324,5 +327,46 @@ describe("panelCanDrop", () => {
     expect(
       panelCanDrop([charge], { parent: { kind: "status", collection: PAY, label: LOADING_LABEL } }, opts)
     ).toBe(false);
+  });
+});
+
+// Focusing any row is what scopes Sources, Scripts and the pickers to a collection, so the
+// row id has to resolve back to one. A collection id contains slashes of its own, which is
+// why this matches against the known ids instead of splitting the key.
+describe("collectionForNodeId", () => {
+  const all = [payments, ledger];
+
+  it("resolves a collection row to itself", () => {
+    expect(collectionForNodeId(PAY, all)).toBe(PAY);
+  });
+
+  it("resolves an item key to the collection it is prefixed with", () => {
+    const key = panelNodeId({ kind: "item", item: payItems[0] });
+    expect(key.startsWith(`${PAY}/`)).toBe(true);
+    expect(collectionForNodeId(key, all)).toBe(PAY);
+    expect(collectionForNodeId(panelNodeId({ kind: "item", item: ledgerItems[0] }), all)).toBe(
+      LEDGER
+    );
+  });
+
+  it("resolves a status row id", () => {
+    const id = panelNodeId({ kind: "status", collection: LEDGER, label: LOADING_LABEL });
+    expect(id).toBe(`${LEDGER}${STATUS_SEPARATOR}status`);
+    expect(collectionForNodeId(id, all)).toBe(LEDGER);
+  });
+
+  it("does not let a collection own a sibling whose id merely starts with its own", () => {
+    // "requests" is a string prefix of "requests2" without being a path prefix of it, so a
+    // bare startsWith would hand requests2's rows to requests.
+    const a = summary("requests", "a");
+    const b = summary("requests2", "b");
+    expect(collectionForNodeId("requests2", [a, b])).toBe("requests2");
+    expect(collectionForNodeId("requests2/x", [a, b])).toBe("requests2");
+    expect(collectionForNodeId("requests/x", [a, b])).toBe("requests");
+  });
+
+  it("returns null for an id no collection owns", () => {
+    expect(collectionForNodeId("services/other/requests", all)).toBeNull();
+    expect(collectionForNodeId("", all)).toBeNull();
   });
 });

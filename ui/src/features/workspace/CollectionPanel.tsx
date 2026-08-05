@@ -32,6 +32,7 @@ import {
   type PanelNode,
 } from "./panel-tree";
 import {
+  collectionForNodeId,
   collectionsToQuery,
   countAllRequests,
   filterItemsByCollection,
@@ -296,7 +297,12 @@ export function CollectionPanel() {
             className="font-mono"
             style={{ fontSize: 11, color: "var(--color-neutral-600)" }}
           >
-            {total} {total === 1 ? "req" : "reqs"}
+            {/* Tiered, this counts COLLECTIONS, not requests: a request total would only
+                cover the collections whose rows are open, so collapsing one would change
+                a number that describes the workspace. Untiered it is today's count. */}
+            {tiered
+              ? `${collections.length} collections`
+              : `${total} ${total === 1 ? "req" : "reqs"}`}
           </span>
         </div>
 
@@ -321,13 +327,21 @@ export function CollectionPanel() {
             selection={treeSelection}
             onSelectionChange={setTreeSelection}
             focused={treeFocused}
-            onFocusedChange={setTreeFocused}
+            // Whatever row the tree focuses decides which collection is active, which is
+            // what scopes Sources, Scripts and the pickers. onOpen is not enough: a single
+            // click on an expandable row only toggles it, so a collection row is never
+            // "opened" — and this also makes arrowing into another collection scope to it,
+            // the way VS Code lets the selected thing decide the context.
+            onFocusedChange={(id) => {
+              setTreeFocused(id);
+              const owner = id === null ? null : collectionForNodeId(id, collections);
+              if (owner !== null) setActiveCollection(owner);
+            }}
             activeId={activeKey}
-            // A collection row opens nothing — it makes that collection the active one, which
-            // is what scopes Sources, Scripts and the pickers. A status row does nothing.
+            // A collection row opens nothing; focusing it already made it active. A status
+            // row does nothing.
             onOpen={(node) => {
               if (node.kind === "item") openTab(node.item);
-              else if (node.kind === "collection") setActiveCollection(node.collection.id);
             }}
             onRenameCommit={(node, next) => {
               if (node.kind === "item") doRename(node.item, next);

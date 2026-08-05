@@ -99,13 +99,30 @@ export function TreeRow<T>({
     content = (
       <>
         {item.icon && <TreeIcon token={item.icon} />}
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {/* The label wins the fight for width: a long description (a collection's path)
+            would otherwise squeeze it to "pay…" while itself rendering in full. */}
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            flex: "0 0 auto",
+            maxWidth: "100%",
+          }}
+        >
           {item.label}
         </span>
         {item.description && (
           <span
             className="rowmeta font-mono"
-            style={{ fontSize: 10, color: "var(--color-neutral-600)" }}
+            style={{
+              fontSize: 10,
+              color: "var(--color-neutral-600)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
           >
             {item.description}
           </span>

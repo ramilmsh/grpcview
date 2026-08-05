@@ -10,7 +10,13 @@ import {
   pruneNestedSelections,
   type ItemWithPath,
 } from "@/lib/format";
-import { panelDropAllowed, panelItems, panelNodeCollection, type PanelNode } from "./panel-tree";
+import {
+  panelDropAllowed,
+  panelItems,
+  panelNodeCollection,
+  STATUS_SEPARATOR,
+  type PanelNode,
+} from "./panel-tree";
 
 // The collections whose items the tree needs: the active one (always — its rows are the
 // untiered tree, and its row auto-expands when tiered) plus every collection row the user
@@ -27,6 +33,24 @@ export const collectionsToQuery = (
     if (c.id === activeCollection || expanded.has(c.id)) ids.add(c.id);
   }
   return [...ids].sort();
+};
+
+// The collection a row id belongs to, matched against the KNOWN collection ids rather
+// than parsed out of the id: a collection id may itself contain slashes
+// ("services/payments/requests"), so splitting a key on "/" would name the wrong thing.
+// Every id in the tree is either a collection id, an item key (`<id>/<slug path>`) or a
+// status id (`<id>` + NUL), so a prefix test against the real ids is exact. Decision 4's
+// non-nesting invariant means no two can match, and the longest match is taken anyway.
+export const collectionForNodeId = (
+  id: string,
+  collections: readonly CollectionSummary[]
+): string | null => {
+  let best: string | null = null;
+  for (const c of collections) {
+    const owns = id === c.id || id.startsWith(c.id + '/') || id.startsWith(c.id + STATUS_SEPARATOR);
+    if (owns && (best === null || c.id.length > best.length)) best = c.id;
+  }
+  return best;
 };
 
 export const countRequests = (items: readonly ItemWithPath[]): number =>

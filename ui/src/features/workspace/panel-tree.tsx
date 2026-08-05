@@ -14,6 +14,10 @@ export type PanelNode =
   // resolves that promise and re-renders, so the tree only ever sees a synchronous row.
   | { kind: "status"; collection: string; label: string };
 
+// Joins a status row's id to its collection. Exported so the panel can TEST for it when
+// resolving which collection a row id belongs to, rather than spelling the byte twice.
+export const STATUS_SEPARATOR = "\u0000";
+
 export const LOADING_LABEL = "Loading…";
 export const EMPTY_LABEL = "No requests yet";
 
@@ -37,7 +41,7 @@ export const panelNodeId = (node: PanelNode): string => {
     case "item":
       return itemKey(node.item);
     case "status":
-      return `${node.collection}\u0000status`;
+      return node.collection + STATUS_SEPARATOR + "status";
   }
 };
 
