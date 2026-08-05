@@ -4,10 +4,31 @@ import (
 	"context"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
+
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
+// serviceFileSet is a hand-built descriptor set declaring one methodless service per name — all
+// the merge needs to link them, and all a dial-attribution test needs to tell them apart.
+func serviceFileSet(fileName, pkg string, services ...string) *descriptorpb.FileDescriptorSet {
+	file := &descriptorpb.FileDescriptorProto{
+		Name:    proto.String(fileName),
+		Package: proto.String(pkg),
+		Syntax:  proto.String("proto3"),
+	}
+	for _, name := range services {
+		file.Service = append(file.Service, &descriptorpb.ServiceDescriptorProto{Name: proto.String(name)})
+	}
+	return &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{file}}
+}
+
+// TestResolveTargetServiceAware drives resolveTarget off the descriptor blobs, because that is
+// the only thing services are derived from now: which source SERVES a service decides the dial
+// target, and a service nobody serves over reflection falls back to the first reflection source.
 func TestResolveTargetServiceAware(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -16,19 +37,32 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	serverA := &grpcviewv1.Server{Address: "a.example.com:50051"}
 	serverB := &grpcviewv1.Server{Address: "b.example.com:50052"}
 
+	// A is first and serves nothing, B serves OrderService, and the upload serves LegacyService
+	// with no address of its own — so LegacyService resolves but is unattributed.
+	const uploadID = "upload:legacy.binpb"
 	sources := []*grpcviewv1.DescriptorSource{
 		{Id: "reflection:" + serverA.GetAddress(), Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverA}},
 		{Id: "reflection:" + serverB.GetAddress(), Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverB}},
+		{Id: uploadID, Source: &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: "legacy.binpb"}}},
 	}
-	services := []*grpcviewv1.Service{
-		{Package: "acme.v1", Name: "OrderService", Source: serverB},
-		{Package: "acme.v1", Name: "LegacyService"},
-	}
+	legacy := serviceFileSet("acme/v1/legacy.proto", "acme.v1", "LegacyService")
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.PutDescriptorState(ctx, store.DescriptorState{Sources: sources, Services: services}); err != nil {
+	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
+		Sources: sources,
+		Uploads: map[string]*descriptorpb.FileDescriptorSet{uploadID: legacy},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			"reflection:" + serverA.GetAddress(): {Id: "reflection:" + serverA.GetAddress()},
+			"reflection:" + serverB.GetAddress(): {
+				Id:            "reflection:" + serverB.GetAddress(),
+				DescriptorSet: serviceFileSet("acme/v1/order.proto", "acme.v1", "OrderService"),
+				ServiceNames:  []string{"acme.v1.OrderService"},
+			},
+			uploadID: {Id: uploadID, DescriptorSet: legacy, ServiceNames: []string{"acme.v1.LegacyService"}},
+		},
+	}); err != nil {
 		t.Fatalf("PutDescriptorState: %v", err)
 	}
 

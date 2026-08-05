@@ -66,6 +66,13 @@ type Store struct {
 
 	mu    sync.Mutex
 	colls map[string]*Collection
+
+	// blobMu serializes the whole descriptor-store critical section — write the blobs, rewrite
+	// the writing collection's index, collect garbage — across every collection in this
+	// workspace. Collection.mu cannot do that job: it serializes ONE collection, while the
+	// blob store and its GC are workspace-wide, so without this a GC could delete a blob a
+	// concurrent writer in another collection had already written but not yet indexed.
+	blobMu sync.Mutex
 }
 
 // New returns a Store rooting collections under root (the workspace root) and keeping
@@ -107,9 +114,11 @@ func (s *Store) Open(_ context.Context, id string) (*Collection, error) {
 	coll, ok := s.colls[key]
 	if !ok {
 		coll = &Collection{
+			store:  s,
 			root:   filepath.Join(s.root, cleaned),
 			state:  collectionStateDir(s.stateRoot, key),
 			id:     cleaned,
+			key:    key,
 			logger: s.logger.With("collection", cleaned),
 		}
 		s.colls[key] = coll
@@ -148,14 +157,20 @@ func cleanCollectionID(id string) (string, error) {
 func collectionStateDir(stateRoot, foldedID string) string {
 	sum := sha256.Sum256([]byte(foldedID))
 	key := slugify(foldedID) + "-" + hex.EncodeToString(sum[:6])
-	return filepath.Join(stateRoot, "collections", key)
+	return filepath.Join(stateRoot, collectionsStateSubdir, key)
 }
 
 // Collection serializes its mutations, so concurrent RPCs for one workspace can't interleave writes.
 type Collection struct {
+	// store is the workspace this collection belongs to. It is needed for the descriptor
+	// blobs, which live under the workspace state root and are shared between collections —
+	// so writing and collecting them is a workspace-level operation a collection can only ask
+	// for, never perform alone.
+	store  *Store
 	root   string // committed content: manifest, tree/, scripts/
-	state  string // local state: resolved-schema cache, run history — see collectionStateDir
+	state  string // local state: descriptor index, run history — see collectionStateDir
 	id     string // the workspace-relative address Store.Open was called with; never a display name
+	key    string // the case-folded id Store.Open keys its handle map on — see Key
 	logger *slog.Logger
 
 	mu sync.Mutex
@@ -164,25 +179,17 @@ type Collection struct {
 func (c *Collection) Root() string  { return c.root }
 func (c *Collection) State() string { return c.state }
 
+// Key is the store's canonical identity for this collection's DIRECTORY: the cleaned,
+// case-folded id. Anything outside the store that memoizes per collection must key it on
+// this rather than on the id it passed to Open — on a case-insensitive filesystem
+// "Requests" and "requests" are one directory (see Open), and two memo entries for one
+// directory would let an invalidation miss the entry a reader is about to use.
+func (c *Collection) Key() string { return c.key }
+
 func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, CollectionFileName) }
 func (c *Collection) treeRoot() string           { return filepath.Join(c.root, treeDir) }
 func (c *Collection) scriptsRoot() string        { return filepath.Join(c.root, scriptsDir) }
-func (c *Collection) servicesCachePath() string {
-	return filepath.Join(c.state, cacheSubdir, servicesCacheFileName)
-}
-
-func (c *Collection) sourcesCacheRoot() string {
-	return filepath.Join(c.state, cacheSubdir, sourcesCacheSubdir)
-}
-
-// sourceCachePath is slug + id hash: two ids that slugify alike (localhost:8080 vs
-// localhost.8080) must not share a file.
-func (c *Collection) sourceCachePath(id string) string {
-	sum := sha256.Sum256([]byte(id))
-	name := fmt.Sprintf("%s-%s%s", slugify(id), hex.EncodeToString(sum[:6]), sourceCacheFileExt)
-	return filepath.Join(c.sourcesCacheRoot(), name)
-}
-func (c *Collection) historyRoot() string { return filepath.Join(c.state, historyDir) }
+func (c *Collection) historyRoot() string        { return filepath.Join(c.state, historyDir) }
 
 // defaultName is the display name a collection gets when its manifest doesn't specify one:
 // the base name of its own directory. This holds even for id ".", since c.root for that

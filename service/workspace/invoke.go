@@ -671,14 +671,14 @@ func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server,
 
 	coll, err := w.store.Open(ctx, workspaceName)
 	if err != nil {
-		return nil, err
-	}
-
-	services, err := coll.Services(ctx)
-	if err != nil {
 		return nil, toConnectError(err)
 	}
-	for _, svc := range services {
+
+	defs, err := w.definitionsOf(ctx, coll)
+	if err != nil {
+		return nil, err
+	}
+	for _, svc := range defs.serviceList {
 		if fmt.Sprintf("%s.%s", svc.GetPackage(), svc.GetName()) == service {
 			if src := svc.GetSource(); src != nil {
 				return src, nil

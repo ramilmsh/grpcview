@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,10 +8,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
@@ -493,25 +494,50 @@ func TestMoveSlugCollision(t *testing.T) {
 	}
 }
 
+// fdsNamed is a minimal descriptor set: the store never links what it stores, so a file name is
+// enough to tell two schemas apart by content.
+func fdsNamed(names ...string) *descriptorpb.FileDescriptorSet {
+	fds := &descriptorpb.FileDescriptorSet{}
+	for _, name := range names {
+		fds.File = append(fds.File, &descriptorpb.FileDescriptorProto{Name: proto.String(name)})
+	}
+	return fds
+}
+
+func reflectionSourceAt(address string) *grpcviewv1.DescriptorSource {
+	return &grpcviewv1.DescriptorSource{
+		Id:     "reflection:" + address,
+		Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: address}},
+	}
+}
+
+// blobNames lists the descriptor blobs in a workspace's state root, which is where the sharing
+// between collections is visible: one file per distinct content, whoever points at it.
+func blobNames(t *testing.T, s *Store) []string {
+	t.Helper()
+	entries, err := os.ReadDir(s.blobsRoot())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		t.Fatalf("ReadDir blobs: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	slices.Sort(names)
+	return names
+}
+
 func TestDescriptorStatePersistence(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
-	sources := []*grpcviewv1.DescriptorSource{
-		{
-			Id:     "reflection:localhost:50051",
-			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "localhost:50051"}},
-		},
-	}
-	services := []*grpcviewv1.Service{
-		{Package: "acme.v1", Name: "UserService", Methods: []*grpcviewv1.Method{{Name: "GetUser"}}},
-	}
-	descriptorSet := []byte{0x01, 0x02, 0x03}
+	const id = "reflection:localhost:50051"
 	if err := coll.PutDescriptorState(ctx, DescriptorState{
-		Sources:       sources,
-		Services:      services,
-		DescriptorSet: descriptorSet,
+		Sources: []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:50051")},
 		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
-			"reflection:localhost:50051": {Id: "reflection:localhost:50051", ServiceNames: []string{"acme.v1.UserService"}},
+			id: {Id: id, DescriptorSet: fdsNamed("acme/v1/user.proto"), ServiceNames: []string{"acme.v1.UserService"}},
 		},
 	}); err != nil {
 		t.Fatalf("PutDescriptorState: %v", err)
@@ -524,24 +550,170 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetReflection().GetAddress() != "localhost:50051" {
 		t.Errorf("sources not round-tripped: %v", ws.GetSources())
 	}
-	if len(ws.GetServices()) != 1 || ws.GetServices()[0].GetName() != "UserService" {
-		t.Errorf("services not round-tripped: %v", ws.GetServices())
-	}
-	if !bytes.Equal(ws.GetDescriptorSet(), descriptorSet) {
-		t.Errorf("descriptor set not round-tripped: got %v want %v", ws.GetDescriptorSet(), descriptorSet)
+	// The store persists no merged view at all any more: Load answers the manifest, the tree and
+	// the scripts, and the layer above derives the rest from the blobs.
+	if len(ws.GetServices()) != 0 || len(ws.GetDescriptorSet()) != 0 {
+		t.Errorf("Load returned a merged view the store must not hold: %v / %d bytes",
+			ws.GetServices(), len(ws.GetDescriptorSet()))
 	}
 
-	if _, err := os.Stat(coll.servicesCachePath()); err != nil {
-		t.Errorf("services cache missing: %v", err)
+	blobs, err := coll.DescriptorBlobs(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorBlobs: %v", err)
 	}
-	if _, err := os.Stat(coll.sourceCachePath("reflection:localhost:50051")); err != nil {
-		t.Errorf("per-source resolve cache missing: %v", err)
+	blob, ok := blobs[id]
+	if !ok {
+		t.Fatalf("no blob for %q: %v", id, blobs)
 	}
+	if got := blob.GetDescriptorSet().GetFile(); len(got) != 1 || got[0].GetName() != "acme/v1/user.proto" {
+		t.Errorf("blob descriptors not round-tripped: %v", got)
+	}
+	if got := blob.GetServiceNames(); len(got) != 1 || got[0] != "acme.v1.UserService" {
+		t.Errorf("served service names not round-tripped: %v", got)
+	}
+	if got := blobNames(t, coll.store); len(got) != 1 {
+		t.Errorf("want exactly one blob for one resolved source, got %v", got)
+	}
+
 	if err := coll.PutDescriptorState(ctx, DescriptorState{}); err != nil {
 		t.Fatalf("PutDescriptorState (empty): %v", err)
 	}
-	if _, err := os.Stat(coll.sourceCachePath("reflection:localhost:50051")); !os.IsNotExist(err) {
-		t.Errorf("per-source resolve cache not pruned: %v", err)
+	if got := blobNames(t, coll.store); len(got) != 0 {
+		t.Errorf("dropping the last source must collect its blob, still have %v", got)
+	}
+	blobs, err = coll.DescriptorBlobs(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorBlobs after removal: %v", err)
+	}
+	if len(blobs) != 0 {
+		t.Errorf("index not rewritten on removal: %v", blobs)
+	}
+}
+
+// TestDescriptorBlobsAreSharedAcrossCollections is the reason the blobs are content-addressed and
+// workspace-scoped: a monorepo where five collections point at one schema must hold one copy of
+// it, and collecting one collection's garbage must not reach into another's.
+func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	const id = "reflection:localhost:50051"
+	shared := fdsNamed("acme/v1/user.proto")
+	colls := make([]*Collection, 0, 2)
+	for _, name := range []string{"payments", "ledger"} {
+		coll, err := s.Open(ctx, name)
+		if err != nil {
+			t.Fatalf("Open %s: %v", name, err)
+		}
+		if err := coll.Create(ctx, ""); err != nil {
+			t.Fatalf("Create %s: %v", name, err)
+		}
+		if err := coll.PutDescriptorState(ctx, DescriptorState{
+			Sources: []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:50051")},
+			Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+				// Independently built, byte-identical: the two collections resolved the same
+				// target, which is exactly the case CAS has to collapse.
+				id: {Id: id, DescriptorSet: proto.CloneOf(shared), ServiceNames: []string{"acme.v1.UserService"}},
+			},
+		}); err != nil {
+			t.Fatalf("PutDescriptorState %s: %v", name, err)
+		}
+		colls = append(colls, coll)
+	}
+
+	if got := blobNames(t, s); len(got) != 1 {
+		t.Fatalf("two collections resolving to identical bytes must share one blob, got %v", got)
+	}
+
+	// Re-writing identical content is not a write at all, so nothing churns and a reorder costs
+	// no file system traffic.
+	before, err := os.Stat(s.blobPath(strings.TrimSuffix(blobNames(t, s)[0], blobFileExt)))
+	if err != nil {
+		t.Fatalf("Stat blob: %v", err)
+	}
+	if err := colls[0].PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:50051")},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			id: {Id: id, DescriptorSet: proto.CloneOf(shared), ServiceNames: []string{"acme.v1.UserService"}},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState (identical rewrite): %v", err)
+	}
+	if got := blobNames(t, s); len(got) != 1 {
+		t.Fatalf("an identical resolve must not add a blob, got %v", got)
+	}
+	after, err := os.Stat(s.blobPath(strings.TrimSuffix(blobNames(t, s)[0], blobFileExt)))
+	if err != nil {
+		t.Fatalf("Stat blob after rewrite: %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("an identical resolve rewrote the blob (mtime %v -> %v)", before.ModTime(), after.ModTime())
+	}
+
+	// One collection dropping the source must not collect bytes the other still points at.
+	if err := colls[0].PutDescriptorState(ctx, DescriptorState{}); err != nil {
+		t.Fatalf("PutDescriptorState (drop in payments): %v", err)
+	}
+	if got := blobNames(t, s); len(got) != 1 {
+		t.Fatalf("a blob another collection references must survive the drop, got %v", got)
+	}
+	blobs, err := colls[1].DescriptorBlobs(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorBlobs (ledger): %v", err)
+	}
+	if _, ok := blobs[id]; !ok {
+		t.Errorf("ledger lost its source's descriptors when payments dropped its own: %v", blobs)
+	}
+
+	// With the last reference gone it is garbage, and the next write collects it.
+	if err := colls[1].PutDescriptorState(ctx, DescriptorState{}); err != nil {
+		t.Fatalf("PutDescriptorState (drop in ledger): %v", err)
+	}
+	if got := blobNames(t, s); len(got) != 0 {
+		t.Errorf("want the unreferenced blob collected, got %v", got)
+	}
+}
+
+// TestPutDescriptorStateKeepsUnresolvedIDs pins the contract every non-acquiring mutation relies
+// on: a reorder or an unrelated add re-resolves nothing, so an id absent from Resolves must keep
+// pointing at what it last resolved to rather than going blank.
+func TestPutDescriptorStateKeepsUnresolvedIDs(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+
+	const (
+		kept  = "reflection:localhost:1"
+		added = "reflection:localhost:2"
+	)
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:1")},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			kept: {Id: kept, DescriptorSet: fdsNamed("one.proto"), ServiceNames: []string{"one.One"}},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState (first): %v", err)
+	}
+
+	if err := coll.PutDescriptorState(ctx, DescriptorState{
+		Sources: []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:1"), reflectionSourceAt("localhost:2")},
+		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
+			added: {Id: added, DescriptorSet: fdsNamed("two.proto"), ServiceNames: []string{"two.Two"}},
+		},
+	}); err != nil {
+		t.Fatalf("PutDescriptorState (second): %v", err)
+	}
+
+	blobs, err := coll.DescriptorBlobs(ctx)
+	if err != nil {
+		t.Fatalf("DescriptorBlobs: %v", err)
+	}
+	if got := blobs[kept].GetServiceNames(); len(got) != 1 || got[0] != "one.One" {
+		t.Errorf("the untouched source lost its entry: %v", got)
+	}
+	if got := blobs[added].GetServiceNames(); len(got) != 1 || got[0] != "two.Two" {
+		t.Errorf("the added source has no entry: %v", got)
+	}
+	if got := blobNames(t, coll.store); len(got) != 2 {
+		t.Errorf("want both sources' blobs kept, got %v", got)
 	}
 }
 
@@ -1041,8 +1213,8 @@ func TestDisplayNameIsNeverTheID(t *testing.T) {
 	}
 }
 
-// TestLocalStateStaysOutOfCollectionDir exercises all three kinds of local state (descriptor
-// cache, per-source resolve cache, run history) and asserts none of it lands next to the
+// TestLocalStateStaysOutOfCollectionDir exercises every kind of local state (the descriptor
+// index, the descriptor blobs it points at, run history) and asserts none of it lands next to the
 // committed manifest/tree — it must all be reachable only under the state root passed to
 // New, which for a real workspace is wsroot.StateDir's directory, never the repo.
 func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
@@ -1068,7 +1240,7 @@ func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 			Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: &grpcviewv1.Server{Address: "localhost:1"}},
 		}},
 		Resolves: map[string]*grpcviewstorev1.ResolvedSource{
-			sourceID: {Id: sourceID},
+			sourceID: {Id: sourceID, DescriptorSet: fdsNamed("echo.proto")},
 		},
 	}); err != nil {
 		t.Fatalf("PutDescriptorState: %v", err)
@@ -1091,11 +1263,11 @@ func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 	if !strings.HasPrefix(coll.State(), state) {
 		t.Errorf("collection state dir %q is not under the configured state root %q", coll.State(), state)
 	}
-	if _, err := os.Stat(coll.servicesCachePath()); err != nil {
-		t.Errorf("services cache missing under the state root: %v", err)
+	if _, err := os.Stat(coll.descriptorIndexPath()); err != nil {
+		t.Errorf("descriptor index missing under the state root: %v", err)
 	}
-	if _, err := os.Stat(coll.sourceCachePath(sourceID)); err != nil {
-		t.Errorf("per-source resolve cache missing under the state root: %v", err)
+	if got := blobNames(t, coll.store); len(got) != 1 {
+		t.Errorf("want the source's descriptor blob under the state root, got %v", got)
 	}
 	histPath, err := coll.historyFilePath(filepath.Join(coll.treeRoot(), "echo"))
 	if err != nil {

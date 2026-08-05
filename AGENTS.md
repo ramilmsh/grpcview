@@ -199,14 +199,26 @@ The layering is the whole point, so don't collapse it:
 
 1. **Each source resolves independently** to its own `FileDescriptorSet` plus the
    list of services it serves. A reflection source resolves by dialing; an upload
-   resolves by linking its committed bytes. Each resolve is cached per source
-   (`.grpcview/cache/sources/<slug>.binpb`, binary, gitignored).
-2. **The merged view is re-derived from those caches on every mutation** —
+   resolves by linking its committed bytes. Each resolve is stored as a
+   **content-addressed blob** under the workspace state root
+   (`blobs/<sha256>.binpb`, binary, never in the repo), and each collection keeps a
+   `descriptors.json` index pointing its source **ids** at digests. The two keys are
+   different on purpose — an id is a pointer and survives its content changing,
+   which is what makes re-adding a source a refresh — and the blobs are shared, so
+   five collections resolving one target hold one copy of its bytes and a blob is
+   collected only when no collection in the workspace references it.
+2. **The merged view is derived in memory, per collection, on first touch** —
    `mergeSources`, walking the list front to back: the first source to define a
    proto **file** (by name) wins it, the first to serve a **service** (by full
    name) wins its list entry, later sources fill the gaps. Then the whole claimed
    set is *link-checked*, so sources that disagree about shared protos fail loudly
-   instead of producing a subtly broken workspace.
+   instead of producing a subtly broken workspace. Nothing about that result is
+   persisted: it is a pure function of (the blobs, the source order in
+   `grpcview.json`), the writer drops the memo entry, and the next read rebuilds
+   it. A *read* survives an unmergeable list — the error lands on the source rows
+   and `services` comes back empty, so a colleague's commit cannot stop a
+   collection loading — while a *mutation* still fails outright, because the user
+   is changing those sources right now.
 
 Consequences worth preserving, each of which was a bug before:
 
@@ -243,11 +255,12 @@ Consequences worth preserving, each of which was a bug before:
   now the only thing invoke needs the network for. The corollary is that a workspace
   with no resolved definitions gets `FailedPrecondition` and nothing is sent, which
   is also the contract the CLI already enforced before reaching the backend.
-- **Linking the merged set is memoized, not repeated.** `definitionsCache` keys the
-  linked descriptors by workspace and invalidates on the descriptor set's digest, so
-  the per-invoke cost is one cache read, not a re-link of every file. Source
-  *summaries* are re-read each time regardless: a reorder changes which source won a
-  service without changing a single descriptor.
+- **The merged set is memoized, not repeated.** `definitionsCache` holds the whole
+  derived view — linked descriptors, services, merged bytes, per-source summaries —
+  keyed by collection and by nothing else, so a hit is a plain map lookup with no
+  read, no stat and no hash. It is a small LRU because one entry is a fully linked
+  descriptor set. The four acquisition RPCs invalidate; nothing else can change a
+  collection's descriptors.
 - **A service's dial target is independent of who won its descriptors**:
   `Service.source` is the first *reflection* source that serves it. An upload has
   no address, so without that split, placing one first for its comments would

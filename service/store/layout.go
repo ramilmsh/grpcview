@@ -25,17 +25,25 @@ const (
 	scriptFileName     = "script.json"
 	historyFileName    = "history.json"
 
-	treeDir               = "tree"
-	scriptsDir            = "scripts"
-	cacheSubdir           = "cache"
-	historyDir            = "history"
-	servicesCacheFileName = "services.json"
-	sourcesCacheSubdir    = "sources"
-	sourceCacheFileExt    = ".binpb"
+	treeDir    = "tree"
+	scriptsDir = "scripts"
+	historyDir = "history"
 
-	// collectionIndexFileName sits directly under the workspace STATE root, not under
-	// collections/: the index is about the workspace, and no collection owns it.
+	// descriptorIndexFileName is a collection's `source id -> blob digest` index; the blobs
+	// it points at are shared, so it sits in the collection's state dir while they do not.
+	descriptorIndexFileName = "descriptors.json"
+
+	// collectionIndexFileName and blobsDir sit directly under the workspace STATE root, not
+	// under collections/: the collection index is about the workspace and no collection owns
+	// it, and a blob is deliberately shared by every collection whose sources resolve to the
+	// same bytes.
 	collectionIndexFileName = "collections.json"
+	blobsDir                = "blobs"
+	blobFileExt             = ".binpb"
+
+	// collectionsStateSubdir holds one state directory per collection — see collectionStateDir
+	// for why it is a flat, hashed layer rather than the collection's own path.
+	collectionsStateSubdir = "collections"
 
 	gitignoreFileName = ".gitignore"
 	// gitExcludeRelPath is the repo-local ignore file git itself reads before any

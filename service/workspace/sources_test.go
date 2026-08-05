@@ -89,10 +89,11 @@ func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 		services: []string{"grpc.health.v1.Health"},
 	}
 
-	services, merged, summaries, err := mergeSources([]*resolvedSource{upload, reflection})
+	view, err := mergeSources([]*resolvedSource{upload, reflection})
 	if err != nil {
 		t.Fatalf("mergeSources(upload, reflection): %v", err)
 	}
+	services, merged, summaries := view.services, view.descriptorSet, view.summaries
 	if got := commentedFiles(t, merged); got != len(rich.GetFile()) {
 		t.Errorf("upload first: want all %d files commented, got %d", len(rich.GetFile()), got)
 	}
@@ -111,10 +112,11 @@ func TestMergeSourcesPriorityDecidesDescriptors(t *testing.T) {
 		t.Errorf("want dial target localhost:50051 even with the upload winning, got %q", got)
 	}
 
-	_, merged, summaries, err = mergeSources([]*resolvedSource{reflection, upload})
+	view, err = mergeSources([]*resolvedSource{reflection, upload})
 	if err != nil {
 		t.Fatalf("mergeSources(reflection, upload): %v", err)
 	}
+	merged, summaries = view.descriptorSet, view.summaries
 	if got := commentedFiles(t, merged); got != 0 {
 		t.Errorf("reflection first: want no commented files, got %d", got)
 	}
@@ -136,10 +138,11 @@ func TestMergeSourcesFillsGaps(t *testing.T) {
 		services: []string{"grpc.reflection.v1.ServerReflection"},
 	}
 
-	services, _, summaries, err := mergeSources([]*resolvedSource{health, reflectionOnly})
+	view, err := mergeSources([]*resolvedSource{health, reflectionOnly})
 	if err != nil {
 		t.Fatalf("mergeSources: %v", err)
 	}
+	services, summaries := view.services, view.summaries
 	if hasServiceNamed(services, "grpc.health.v1.Health") == nil {
 		t.Errorf("Health (first source) missing: %v", services)
 	}
@@ -161,10 +164,11 @@ func TestMergeSourcesUnresolvedSourceIsNotFatal(t *testing.T) {
 		services: []string{"grpc.health.v1.Health"},
 	}
 
-	services, merged, summaries, err := mergeSources([]*resolvedSource{dead, live})
+	view, err := mergeSources([]*resolvedSource{dead, live})
 	if err != nil {
 		t.Fatalf("mergeSources: %v", err)
 	}
+	services, merged, summaries := view.services, view.descriptorSet, view.summaries
 	if hasServiceNamed(services, "grpc.health.v1.Health") == nil {
 		t.Errorf("the healthy source must still merge: %v", services)
 	}

@@ -118,7 +118,7 @@ func (w Workspace) resolveConfigured(
 	sources []*grpcviewv1.DescriptorSource,
 	fresh map[string]*resolvedSource,
 ) ([]*resolvedSource, error) {
-	cached, err := coll.SourceResolves(ctx)
+	cached, err := coll.DescriptorBlobs(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,22 @@ func (w Workspace) resolveConfigured(
 	return out, nil
 }
 
-func mergeSources(resolved []*resolvedSource) ([]*grpcviewv1.Service, []byte, map[string]*grpcviewv1.Resolved, error) {
+// mergedView is what merging the resolved sources in priority order produced: the whole derived
+// half of a collection, which is held in memory and never written to disk.
+type mergedView struct {
+	services      []*grpcviewv1.Service
+	descriptorSet []byte
+	summaries     map[string]*grpcviewv1.Resolved
+	// serviceDescs is descriptorSet in LINKED form, indexed by service full name. It is carried
+	// out of the merge rather than re-linked by whoever consumes it: linking is the expensive
+	// half of the whole operation, and the merge has already done it to decide which services
+	// survived.
+	serviceDescs map[string]*desc.ServiceDescriptor
+}
+
+// summarize is the per-source half of a merge, which is independent of whether the merge itself
+// succeeds — a caller that has to report an unmergeable source list still needs these rows.
+func summarize(resolved []*resolvedSource) map[string]*grpcviewv1.Resolved {
 	summaries := make(map[string]*grpcviewv1.Resolved, len(resolved))
 	for _, rs := range resolved {
 		summary := &grpcviewv1.Resolved{
@@ -162,6 +177,11 @@ func mergeSources(resolved []*resolvedSource) ([]*grpcviewv1.Service, []byte, ma
 		}
 		summaries[rs.id] = summary
 	}
+	return summaries
+}
+
+func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
+	summaries := summarize(resolved)
 
 	claimedBy := make(map[string]string)
 	var claimed []*descriptorpb.FileDescriptorProto
@@ -175,12 +195,12 @@ func mergeSources(resolved []*resolvedSource) ([]*grpcviewv1.Service, []byte, ma
 		}
 	}
 	if len(claimed) == 0 {
-		return nil, nil, summaries, nil
+		return &mergedView{summaries: summaries}, nil
 	}
 
 	linked, err := desc.CreateFileDescriptorsFromSet(&descriptorpb.FileDescriptorSet{File: claimed})
 	if err != nil {
-		return nil, nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"descriptor sources %s cannot be merged — they disagree about the protos they share: %w",
 			strings.Join(sourceIDs(resolved), ", "), err))
 	}
@@ -234,9 +254,14 @@ func mergeSources(resolved []*resolvedSource) ([]*grpcviewv1.Service, []byte, ma
 	}
 	descriptorSet, err := proto.Marshal(desc.ToFileDescriptorSet(all...))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("marshal merged descriptor set: %w", err)
+		return nil, fmt.Errorf("marshal merged descriptor set: %w", err)
 	}
-	return services, descriptorSet, summaries, nil
+	return &mergedView{
+		services:      services,
+		descriptorSet: descriptorSet,
+		summaries:     summaries,
+		serviceDescs:  serviceDescs,
+	}, nil
 }
 
 func sourceIDs(resolved []*resolvedSource) []string {
@@ -258,7 +283,10 @@ func (w Workspace) putDescriptorState(
 	if err != nil {
 		return err
 	}
-	services, descriptorSet, summaries, err := mergeSources(resolved)
+	// A mutation still FAILS on an unmergeable source list, unlike a read (see
+	// deriveDefinitions): the user is changing the sources right now, so refusing the change is
+	// actionable where refusing to load a collection they did not touch would not be.
+	view, err := mergeSources(resolved)
 	if err != nil {
 		return err
 	}
@@ -277,17 +305,23 @@ func (w Workspace) putDescriptorState(
 	stored := make([]*grpcviewv1.DescriptorSource, 0, len(sources))
 	for _, src := range sources {
 		clone := proto.CloneOf(src)
-		clone.Resolved = summaries[src.GetId()]
+		clone.Resolved = view.summaries[src.GetId()]
 		stored = append(stored, clone)
 	}
 
-	return coll.PutDescriptorState(ctx, store.DescriptorState{
-		Sources:       stored,
-		Uploads:       uploads,
-		Resolves:      resolves,
-		Services:      services,
-		DescriptorSet: descriptorSet,
-	})
+	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
+		Sources:  stored,
+		Uploads:  uploads,
+		Resolves: resolves,
+	}); err != nil {
+		return err
+	}
+	// The writer invalidates, and that is the whole of the memo's coherency: nothing but these
+	// four RPCs can change a collection's descriptors. The freshly computed view is deliberately
+	// NOT grafted in — the next reader re-derives from the blobs that were just written, so
+	// there is one derivation path rather than two that could disagree.
+	w.defs.invalidate(coll.Key())
+	return nil
 }
 
 func upsertSource(sources []*grpcviewv1.DescriptorSource, src *grpcviewv1.DescriptorSource) []*grpcviewv1.DescriptorSource {

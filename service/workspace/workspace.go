@@ -21,7 +21,7 @@ import (
 const scriptingMaxPages = 4096
 
 // Workspace is the WorkspaceService handler: a thin adapter over store.Store that also owns the
-// shared scripting Engine and the linked-definitions memo.
+// shared scripting Engine and the memo holding each collection's derived merged view.
 type Workspace struct {
 	store  *store.Store
 	engine *scripting.Engine
@@ -84,9 +84,9 @@ func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.
 		return nil, toConnectError(err)
 	}
 
-	ws, err := coll.Load(ctx)
+	ws, err := w.loadCollection(ctx, coll)
 	if err != nil {
-		return nil, toConnectError(err)
+		return nil, err
 	}
 
 	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: ws}), nil
@@ -130,9 +130,9 @@ func (w Workspace) CreateCollection(ctx context.Context, request *connect.Reques
 	// services/payments/requests never touches the root — so the only writer that can add a
 	// collection has to say so itself.
 	w.store.InvalidateList()
-	ws, err := coll.Load(ctx)
+	ws, err := w.loadCollection(ctx, coll)
 	if err != nil {
-		return nil, toConnectError(err)
+		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.CreateCollectionResponse{Collection: ws}), nil
 }
@@ -186,9 +186,9 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{src.GetId(): fresh}, uploads); err != nil {
 		return nil, err
 	}
-	reloaded, err := coll.Load(ctx)
+	reloaded, err := w.loadCollection(ctx, coll)
 	if err != nil {
-		return nil, toConnectError(err)
+		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.AddDescriptorSourceResponse{Collection: reloaded}), nil
 }
@@ -212,9 +212,9 @@ func (w Workspace) RefreshDescriptorSource(ctx context.Context, request *connect
 	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{fresh.id: fresh}, nil); err != nil {
 		return nil, err
 	}
-	reloaded, err := coll.Load(ctx)
+	reloaded, err := w.loadCollection(ctx, coll)
 	if err != nil {
-		return nil, toConnectError(err)
+		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.RefreshDescriptorSourceResponse{Collection: reloaded}), nil
 }
@@ -233,13 +233,16 @@ func (w Workspace) ReorderDescriptorSources(ctx context.Context, request *connec
 	if err := w.putDescriptorState(ctx, coll, sources, nil, nil); err != nil {
 		return nil, err
 	}
-	reloaded, err := coll.Load(ctx)
+	reloaded, err := w.loadCollection(ctx, coll)
 	if err != nil {
-		return nil, toConnectError(err)
+		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.ReorderDescriptorSourcesResponse{Collection: reloaded}), nil
 }
 
+// openWithSources deliberately loads WITHOUT the derived merged view (loadCollection): its
+// callers are about to change the source list and re-derive anyway, so deriving the view they are
+// replacing would be pure waste — and on a cold process it would be a merge of every blob.
 func (w Workspace) openWithSources(ctx context.Context, name string) (*store.Collection, *grpcviewv1.Collection, error) {
 	coll, err := w.store.Open(ctx, name)
 	if err != nil {
@@ -268,9 +271,9 @@ func (w Workspace) RemoveDescriptorSource(ctx context.Context, request *connect.
 	if err := w.putDescriptorState(ctx, coll, slices.Delete(sources, index, index+1), nil, nil); err != nil {
 		return nil, err
 	}
-	reloaded, err := coll.Load(ctx)
+	reloaded, err := w.loadCollection(ctx, coll)
 	if err != nil {
-		return nil, toConnectError(err)
+		return nil, err
 	}
 	return connect.NewResponse(&grpcviewv1.RemoveDescriptorSourceResponse{Collection: reloaded}), nil
 }
@@ -283,11 +286,7 @@ func (w Workspace) mutate(ctx context.Context, name string, fn func(*store.Colle
 	if err := fn(coll); err != nil {
 		return nil, toConnectError(err)
 	}
-	ws, err := coll.Load(ctx)
-	if err != nil {
-		return nil, toConnectError(err)
-	}
-	return ws, nil
+	return w.loadCollection(ctx, coll)
 }
 
 func (w Workspace) CreateFolder(ctx context.Context, request *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error) {
