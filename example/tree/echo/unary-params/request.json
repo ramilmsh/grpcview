@@ -1,0 +1,14 @@
+{
+  "meta":  {
+    "name":  "Unary (params)"
+  },
+  "service":  "echo.v1.EchoService",
+  "method":  "Unary",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // gv.request.params is whatever the caller passed for THIS run — the CLI's\n  // --param, the MCP tool's `params`, or the second argument of gv.invoke().\n  // Empty on a plain run, so give every param a default.\n  message: gv.request.params.message ?? \"hello from params\",\n  count: Number(gv.request.params.count ?? 1),\n}\n)",
+  "middleware":  [],
+  "draftMetadataScript":  "",
+  "target":  {
+    "address":  "127.0.0.1:50055",
+    "tls":  false
+  }
+}

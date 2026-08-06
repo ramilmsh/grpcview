@@ -1,0 +1,14 @@
+{
+  "meta":  {
+    "name":  "ServerStream"
+  },
+  "service":  "echo.v1.EchoService",
+  "method":  "ServerStream",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // One request, N responses. Authoring, the method-kind tag and the message\n  // cards are all in place, but EXECUTING a streaming call is still\n  // Unimplemented server-side — invoking this returns that status.\n  message: \"tick\",\n  count: Number(gv.request.params.count ?? 5),\n}\n)",
+  "middleware":  [],
+  "draftMetadataScript":  "",
+  "target":  {
+    "address":  "127.0.0.1:50055",
+    "tls":  false
+  }
+}

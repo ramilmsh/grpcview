@@ -1,0 +1,7 @@
+{
+  "meta":  {
+    "name":  "stamp"
+  },
+  "kind":  "SCRIPT_KIND_GENERATOR",
+  "source":  "// GENERATOR using an npm dependency. `dayjs` is bundled into the sandbox by\n// esbuild at run time from the curated embedded allowlist — no node_modules, no\n// network fetch.\n//\n// The sandbox clock is virtualised and starts pinned at 2022-01-01T00:00:00Z, so\n// this is deterministic: two runs of the same script produce the same stamp.\n\nimport dayjs from \"dayjs\";\n\nexport default (format = \"YYYY-MM-DDTHH:mm:ss[Z]\"): string => dayjs().format(format);\n"
+}

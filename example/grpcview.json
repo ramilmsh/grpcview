@@ -1,27 +1,31 @@
 {
-  "schemaVersion": 1,
-  "name": "example",
-  "items": [
+  "schemaVersion":  1,
+  "name":  "example",
+  "items":  [
+    "echo",
     "collections"
   ],
-  "sources": [
+  "sources":  [
     {
-      "id": "reflection:localhost:10000",
-      "reflection": {
-        "address": "localhost:10000",
-        "tls": false
+      "id":  "reflection:localhost:10000",
+      "reflection":  {
+        "address":  "localhost:10000",
+        "tls":  false
       },
-      "commitDescriptors": true
+      "commitDescriptors":  true
     },
     {
-      "id": "bazel://proto/echo/v1:echov1_proto",
-      "bazel": {
-        "label": "//proto/echo/v1:echov1_proto"
+      "id":  "bazel://proto/echo/v1:echov1_proto",
+      "bazel":  {
+        "label":  "//proto/echo/v1:echov1_proto"
       },
-      "commitDescriptors": false
+      "commitDescriptors":  false
     }
   ],
-  "scripts": [
-    "test-goals"
+  "scripts":  [
+    "requestid",
+    "stamp",
+    "trace-headers",
+    "smoke"
   ]
 }

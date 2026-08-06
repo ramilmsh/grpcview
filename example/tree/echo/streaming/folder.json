@@ -1,0 +1,11 @@
+{
+  "meta":  {
+    "name":  "Streaming"
+  },
+  "items":  [
+    "serverstream",
+    "clientstream",
+    "bidistream"
+  ],
+  "draftMetadataScript":  "export default async (): Promise<Metadata> => (\n{\n  // A nested folder carries its ancestors forward only if it spreads them.\n  // Drop the spread and this folder becomes a deliberate barrier.\n  ...gv.metadata.inherit(),\n  \"x-demo-folder\": [\"streaming\"],\n}\n)"
+}

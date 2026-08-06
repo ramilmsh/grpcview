@@ -1,0 +1,14 @@
+{
+  "meta":  {
+    "name":  "Unary (generators)"
+  },
+  "service":  "echo.v1.EchoService",
+  "method":  "Unary",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // Generators are globals: `requestId` and `stamp` are this collection's\n  // scripts, pulled in only because they are called here.\n  message: `${requestId(\"echo\")} at ${stamp()}`,\n  count: 1,\n}\n)",
+  "middleware":  [],
+  "draftMetadataScript":  "export default async (): Promise<Metadata> => (\n{\n  // Metadata is the same language as the body, evaluated to\n  // { [key: string]: string[] }. Spread the folder chain, then add our own.\n  ...gv.metadata.inherit(),\n  \"x-request-id\": [requestId()],\n  \"x-sent-at\": [stamp()],\n}\n)",
+  "target":  {
+    "address":  "127.0.0.1:50055",
+    "tls":  false
+  }
+}

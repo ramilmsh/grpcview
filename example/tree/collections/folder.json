@@ -1,10 +1,10 @@
 {
-  "meta": {
-    "name": "Collections"
+  "meta":  {
+    "name":  "Collections"
   },
-  "items": [
+  "items":  [
     "listcollections",
     "describemethod"
   ],
-  "draftMetadataScript": ""
+  "draftMetadataScript":  "export default async (): Promise<Metadata> => (\n{\n  // grpcview reflecting itself: everything under here talks to the running app\n  // on localhost:10000, this collection's first reflection source, so no\n  // request below needs a target of its own.\n  \"x-demo-suite\": [\"workspace\"],\n}\n)"
 }
