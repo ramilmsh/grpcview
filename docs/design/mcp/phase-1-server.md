@@ -270,14 +270,14 @@ entirely and put a cobra tree in `service/cli`, so:
      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
      '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
      '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-   | bazel-bin/service/cmd/cmd_/cmd mcp
+   | bazel-bin/service/cmd/grpcview_/grpcview mcp
    ```
    Assert: 15 tools, every name short, no `outputSchema`, and **no log line on stdout**.
 4. **Real client, end to end.** Isolate `HOME` so the agent gets a scratch collection
    (the repo's standing verification pattern), start the echo server
    (`bazel run //service/echo/cmd`), then:
    ```
-   claude mcp add grpcview -- /abs/path/to/bazel-bin/service/cmd/cmd_/cmd mcp
+   claude mcp add grpcview -- /abs/path/to/bazel-bin/service/cmd/grpcview_/grpcview mcp
    ```
    Drive it: `get_workspace` → `add_source` at the echo server → `create_request` →
    `invoke` with `body = "export default () => ({ message: \"hi\" })"`. Confirm the echo

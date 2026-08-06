@@ -942,8 +942,22 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 - **Build the release binary** (standalone, frontend embedded):
 
   ```bash
-  bazel build //service/cmd
+  bazel build //service/cmd            # host arch -> bazel-bin/service/cmd/grpcview_/grpcview
+  bazel build //service/cmd:release    # all four published arches
   ```
+
+  `//service/cmd` is an alias for `//service/cmd:grpcview`. `:release` is a
+  filegroup over one `go_cross_binary` per entry in `RELEASE_PLATFORMS`
+  (`darwin_amd64`, `darwin_arm64`, `linux_amd64`, `linux_arm64`), each named
+  `grpcview_<goos>_<goarch>`. Their outputs land in per-configuration
+  `bazel-out/...-ST-<hash>/bin/` directories rather than `bazel-bin`, so locate
+  them with `bazel cquery --output=files` rather than by guessing a path.
+
+  The embedded UI is pinned to `@platforms//host` by a
+  `platform_transition_filegroup`. Without that pin the cross transition would
+  rebuild the vite bundle once per arch, and rules_js resolves rollup's native
+  binding from the target platform, so every non-host arch fails on a missing
+  `@rollup/rollup-<os>-<cpu>`.
 
 - **Build & test everything:**
 
@@ -972,6 +986,34 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 
   This copies the regenerated `.d.ts` declarations into the source tree. The
   runtime `_pb` modules are Bazel-generated and not committed.
+
+### Releasing
+
+```bash
+tools/release.sh --bucket gs://BUCKET            # or set GRPCVIEW_RELEASE_BUCKET
+tools/release.sh --bucket gs://BUCKET --dry-run  # build and stage, upload nothing
+```
+
+It builds `//service/cmd:release` with `--stamp -c opt`, stages the four
+binaries with a `SHA256SUMS`, and uploads them to
+`gs://BUCKET/grpcview/<version>/`, then rewrites `gs://BUCKET/grpcview/latest`
+to hold the version string. Version directories are treated as immutable —
+uploaded with a one-year `Cache-Control` and refused if they already exist,
+unless `--force`. A modified worktree is refused unless `--allow-dirty`.
+
+**Versions come from `tools/version.sh`**, which `tools/workspace_status.sh`
+stamps into `STABLE_VERSION_TAG` and thence into `cli.version` (what `grpcview
+version` prints). An exact `vX.Y.Z` tag on HEAD wins; otherwise it emits a Go
+pseudo-version — `v0.0.0-20260806152233-1a2b3c4d5e6f` with no tags in the repo,
+or `v0.1.1-0.<timestamp>-<sha>` once `v0.1.0` exists. That is the canonical
+date-based version for an untagged commit: the timestamp is the commit time in
+UTC, so the strings sort chronologically, and they compare as semver
+prereleases below the tag they build on, which keeps `go get` and any semver
+range check honest. A dirty worktree gets a `+dirty` suffix.
+
+Stamping is opt-in per build. `.bazelrc` deliberately omits `--stamp` because
+it would cost a remote-cache hit on every stamped target on every commit; an
+unstamped build leaves `cli.version` at its `dev` default.
 
 ### Frontend gates
 
