@@ -12,6 +12,13 @@
         "tls": false
       },
       "commitDescriptors": true
+    },
+    {
+      "id": "bazel://proto/echo/v1:echov1_proto",
+      "bazel": {
+        "label": "//proto/echo/v1:echov1_proto"
+      },
+      "commitDescriptors": false
     }
   ],
   "scripts": []
