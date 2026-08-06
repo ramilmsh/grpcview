@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -94,7 +93,7 @@ func resolveInitCollection(g *globalFlags, dir string) (string, error) {
 		return dir, nil
 	}
 
-	cwd, err := os.Getwd()
+	cwd, err := wsroot.InvocationDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve the current directory: %w", err)
 	}

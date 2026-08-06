@@ -41,6 +41,7 @@ func TestDiscover_OverrideWinsOverNearbyGit(t *testing.T) {
 }
 
 func TestDiscover_RelativeOverrideResolvesAgainstCwd(t *testing.T) {
+	t.Setenv(BuildWorkspaceEnv, "")
 	tmp := t.TempDir()
 	cwd := filepath.Join(tmp, "cwd")
 	mustMkdirAll(t, cwd)
@@ -87,6 +88,7 @@ func TestDiscover_OverrideMustBeDirectory(t *testing.T) {
 }
 
 func TestDiscover_GitAsDirectoryFromNestedCwd(t *testing.T) {
+	t.Setenv(BuildWorkspaceEnv, "")
 	tmp := t.TempDir()
 	repo := filepath.Join(tmp, "repo")
 	mustMkdirAll(t, filepath.Join(repo, ".git"))
@@ -107,6 +109,7 @@ func TestDiscover_GitAsDirectoryFromNestedCwd(t *testing.T) {
 }
 
 func TestDiscover_GitAsFileFromNestedCwd(t *testing.T) {
+	t.Setenv(BuildWorkspaceEnv, "")
 	tmp := t.TempDir()
 	repo := filepath.Join(tmp, "worktree")
 	mustMkdirAll(t, repo)
@@ -130,6 +133,7 @@ func TestDiscover_GitAsFileFromNestedCwd(t *testing.T) {
 }
 
 func TestDiscover_NoGitAnywhereReturnsCwdWithWarning(t *testing.T) {
+	t.Setenv(BuildWorkspaceEnv, "")
 	cwd := t.TempDir()
 
 	root, warn, err := Discover("", cwd)
@@ -220,5 +224,93 @@ func TestStateDir_DoesNotCreateTheDirectory(t *testing.T) {
 		t.Errorf("StateDir(%q) = %q already exists, want StateDir to leave creation to the caller", root, dir)
 	} else if !os.IsNotExist(err) {
 		t.Errorf("os.Stat(%q): unexpected error: %v", dir, err)
+	}
+}
+
+func TestDiscover_BuildWorkspaceEnvUsedWhenNoOverride(t *testing.T) {
+	tmp := t.TempDir()
+	invoked := filepath.Join(tmp, "invoked")
+	mustMkdirAll(t, invoked)
+	t.Setenv(BuildWorkspaceEnv, invoked)
+
+	root, warn, err := Discover("", filepath.Join(tmp, "runfiles"))
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if root != invoked {
+		t.Errorf("root = %q, want %q", root, invoked)
+	}
+	if warn != "" {
+		t.Errorf("warn = %q, want none", warn)
+	}
+}
+
+func TestDiscover_ExplicitOverrideBeatsBuildWorkspaceEnv(t *testing.T) {
+	tmp := t.TempDir()
+	fromEnv := filepath.Join(tmp, "from-env")
+	explicit := filepath.Join(tmp, "explicit")
+	mustMkdirAll(t, fromEnv)
+	mustMkdirAll(t, explicit)
+	t.Setenv(BuildWorkspaceEnv, fromEnv)
+
+	root, _, err := Discover(explicit, tmp)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if root != explicit {
+		t.Errorf("root = %q, want the explicit override %q", root, explicit)
+	}
+}
+
+// The reason the env var outranks the .git walk rather than seeding it: a bazel workspace
+// nested inside a larger repository must resolve to the bazel workspace.
+func TestDiscover_BuildWorkspaceEnvBeatsEnclosingGitRoot(t *testing.T) {
+	tmp := t.TempDir()
+	outerRepo := filepath.Join(tmp, "repo")
+	mustMkdirAll(t, filepath.Join(outerRepo, ".git"))
+	nested := filepath.Join(outerRepo, "tools", "grpcview")
+	mustMkdirAll(t, nested)
+	t.Setenv(BuildWorkspaceEnv, nested)
+
+	root, _, err := Discover("", filepath.Join(nested, "sub"))
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if root != nested {
+		t.Errorf("root = %q, want the bazel workspace %q, not the enclosing repo", root, nested)
+	}
+}
+
+func TestDiscover_BuildWorkspaceEnvMustExist(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(BuildWorkspaceEnv, filepath.Join(tmp, "missing"))
+
+	if _, _, err := Discover("", tmp); err == nil {
+		t.Fatal("Discover: want an error for a $BUILD_WORKSPACE_DIRECTORY that does not exist")
+	}
+}
+
+func TestInvocationDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(BuildWorkspaceEnv, tmp)
+	dir, err := InvocationDir()
+	if err != nil {
+		t.Fatalf("InvocationDir: %v", err)
+	}
+	if dir != tmp {
+		t.Errorf("dir = %q, want %q", dir, tmp)
+	}
+
+	t.Setenv(BuildWorkspaceEnv, "")
+	dir, err = InvocationDir()
+	if err != nil {
+		t.Fatalf("InvocationDir: %v", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if dir != cwd {
+		t.Errorf("with the env unset, dir = %q, want cwd %q", dir, cwd)
 	}
 }

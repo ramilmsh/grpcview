@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
@@ -44,7 +45,7 @@ func listCollections(ctx context.Context, sess session, refresh bool) (*grpcview
 }
 
 func collectionForCwd(listing *grpcviewv1.ListCollectionsResponse) (string, error) {
-	cwd, err := os.Getwd()
+	cwd, err := wsroot.InvocationDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve the current directory: %w", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 
 	"connectrpc.com/connect"
 
@@ -99,7 +98,7 @@ func openClient(ctx context.Context, g *globalFlags, s Streams) (session, error)
 	if g != nil {
 		override = g.Workspace
 	}
-	cwd, err := os.Getwd()
+	cwd, err := wsroot.InvocationDir()
 	if err != nil {
 		return session{}, fmt.Errorf("failed to resolve the current directory: %w", err)
 	}

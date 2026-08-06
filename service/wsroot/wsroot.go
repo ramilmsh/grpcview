@@ -10,10 +10,25 @@ import (
 	"strings"
 )
 
-// Discover resolves the workspace root: override, else the nearest ancestor of cwd holding .git, else
-// cwd with warn set. .git may be a regular FILE (a git worktree or submodule), which counts. Symlinks
-// are deliberately not resolved: a user who cd's through one means the path they typed.
+// Set by `bazel run`, which replaces cwd with the runfiles tree.
+const BuildWorkspaceEnv = "BUILD_WORKSPACE_DIRECTORY"
+
+// InvocationDir is where the user stands, which under `bazel run` is not cwd.
+func InvocationDir() (string, error) {
+	if dir := os.Getenv(BuildWorkspaceEnv); dir != "" {
+		return dir, nil
+	}
+	return os.Getwd()
+}
+
+// Discover resolves the workspace root, in order: override, else $BUILD_WORKSPACE_DIRECTORY,
+// else the nearest ancestor of cwd holding .git, else cwd with warn set. .git may be a regular
+// FILE (a git worktree or submodule), which counts. Symlinks are deliberately not resolved: a
+// user who cd's through one means the path they typed.
 func Discover(override, cwd string) (root string, warn string, err error) {
+	if override == "" {
+		override = os.Getenv(BuildWorkspaceEnv)
+	}
 	if override != "" {
 		abs := override
 		if !filepath.IsAbs(abs) {

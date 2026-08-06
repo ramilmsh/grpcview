@@ -6,16 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 
 	"codeberg.org/ramilmsh/grpcview/service"
 )
 
 func run(ctx context.Context) error {
 	var port int
-	workspace := os.Getenv("BUILD_WORKSPACE_DIRECTORY")
+	var workspace string
 	flag.IntVar(&port, "port", 10000, "port to start the server at")
-	flag.StringVar(&workspace, "workspace", workspace, "workspace root; empty walks up from the current directory to the nearest .git")
+	flag.StringVar(&workspace, "workspace", "", "workspace root; empty takes $BUILD_WORKSPACE_DIRECTORY, else walks up from the current directory to the nearest .git")
 	flag.Parse()
 
 	b := bytes.Buffer{}
