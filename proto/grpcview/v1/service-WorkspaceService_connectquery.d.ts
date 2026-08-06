@@ -11,10 +11,17 @@ import { WorkspaceService } from "./service_pb";
  */
 export const addDescriptorSource: typeof WorkspaceService["method"]["addDescriptorSource"];
 /**
+ * Never dials, so an unreachable sibling source cannot block a removal. Services
+ * only this source provided leave the services list; requests against them remain
+ * saved but stop being invocable.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
  */
 export const removeDescriptorSource: typeof WorkspaceService["method"]["removeDescriptorSource"];
 /**
+ * Re-dials a reflection target, or re-reads an upload. An unreachable target stays
+ * listed with the reason in its resolved.error rather than being dropped.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.RefreshDescriptorSource
  */
 export const refreshDescriptorSource: typeof WorkspaceService["method"]["refreshDescriptorSource"];
@@ -63,6 +70,9 @@ export const setWorkspaceTrust: typeof WorkspaceService["method"]["setWorkspaceT
  */
 export const listBazelTargets: typeof WorkspaceService["method"]["listBazelTargets"];
 /**
+ * Creates the collection's directory in the workspace. An existing collection at
+ * that path is AlreadyExists, never adopted.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
  */
 export const createCollection: typeof WorkspaceService["method"]["createCollection"];
@@ -74,26 +84,43 @@ export const createCollection: typeof WorkspaceService["method"]["createCollecti
  */
 export const updateCollection: typeof WorkspaceService["method"]["updateCollection"];
 /**
+ * A name colliding with an existing sibling is FailedPrecondition.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder
  */
 export const createFolder: typeof WorkspaceService["method"]["createFolder"];
 /**
+ * The body starts empty. Saving is optional: invoke calls a method without one.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateRequest
  */
 export const createRequest: typeof WorkspaceService["method"]["createRequest"];
 /**
+ * Deletes requests AND folders, a folder recursively. An item that is not there is
+ * a silent success, so check the returned tree rather than relying on an error.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.DeleteRequest
  */
 export const deleteRequest: typeof WorkspaceService["method"]["deleteRequest"];
 /**
+ * Partial update: everything but the fields locating the request is optional, and an
+ * omitted one is left as it was. `target` and `middleware` change only when their
+ * update_ set-flag is true.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateRequest
  */
 export const updateRequest: typeof WorkspaceService["method"]["updateRequest"];
 /**
+ * Sets the metadata script requests inside the folder inherit, so shared headers are
+ * written once. Present but empty clears it; omitted leaves it unchanged.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateFolder
  */
 export const updateFolder: typeof WorkspaceService["method"]["updateFolder"];
 /**
+ * Reparents and/or reorders one item. Moving a folder into its own descendant is
+ * FailedPrecondition.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.MoveItem
  */
 export const moveItem: typeof WorkspaceService["method"]["moveItem"];
@@ -123,14 +150,23 @@ export const describeMethod: typeof WorkspaceService["method"]["describeMethod"]
  */
 export const runScript: typeof WorkspaceService["method"]["runScript"];
 /**
+ * Creates it empty; use UpdateScript to fill in the source. GENERATOR is a helper a
+ * request body calls, MIDDLEWARE rewrites a request just before it is sent.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
  */
 export const createScript: typeof WorkspaceService["method"]["createScript"];
 /**
+ * Partial update: an omitted field is left unchanged. Renaming onto an existing
+ * script's name fails.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
  */
 export const updateScript: typeof WorkspaceService["method"]["updateScript"];
 /**
+ * Requests still listing it as middleware keep the dangling reference and fail when
+ * invoked, so clear it from them first.
+ *
  * @generated from rpc grpcview.v1.WorkspaceService.DeleteScript
  */
 export const deleteScript: typeof WorkspaceService["method"]["deleteScript"];

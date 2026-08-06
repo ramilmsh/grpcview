@@ -673,7 +673,7 @@ host.
 **A workspace is a repository; the collections are what's in it.** Three tiers:
 the workspace root owns no requests, a collection is the unchanged unit
 (`grpcview.json`, `tree/`, `scripts/`), and a request is unchanged. The plan is
-`docs/design/vscode/phase-1-workspace.md`, and all of it — sub-phases 1a through 1e —
+`docs/design/shipped/vscode/phase-1-workspace.md`, and all of it — sub-phases 1a through 1e —
 is shipped.
 
 - **The root is found by walking up** (`service/wsroot`): `--workspace <path>`
@@ -770,12 +770,23 @@ grpcview request create | rm | mv        grpcview folder create
 grpcview script ls | run                 grpcview completion bash|zsh|fish
 grpcview init [dir] [--name]            create a collection
 grpcview collections ls                 [-o text|json] [--refresh]
+grpcview mcp                            serve MCP over stdio
 ```
 
 The reason it exists is one verb: **run a saved request from a shell, with an exit
 code that reflects the gRPC status.** The rest is in service of that.
 
 Every verb takes `--workspace <root>` and `--collection <id>`.
+
+**The workspace root resolves in one place, `wsroot.Discover`, in this order:** explicit
+`--workspace`, else **`$BUILD_WORKSPACE_DIRECTORY`**, else the nearest ancestor of the
+current directory holding `.git`, else the current directory with a warning. The env var
+sits second, not as a seed for the `.git` walk, so a bazel workspace nested inside a larger
+repository resolves to the bazel workspace rather than the outer repo's root. `bazel run`
+sets that variable and replaces cwd with the runfiles tree, so without this every verb run
+that way — `ls`, `collections ls`, `mcp` — would walk up from `bazel-out` and find nothing.
+`wsroot.InvocationDir` answers the adjacent but different question of *which directory the
+user is standing in* (which collection does it address); it is not the root.
 
 - **`service.Run` does not own argv.** It takes `service.Options{Port}`; the CLI
   (or `dev`'s own two-line flag set) parses. The flag is `--port`: pflag reads
@@ -872,6 +883,57 @@ Every verb takes `--workspace <root>` and `--collection <id>`.
   `--no-history` removes the only write `invoke` performs. If a lost update ever
   bites, the fix is one advisory lock in the store that benefits every surface.
 
+## The MCP server
+
+`grpcview mcp` speaks MCP over stdio on the **same single binary** as everything
+else — no HTTP endpoint, no auth, because the transport is a pipe to a child
+process the user (or their agent's config, see `.mcp.json`) launched directly.
+`--timeout` does not apply to it: the verb calls `mcp.Run(cmd.Context(), ...)`
+straight, bypassing `withSession`/`withCollection`, because an MCP session is
+long-lived and the global 30s default would kill it mid-conversation.
+
+- **Tools are grpcview's own unary RPCs**, registered at runtime from
+  `WorkspaceService`'s `protoreflect.ServiceDescriptor` via
+  `protoc-gen-go-mcp/pkg/gen.RegisterService` — **not** one tool per reflected
+  target method. The dynamic-tool-per-target design was rejected: it reintroduces
+  the JSON-schema-per-target layer this repo deleted (see the request-body-contract
+  history), makes the tool list unbounded and mutable across a session, and
+  duplicates what grpcurl already does better.
+- **The plugin's protoc codegen is deliberately unused.** rules_go passes the
+  `go_proto_library` `importpath` as the proto's `go_package`, and the plugin then
+  appends `package_suffix` again, so the generated file imports itself. Runtime
+  registration against a live descriptor sidesteps codegen entirely, and also buys
+  the `CommentProvider` and `NewMessage` seams the static path has no equivalent
+  for.
+- **Streaming RPCs get no tool** — the plugin's `RegisterService` skips any method
+  where `IsStreamingClient() || IsStreamingServer()` returns true, and an MCP tool
+  call is inherently request/response. `invoke` rejects a streaming method with a
+  legible `Unimplemented` rather than silently registering a tool that could never
+  be called.
+- **`service/mcp` is the one seam for every payload rule**: it renames the
+  plugin's generated tool names to short ones (a generated tool with no entry in
+  the rename map panics on startup, and a totality test makes adding an RPC without
+  updating the map a `bazel test` failure), drops the output schema entirely,
+  annotates the input schema with the proto's own field comments, strips every
+  `descriptor_set` out of every response (unstripped, it is megabytes of base64
+  and would land in the calling agent's context on every single tool call), and
+  defaults the `collection` argument so a tool call that omits it still resolves.
+  The strip walks the whole response rather than one known key, because two
+  unrelated shapes carry one: `Collection.descriptor_set` and, at the top level,
+  `DescribeMethodResponse.descriptor_set`.
+- **Descriptions and field docs come from an embedded descriptor set that retains
+  `source_code_info`.** Generated Go protobuf strips that section, so
+  `protoregistry.GlobalFiles` carries no comments at all — this is *why* proto
+  comments elsewhere in this repo stay terse: the JSON Schema now carries the
+  field-level detail, so the RPC-level comment does not have to repeat it.
+- **`run_script` hands the calling agent arbitrary JS with `fetch` enabled.** That
+  is named here as a known exposure, not mitigated — there is no sandboxing beyond
+  what the scripting engine already does for the UI/CLI paths, and an agent with
+  this tool available can reach the network from inside the collection process.
+- **Two processes on one collection directory is the existing model** (see the CLI
+  section's last bullet) — an MCP session and a `serve`/CLI process both writing
+  the same collection share the same last-write-wins exposure, unchanged.
+
 ## Views (no router)
 
 The SPA has **no URL router**. `App.tsx` renders a single `AppShell` and switches
@@ -889,21 +951,26 @@ between three feature views:
 Server state is fetched via `@connectrpc/connect-query` on top of
 `@tanstack/react-query`; local/view state lives in `zustand`.
 
-## Verify through the CLI, not the browser
+## Verify through MCP or the CLI, not the browser
 
-**Reproduce bugs and exercise new features through `grpcview <verb>` whenever the
-CLI can reach them.** The two surfaces share the whole backend — store, resolve,
-invoke, scripting, TS body/metadata evaluation — so for anything below the React
-layer a CLI run tests the same code the UI would, in one `bazel run` instead of a
-browser session. Driving Chrome is *far* slower per check: tab setup, screenshots,
-DOM reads and click round-trips cost multiples of what a verb costs, and that
-overhead lands on every iteration.
+**Prefer the MCP tools first, the CLI second, and the browser last.** All three
+surfaces share the whole backend — store, resolve, invoke, scripting, TS
+body/metadata evaluation — so for anything below the React layer an MCP tool call
+or a CLI run tests the same code the UI would, without a browser session. Driving
+Chrome is *far* slower per check: tab setup, screenshots, DOM reads and click
+round-trips cost multiples of what a verb (or a tool call) costs, and that overhead
+lands on every iteration.
 
-The browser is the exception, reserved for what only it can exercise: rendering,
+The CLI remains the right tool for what MCP doesn't cover: shell/exit-code checks
+(`invoke`'s 0/1/2 contract, piping, `-o` variants), streaming RPCs (MCP exposes no
+tool for them), and verifying the CLI's own argv/flag surface — none of which an
+MCP tool call exercises.
+
+The browser is the last resort, reserved for what only it can exercise: rendering,
 Monaco behavior, the tree's keyboard/mouse/DnD semantics, focus and layout,
-zustand/query-cache state, and any bug that does not reproduce from the CLI. A
-change confined to `ui/` is a UI bug by definition — verify that one in a browser
-(hook below), and say in the report which surface you used.
+zustand/query-cache state, and any bug that does not reproduce from MCP or the
+CLI. A change confined to `ui/` is a UI bug by definition — verify that one in a
+browser (hook below), and say in the report which surface you used.
 
 ## Browser verification hook (editors)
 
@@ -931,7 +998,7 @@ Phosphor icons, outlined actions, 8px radii, ~0.7× density). Tokens live in
 `ui/src/theme/` (`nocturne.css`, `app-tokens.css`) and are consumed through
 Tailwind utilities plus the design-system primitives in `ui/src/components/ui/`.
 The reference is the "Nocturne" Claude Design project; the migration plan and
-current status are in `docs/design/ui-redesign-plan.md`.
+current status are in `docs/design/shipped/ui-redesign-plan.md`.
 
 ## Build System (Bazel)
 
@@ -1137,10 +1204,31 @@ docs/design/          Design docs and plans (see below)
 
 ## Design docs
 
-`docs/design/` holds living design docs (e.g. `storage.md`, `scripting-ui-plan.md`,
-`ui-redesign-plan.md`) and background research under `research/`. Shipped
-one-off implementation plans are deleted once their work lands — the code and this
-file are the source of truth, not a plan archive.
+`docs/design/` is sorted by how much of each doc is real code — read
+[`docs/design/README.md`](docs/design/README.md) for the index:
+
+- `shipped/` — the arc is finished; kept for the decisions, never as a worklist.
+- `active/` — **stopped mid-arc**: written-out work that is genuinely unbuilt.
+- `planned/` — nothing built. `planned/roadmap.md` is the backlog of *wants* with no plan
+  behind them yet; everything else there is a real plan with decisions and steps.
+- `research/` — background research, closed.
+
+A shipped plan does not stay `active/` because it ends in a wishlist — the leftovers go to
+`planned/roadmap.md` and the doc goes to `shipped/`. Re-check leftovers against trunk
+before carrying them; stale "remaining" bullets are the normal failure here.
+
+Multi-phase tracks sort **per doc**, so one track can span folders: the VS Code track has
+phase 1 in `shipped/vscode/`, its daemon in `planned/`, and phases 2–6 in `active/vscode/`.
+The track README stays with the unbuilt phases and maps the rest.
+
+`request-body-contract.md` and `known-bugs.md` stay at the top level: the first is
+authoritative on what a request body may be across all four surfaces, the second tracks
+defects deliberately left unfixed.
+
+Every doc is written in the present tense about the code as it stood when it was written;
+its `file.go:line` citations are the premise of a decision, not a description of trunk.
+Move a doc when its status changes, and delete a `shipped/` one once nothing in it is
+worth keeping — the code and this file are the source of truth, not a plan archive.
 
 # Claude for Chrome
 

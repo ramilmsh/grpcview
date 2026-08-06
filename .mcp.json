@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "grpcview": {
+      "command": "bazel",
+      "args": ["run", "--ui_event_filters=,+error", "--noshow_progress", "//service/cmd", "--", "mcp"]
+    }
+  }
+}

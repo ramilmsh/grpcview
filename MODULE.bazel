@@ -56,17 +56,29 @@ go_sdk.download(
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
+
+# The module ships its own BUILD files; "clean" makes gazelle regenerate them.
+go_deps.gazelle_override(
+    build_file_generation = "clean",
+    path = "github.com/redpanda-data/protoc-gen-go-mcp",
+)
 use_repo(
     go_deps,
+    "build_buf_gen_go_bufbuild_protovalidate_protocolbuffers_go",
+    "build_buf_gen_go_redpandadata_common_protocolbuffers_go",
     "com_connectrpc_connect",
     "com_connectrpc_cors",
     "com_connectrpc_grpcreflect",
     "com_github_evanw_esbuild",
     "com_github_go_git_go_git_v5",
     "com_github_jhump_protoreflect",
+    "com_github_modelcontextprotocol_go_sdk",
+    "com_github_redpanda_data_common_go_api",
+    "com_github_redpanda_data_protoc_gen_go_mcp",
     "com_github_rs_cors",
     "com_github_spf13_cobra",
     "com_github_tetratelabs_wazero",
+    "org_golang_google_genproto_googleapis_api",
     "org_golang_google_genproto_googleapis_rpc",
     "org_golang_google_grpc",
     "org_golang_google_protobuf",

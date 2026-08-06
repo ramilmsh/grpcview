@@ -68,7 +68,7 @@ type globalFlags struct {
 func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	g := &globalFlags{}
 	f := cmd.PersistentFlags()
-	f.StringVar(&g.Workspace, "workspace", "", "workspace root; empty walks up from the current directory to the nearest .git")
+	f.StringVar(&g.Workspace, "workspace", "", "workspace root; empty takes $BUILD_WORKSPACE_DIRECTORY, else walks up from the current directory to the nearest .git")
 	f.StringVar(&g.Collection, "collection", "", "collection to operate on; empty resolves from the current directory")
 	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
 	f.DurationVar(&g.Timeout, "timeout", defaultTimeout,
@@ -132,6 +132,7 @@ func newRootCmd(
 	root.AddCommand(newCollectionsCmd(s, globals, open))
 	root.AddCommand(newTrustCmd(globals, open))
 	root.AddCommand(newServeCmd(serve, globals))
+	root.AddCommand(newMcpCmd(globals))
 	root.AddCommand(newVersionCmd())
 
 	root.SetIn(s.In)

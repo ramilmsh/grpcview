@@ -948,6 +948,10 @@ export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
   spec?: InvokeSpec | undefined;
 
   /**
+   * The request message as a JSON object, or a TypeScript module default-exporting
+   * one — valid JSON is already valid TS, so both forms parse. Quote 64-bit ints:
+   * an unquoted one loses precision. Empty sends an empty message.
+   *
    * @generated from field: string body = 2;
    */
   body: string;
@@ -1515,6 +1519,10 @@ export declare const WorkspaceService: GenService<{
     output: typeof AddDescriptorSourceResponseSchema;
   },
   /**
+   * Never dials, so an unreachable sibling source cannot block a removal. Services
+   * only this source provided leave the services list; requests against them remain
+   * saved but stop being invocable.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.RemoveDescriptorSource
    */
   removeDescriptorSource: {
@@ -1523,6 +1531,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof RemoveDescriptorSourceResponseSchema;
   },
   /**
+   * Re-dials a reflection target, or re-reads an upload. An unreachable target stays
+   * listed with the reason in its resolved.error rather than being dropped.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.RefreshDescriptorSource
    */
   refreshDescriptorSource: {
@@ -1599,6 +1610,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof ListBazelTargetsResponseSchema;
   },
   /**
+   * Creates the collection's directory in the workspace. An existing collection at
+   * that path is AlreadyExists, never adopted.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
    */
   createCollection: {
@@ -1618,6 +1632,8 @@ export declare const WorkspaceService: GenService<{
     output: typeof UpdateCollectionResponseSchema;
   },
   /**
+   * A name colliding with an existing sibling is FailedPrecondition.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder
    */
   createFolder: {
@@ -1626,6 +1642,8 @@ export declare const WorkspaceService: GenService<{
     output: typeof CreateFolderResponseSchema;
   },
   /**
+   * The body starts empty. Saving is optional: invoke calls a method without one.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.CreateRequest
    */
   createRequest: {
@@ -1634,6 +1652,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof CreateRequestResponseSchema;
   },
   /**
+   * Deletes requests AND folders, a folder recursively. An item that is not there is
+   * a silent success, so check the returned tree rather than relying on an error.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.DeleteRequest
    */
   deleteRequest: {
@@ -1642,6 +1663,10 @@ export declare const WorkspaceService: GenService<{
     output: typeof DeleteRequestResponseSchema;
   },
   /**
+   * Partial update: everything but the fields locating the request is optional, and an
+   * omitted one is left as it was. `target` and `middleware` change only when their
+   * update_ set-flag is true.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.UpdateRequest
    */
   updateRequest: {
@@ -1650,6 +1675,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof UpdateRequestResponseSchema;
   },
   /**
+   * Sets the metadata script requests inside the folder inherit, so shared headers are
+   * written once. Present but empty clears it; omitted leaves it unchanged.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.UpdateFolder
    */
   updateFolder: {
@@ -1658,6 +1686,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof UpdateFolderResponseSchema;
   },
   /**
+   * Reparents and/or reorders one item. Moving a folder into its own descendant is
+   * FailedPrecondition.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.MoveItem
    */
   moveItem: {
@@ -1727,6 +1758,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof RunScriptResponseSchema;
   },
   /**
+   * Creates it empty; use UpdateScript to fill in the source. GENERATOR is a helper a
+   * request body calls, MIDDLEWARE rewrites a request just before it is sent.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
    */
   createScript: {
@@ -1735,6 +1769,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof CreateScriptResponseSchema;
   },
   /**
+   * Partial update: an omitted field is left unchanged. Renaming onto an existing
+   * script's name fails.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
    */
   updateScript: {
@@ -1743,6 +1780,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof UpdateScriptResponseSchema;
   },
   /**
+   * Requests still listing it as middleware keep the dangling reference and fail when
+   * invoked, so clear it from them first.
+   *
    * @generated from rpc grpcview.v1.WorkspaceService.DeleteScript
    */
   deleteScript: {

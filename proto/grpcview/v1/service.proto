@@ -251,6 +251,9 @@ message InvokeSpec {
 // Executes a unary RPC carrying the caller's own, possibly unsaved, body.
 message InvokeRequest {
   InvokeSpec spec = 1;
+  // The request message as a JSON object, or a TypeScript module default-exporting
+  // one — valid JSON is already valid TS, so both forms parse. Quote 64-bit ints:
+  // an unquoted one loses precision. Empty sends an empty message.
   string     body = 2;
 }
 
@@ -396,7 +399,12 @@ message RunScriptResponse {
 service WorkspaceService {
   // Appends at LOWEST priority, or refreshes in place when the id already exists.
   rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
+  // Never dials, so an unreachable sibling source cannot block a removal. Services
+  // only this source provided leave the services list; requests against them remain
+  // saved but stop being invocable.
   rpc RemoveDescriptorSource(RemoveDescriptorSourceRequest) returns (RemoveDescriptorSourceResponse);
+  // Re-dials a reflection target, or re-reads an upload. An unreachable target stays
+  // listed with the reason in its resolved.error rather than being dropped.
   rpc RefreshDescriptorSource(RefreshDescriptorSourceRequest) returns (RefreshDescriptorSourceResponse);
   // Sets which source wins when several describe the same protos.
   rpc ReorderDescriptorSources(ReorderDescriptorSourcesRequest) returns (ReorderDescriptorSourcesResponse);
@@ -418,15 +426,28 @@ service WorkspaceService {
   // source can be a pick. Runs `bazel query`, which loads BUILD files, so it is
   // trust-gated: an untrusted workspace gets FailedPrecondition, not an empty list.
   rpc ListBazelTargets(ListBazelTargetsRequest) returns (ListBazelTargetsResponse);
+  // Creates the collection's directory in the workspace. An existing collection at
+  // that path is AlreadyExists, never adopted.
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
   // Renames a collection's display name and/or MOVES its directory. The local
   // state (history, resolve caches) moves with it; nothing is re-resolved.
   rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
+  // A name colliding with an existing sibling is FailedPrecondition.
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
+  // The body starts empty. Saving is optional: invoke calls a method without one.
   rpc CreateRequest(CreateRequestRequest) returns (CreateRequestResponse);
+  // Deletes requests AND folders, a folder recursively. An item that is not there is
+  // a silent success, so check the returned tree rather than relying on an error.
   rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);
+  // Partial update: everything but the fields locating the request is optional, and an
+  // omitted one is left as it was. `target` and `middleware` change only when their
+  // update_ set-flag is true.
   rpc UpdateRequest(UpdateRequestRequest) returns (UpdateRequestResponse);
+  // Sets the metadata script requests inside the folder inherit, so shared headers are
+  // written once. Present but empty clears it; omitted leaves it unchanged.
   rpc UpdateFolder(UpdateFolderRequest) returns (UpdateFolderResponse);
+  // Reparents and/or reorders one item. Moving a folder into its own descendant is
+  // FailedPrecondition.
   rpc MoveItem(MoveItemRequest) returns (MoveItemResponse);
   // Returns the status, response body, request/response metadata and latency.
   rpc Invoke(InvokeRequest) returns (InvokeResponse);
@@ -441,7 +462,13 @@ service WorkspaceService {
   rpc DescribeMethod(DescribeMethodRequest) returns (DescribeMethodResponse);
   // Uses a fresh isolated instance: no capabilities, no collection state.
   rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
+  // Creates it empty; use UpdateScript to fill in the source. GENERATOR is a helper a
+  // request body calls, MIDDLEWARE rewrites a request just before it is sent.
   rpc CreateScript(CreateScriptRequest) returns (CreateScriptResponse);
+  // Partial update: an omitted field is left unchanged. Renaming onto an existing
+  // script's name fails.
   rpc UpdateScript(UpdateScriptRequest) returns (UpdateScriptResponse);
+  // Requests still listing it as middleware keep the dangling reference and fail when
+  // invoked, so clear it from them first.
   rpc DeleteScript(DeleteScriptRequest) returns (DeleteScriptResponse);
 }
