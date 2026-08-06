@@ -7,6 +7,7 @@ import { useActiveWorkspace, hostLabel, useCollections } from "@/lib/workspace-q
 import { useUIStore } from "@/lib/ui-store";
 import { collectionSwitcherItems } from "@/features/workspace/collection-switcher";
 import { NewCollectionDialog } from "@/features/workspace/NewCollectionDialog";
+import { RenameCollectionDialog } from "@/features/workspace/RenameCollectionDialog";
 
 export function TopBar() {
   const { collection, workspace, reflection, sources } = useActiveWorkspace();
@@ -15,6 +16,7 @@ export function TopBar() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   // The NAME, disambiguated by the id in the tooltip: a collection is addressed by its
   // path and named separately, so five of them may all be called "requests".
   const collectionLabel = workspace?.name || collection || "";
@@ -75,12 +77,24 @@ export function TopBar() {
           y={menu.y}
           items={collectionSwitcherItems(collections, collection, {
             select: setActiveCollection,
+            rename: () => setRenaming(true),
             createNew: () => setCreating(true),
           })}
           onClose={() => setMenu(null)}
         />
       ) : null}
       <NewCollectionDialog open={creating} onClose={() => setCreating(false)} />
+      {collection !== null ? (
+        <RenameCollectionDialog
+          open={renaming}
+          onClose={() => setRenaming(false)}
+          collection={collection}
+          // Empty, never the id, while the Get is still in flight: an unedited blank Name
+          // field sends nothing, whereas one pre-filled with the id would rename the
+          // collection to its own path on a stray Save.
+          name={workspace?.name ?? ""}
+        />
+      ) : null}
 
       <div className="ml-auto flex items-center gap-[10px]">
         <Button

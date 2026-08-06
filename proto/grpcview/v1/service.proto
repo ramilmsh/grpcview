@@ -215,6 +215,23 @@ message CreateCollectionResponse {
   Collection collection = 1;
 }
 
+// The two names a collection has, editable independently: `name` is manifest
+// text, `new_collection` is the directory the collection lives in. An unset
+// field is left alone.
+message UpdateCollectionRequest {
+  // The collection to edit, addressed as it is now.
+  string          collection     = 1;
+  // New display name. Empty resets it to the directory's own base name.
+  optional string name           = 2;
+  // New workspace-relative directory; MOVES the directory on disk. Neither the
+  // source nor the destination may be ".", and the destination must not exist.
+  optional string new_collection = 3;
+}
+
+message UpdateCollectionResponse {
+  Collection collection = 1;
+}
+
 // Everything an ad-hoc invoke needs except the client payload — the one thing
 // the unary and streaming forms disagree about.
 message InvokeSpec {
@@ -402,6 +419,9 @@ service WorkspaceService {
   // trust-gated: an untrusted workspace gets FailedPrecondition, not an empty list.
   rpc ListBazelTargets(ListBazelTargetsRequest) returns (ListBazelTargetsResponse);
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);
+  // Renames a collection's display name and/or MOVES its directory. The local
+  // state (history, resolve caches) moves with it; nothing is re-resolved.
+  rpc UpdateCollection(UpdateCollectionRequest) returns (UpdateCollectionResponse);
   rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
   rpc CreateRequest(CreateRequestRequest) returns (CreateRequestResponse);
   rpc DeleteRequest(DeleteRequestRequest) returns (DeleteRequestResponse);

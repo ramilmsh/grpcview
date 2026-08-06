@@ -119,6 +119,23 @@ func (c *Collection) Create(_ context.Context, name string) error {
 	return c.writeCollection(&grpcviewstorev1.Collection{Name: name, Sources: seeded})
 }
 
+func (c *Collection) SetName(_ context.Context, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	col, err := c.readCollection()
+	if errors.Is(err, os.ErrNotExist) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		name = c.defaultName()
+	}
+	col.Name = name
+	return c.writeCollection(col)
+}
+
 func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error) {
 	ws, err := c.store.readWorkspaceManifest()
 	if err != nil {

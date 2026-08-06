@@ -824,6 +824,59 @@ export declare type CreateCollectionResponse = Message<"grpcview.v1.CreateCollec
 export declare const CreateCollectionResponseSchema: GenMessage<CreateCollectionResponse>;
 
 /**
+ * The two names a collection has, editable independently: `name` is manifest
+ * text, `new_collection` is the directory the collection lives in. An unset
+ * field is left alone.
+ *
+ * @generated from message grpcview.v1.UpdateCollectionRequest
+ */
+export declare type UpdateCollectionRequest = Message<"grpcview.v1.UpdateCollectionRequest"> & {
+  /**
+   * The collection to edit, addressed as it is now.
+   *
+   * @generated from field: string collection = 1;
+   */
+  collection: string;
+
+  /**
+   * New display name. Empty resets it to the directory's own base name.
+   *
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * New workspace-relative directory; MOVES the directory on disk. Neither the
+   * source nor the destination may be ".", and the destination must not exist.
+   *
+   * @generated from field: optional string new_collection = 3;
+   */
+  newCollection?: string | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.UpdateCollectionRequest.
+ * Use `create(UpdateCollectionRequestSchema)` to create a new message.
+ */
+export declare const UpdateCollectionRequestSchema: GenMessage<UpdateCollectionRequest>;
+
+/**
+ * @generated from message grpcview.v1.UpdateCollectionResponse
+ */
+export declare type UpdateCollectionResponse = Message<"grpcview.v1.UpdateCollectionResponse"> & {
+  /**
+   * @generated from field: grpcview.v1.Collection collection = 1;
+   */
+  collection?: Collection | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.UpdateCollectionResponse.
+ * Use `create(UpdateCollectionResponseSchema)` to create a new message.
+ */
+export declare const UpdateCollectionResponseSchema: GenMessage<UpdateCollectionResponse>;
+
+/**
  * Everything an ad-hoc invoke needs except the client payload — the one thing
  * the unary and streaming forms disagree about.
  *
@@ -1552,6 +1605,17 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof CreateCollectionRequestSchema;
     output: typeof CreateCollectionResponseSchema;
+  },
+  /**
+   * Renames a collection's display name and/or MOVES its directory. The local
+   * state (history, resolve caches) moves with it; nothing is re-resolved.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.UpdateCollection
+   */
+  updateCollection: {
+    methodKind: "unary";
+    input: typeof UpdateCollectionRequestSchema;
+    output: typeof UpdateCollectionResponseSchema;
   },
   /**
    * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder

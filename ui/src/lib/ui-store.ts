@@ -54,6 +54,92 @@ export type RequestSubtab = "message" | "metadata" | "middleware";
 export type ResponseSubtab = "messages" | "metadata" | "history";
 export type ScriptSubtab = "code" | "deps" | "caps";
 
+// Every slug-keyed slice, and the one function that rewrites a key prefix across all of
+// them. There is exactly ONE of these: both a MOVE (a key's tail changes) and a collection
+// rename (a key's FIRST segment changes — itemKey prefixes every key with the collection
+// id) are the same prefix rewrite, and a second remapper would be a second thing to keep
+// correct. Every slice keeps its own reference when nothing in it matched, or consumers of
+// untouched state re-render.
+interface KeyedSlices {
+  openTabs: OpenTab[];
+  activeKey: string | null;
+  drafts: Record<string, Draft | undefined>;
+  invokes: Record<string, InvokeState | undefined>;
+  treeSelection: readonly string[];
+  treeFocused: string | null;
+  treeExpanded: ReadonlySet<string>;
+}
+
+function remapKeyedState(
+  s: KeyedSlices,
+  oldKey: string,
+  newKey: string
+): Partial<KeyedSlices> {
+  if (oldKey === newKey) return {};
+  const prefix = `${oldKey}/`;
+  const remap = (key: string): string | null => {
+    if (key === oldKey) return newKey;
+    // The trailing "/" (itemKey's slug separator) is what stops a sibling slug
+    // "foo2" being swept up by a move of "foo".
+    if (key.startsWith(prefix)) return newKey + key.slice(oldKey.length);
+    return null;
+  };
+  const rekey = <T,>(m: Record<string, T | undefined>): Record<string, T | undefined> => {
+    let changed = false;
+    const out: Record<string, T | undefined> = {};
+    for (const [key, value] of Object.entries(m)) {
+      const to = remap(key);
+      if (to === null) out[key] = value;
+      else {
+        changed = true;
+        out[to] = value;
+      }
+    }
+    return changed ? out : m;
+  };
+  const rekeySet = (ids: ReadonlySet<string>): ReadonlySet<string> => {
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of ids) {
+      const to = remap(id);
+      if (to === null) next.add(id);
+      else {
+        changed = true;
+        next.add(to);
+      }
+    }
+    return changed ? next : ids;
+  };
+  const rekeyOne = (key: string | null): string | null =>
+    key === null ? null : remap(key) ?? key;
+
+  let tabsChanged = false;
+  const openTabs = s.openTabs.map((t) => {
+    const to = remap(t.key);
+    if (to === null) return t;
+    tabsChanged = true;
+    return { ...t, key: to };
+  });
+
+  let selectionChanged = false;
+  const treeSelection = s.treeSelection.map((id) => {
+    const to = remap(id);
+    if (to === null) return id;
+    selectionChanged = true;
+    return to;
+  });
+
+  return {
+    openTabs: tabsChanged ? openTabs : s.openTabs,
+    activeKey: rekeyOne(s.activeKey),
+    drafts: rekey(s.drafts),
+    invokes: rekey(s.invokes),
+    treeSelection: selectionChanged ? treeSelection : s.treeSelection,
+    treeFocused: rekeyOne(s.treeFocused),
+    treeExpanded: rekeySet(s.treeExpanded),
+  };
+}
+
 interface UIState {
   activeView: ActiveView;
   // The collection the scoped views address, or null when nothing has been chosen yet.
@@ -87,6 +173,10 @@ interface UIState {
   // Remaps every slug-keyed slice after a real MOVE (the only thing that changes a
   // key). A move never renames, so `OpenTab.name` needs no fixing up here.
   moveSubtree: (oldKey: string, newKey: string) => void;
+  // Same remap, applied to the collection id every key is prefixed with — UpdateCollection
+  // moved the directory, so `oldId` names nothing on disk any more. Also fixes the
+  // `collection` each tab carries and makes `newId` the active, persisted choice.
+  renameCollection: (oldId: string, newId: string) => void;
 
   setTreeExpanded: (next: ReadonlySet<string>) => void;
   setTreeSelection: (next: readonly string[]) => void;
@@ -176,76 +266,26 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ activeKey, activeCollection: collection });
   },
 
-  moveSubtree: (oldKey, newKey) =>
+  moveSubtree: (oldKey, newKey) => set((s) => remapKeyedState(s, oldKey, newKey)),
+
+  renameCollection: (oldId, newId) => {
+    if (oldId === newId) return;
+    writeStoredCollection(newId);
     set((s) => {
-      if (oldKey === newKey) return {};
-      const prefix = `${oldKey}/`;
-      const remap = (key: string): string | null => {
-        if (key === oldKey) return newKey;
-        // The trailing "/" (itemKey's slug separator) is what stops a sibling slug
-        // "foo2" being swept up by a move of "foo".
-        if (key.startsWith(prefix)) return newKey + key.slice(oldKey.length);
-        return null;
-      };
-      // Each helper returns the identical reference when nothing changed, or every
-      // consumer of untouched state re-renders.
-      const rekey = <T,>(
-        m: Record<string, T | undefined>
-      ): Record<string, T | undefined> => {
-        let changed = false;
-        const out: Record<string, T | undefined> = {};
-        for (const [key, value] of Object.entries(m)) {
-          const to = remap(key);
-          if (to === null) out[key] = value;
-          else {
-            changed = true;
-            out[to] = value;
-          }
-        }
-        return changed ? out : m;
-      };
-      const rekeySet = (ids: ReadonlySet<string>): ReadonlySet<string> => {
-        let changed = false;
-        const next = new Set<string>();
-        for (const id of ids) {
-          const to = remap(id);
-          if (to === null) next.add(id);
-          else {
-            changed = true;
-            next.add(to);
-          }
-        }
-        return changed ? next : ids;
-      };
-      const rekeyOne = (key: string | null): string | null =>
-        key === null ? null : remap(key) ?? key;
-
-      let tabsChanged = false;
-      const openTabs = s.openTabs.map((t) => {
-        const to = remap(t.key);
-        if (to === null) return t;
+      const patch = remapKeyedState(s, oldId, newId);
+      let tabsChanged = patch.openTabs !== undefined && patch.openTabs !== s.openTabs;
+      const openTabs = (patch.openTabs ?? s.openTabs).map((t) => {
+        if (t.collection !== oldId) return t;
         tabsChanged = true;
-        return { ...t, key: to };
+        return { ...t, collection: newId };
       });
-
-      let selectionChanged = false;
-      const treeSelection = s.treeSelection.map((id) => {
-        const to = remap(id);
-        if (to === null) return id;
-        selectionChanged = true;
-        return to;
-      });
-
       return {
+        ...patch,
         openTabs: tabsChanged ? openTabs : s.openTabs,
-        activeKey: rekeyOne(s.activeKey),
-        drafts: rekey(s.drafts),
-        invokes: rekey(s.invokes),
-        treeSelection: selectionChanged ? treeSelection : s.treeSelection,
-        treeFocused: rekeyOne(s.treeFocused),
-        treeExpanded: rekeySet(s.treeExpanded),
+        activeCollection: newId,
       };
-    }),
+    });
+  },
 
   setTreeExpanded: (treeExpanded) => set({ treeExpanded }),
   setTreeSelection: (treeSelection) => set({ treeSelection }),

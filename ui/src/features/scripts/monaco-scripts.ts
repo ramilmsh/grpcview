@@ -109,8 +109,9 @@ ts.typescriptDefaults.addExtraLib(ENV_DTS, "file:///grpcview-scripts-env.d.ts");
 const GV_DTS = `
 /**
  * The saved requests \`gv.invoke()\` can reach, path → response type. Declared empty here and
- * MERGED into by the generated \`gv-requests.d.ts\` (proto-types.ts \`gvRequestMapDts\`), which the
- * body editor registers per collection. With no map registered \`keyof\` is \`never\`, every path
+ * MERGED into by the generated \`gv-requests.d.ts\` (proto-types.ts \`gvRequestMapDts\`), which
+ * \`gv-types.ts\` registers app-level per collection — every editor that can call \`gv.invoke\`
+ * needs it, so no one editor owns it. With no map registered \`keyof\` is \`never\`, every path
  * takes the string branch, and \`body\` is \`any\` — the untyped behavior, unchanged.
  *
  * Streaming saved requests are deliberately absent: \`gv.invoke\` rejects them, so there is no
@@ -158,6 +159,21 @@ declare const gv: {
     path: P,
     params?: Record<string, unknown>
   ): Promise<InvokeResult<GvBody<P>>>;
+  /**
+   * Assert a condition, THROWING on failure — an \`AssertionError\` whose message is
+   * \`assertion failed: <description>\`, with the underlying error's text appended when the
+   * predicate itself throws or its promise rejects. Truthiness decides, not \`=== true\`, so a
+   * non-empty string or a found object passes. Nothing is logged on success: silence is a pass.
+   *
+   * A boolean or sync predicate throws SYNCHRONOUSLY and returns \`void\`. Only a thenable
+   * condition — an \`async\` predicate or a bare promise — returns a promise, and that one MUST be
+   * awaited: an unawaited rejection is dropped and the assertion reads as passing.
+   */
+  assert(description: string, condition: boolean | (() => boolean)): void;
+  assert(
+    description: string,
+    condition: (() => PromiseLike<boolean>) | PromiseLike<boolean>
+  ): Promise<void>;
 };
 /** The decoded result of \`gv.invoke()\` — a fetch-style POJO, never a proto Struct/Duration/Any. */
 type InvokeResult<T = any> = {

@@ -67,6 +67,13 @@ export const listBazelTargets: typeof WorkspaceService["method"]["listBazelTarge
  */
 export const createCollection: typeof WorkspaceService["method"]["createCollection"];
 /**
+ * Renames a collection's display name and/or MOVES its directory. The local
+ * state (history, resolve caches) moves with it; nothing is re-resolved.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.UpdateCollection
+ */
+export const updateCollection: typeof WorkspaceService["method"]["updateCollection"];
+/**
  * @generated from rpc grpcview.v1.WorkspaceService.CreateFolder
  */
 export const createFolder: typeof WorkspaceService["method"]["createFolder"];

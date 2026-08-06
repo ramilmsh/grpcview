@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -99,6 +100,110 @@ func (s *Store) Open(_ context.Context, id string) (*Collection, error) {
 		s.colls[key] = coll
 	}
 	return coll, nil
+}
+
+// Rename MOVES the collection's directory inside the workspace and returns a handle on its new address.
+// The returned handle replaces the caller's: every handle on either id is dropped from the cache, so any
+// the caller still holds addresses the old path.
+func (s *Store) Rename(ctx context.Context, id, newID string) (*Collection, error) {
+	oldCleaned, err := cleanCollectionID(id)
+	if err != nil {
+		return nil, err
+	}
+	newCleaned, err := cleanCollectionID(newID)
+	if err != nil {
+		return nil, err
+	}
+	if oldCleaned == newCleaned {
+		return s.Open(ctx, newCleaned)
+	}
+	// A collection at "." IS the workspace root directory, so moving it would move the workspace itself.
+	if oldCleaned == "." || newCleaned == "." {
+		return nil, fmt.Errorf("%w: the collection at %q is the workspace root and cannot be moved", ErrInvalidCollectionID, ".")
+	}
+
+	srcAbs := filepath.Join(s.root, oldCleaned)
+	destAbs := filepath.Join(s.root, newCleaned)
+	if !fileExists(filepath.Join(srcAbs, CollectionFileName)) {
+		return nil, fmt.Errorf("%w: %q", ErrNotFound, oldCleaned)
+	}
+	if _, err := os.Lstat(destAbs); err == nil {
+		return nil, fmt.Errorf("%w: %q", ErrCollectionExists, newCleaned)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	rel, err := filepath.Rel(srcAbs, destAbs)
+	if err != nil {
+		return nil, err
+	}
+	if !(rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+		return nil, fmt.Errorf("%w: %q is inside %q", ErrInvalidCollectionID, newCleaned, oldCleaned)
+	}
+	if err := s.rejectNestedDestination(destAbs); err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(destAbs), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.Rename(srcAbs, destAbs); err != nil {
+		return nil, err
+	}
+
+	oldKey, newKey := strings.ToLower(oldCleaned), strings.ToLower(newCleaned)
+	s.moveState(oldKey, newKey)
+
+	// A cached handle holds root/state/id resolved at Open time, so a stale entry would keep addressing the
+	// old path. Its own critical section: s.Open takes s.mu itself.
+	s.mu.Lock()
+	delete(s.colls, oldKey)
+	delete(s.colls, newKey)
+	s.mu.Unlock()
+
+	s.InvalidateList()
+	return s.Open(ctx, newCleaned)
+}
+
+// A collection is a leaf: the scan prunes at the first grpcview.json it finds, so a collection nested
+// inside another one would be invisible.
+func (s *Store) rejectNestedDestination(destAbs string) error {
+	root := filepath.Clean(s.root)
+	for dir := filepath.Dir(destAbs); dir != root && dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+		if !fileExists(filepath.Join(dir, CollectionFileName)) {
+			continue
+		}
+		enclosing, err := s.relativeID(dir)
+		if err != nil {
+			enclosing = dir
+		}
+		return fmt.Errorf("%w: the destination is inside collection %q", ErrInvalidCollectionID, enclosing)
+	}
+	return nil
+}
+
+// Run history and the resolved-descriptor index live here, so they follow the directory. The directory
+// move already happened and cannot be taken back, so a failure here is logged, never returned.
+func (s *Store) moveState(oldKey, newKey string) {
+	oldDir := collectionStateDir(s.stateRoot, oldKey)
+	newDir := collectionStateDir(s.stateRoot, newKey)
+	if _, err := os.Stat(oldDir); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			s.logger.Warn("stat the local state of a renamed collection", "dir", oldDir, "err", err)
+		}
+		return
+	}
+	// Whatever sits at the destination belongs to a collection that no longer exists.
+	if err := os.RemoveAll(newDir); err != nil {
+		s.logger.Warn("clear the local state at a rename destination", "dir", newDir, "err", err)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(newDir), 0o755); err != nil {
+		s.logger.Warn("create the local state parent of a renamed collection", "dir", newDir, "err", err)
+		return
+	}
+	if err := os.Rename(oldDir, newDir); err != nil {
+		s.logger.Warn("move the local state of a renamed collection", "from", oldDir, "to", newDir, "err", err)
+	}
 }
 
 func cleanCollectionID(id string) (string, error) {

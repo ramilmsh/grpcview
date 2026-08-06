@@ -55,6 +55,124 @@ describe("the active collection", () => {
   });
 });
 
+// A collection id is the FIRST segment of every key (itemKey), so moving the directory
+// rewrites every one of them — the same prefix remap a move does, one level up.
+describe("renameCollection", () => {
+  const OLD_ID = "services/pay";
+  const NEW_ID = "services/payments";
+  const MINE = `${OLD_ID}/get-charge`;
+  const MINE_DEEP = `${OLD_ID}/admin/refund`;
+  const THEIRS = "web/list";
+
+  const inCollection = (key: string, name: string, collection: string): OpenTab => ({
+    key,
+    name,
+    collection,
+  });
+
+  beforeEach(() => {
+    const draft: Draft = { body: "{}", metadata: "" };
+    useUIStore.setState({
+      activeCollection: OLD_ID,
+      openTabs: [
+        inCollection(MINE, "GetCharge", OLD_ID),
+        inCollection(MINE_DEEP, "Refund", OLD_ID),
+        inCollection(THEIRS, "List", "web"),
+      ],
+      activeKey: MINE,
+      drafts: { [MINE]: draft, [THEIRS]: draft },
+      invokes: { [MINE_DEEP]: { error: "boom" } },
+      treeSelection: [MINE, THEIRS],
+      treeFocused: MINE_DEEP,
+      treeExpanded: new Set([`${OLD_ID}/admin`, "web"]),
+    });
+  });
+
+  it("rewrites the collection prefix of every keyed slice", () => {
+    useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
+    const s = useUIStore.getState();
+    expect(s.activeKey).toBe(`${NEW_ID}/get-charge`);
+    expect(s.drafts[MINE]).toBeUndefined();
+    expect(s.drafts[`${NEW_ID}/get-charge`]).toEqual({ body: "{}", metadata: "" });
+    expect(s.invokes[`${NEW_ID}/admin/refund`]).toEqual({ error: "boom" });
+    expect(s.treeSelection).toEqual([`${NEW_ID}/get-charge`, THEIRS]);
+    expect(s.treeFocused).toBe(`${NEW_ID}/admin/refund`);
+    expect(s.treeExpanded).toEqual(new Set([`${NEW_ID}/admin`, "web"]));
+  });
+
+  it("fixes the collection each tab carries, and only for tabs in the renamed one", () => {
+    useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
+    expect(useUIStore.getState().openTabs).toEqual([
+      inCollection(`${NEW_ID}/get-charge`, "GetCharge", NEW_ID),
+      inCollection(`${NEW_ID}/admin/refund`, "Refund", NEW_ID),
+      inCollection(THEIRS, "List", "web"),
+    ]);
+  });
+
+  it("makes the new id the active collection", () => {
+    useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
+    expect(useUIStore.getState().activeCollection).toBe(NEW_ID);
+  });
+
+  // The only caller is UpdateCollection's onSuccess, i.e. the collection the user just
+  // edited, so the renamed one becomes active even if another one was — deliberate, since
+  // the id that was active may be the one that no longer exists.
+  it("makes the renamed collection active even when another one was", () => {
+    useUIStore.setState({ activeCollection: "web" });
+    useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
+    expect(useUIStore.getState().activeCollection).toBe(NEW_ID);
+  });
+
+  it("never touches a collection whose id is a string prefix of the renamed one", () => {
+    const sibling = `${OLD_ID}2/get-charge`;
+    useUIStore.setState({
+      openTabs: [inCollection(sibling, "GetCharge", `${OLD_ID}2`)],
+      activeKey: sibling,
+      drafts: { [sibling]: { body: "sibling", metadata: "" } },
+      treeExpanded: new Set([`${OLD_ID}2`]),
+    });
+    useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
+    const s = useUIStore.getState();
+    expect(s.openTabs).toEqual([inCollection(sibling, "GetCharge", `${OLD_ID}2`)]);
+    expect(s.activeKey).toBe(sibling);
+    expect(s.drafts[sibling]).toEqual({ body: "sibling", metadata: "" });
+    expect(s.treeExpanded).toEqual(new Set([`${OLD_ID}2`]));
+  });
+
+  it("is a no-op when the id did not change — a name-only edit", () => {
+    const before = useUIStore.getState();
+    useUIStore.getState().renameCollection(OLD_ID, OLD_ID);
+    const after = useUIStore.getState();
+    expect(after.openTabs).toBe(before.openTabs);
+    expect(after.drafts).toBe(before.drafts);
+    expect(after.invokes).toBe(before.invokes);
+    expect(after.treeSelection).toBe(before.treeSelection);
+    expect(after.treeExpanded).toBe(before.treeExpanded);
+    expect(after.activeCollection).toBe(OLD_ID);
+  });
+
+  it("leaves every untouched slice's reference alone when the collection had nothing open", () => {
+    useUIStore.setState({
+      openTabs: [inCollection(THEIRS, "List", "web")],
+      activeKey: THEIRS,
+      drafts: {},
+      invokes: {},
+      treeSelection: [THEIRS],
+      treeFocused: THEIRS,
+      treeExpanded: new Set(["web"]),
+    });
+    const before = useUIStore.getState();
+    useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
+    const after = useUIStore.getState();
+    expect(after.openTabs).toBe(before.openTabs);
+    expect(after.drafts).toBe(before.drafts);
+    expect(after.invokes).toBe(before.invokes);
+    expect(after.treeSelection).toBe(before.treeSelection);
+    expect(after.treeExpanded).toBe(before.treeExpanded);
+    expect(after.activeCollection).toBe(NEW_ID);
+  });
+});
+
 describe("moveSubtree: the moved item itself", () => {
   beforeEach(seed);
 

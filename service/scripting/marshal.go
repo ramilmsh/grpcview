@@ -126,9 +126,54 @@ const gvInvokeShim = `function (path, params) {
   }
 }`
 
+// The sync path must throw synchronously and return undefined: a rejected promise nobody awaits is
+// dropped by the top-level settle in evalRaw, so a wrapped failure would read as a pass. Only a
+// thenable condition yields a promise, which the caller must await.
+// Both frames are NAMED so they can be dropped from the stack below: the throw happens inside the
+// prelude, and remapJSError reads the first frame's line, so an unfiltered stack reports a prelude
+// line instead of the failing assertion's.
+const gvAssertShim = `function gvAssert(description, condition) {
+  if (typeof description !== "string" || description === "") {
+    throw new TypeError("gv.assert: description must be a non-empty string");
+  }
+  var fail = function gvAssertFail(reason) {
+    var msg = "assertion failed: " + description;
+    if (reason) { msg = msg + ": " + reason; }
+    var e = new Error(msg);
+    e.name = "AssertionError";
+    try {
+      if (typeof e.stack === "string") {
+        e.stack = e.stack.split("\n").filter(function (line) {
+          return line.indexOf("gvAssert") === -1;
+        }).join("\n");
+      }
+    } catch (ignored) {}
+    throw e;
+  };
+  var reasonOf = function (e) {
+    return String((e && e.message) ? e.message : e);
+  };
+  var c = condition;
+  if (typeof c === "function") {
+    try {
+      c = c();
+    } catch (e) {
+      fail(reasonOf(e));
+    }
+  }
+  if (c && typeof c.then === "function") {
+    return Promise.resolve(c).then(
+      function (v) { if (!v) { fail(); } },
+      function (e) { fail(reasonOf(e)); }
+    );
+  }
+  if (!c) { fail(); }
+}`
+
 // `gv` must be assembled and frozen in ONE statement: the freeze blocks later member addition, and a
 // second assignment would clobber it. The inherited map needs its own __ff because it hangs off the
-// inherit() closure, not gv's property graph.
+// inherit() closure, not gv's property graph. invoke/assert survive the freeze only because __ff
+// recurses on `typeof o === "object"` and so never touches a function.
 func buildGvPrelude(in Input) string {
 	data := map[string]any{
 		"request": map[string]any{"params": orEmptyMap(in.Params)},
@@ -138,9 +183,10 @@ func buildGvPrelude(in Input) string {
   var m = __ff(JSON.parse(%s));
   d.metadata = { inherit: function () { return m; } };
   d.invoke = %s;
+  d.assert = %s;
   return d;
 })());
-`, jsonLit(data), jsonLit(orEmptyMetadata(in.InheritedMetadata)), gvInvokeShim)
+`, jsonLit(data), jsonLit(orEmptyMetadata(in.InheritedMetadata)), gvInvokeShim, gvAssertShim)
 }
 
 func decodeResult(tag uint8, payload []byte) (json.RawMessage, error) {

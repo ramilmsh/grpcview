@@ -8,7 +8,6 @@ import "@/features/scripts/monaco-scripts";
 import "./vendor/bufbuild-stubs";
 import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
 import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
-import type { InvokeTarget } from "./proto-types";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
@@ -55,8 +54,6 @@ interface EditorProps {
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
-  // The collection's invokable saved requests, typing `gv.invoke()`'s path and body.
-  invokeTargets?: InvokeTarget[];
   generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
@@ -69,7 +66,6 @@ export function Editor({
   inputPackage,
   inputName,
   inputFile,
-  invokeTargets,
   generators = [],
   onErrorsChange,
 }: EditorProps) {
@@ -116,6 +112,8 @@ export function Editor({
     return () => sub.dispose();
   }, [monaco, onErrorsChange]);
 
+  // Method-scoped, so it stays here; the `./gen/**` modules its import resolves against are
+  // registered app-level by gv-types.ts, hence the shared `file:///grpcview/request/` prefix.
   // typescriptDefaults is global and a same-path re-add throws "Duplicate definition".
   const typeLibs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
@@ -123,37 +121,24 @@ export function Editor({
     if (!monaco || !descriptorSet?.length || !inputFile) return;
     let cancelled = false;
     void (async () => {
-      const { generateWorkspaceTypes, requestMessageAlias, gvRequestMapDts } = await import(
-        "./proto-types"
-      );
+      const { generateWorkspaceTypes, requestMessageAlias } = await import("./proto-types");
+      // Free after gv-types.ts's call: generateWorkspaceTypes memoizes on the descriptor bytes.
       const files = generateWorkspaceTypes(descriptorSet);
       if (cancelled) return;
       const tsDefaults = monaco.languages.typescript.typescriptDefaults;
       typeLibs.current.forEach((d) => d.dispose());
       typeLibs.current = [];
-      for (const [path, content] of files) {
-        typeLibs.current.push(
-          tsDefaults.addExtraLib(content, `file:///grpcview/request/gen/${path}`)
-        );
-      }
       const alias = requestMessageAlias(files, inputPackage ?? "", inputName ?? "", inputFile);
       typeLibs.current.push(
         tsDefaults.addExtraLib(alias.dts, "file:///grpcview/request/request-message.d.ts")
       );
-      // Sibling of request-message.d.ts so its "./gen/…" imports resolve the same way.
-      const gvMap = gvRequestMapDts(files, invokeTargets ?? []);
-      if (gvMap) {
-        typeLibs.current.push(
-          tsDefaults.addExtraLib(gvMap, "file:///grpcview/request/gv-requests.d.ts")
-        );
-      }
     })();
     return () => {
       cancelled = true;
       typeLibs.current.forEach((d) => d.dispose());
       typeLibs.current = [];
     };
-  }, [monaco, descriptorSet, inputPackage, inputName, inputFile, invokeTargets]);
+  }, [monaco, descriptorSet, inputPackage, inputName, inputFile]);
 
   // Same dispose-before-add rule; scope="body" namespaces the URIs away from metadata.
   const genLibs = useRef<Monaco.IDisposable[]>([]);

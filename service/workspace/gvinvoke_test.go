@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -126,6 +127,65 @@ func TestGvInvokeFromSavedDryRun(t *testing.T) {
 	if evaluated := decodeEchoMessage(t, []byte(msgs[0])); evaluated != want {
 		t.Fatalf("evaluated body message = %q, want %q (nested gv.invoke did not run from the "+
 			"dry-run path)", evaluated, want)
+	}
+}
+
+func TestGvInvokeFromRunScript(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := echoTarget(t, w, ctx, startEchoServer)
+
+	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
+
+	for _, tc := range []struct {
+		name string
+		kind *grpcviewv1.ScriptKind
+		src  string
+	}{
+		{
+			name: "scenario",
+			kind: grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO.Enum(),
+			src: `const b = await gv.invoke("B", { id: 9 });
+b.body.message`,
+		},
+		{
+			name: "generator",
+			kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR.Enum(),
+			src: `export default async () => {
+  const b = await gv.invoke("B", { id: 9 });
+  return b.body.message;
+}`,
+		},
+		{
+			name: "middleware",
+			kind: grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE.Enum(),
+			src: `export default async (req) => {
+  const b = await gv.invoke("B", { id: 9 });
+  return { ...req, metadata: { seen: [b.body.message] } };
+}`,
+		},
+		{
+			name: "scratchpad",
+			src:  `(await gv.invoke("B", { id: 9 })).body.message`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := w.RunScript(ctx, connect.NewRequest(&grpcviewv1.RunScriptRequest{
+				Collection: testWorkspace,
+				Source:     tc.src,
+				Kind:       tc.kind,
+			}))
+			if err != nil {
+				t.Fatalf("RunScript: %v", err)
+			}
+			if e := resp.Msg.GetError(); e != nil {
+				t.Fatalf("script error = %q (gv.invoke must be available to RunScript)", e.GetMessage())
+			}
+			if want := "echo: id-9"; !strings.Contains(resp.Msg.GetValue(), want) {
+				t.Fatalf("value = %q, want it to contain %q", resp.Msg.GetValue(), want)
+			}
+		})
 	}
 }
 

@@ -69,6 +69,81 @@ func TestListCollectionsAfterCreate(t *testing.T) {
 	}
 }
 
+func TestUpdateCollectionRenamesTheDisplayNameOnly(t *testing.T) {
+	w := newWorkspaceAt(t, t.TempDir())
+	ctx := context.Background()
+
+	if _, err := w.CreateCollection(ctx, connect.NewRequest(&grpcviewv1.CreateCollectionRequest{
+		Collection: "requests",
+		Name:       "Payments",
+	})); err != nil {
+		t.Fatalf("CreateCollection: %v", err)
+	}
+
+	name := "Billing"
+	resp, err := w.UpdateCollection(ctx, connect.NewRequest(&grpcviewv1.UpdateCollectionRequest{
+		Collection: "requests",
+		Name:       &name,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateCollection: %v", err)
+	}
+	if got := resp.Msg.GetCollection().GetName(); got != name {
+		t.Errorf("response name = %q, want %q", got, name)
+	}
+	if got := resp.Msg.GetCollection().GetId(); got != "requests" {
+		t.Errorf("response id = %q, want the unchanged id %q", got, "requests")
+	}
+
+	got := listCollections(t, w, ctx, false).GetCollections()
+	if len(got) != 1 {
+		t.Fatalf("collections = %v, want exactly one", got)
+	}
+	if got[0].GetName() != name || got[0].GetId() != "requests" {
+		t.Errorf("listed collection = %+v, want name %q at id %q", got[0], name, "requests")
+	}
+}
+
+func TestUpdateCollectionMovesTheCollection(t *testing.T) {
+	w := newWorkspaceAt(t, t.TempDir())
+	ctx := context.Background()
+
+	if _, err := w.CreateCollection(ctx, connect.NewRequest(&grpcviewv1.CreateCollectionRequest{
+		Collection: "requests",
+		Name:       "Payments",
+	})); err != nil {
+		t.Fatalf("CreateCollection: %v", err)
+	}
+
+	newID := "services/payments/requests"
+	resp, err := w.UpdateCollection(ctx, connect.NewRequest(&grpcviewv1.UpdateCollectionRequest{
+		Collection:    "requests",
+		NewCollection: &newID,
+	}))
+	if err != nil {
+		t.Fatalf("UpdateCollection: %v", err)
+	}
+	if got := resp.Msg.GetCollection().GetId(); got != newID {
+		t.Errorf("response id = %q, want %q", got, newID)
+	}
+	if got := resp.Msg.GetCollection().GetName(); got != "Payments" {
+		t.Errorf("response name = %q, want the untouched display name %q", got, "Payments")
+	}
+
+	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: newID})); err != nil {
+		t.Errorf("Get(%q) after the move: %v", newID, err)
+	}
+	_, err = w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: "requests"}))
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("Get of the vacated id = %v, want NotFound", err)
+	}
+
+	got := listCollections(t, w, ctx, false).GetCollections()
+	if len(got) != 1 || got[0].GetId() != newID {
+		t.Errorf("collections after the move = %v, want only %q", got, newID)
+	}
+}
+
 func TestListCollectionsSeesCreateWithoutRefresh(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "services", "payments"), 0o755); err != nil {

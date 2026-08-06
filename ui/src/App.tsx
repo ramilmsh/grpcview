@@ -5,6 +5,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Centered } from "@/components/ui/Centered";
 import { useUIStore } from "@/lib/ui-store";
 import { useActiveWorkspace, useCollections } from "@/lib/workspace-query";
+import { useGvInvokeTypes } from "@/features/workspace/gv-types";
 import { WorkspaceView } from "@/features/workspace/WorkspaceView";
 import { NoCollection } from "@/features/workspace/NoCollection";
 import { SourcesView } from "@/features/sources/SourcesView";
@@ -31,6 +32,9 @@ function CurrentView() {
   const activeView = useUIStore((s) => s.activeView);
   const { collections, isPending, error } = useCollections();
   const { notFound } = useActiveWorkspace();
+  // Above the early returns and outside the view switch: the Scripts view calls gv.invoke too,
+  // so these types cannot be owned by the body editor.
+  useGvInvokeTypes();
   // Nothing at all until the listing resolves: a flash of "No collection here" over a
   // workspace that has one reads as data loss.
   if (isPending) return null;

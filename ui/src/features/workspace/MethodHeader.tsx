@@ -39,7 +39,9 @@ export function MethodHeader({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const canInvoke = !!(targetOverride ?? reflection);
+  // The ADDRESS, not the presence of a Server: an override starts life as an empty
+  // one the moment the target field is touched, and dialing "" is not an invoke.
+  const canInvoke = !!(targetOverride ?? reflection)?.address;
   const hasMethod = !!(request.service && request.method);
 
   const onPick = (service: Service, method: Method) => {

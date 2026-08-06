@@ -16,6 +16,7 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 	}
 
 	source := request.Msg.GetSource()
+	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(request.Msg.GetCollection()))
 	var (
 		res    scripting.Result
 		runErr error

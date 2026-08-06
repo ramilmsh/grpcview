@@ -15,6 +15,11 @@ export function TargetBar({
 }) {
   const cur = override ?? reflection;
   const tls = cur?.tls != null;
+  const address = cur?.address ?? "";
+  // A request may carry its own target with no reflection source anywhere in the
+  // collection — resolveTarget honors an override before it looks at the sources —
+  // so the field is always editable and the empty case is a prompt, not a refusal.
+  const unset = address === "";
 
   // A message field has no partial patch, so every edit emits a whole Server.
   const emit = (patch: { address?: string; tls?: boolean }) => {
@@ -38,59 +43,54 @@ export function TargetBar({
       }}
     >
       <HardDrives size={15} style={{ color: "var(--color-neutral-500)" }} />
-      {cur ? (
-        <>
-          <input
-            className="font-mono"
-            value={cur.address}
-            onChange={(e) => emit({ address: e.target.value })}
-            placeholder="host:port"
-            aria-label="Target address"
-            spellCheck={false}
-            style={{
-              background: "transparent",
-              border: "none",
-              outline: "none",
-              padding: 0,
-              color: "var(--color-text)",
-              fontSize: 13,
-              width: `${Math.max(cur.address.length, 12)}ch`,
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => emit({ tls: !tls })}
-            className="ml-auto flex items-center gap-[5px]"
-            title={tls ? "TLS on — click to disable" : "insecure — click to enable TLS"}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-              fontSize: 12,
-              color: "var(--color-neutral-400)",
-            }}
-          >
-            {tls ? (
-              <>
-                <LockSimple weight="fill" size={13} style={{ color: "var(--ok)" }} />
-                TLS
-              </>
-            ) : (
-              <>
-                <LockSimpleOpen size={13} style={{ color: "var(--color-neutral-500)" }} />
-                insecure
-              </>
-            )}
-          </button>
-        </>
-      ) : (
-        <div className="font-mono" style={{ fontSize: 13 }}>
-          <span style={{ color: "var(--color-neutral-500)" }}>
-            no target — add a reflection source
-          </span>
-        </div>
-      )}
+      <input
+        className="font-mono"
+        value={address}
+        onChange={(e) => emit({ address: e.target.value })}
+        placeholder="host:port"
+        aria-label="Target address"
+        spellCheck={false}
+        style={{
+          background: "transparent",
+          border: "none",
+          outline: "none",
+          padding: 0,
+          color: "var(--color-text)",
+          fontSize: 13,
+          width: `${Math.max(address.length, 12)}ch`,
+        }}
+      />
+      {unset ? (
+        <span style={{ fontSize: 12, color: "var(--color-neutral-600)" }}>
+          no reflection source — type where this request is sent
+        </span>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => emit({ tls: !tls })}
+        className="ml-auto flex items-center gap-[5px]"
+        title={tls ? "TLS on — click to disable" : "insecure — click to enable TLS"}
+        style={{
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+          fontSize: 12,
+          color: "var(--color-neutral-400)",
+        }}
+      >
+        {tls ? (
+          <>
+            <LockSimple weight="fill" size={13} style={{ color: "var(--ok)" }} />
+            TLS
+          </>
+        ) : (
+          <>
+            <LockSimpleOpen size={13} style={{ color: "var(--color-neutral-500)" }} />
+            insecure
+          </>
+        )}
+      </button>
     </div>
   );
 }

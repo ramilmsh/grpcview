@@ -5,6 +5,7 @@ import type { CollectionSummary } from "@grpcview/v1/service_pb";
 
 export interface CollectionSwitcherActions {
   select(id: string): void;
+  rename(): void;
   createNew(): void;
 }
 
@@ -31,9 +32,14 @@ export function collectionSwitcherItems(
     label: collectionSwitcherLabel(collection, collections, activeId),
     onSelect: () => actions.select(collection.id),
   }));
-  // Last and behind a separator: it writes to the repo, the rows above it only switch views.
+  // Last and behind one separator: these write to the repo, the rows above them only switch
+  // views. Rename comes first because it acts on the active collection, whose row it sits
+  // under — and it is absent without one, since there would be nothing to rename.
+  const writes: MenuItem[] = [];
+  if (activeId !== null) writes.push({ label: "Rename collection…", onSelect: actions.rename });
+  writes.push({ label: "New collection…", onSelect: actions.createNew });
   return [
     ...rows,
-    { label: "New collection…", separatorBefore: rows.length > 0, onSelect: actions.createNew },
+    ...writes.map((item, i) => ({ ...item, separatorBefore: i === 0 && rows.length > 0 })),
   ];
 }

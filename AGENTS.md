@@ -159,6 +159,8 @@ declare const gv: {
   metadata: { inherit(): { [key: string]: string[] } };
   request:  { params: Readonly<Record<string, any>> };
   invoke(path: string, params?: Record<string, unknown>): Promise<InvokeResult>;
+  assert(description: string, condition: boolean | (() => boolean)): void;
+  assert(description: string, condition: (() => PromiseLike<boolean>) | PromiseLike<boolean>): Promise<void>;
 };
 ```
 
@@ -195,6 +197,22 @@ context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
   target, un-evaluable body/metadata, or the depth cap. Nested invokes do **not**
   record history. Bounded by a ctx depth counter (`gvinvoke.go`) — a depth cap only,
   with no cycle set, so self-recursive pagination still works.
+- **`gv.assert(description, condition)`** is the whole test-harness primitive, and it is
+  pure prelude JS (`gvAssertShim` in `marshal.go`) — no host call, no wire field, no UI. It
+  **throws** on failure: an `AssertionError` reading `assertion failed: <description>`, with
+  the underlying text appended when the predicate throws or its promise rejects. Truthiness
+  decides, not `=== true`. Three things about it are load bearing:
+  - **The sync path throws synchronously and returns `undefined`**; only a *thenable*
+    condition returns a promise. Wrapping the sync case would be silently broken, because an
+    unawaited rejection is dropped by `evalRaw`'s top-level settle — a failed assertion
+    would read as a pass. The two `.d.ts` overloads exist to keep that visible in the
+    editor: the sync form types as `void`, so nobody is nudged into `await`ing it.
+  - **Its own frames are named (`gvAssert`, `gvAssertFail`) and filtered out of the stack**
+    before the throw. `remapJSError` reads the *first* frame's line and the throw happens
+    inside the prelude, so an unfiltered stack blames a prelude line instead of the failing
+    assertion's.
+  - **Nothing is logged on success**, and a failure aborts the run — silence is a pass, and
+    one script is one assertion budget rather than a report over many.
 
 ### Typed `gv.invoke` paths
 
@@ -216,9 +234,21 @@ The mechanism is an ambient interface merged into from a generated file:
   requests are skipped (`gv.invoke` rejects them), as is any name containing `/`,
   which `splitInvokePath` would resolve elsewhere.
 - `gvRequestMapDts` (`proto-types.ts`) turns that list into
-  `gv-requests.d.ts`, importing each `<Message>Json` from the already-registered
-  generated `./gen/**_pb` modules under a positional alias (two files may export the
-  same symbol). `Editor.tsx` registers it beside `request-message.d.ts`.
+  `gv-requests.d.ts`, importing each `<Message>Json` from the generated `./gen/**_pb`
+  modules under a positional alias (two files may export the same symbol).
+
+**The registration is app-level, not per-editor** (`gv-types.ts`'s `useGvInvokeTypes`,
+called once from `App.tsx`'s `CurrentView` *above* its early returns). `gv.invoke` is
+callable from every script surface, so the two **collection-scoped** libs — the generated
+`file:///grpcview/request/gen/**` modules and `gv-requests.d.ts` — cannot belong to the body
+editor: owned there, they existed only while a request tab was open with a method selected,
+and the Scripts view (which mounts no body editor) got `keyof GvRequestMap === never` and
+`body: any`. Only the **method-scoped** `request-message.d.ts` alias stays in `Editor.tsx`.
+Two consequences to keep: both must keep the same `file:///grpcview/request/` prefix, since
+that shared prefix is what resolves the alias's relative `./gen/…` import; and the hook uses
+a direct `import * as monaco from "monaco-editor"` rather than `useMonaco()`, which returns
+null until the loader runs on the first editor mount — the very coupling being removed
+(`monaco-nocturne.ts` does `loader.config({ monaco })`, so they are one instance).
 
 Degradation is the point: no descriptor set, an unresolvable symbol or an empty
 collection means no map, `keyof GvRequestMap` is `never`, and every path falls back
@@ -336,7 +366,14 @@ Consequences worth preserving, each of which was a bug before:
   keeps the two questions visually separate too: the request header's chip names
   the source the **schema** came from (`schemaSourceFor`, off
   `Resolved.won_service_names`), while the target bar under it shows where the
-  request is **sent**. Neither is "no source" merely because the other is absent.
+  request is **sent**. Neither is "no source" merely because the other is absent — and the
+  target field is **always editable**, never a message telling you to go add a reflection
+  source. `resolveTarget` honors a per-request override *before* it looks at the sources, so a
+  collection whose schema came from an upload or a bazel label is invokable by typing an
+  address; refusing to accept one was the bug. With nothing set the field is an empty
+  `host:port` prompt, and `MethodHeader` gates Invoke on the target's **address** rather than
+  on a `Server` existing, because an override starts life empty the moment the field is
+  touched and dialing `""` is not an invoke.
 
 **Definitions are shared; the order stays per collection.** Five collections pointing
 at one target must not mean five copies of its config, but precedence is per
@@ -657,6 +694,24 @@ is shipped.
   dialog suggests **no** directory, unlike the empty state, which offers the path
   that just came back `NotFound`: with nothing already asked for, a default of `"."`
   would scatter a `grpcview.json` across the repo root on a stray Enter.
+- **Both of a collection's names are editable, and they are different jobs.**
+  `UpdateCollection` takes `name` and `new_collection`, each proto3-optional so an omitted
+  field is left alone (an *empty* `name` resets it to the directory's base name).
+  `Collection.SetName` is a manifest write; `new_collection` is a **move**, so `Store.Rename`
+  `os.Rename`s the directory and then moves the collection's local state dir — run history
+  lives there — log-and-continue, because the directory move is already committed and
+  returning an error would be a lie. It refuses `"."` on either side (a collection at `"."`
+  *is* the workspace root, so moving it would move the workspace), an existing destination, a
+  destination inside the source, and a destination nested under another collection (a
+  collection is a leaf; the scan prunes at a hit, so a nested one would be invisible). Both
+  cached handles are dropped from `Store.colls` before re-`Open`, since a handle caches
+  `root`/`state`/`id` and a stale one keeps addressing the old path, and the handler
+  invalidates the definitions memo under the **old** key while it is still addressable.
+  Client-side, the id is the first segment of every `itemKey`, so `ui-store.ts`'s
+  `renameCollection` runs the **same** prefix remapper `moveSubtree` does (`remapKeyedState`
+  — there is still exactly one) plus `OpenTab.collection` and `activeCollection`; the old
+  id's `Get` entry is then dropped, *after* the remap, or a live observer still pointed at it
+  refetches and gets `NotFound`.
 - **The TopBar picker is where a collection is switched**, and switching is pure UI
   state (`activeCollection`) because every query key is built from the active id —
   no reload, no refetch of anything but the collection now addressed. A row is

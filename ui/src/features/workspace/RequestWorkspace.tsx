@@ -20,7 +20,6 @@ import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
 import { TypesModal } from "./TypesModal";
 import { migrateBodyToTs } from "./body-wrapper";
-import { collectInvokeTargets } from "./gv-requests";
 import { defaultMetadataModule, migrateMetadataToTs } from "./metadata-wrapper";
 import type { GeneratorDef } from "./generator-libs";
 
@@ -86,13 +85,6 @@ export function RequestWorkspace() {
     [services, request]
   );
   const kind = methodKind(activeMethod);
-
-  // Every unary saved request in this collection, so the body editor can type gv.invoke()'s
-  // path and response. Recomputed on any tree or descriptor change: a rename moves a path.
-  const invokeTargets = useMemo(
-    () => collectInvokeTargets(rootItems, services),
-    [rootItems, services]
-  );
 
   const generators = useMemo<GeneratorDef[]>(
     () =>
@@ -326,7 +318,6 @@ export function RequestWorkspace() {
           descriptorSet={workspace?.descriptorSet}
           inputPackage={activeMethod?.input?.package}
           inputFile={activeMethod?.input?.file}
-          invokeTargets={invokeTargets}
           generators={generators}
         />
         <ResponsePane

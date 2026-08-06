@@ -156,6 +156,37 @@ func (w Workspace) CreateCollection(ctx context.Context, request *connect.Reques
 	return connect.NewResponse(&grpcviewv1.CreateCollectionResponse{Collection: ws}), nil
 }
 
+func (w Workspace) UpdateCollection(ctx context.Context, request *connect.Request[grpcviewv1.UpdateCollectionRequest]) (*connect.Response[grpcviewv1.UpdateCollectionResponse], error) {
+	coll, err := w.store.Open(ctx, request.Msg.GetCollection())
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	if request.Msg.Name != nil {
+		if err := coll.SetName(ctx, request.Msg.GetName()); err != nil {
+			return nil, toConnectError(err)
+		}
+		// The cached listing carries the display name.
+		w.store.InvalidateList()
+	}
+
+	if request.Msg.NewCollection != nil && request.Msg.GetNewCollection() != request.Msg.GetCollection() {
+		// The memo is keyed by collection id, and the rename changes it: drop the old entry while it is still
+		// addressable, or nothing will ever invalidate it again.
+		w.defs.invalidate(coll.Key())
+		moved, err := w.store.Rename(ctx, request.Msg.GetCollection(), request.Msg.GetNewCollection())
+		if err != nil {
+			return nil, toConnectError(err)
+		}
+		coll = moved
+	}
+
+	ws, err := w.loadCollection(ctx, coll)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&grpcviewv1.UpdateCollectionResponse{Collection: ws}), nil
+}
+
 func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error) {
 	coll, ws, err := w.openWithSources(ctx, request.Msg.GetCollection())
 	if err != nil {

@@ -21,6 +21,7 @@ import {
   get,
   listCollections,
   createCollection,
+  updateCollection,
   createFolder,
   createRequest,
   deleteRequest,
@@ -178,6 +179,39 @@ export function useCreateCollection() {
       );
       void qc.invalidateQueries({ queryKey: listKey });
       setActiveCollection(id);
+    },
+  });
+}
+
+// Renames a collection's display name, its directory, or both. A directory change moves it
+// on disk and so changes its id — which is the first segment of every slug key — so the
+// store has to remap all of them (renameCollection), and the old id's Get entry has to go:
+// it names a directory that no longer exists, and left cached it would keep answering a
+// stale snapshot for anything that asks about the old id.
+//
+// The old id comes off the mutation's own variables rather than the active collection: this
+// hook resolves once per render, and by the time onSuccess runs the active id may already be
+// the new one.
+export function useUpdateCollection() {
+  const qc = useQueryClient();
+  const transport = useTransport();
+  const listKey = useCollectionsKey();
+  const renameCollection = useUIStore((s) => s.renameCollection);
+  return useMutation(updateCollection, {
+    onSuccess: (res, vars) => {
+      const id = res.collection?.id;
+      if (!id) return;
+      qc.setQueryData(
+        keyForCollection(transport, id),
+        create(GetResponseSchema, { collection: res.collection })
+      );
+      void qc.invalidateQueries({ queryKey: listKey });
+      const oldId = vars.collection ?? "";
+      if (!oldId || oldId === id) return;
+      // Remap BEFORE dropping the old entry: removeQueries notifies live observers, and one
+      // still pointed at the old id would refetch it and get NotFound.
+      renameCollection(oldId, id);
+      qc.removeQueries({ queryKey: keyForCollection(transport, oldId) });
     },
   });
 }

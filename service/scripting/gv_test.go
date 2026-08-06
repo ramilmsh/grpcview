@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -151,6 +152,182 @@ func TestGvInvokeStubDefaultsParams(t *testing.T) {
 	if envelope.Path != "solo" || len(envelope.Params) != 0 {
 		t.Fatalf("request envelope = %+v, want path=\"solo\" params={}", envelope)
 	}
+}
+
+func TestGvAssertPasses(t *testing.T) {
+	e := newEngine(t)
+	src := `gv.assert("a bool", true);
+gv.assert("a sync fn", function () { return 1 < 2; });
+gv.assert("truthiness, not === true", "non-empty");
+const r = gv.assert("returns undefined", true);
+({ ok: true, returned: r === undefined })`
+	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := `{"ok":true,"returned":true}`
+	if string(res.Value) != want {
+		t.Fatalf("value = %s, want %s", res.Value, want)
+	}
+	if len(res.Logs) != 0 {
+		t.Fatalf("logs = %+v, want none (silence is a pass)", res.Logs)
+	}
+}
+
+func TestGvAssertFailsSync(t *testing.T) {
+	for _, tc := range []struct{ name, src, want string }{
+		{"falsy-bool", `gv.assert("bool is false", false)`, "assertion failed: bool is false"},
+		{"falsy-fn", `gv.assert("fn is false", function () { return false; })`, "assertion failed: fn is false"},
+		{"throwing-fn", `gv.assert("fn blew up", function () { throw new Error("inner boom"); })`,
+			"assertion failed: fn blew up: inner boom"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEngine(t)
+			_, err := e.RunScenario(context.Background(), tc.src, Grant{}, Input{})
+			var je *JSError
+			if !errors.As(err, &je) {
+				t.Fatalf("got %v, want *JSError", err)
+			}
+			if !strings.Contains(je.Message, tc.want) {
+				t.Fatalf("message = %q, want it to contain %q", je.Message, tc.want)
+			}
+			if !strings.Contains(je.Message, "AssertionError") {
+				t.Fatalf("message = %q, want it to name AssertionError", je.Message)
+			}
+		})
+	}
+}
+
+func TestGvAssertReportsTheCallersLine(t *testing.T) {
+	e := newEngine(t)
+	src := "const a = 1;\nconst b = 2;\ngv.assert(\"a equals b\", a === b);\n"
+	_, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+	var je *JSError
+	if !errors.As(err, &je) {
+		t.Fatalf("got %v, want *JSError", err)
+	}
+	// The throw happens inside the prelude shim, so an unfiltered stack would report a prelude line.
+	if je.Line != 3 {
+		t.Fatalf("line = %d, want 3 (the failing assertion's own line)", je.Line)
+	}
+}
+
+func TestGvAssertSyncFailureIsNotAPromise(t *testing.T) {
+	e := newEngine(t)
+	src := `let threwSynchronously = false;
+try { gv.assert("sync throw", false); } catch (e) { threwSynchronously = e.name === "AssertionError"; }
+({ threwSynchronously })`
+	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if string(res.Value) != `{"threwSynchronously":true}` {
+		t.Fatalf("value = %s, want a synchronous throw (an unawaited rejection would be dropped)", res.Value)
+	}
+}
+
+func TestGvAssertAsync(t *testing.T) {
+	e := newEngine(t)
+	res, err := e.RunScenario(context.Background(),
+		`await gv.assert("async true", async () => true); "done"`, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("async true run: %v", err)
+	}
+	if string(res.Value) != `"done"` {
+		t.Fatalf("async true value = %s, want \"done\"", res.Value)
+	}
+
+	for _, tc := range []struct{ name, src, want string }{
+		{"async-false", `await gv.assert("async is false", async () => false)`,
+			"assertion failed: async is false"},
+		{"bare-promise-false", `await gv.assert("promise is false", Promise.resolve(false))`,
+			"assertion failed: promise is false"},
+		{"async-rejects", `await gv.assert("async blew up", async () => { throw new Error("async boom"); })`,
+			"assertion failed: async blew up: async boom"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEngine(t)
+			_, err := e.RunScenario(context.Background(), tc.src, Grant{}, Input{})
+			var je *JSError
+			if !errors.As(err, &je) {
+				t.Fatalf("got %v, want *JSError", err)
+			}
+			if !strings.Contains(je.Message, tc.want) {
+				t.Fatalf("message = %q, want it to contain %q", je.Message, tc.want)
+			}
+		})
+	}
+}
+
+func TestGvAssertBadDescription(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"missing", `gv.assert()`},
+		{"non-string", `gv.assert(42, true)`},
+		{"empty", `gv.assert("", true)`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEngine(t)
+			_, err := e.RunScenario(context.Background(), tc.src, Grant{}, Input{})
+			var je *JSError
+			if !errors.As(err, &je) {
+				t.Fatalf("got %v, want *JSError", err)
+			}
+			if !strings.Contains(je.Message, "TypeError") ||
+				!strings.Contains(je.Message, "description must be a non-empty string") {
+				t.Fatalf("message = %q, want a TypeError naming description", je.Message)
+			}
+		})
+	}
+}
+
+// gv.assert rides buildGvPrelude, which every profile's runCompiled calls — not a body-only path.
+func TestGvAssertInEveryProfile(t *testing.T) {
+	e := newEngine(t)
+	probe := `({ present: typeof gv.assert === "function", frozenOut: (gv.assert = null, typeof gv.assert === "function") })`
+	want := `{"present":true,"frozenOut":true}`
+
+	t.Run("generator", func(t *testing.T) {
+		res, err := e.RunRequestBody(context.Background(),
+			"export default function () { return "+probe+"; }", nil, Grant{}, Input{})
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		if string(res.Value) != want {
+			t.Fatalf("value = %s, want %s", res.Value, want)
+		}
+	})
+
+	t.Run("middleware", func(t *testing.T) {
+		res, err := e.RunMiddleware(context.Background(),
+			"export function handle(ctx) { ctx.metadata.probe = JSON.stringify("+probe+"); return ctx; }",
+			Grant{}, Input{})
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		var out struct {
+			Metadata struct {
+				Probe string `json:"probe"`
+			} `json:"metadata"`
+		}
+		if err := json.Unmarshal(res.Value, &out); err != nil {
+			t.Fatalf("decode %s: %v", res.Value, err)
+		}
+		if out.Metadata.Probe != want {
+			t.Fatalf("probe = %s, want %s", out.Metadata.Probe, want)
+		}
+	})
+
+	t.Run("middleware-assertion-fails-the-run", func(t *testing.T) {
+		_, err := e.RunMiddleware(context.Background(),
+			`export function handle(ctx) { gv.assert("mw check", false); return ctx; }`, Grant{}, Input{})
+		var je *JSError
+		if !errors.As(err, &je) {
+			t.Fatalf("got %v, want *JSError", err)
+		}
+		if !strings.Contains(je.Message, "assertion failed: mw check") {
+			t.Fatalf("message = %q, want it to contain the assertion failure", je.Message)
+		}
+	})
 }
 
 func TestGvInvokeStubRejects(t *testing.T) {

@@ -1485,6 +1485,120 @@ func TestDisplayNameIsNeverTheID(t *testing.T) {
 	}
 }
 
+func TestRenameMovesDirectoryAndState(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	s := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+
+	coll, err := s.Open(ctx, "a")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := coll.Create(ctx, "Payments"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := coll.CreateRequest(ctx, nil, "Get User", "acme.v1.UserService", "GetUser"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	if err := coll.AppendHistory(ctx, nil, "Get User", &grpcviewv1.History{
+		Request: &grpcviewv1.History_Request{Service: "acme.v1.UserService", Method: "GetUser", Body: []byte(`{"n":1}`)},
+	}, 0); err != nil {
+		t.Fatalf("AppendHistory: %v", err)
+	}
+
+	moved, err := s.Rename(ctx, "a", "b/c")
+	if err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if want := filepath.Join(root, "b", "c"); moved.Root() != want {
+		t.Errorf("renamed Root() = %q, want %q", moved.Root(), want)
+	}
+	if _, err := os.Stat(filepath.Join(root, "a")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the old directory must be gone (Stat: %v)", err)
+	}
+
+	col := &grpcviewstorev1.Collection{}
+	mustRead(t, filepath.Join(root, "b", "c", CollectionFileName), col)
+	if col.GetName() != "Payments" {
+		t.Errorf("manifest name after rename = %q, want %q", col.GetName(), "Payments")
+	}
+	rf := &grpcviewstorev1.Request{}
+	mustRead(t, filepath.Join(root, "b", "c", treeDir, "get-user", requestFileName), rf)
+	if rf.GetMeta().GetName() != "Get User" {
+		t.Errorf("tree content after rename: request meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
+	}
+
+	histFile := filepath.Join(moved.State(), historyDir, "get-user", historyFileName)
+	if _, err := os.Stat(histFile); err != nil {
+		t.Fatalf("history sidecar missing at the new state dir %s: %v", histFile, err)
+	}
+	hist := historyOf(t, moved, ctx, "Get User")
+	if len(hist) != 1 || string(hist[0].GetRequest().GetBody()) != `{"n":1}` {
+		t.Errorf("history after rename = %v, want the one entry to survive", hist)
+	}
+
+	if _, err := s.Open(ctx, "a"); err != nil {
+		t.Fatalf("Open of the vacated id: %v", err)
+	}
+	stale, err := s.Open(ctx, "b/c")
+	if err != nil {
+		t.Fatalf("Open(b/c): %v", err)
+	}
+	if stale.Root() != moved.Root() {
+		t.Errorf("Open(b/c).Root() = %q, want the moved directory %q", stale.Root(), moved.Root())
+	}
+}
+
+func TestRenameNoOpOnTheSameID(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	same, err := coll.store.Rename(ctx, "test", "./test")
+	if err != nil {
+		t.Fatalf("Rename to the same id: %v", err)
+	}
+	if same.Root() != coll.Root() {
+		t.Errorf("Rename to the same id returned %q, want %q", same.Root(), coll.Root())
+	}
+}
+
+func TestRenameRejections(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	s := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx := context.Background()
+
+	for _, id := range []string{"a", "taken", "outer"} {
+		coll, err := s.Open(ctx, id)
+		if err != nil {
+			t.Fatalf("Open(%q): %v", id, err)
+		}
+		if err := coll.Create(ctx, ""); err != nil {
+			t.Fatalf("Create(%q): %v", id, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		name    string
+		from    string
+		to      string
+		wantErr error
+	}{
+		{"source is the workspace root", ".", "a", ErrInvalidCollectionID},
+		{"destination is the workspace root", "a", ".", ErrInvalidCollectionID},
+		{"destination exists", "a", "taken", ErrCollectionExists},
+		{"destination inside the source", "a", "a/inner", ErrInvalidCollectionID},
+		{"destination nested under another collection", "a", "outer/inner", ErrInvalidCollectionID},
+		{"unknown source", "absent", "b", ErrNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := s.Rename(ctx, tc.from, tc.to); !errors.Is(err, tc.wantErr) {
+				t.Errorf("Rename(%q, %q) = %v, want %v", tc.from, tc.to, err, tc.wantErr)
+			}
+			if !fileExists(filepath.Join(root, "a", CollectionFileName)) {
+				t.Errorf("a rejected rename must leave the source in place")
+			}
+		})
+	}
+}
+
 func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 	root, state := t.TempDir(), t.TempDir()
 	s := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil)))
