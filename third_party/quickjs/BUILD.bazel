@@ -6,7 +6,7 @@
 # libc, wasm-ld) but the root module only registers the host-platform cc
 # toolchains, and the macOS host forces the Apple cc toolchain. Calling the compiler
 # directly sidesteps toolchain resolution entirely and works identically on a macOS
-# host and on the Linux RBE executors. See docs/design/quickjs-wasm-spike.md.
+# host and on the Linux RBE executors. See docs/design/shipped/quickjs-wasm-spike.md.
 
 exports_files(["qjs_wasm.c"])
 

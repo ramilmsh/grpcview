@@ -1,9 +1,10 @@
 # grpcview — scripting UI plan (create & use scripts)
 
-**Status:** S1–S3 shipped (2026-07-23, on `trunk`); **S4–S6 deferred.** This doc
-now tracks the *remaining* roadmap (S4–S6) plus the enduring decisions the shipped
-work rests on. Implementation detail for the shipped milestones lives in the code
-(and `AGENTS.md`), not here.
+**Status:** **shipped** — S1–S3 landed 2026-07-23 on `trunk` and the
+"author a script, then use it in a request" loop is live. What this doc is *for* now
+is the enduring decisions the shipped work rests on (§"Enduring decisions"), not a
+worklist; implementation detail lives in the code and `AGENTS.md`. The deferred
+S4–S6 milestones moved to [`roadmap.md`](../planned/roadmap.md).
 **Companion to:** [`ui-redesign-plan.md`](./ui-redesign-plan.md) (client track) and
 the QuickJS·WASM spikes ([`quickjs-wasm-spike.md`](./quickjs-wasm-spike.md),
 [`quickjs-wasm-capabilities-spike.md`](./quickjs-wasm-capabilities-spike.md)).
@@ -60,26 +61,17 @@ The "author a script, then use it in a request" loop is live:
 
 ## Deferred roadmap (S4–S6)
 
-| # | Milestone | Delivers |
-|---|---|---|
-| S4 | Capabilities · grants · launch consent · `std/http` | security |
-| S5 | npm dependency management (Dependencies · Add-package · Store · Registries) | packages |
-| S6 | Scenarios view · Environments view | test/env |
+Moved to [`roadmap.md`](../planned/roadmap.md) — S4 capabilities/grants/consent, S5
+npm dependency management, S6 Scenarios + Environments. They were three sentences of
+intent, which is a want and not a plan; each gets its own doc when it is picked up.
 
-- **S4 — Capabilities · grants · consent.** Productionize `std/http` (opt-in,
-  host-scoped) + `exec` (binary allowlist); digest-pinned per-script grants (local,
-  never committed); the Capabilities subtab (requested-vs-granted, scope,
-  worst-case); the **launch-consent** modal (foreign-origin/changed-digest
-  trigger); the **Grants** management view; `invoke()` for generators reaching
-  other requests. Unblocks the mockup's `auth.bearer`/`vault.token` examples.
-- **S5 — npm dependency management (GUI package manager).** Dependencies subtab
-  (direct + resolved tree, integrity/tamper), **Add-package** modal (registry
-  search → pin by digest), **Package store** (content-addressed, prune,
-  re-verify), **Registries** (scope mapping, priority, keychain tokens). Rides the
-  engine's existing npm resolver/store.
-- **S6 — Scenarios + Environments.** Scenarios view (list + editor + results tree +
-  call chain); Environments view (`env`/`vars`/`secrets`, resolution against them,
-  `.expires_at` caching) — which also enriches generators.
+One S4 line needs care, because half of it landed elsewhere: `gv.invoke` shipped with
+[`gv-features-plan.md`](./gv-features-plan.md) (2026-07-29), ungated — reaching a
+saved request in the same collection is not a host capability. But it shipped for
+request bodies and middleware only. **Generators still cannot invoke**, by design:
+`RunGenerator` is cached by `configDigest`, so it must see a throwing `invoke` for the
+cached prelude to stay identical run-to-run. "`invoke()` for generators" therefore
+remains open, and it is a cache-invalidation question rather than a grant question.
 
 ---
 

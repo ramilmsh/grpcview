@@ -26,7 +26,7 @@ export function flatten<T>(
       throw new Error(
         "flatten(): adapter.getChildren() returned a thenable, but flatten() " +
           "implements only the synchronous TreeDataProvider path. The promise " +
-          'path is T8 ("Async children", docs/design/tree-rewrite-plan.md) and ' +
+          'path is T8 ("Async children", docs/design/shipped/tree-rewrite-plan.md) and ' +
           "is not built yet — silently ignoring the promise would drop every " +
           "async node's children rather than fail loudly."
       );

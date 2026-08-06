@@ -6,7 +6,7 @@ depend on `DiskSink` and land in [phase 5](./phase-5-extension.md) or
 
 > **Scope.** This doc is about *editor enforcement of the module form*, which is one of
 > the two accepted body forms. The authoritative cross-surface contract is
-> [`../request-body-contract.md`](../request-body-contract.md): a body is protojson, and
+> [`request-body-contract.md`](../../request-body-contract.md): a body is protojson, and
 > a bare expression — which includes plain protojson, since valid JSON is valid TS — is
 > equally valid and reaches the wire without any of the layers below. Nothing here may
 > be read as "TypeScript is required."

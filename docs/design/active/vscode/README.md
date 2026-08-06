@@ -3,6 +3,11 @@
 **Status:** Phase 1 is **shipped** — sub-phases 1a through 1e are all on trunk and their
 behavior is documented in `AGENTS.md`. Phases 2–6 are planning only.
 
+**The track spans folders**, sorted per doc rather than as a block: phase 1 sits in
+[`shipped/vscode/`](../../shipped/vscode/) and the daemon it spun off sits in
+[`planned/`](../../planned/daemon.md), while this README and phases 2–6 stay in `active/`.
+The table below is the map; every link works from here.
+
 Every phase doc, phase 1 included, is written in the present tense about the code as it
 stood when the doc was written. Its `file.go:line` citations are the *premise* of a
 decision, not a description of trunk — for what the code does now, read `AGENTS.md`.
@@ -16,14 +21,14 @@ two architecture decisions every phase depends on.
 
 | Phase | Doc | Summary |
 |---|---|---|
-| 1 | [`phase-1-workspace.md`](./phase-1-workspace.md) | The workspace is the repo; collections are what's in it — **shipped (1a–1e)** |
+| 1 | [`phase-1-workspace.md`](../../shipped/vscode/phase-1-workspace.md) | The workspace is the repo; collections are what's in it — **shipped (1a–1e)** |
 | 2 | [`phase-2-body-files.md`](./phase-2-body-files.md) | Body + metadata become real `.ts` files on disk |
 | 3 | [`phase-3-type-sinks.md`](./phase-3-type-sinks.md) | Extract the type producer/sink seam |
 | 4 | [`phase-4-request-management.md`](./phase-4-request-management.md) | Document identity, dirty state, preview tabs, commands |
 | 5 | [`phase-5-extension.md`](./phase-5-extension.md) | The extension itself |
 | 6 | [`phase-6-optional.md`](./phase-6-optional.md) | QuickJS producer, tsserver plugin, tsgo IPC, CI checking |
 | — | [`body-contract.md`](./body-contract.md) | Enforcing the body/metadata export signature (spans 2 and 5) |
-| — | [`../daemon.md`](../daemon.md) | One daemon per workspace — was phase 1's Decision 10; depends only on 1a |
+| — | [`daemon.md`](../../planned/daemon.md) | One daemon per workspace — was phase 1's Decision 10; depends only on 1a |
 
 ---
 
@@ -125,7 +130,7 @@ Break both:
 
 ## Relationship to the descriptor explorer
 
-[`../descriptor-explorer-plan.md`](../descriptor-explorer-plan.md) has the same
+[`descriptor-explorer-plan.md`](../../planned/descriptor-explorer-plan.md) has the same
 *shape* — a derived artifact set keyed by descriptor digest, invalidated on source
 mutation, rendered into Monaco as a virtual file set. It shares the
 digest/invalidation discipline and a thin "register a virtual file set into Monaco"

@@ -1,7 +1,10 @@
 # grpcview — CLI surface: implementation plan
 
-**Status:** Plan of record. **Nothing implemented.** In-repo claims verified against the
-tree on **2026-08-03**; third-party claims on 2026-07-30.
+**Status:** **Shipped** (all nine phases, on `trunk` 2026-08-03). Behavior is documented
+in `AGENTS.md` §"The CLI"; this doc is kept for the decisions behind it, not as a
+worklist. Everything below is written in the present tense about the tree as it stood on
+**2026-08-03** (third-party claims 2026-07-30) — read its `file.go:line` citations as the
+premise of a decision, not as a description of trunk.
 
 **What this is.** A hand-written, task-shaped CLI as subcommands of the existing
 `//service/cmd` binary, built on cobra, driven by the generated Connect client. Its
@@ -19,11 +22,13 @@ deprecation windows. This is also license to break something purely to simplify.
 decisions → §5 surface → §6 architecture → §8 phases. §4 is the part to disagree with;
 everything after it is mechanical.
 
-**Companions.** [`request-body-contract.md`](./request-body-contract.md) is
+**Companions.** [`request-body-contract.md`](../request-body-contract.md) is
 **authoritative** on what a body may be — it declares anything in `docs/design/**` that
-contradicts it stale — and this plan depends on one unimplemented piece of it, scheduled
-here as **C0.2**. [`vscode/README.md`](./vscode/README.md) and
-[`mcp/README.md`](./mcp/README.md) are later surfaces over the same RPCs; C0, C1a and C2b
+contradicts it stale. The one piece of it this plan depended on shipped here as **C0.2**:
+the bare-object wrap now happens in `resolveInvokeBody`
+(`service/workspace/invoke.go:359`), not only in the browser.
+[`vscode/README.md`](../active/vscode/README.md) and
+[`mcp/README.md`](../planned/mcp/README.md) are later surfaces over the same RPCs; C0, C1a and C2b
 are written so they can build on them rather than fork.
 
 ---
@@ -47,7 +52,7 @@ or a one-off call whose body the caller already has:
 | Smoke-test a script change | `grpcview script run <name>` | humans |
 
 The third row is only viable because of
-[the body contract](./request-body-contract.md): **a request body is protojson;
+[the body contract](../request-body-contract.md): **a request body is protojson;
 TypeScript is an authoring affordance layered over it.** A shell user pipes protojson and
 is never asked to wrap it in `export default () => ({ … })`.
 
@@ -521,7 +526,7 @@ still green under `GOPROXY=off`.
 
 **Files.** `go.mod`, `go.sum`, `MODULE.bazel`.
 
-**Steps.** Follow [`mcp/phase-0-dependencies.md`](./mcp/phase-0-dependencies.md) — the
+**Steps.** Follow [`phase-0-dependencies.md`](../planned/mcp/phase-0-dependencies.md) — the
 *procedure* is the same one, though the modules are unrelated:
 1. Hand-edit `go.mod`: `github.com/spf13/cobra v1.10.2` direct; `spf13/pflag v1.0.10` and
    `inconshreveable/mousetrap v1.1.0` indirect. **Copy the exact versions from
@@ -563,7 +568,7 @@ repo-level bug this track happened to find. Measurements in [Appendix A](#append
 
 **Goal.** `resolveInvokeBody` accepts a bare protojson object, so a shell pipe, an `-f
 body.json`, and a stored bare-object body all evaluate. **Specified by
-[`request-body-contract.md`](./request-body-contract.md) §"The structural change: the
+[`request-body-contract.md`](../request-body-contract.md) §"The structural change: the
 sniff belongs to the backend"; scheduled here because C1a and C1 hard-depend on it.**
 
 **Why it is a blocker and not a nicety.** Verified three ways: the wrap exists only in the
@@ -994,7 +999,7 @@ fix is C0.1. Nothing in this plan consumes them (D5), which is why C0.1 is not i
 
 ### A.2 Comment house style
 
-[`mcp/phase-2-comments.md`](./mcp/phase-2-comments.md) holds the nine-rule house style and
+[`phase-2-comments.md`](../planned/mcp/phase-2-comments.md) holds the nine-rule house style and
 a per-RPC rewrite table. Use it rather than writing a second one. Verb-first, no leading
 identifier, first line self-contained and under ~100 chars.
 

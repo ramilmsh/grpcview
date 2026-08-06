@@ -1,6 +1,6 @@
 # Phase 5 — the extension
 
-**Prereqs:** phases [1](./phase-1-workspace.md), [2](./phase-2-body-files.md),
+**Prereqs:** phases [1](../../shipped/vscode/phase-1-workspace.md), [2](./phase-2-body-files.md),
 [3](./phase-3-type-sinks.md), [4](./phase-4-request-management.md).
 See [`README.md`](./README.md) for the approach and the sink model.
 
@@ -24,7 +24,7 @@ plumbing.
 ### 2. Backend supervisor
 
 Spawn the Go binary with `--workspace <workspaceFolder>` (the port is random —
-[`../daemon.md`](../daemon.md)), or better, let the daemon's connect-or-spawn registry do it
+[`daemon.md`](../../planned/daemon.md)), or better, let the daemon's connect-or-spawn registry do it
 and just read the registration file. Health-check, restart on crash, kill on `deactivate`.
 Which of the two is an open question in that document.
 
@@ -32,7 +32,7 @@ Which of the two is an open question in that document.
 report the port the OS chose for `:0`. Switch to `net.Listen` + `http.Serve` and report
 the resolved address — the same restructure the daemon needs for graceful shutdown. The
 `127.0.0.1` bind (today `net.IPv4zero`, `service.go:81`) lands earlier, in
-[phase 1](./phase-1-workspace.md) Decision 12, since it is a live defect rather than an
+[phase 1](../../shipped/vscode/phase-1-workspace.md) Decision 12, since it is a live defect rather than an
 extension concern.
 
 ### 3. Connect client

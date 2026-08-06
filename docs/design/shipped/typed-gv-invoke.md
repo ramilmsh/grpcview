@@ -128,7 +128,7 @@ from the map (they fall through to `any` — silent) or include them with
 *Lean 1 now, 2 as an opt-in later.*
 
 **D4 — where the producer lives.** This is a third artifact of the producer/sink
-seam already planned in [vscode/phase-3-type-sinks.md](./vscode/phase-3-type-sinks.md):
+seam already planned in [vscode/phase-3-type-sinks.md](../active/vscode/phase-3-type-sinks.md):
 a pure `(descriptorSet, requests) → dts` function with no `monaco-editor` import, so
 the VS Code disk sink gets typed invoke for free instead of reimplementing it.
 *Lean: land phase 3 first, or at minimum write the function pure inside

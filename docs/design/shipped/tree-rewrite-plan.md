@@ -1,5 +1,15 @@
 # grpcview — collection tree rewrite plan
 
+**Status:** **shipped.** T0–T2, T4, T5 and T6 are on `trunk` (2026-08-01) and the
+component's behavior is documented in `AGENTS.md` §"The collection tree". The three
+milestones that were never built — **T3** (typeahead), **T7** (polish) and **T8**
+(async children) — are carried in [`roadmap.md`](../planned/roadmap.md), which is what
+this doc's closing note demanded before it could be deleted.
+
+What keeps the doc alive is §"Why build rather than adopt a library" and the
+`What T<n> settled` sections: four libraries rejected with reasons, and the calls each
+milestone forced, several of which contradict the plan text above them.
+
 Rewrite the request-collection tree from scratch as a **standalone, data-agnostic
 React component**, with interaction UX **identical to VS Code's file explorer**.
 
@@ -237,7 +247,7 @@ implements `getTreeItem` is portable by construction — which makes portability
 you can check, not a convention to remember.
 
 The request tree stays deliberately **rich/standalone-only**: in plugin mode the
-collection is a directory of files (`docs/design/vscode/phase-1-workspace.md`), so
+collection is a directory of files (`docs/design/shipped/vscode/phase-1-workspace.md`), so
 VS Code's *file explorer* is the request tree and there is nothing to port. That
 assumption is load-bearing for this split — if the plugin ever needs a custom request
 tree, the hover-reveal gear/pencil/plus/trash affordances would have to collapse into
@@ -1135,6 +1145,11 @@ identified — neither is an app bug:
 
 Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
 convention used by the request-body and definition-sources tracks.
+
+**Carried, 2026-08-06.** T3, T7 and T8 now live in
+[`roadmap.md`](../planned/roadmap.md), including T3's compose-with-the-filter-box
+requirement and T8's ownership by the descriptor-explorer track. The condition below is
+met; what remains here is rationale, not a worklist.
 
 **Half done, 2026-08-01.** `AGENTS.md` gained a §"The collection tree" describing the
 component as it now is — the contract, the two tiers, the flat-array decision, controlled

@@ -1,9 +1,14 @@
 # Phase 1 — the workspace is the repo, collections are what's in it
 
-**Prereqs:** none. **Unblocks:** everything (the extension must be able to say "the
-collection is *this* folder"). See [`README.md`](./README.md) for the track overview.
-The workspace **daemon** was part of this phase and is now its own document:
-[`../daemon.md`](../daemon.md).
+**Status: shipped** — 1a through 1e are all on trunk (see §Sub-phases for what each
+covered and the five details 1e changed). **Prereqs:** none. **Unblocks:** everything
+(the extension must be able to say "the collection is *this* folder"). The rest of the
+track — phases 2–6 — is unbuilt and lives in
+[`active/vscode/README.md`](../../active/vscode/README.md). The workspace **daemon** was
+part of this phase and is now its own document: [`daemon.md`](../../planned/daemon.md).
+
+Its four **Open questions** at the bottom are still open, and they are inputs to phase 2
+and later rather than leftovers of this one.
 
 ## Goal
 
@@ -14,7 +19,7 @@ model is unchanged. What changes is *addressing*, plus a clean split between how
 descriptors are **acquired** and where they are **stored**, which is what lets a
 monorepo's own build outputs be the schema.
 
-`docs/design/storage.md` already states half the intent — "a workspace = **any**
+`docs/design/shipped/storage.md` already states half the intent — "a workspace = **any**
 directory the user opens" — but it was never wired: `service/workspace/workspace.go:44`
 hardcodes `store.New(filepath.Join(configDir, ".grpcview"))`, the user config dir, and
 `ui/src/lib/workspace-query.ts:35` pins the collection name to `"default"`.
@@ -189,7 +194,7 @@ colleague's stray `grpcview.json`. When absent, scan from the root for `grpcview
 **Gitignore matching comes from go-git.** `go-git/v5/plumbing/format/gitignore` is a
 standalone matcher (`ReadPatterns` collects nested `.gitignore` files, `NewMatcher(…).Match`
 answers) and does not drag in the `Status()` weaknesses recorded in
-[`../research/go-git.md`](../research/go-git.md) (line 59: it walks and hashes untracked
+[`go-git.md`](../../research/go-git.md) (line 59: it walks and hashes untracked
 files and descends into ignored dirs — that is about *status*, not pattern matching).
 go-git is landing next anyway to make the tool git-aware, and that work needs the same
 matcher for its own ignore hygiene, so this is one dependency serving two features.
@@ -257,7 +262,7 @@ directory becomes 100% committed content.
   pointerless upload's descriptors (Decision 7) cannot be re-fetched, so neither may live
   somewhere disposable. Use a state dir (`os.UserConfigDir()`-rooted), and reserve
   `os.UserCacheDir()` for the daemon's registration file, which genuinely is disposable
-  ([`../daemon.md`](../daemon.md)).
+  ([`daemon.md`](../../planned/daemon.md)).
 - **`ensureGitignore` is deleted, not fixed** (`fs.go:757-764`). Its bug — returning early
   whenever any `.gitignore` exists, and so never ignoring `.grpcview/` inside a repo that
   already has one — becomes unreachable because there is nothing left to ignore. Earlier
@@ -674,7 +679,7 @@ not the repo, so cwd-walk discovery would root the workspace inside `bazel-out`.
 
 Not a consequence of this phase — **a live defect in today's release binary**, pulled
 forward because this is when the code is open, and because it should not wait behind
-[`../daemon.md`](../daemon.md).
+[`daemon.md`](../../planned/daemon.md).
 
 `service/service.go:81` binds `net.IPv4zero` — every interface, so the server is
 LAN-reachable — and `:73-79` sets `AllowedOrigins: []string{"*"}`, so *any* web page you
@@ -691,7 +696,7 @@ internal services.
   becomes a **dev-only allowance for one known origin**, and today's `"*"` is a dev
   convenience that shipped into the release binary.
 - **Loopback is not an authorization boundary** — any local process under any local user
-  can connect. There is no token in this phase (see [`../daemon.md`](../daemon.md) for what
+  can connect. There is no token in this phase (see [`daemon.md`](../../planned/daemon.md) for what
   was considered and why it was dropped); the boundary is loopback plus origin policy, and
   the doc should say that rather than implying more.
 
@@ -740,7 +745,7 @@ should not be building CAS.
 
 1d before 1e is deliberate: the store is the thing both new kinds write into, and building
 it the other way round hides the general primitive inside the specific one. The daemon
-([`../daemon.md`](../daemon.md)) depends only on 1a and can land any time after it — the VS
+([`daemon.md`](../../planned/daemon.md)) depends only on 1a and can land any time after it — the VS
 Code extension is its second customer.
 
 ## Watch out
@@ -750,7 +755,7 @@ Code extension is its second customer.
 - **Two processes, one collection, no lock** is currently accepted (`AGENTS.md`, "The CLI").
   1a–1e make concurrent writers *likelier* (more collections, more surfaces); the daemon is
   what actually fixes it by funnelling every surface into one process. Until it lands the
-  wart is worse than today, not the same — see [`../daemon.md`](../daemon.md).
+  wart is worse than today, not the same — see [`daemon.md`](../../planned/daemon.md).
 - **`AGENTS.md` will need editing when the daemon lands**, in two places: "no
   autodetection" and the no-lock wart. Do not edit it before then — it documents shipped
   behavior, and these documents are the record of the intent.
@@ -836,7 +841,7 @@ other way.
    one process per team, or a collection at the repo root owning everything.
 2. **The field was not dead weight, it was under-used.** Reinterpreting `workspace_name`
    as a workspace-relative path keeps every handler's shape and shrinks the mechanical
-   diff to a rename — while *adding* the axis a monorepo needs. (`docs/design/mcp/` has
+   diff to a rename — while *adding* the axis a monorepo needs. (`docs/design/planned/mcp/` has
    since been corrected on this.)
 3. **The "watch out" was a design smell.** "Do not point this at your repo root or four
    entries scatter among your project files" is a warning that a layer is missing. With a

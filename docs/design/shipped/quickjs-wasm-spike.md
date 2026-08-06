@@ -1,6 +1,10 @@
 # QuickJS → WASM under Bazel — spike findings
 
-Status: **spike complete, working, green.** A pinned QuickJS is compiled to a single
+Status: **spike complete, and the engine it recommended shipped** — QuickJS-WASM is the
+production scripting engine (`service/scripting/`, `third_party/quickjs/`). This doc is
+kept for the toolchain decisions, which are still the ones the build rests on.
+
+A pinned QuickJS is compiled to a single
 `wasm32-wasi` module by Bazel (locally and analysis-clean on RBE) and executed from Go
 by the pure-Go wazero runtime, keeping the release artifact a single static CGO-free
 binary. All the bounds that goja cannot give us — a hard memory cap and a wall-clock

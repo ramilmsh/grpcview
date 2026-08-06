@@ -161,7 +161,7 @@ hand-written or model-written body is where it will bite.
 editor must not be persisted on its own. If the CLI writes `{"userId":"u_1"}` and the
 user later opens that request in the web UI, displaying it inside the hidden wrapper is
 fine; **saving** it back as `export default async () => ({ … })` is not. In a
-file-backed world ([VS Code phase 2](./vscode/phase-2-body-files.md)) that silent
+file-backed world ([VS Code phase 2](./active/vscode/phase-2-body-files.md)) that silent
 conversion is a spurious git diff on a file the user never touched. Persist the form the
 user authored; convert only on a real edit.
 
@@ -201,7 +201,7 @@ Both are contract-level cleanups for whichever track next touches the proto.
   is unrelated — validation is still protojson-unmarshal against the dynamic message,
   which is the only real enforcement either way.
 - **Type-checking is unchanged for form 1.** Form 2 opts out of the editor layers; it
-  does not weaken them. See [the enforcement layers](./vscode/body-contract.md), whose
+  does not weaken them. See [the enforcement layers](./active/vscode/body-contract.md), whose
   own conclusion — layers 1–3 are authoring UX and layer 4 is the only actual
   enforcement — is what makes accepting a bare expression safe.
 - **Generators and `gv` stay reachable from both forms**, since both end up on the entry

@@ -1,6 +1,6 @@
 # Phase 2 — body and metadata as files
 
-**Prereqs:** [phase 1](./phase-1-workspace.md). **Unblocks:** reveal-body-as-file,
+**Prereqs:** [phase 1](../../shipped/vscode/phase-1-workspace.md). **Unblocks:** reveal-body-as-file,
 CI type-checking, `import`s from shared modules. See [`README.md`](./README.md) for the
 track overview.
 
@@ -13,7 +13,7 @@ This is the highest-value phase and it is close to `writeFile(dir/body.ts, draft
 It is no longer *quite* free, though, and the reason matters: this phase was originally
 scoped on the assumption that `isCanonical`/`migrateBodyToTs` (`body-wrapper.ts`)
 guarantee every persisted body is a complete canonical module. Under
-[the body contract](../request-body-contract.md) that guarantee is gone by design — a
+[the body contract](../../request-body-contract.md) that guarantee is gone by design — a
 persisted body may be a module or a bare expression (which includes plain protojson,
 since valid JSON is valid TS), and this phase is exactly what makes a hand-written one
 easy to produce. So the split must carry the form along rather than assume it.
@@ -22,7 +22,7 @@ easy to produce. So the split must carry the form along rather than assume it.
 
 - **`tsc`-checkable and editor-agnostic.** Today the body is a JSON string; nothing
   outside the browser can check or edit it meaningfully.
-- **Line diffs.** `docs/design/storage.md` lists "diff-first" as a principle, and the
+- **Line diffs.** `docs/design/shipped/storage.md` lists "diff-first" as a principle, and the
   body is the one place it is violated — currently a single `"{\n  userId: …"` string.
 - **AI tooling sees request bodies as code**, with types in scope.
 - **`import` works.** A body could `import { authHeaders } from "../../shared/auth"`.
@@ -64,7 +64,7 @@ easy to produce. So the split must carry the form along rather than assume it.
   a `DiskSink` concern ([phase 5](./phase-5-extension.md)), *not* a split concern —
   introducing it here would be premature.
 - **Tighten the runtime contract** — see [`body-contract.md`](./body-contract.md) for the
-  editor layers and [`../request-body-contract.md`](../request-body-contract.md) for what
+  editor layers and [`request-body-contract.md`](../../request-body-contract.md) for what
   is accepted. Layer 4 (wrap unless it already default-exports → evaluate → `protojson`
   unmarshal, with an error that names the file and the field) is the only real enforcement
   and should land with this phase, since bodies are now hand-editable by anything.

@@ -1,9 +1,9 @@
 # One daemon per workspace
 
 **Status:** Planning only. **Not started.** Depends only on sub-phase 1a of
-[`vscode/phase-1-workspace.md`](./vscode/phase-1-workspace.md) — it needs a workspace root
+[`phase-1-workspace.md`](../shipped/vscode/phase-1-workspace.md) — it needs a workspace root
 to key on and nothing else. Research on the discovery mechanism is closed:
-[`research/server-discovery-and-naming.md`](./research/server-discovery-and-naming.md).
+[`server-discovery-and-naming.md`](../research/server-discovery-and-naming.md).
 
 This was Decision 10 of phase 1. It is its own document because it is its own concern: the
 daemon serves the CLI, the browser and the VS Code extension equally, and phase 1 is about
@@ -255,7 +255,7 @@ socket is a *second* transport serving only the CLI — see the open question be
 ## Why not a registered name
 
 Researched separately and **closed**:
-[`research/server-discovery-and-naming.md`](./research/server-discovery-and-naming.md).
+[`server-discovery-and-naming.md`](../research/server-discovery-and-naming.md).
 Registering a name at startup (mDNS/DNS-SD, `.local`, a loopback alias) does not replace
 the registration file, for three reasons that compound:
 
@@ -315,6 +315,6 @@ unconditionally; a name is not.
   derivable from the workspace hash), while the registration file stays for the URL, the pid,
   and executable identity. Worth it only if loopback proves insufficient in practice.
 - **Does the extension supervise its own server or use connect-or-spawn?**
-  [`vscode/phase-5-extension.md`](./vscode/phase-5-extension.md) sketches both. Reading the
+  [`phase-5-extension.md`](../active/vscode/phase-5-extension.md) sketches both. Reading the
   registration is less code and shares a process with the user's CLI, which is the whole
   point; spawning its own gives it a lifecycle it controls.

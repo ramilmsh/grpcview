@@ -1,6 +1,11 @@
 # QuickJS-in-WASM capability layer — spike findings
 
-Status: **spike complete, working, green.** Builds on `quickjs-wasm-spike.md`. The
+Status: **spike complete; the capability layer it proved is in the engine.** Note that
+*grant management* — the UI for deciding what a script may reach — is a separate, unbuilt
+concern (see [`scripting-ui-plan.md`](./scripting-ui-plan.md) S4–S6):
+everything shipped today runs fully sandboxed with no grant.
+
+Builds on [`quickjs-wasm-spike.md`](./quickjs-wasm-spike.md). The
 capability / host-function layer is proven end-to-end: an inert Node-shaped module runs
 with **no grant**; `node:fs.readFileSync` reaches a real file through **one narrow Go
 import** with a **path allowlist**; and an ungranted script is denied by **two

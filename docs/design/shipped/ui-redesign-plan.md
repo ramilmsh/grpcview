@@ -1,13 +1,14 @@
-# grpcview UI redesign — status & remaining roadmap
+# grpcview UI redesign — the Nocturne rebuild
 
-**Status:** the Nocturne rebuild has **shipped**. `ui/` was rebuilt from the
-light-themed prototype into the dark, compact Nocturne UI, and the core
-request → invoke → response loop is live and browser-verified. This doc now records
-the design source-of-truth, the enduring invariants, and the **remaining** UI
-roadmap; step-by-step build detail for shipped phases lives in the code, not here.
+**Status:** **shipped.** `ui/` was rebuilt from the light-themed prototype into the
+dark, compact Nocturne UI, and the core request → invoke → response loop is live and
+browser-verified. What this doc is *for* now is §1 (the design source of truth) and
+§2 (the invariants that must not be violated) — build detail for what shipped lives
+in the code and `AGENTS.md`. What was left over went to
+[`roadmap.md`](../planned/roadmap.md).
 
-**Companion:** [`scripting-ui-plan.md`](./scripting-ui-plan.md) (scripts track,
-S4–S6 remaining) and the QuickJS·WASM spikes.
+**Companion:** [`scripting-ui-plan.md`](./scripting-ui-plan.md) (the scripts half of
+the same rebuild) and the QuickJS·WASM spikes.
 
 ---
 
@@ -75,28 +76,19 @@ carried it well past the original Phase 0/1 budget:
 
 ---
 
-## 4. Remaining roadmap
+## 4. What was left over
 
-Each item needs design + (mostly) backend work; plan when reached.
+Moved to [`roadmap.md`](../planned/roadmap.md), because it was a wishlist rather than
+a plan — every item needed design and mostly backend work before it could be
+sequenced at all.
 
-- **Sources management (full).** Beyond add/remove: the full sources table with
-  priority/reorder, per-source service attribution, freshness/versioning, collision
-  resolution, and new source types (descriptor-set upload — currently
-  `Unimplemented` server-side — buf registry, proto files with import resolution).
-- **Streaming UI.** Surface `Method` streaming-kind in the tree/tabs (S←/CS/B⇄) and
-  build the message-cards loop / stop / msg-count on top of the shipped
-  `InvokeStreaming` backend.
-- **History UI.** A response Timeline / run-history panel over the persisted
-  `Request.history[]` (backend is done).
-- **Environments & variables.** `env`/`vars`/`secrets` and their resolution — see
-  `scripting-ui-plan.md` S6. (Note: the old `{{ }}` token + binding-editor design
-  was **superseded** by calling generators directly from typed TS bodies.)
-- **Auth / Options / Variants** request-pane tabs (middleware already shipped).
-- **Capabilities, grants, consent, npm package manager** — `scripting-ui-plan.md`
-  S4–S5.
-- **Scenarios** runner — `scripting-ui-plan.md` S6.
-- **Cross-cutting:** multi-collection switcher, ⌘K search, Git integration,
-  Settings.
+Five things this section used to list have since **shipped**: streaming UI, the
+history Timeline, the multi-collection switcher, source priority/reorder with
+per-source attribution, and descriptor-set upload. The roadmap records that, with
+the code that proves it. What genuinely remains: two more source kinds (buf
+registry, proto files with import resolution), source freshness/collision surfacing,
+the Auth/Options/Variants tabs, ⌘K and Settings (both disabled placeholders in
+`TopBar.tsx`), and the git-aware UI that [`storage.md`](./storage.md) locks in.
 
 ---
 

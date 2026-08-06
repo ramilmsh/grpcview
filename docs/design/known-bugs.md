@@ -5,37 +5,11 @@ Defects found by the codebase audit (`codebase-audit-plan.md`) but deliberately
 behavior. Each entry is written up because the fix is more than a few lines or
 needs a design call; trivial fixes were just made.
 
-Line numbers are against `1440d82` unless noted.
-
----
-
-## `gv.invoke` is unavailable on two of the three invoke paths
-
-**Impact:** a script calling `gv.invoke` works from a plain unary request and
-fails from a streaming request *and* from any saved-request invocation — which
-includes the whole CLI `invoke` path and the "invoke from the store" flow.
-
-`service/scripting.WithInvoker` is called exactly once in production, at
-`service/workspace/invoke.go:62`, inside `invokeUnary`. The shared pre-send seam
-`resolvePreSend` (`invoke.go:136`) has three callers:
-
-| caller | site | invoker in `ctx`? |
-|---|---|---|
-| `invokeUnary` | `invoke.go:78` | yes — installed at `:62` |
-| `streamInvoke` | `invoke.go:186` | **no** |
-| saved-request run | `invoke_saved.go:157` | **no** |
-
-**Fix:** move the `ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))`
-line out of `invokeUnary` and into the top of `resolvePreSend`, which already
-receives `spec` and so can build the invoker itself. One line moved; all three
-callers gain it. Add a streaming-path and a saved-path test — the existing
-coverage is `scripting/gv_test.go`, which installs the invoker by hand and so
-cannot catch this.
-
-**Note:** the audit's `D-X3-9` observes that these two paths not being the same
-seam is *why* this bug exists, so the structural unification and this fix touch
-the same lines. Do this first, as a behavior fix with its own test, then let the
-refactor land on top.
+Line numbers are against `1440d82` unless noted, so **re-verify an entry before acting on
+it** — this file is not re-checked when the code moves. An entry is deleted when its bug is
+fixed; `gv.invoke is unavailable on two of the three invoke paths` went that way on
+2026-08-06 (`WithInvoker` now sits at the top of the shared `resolvePreSend`, and
+`service/workspace/gvinvoke_test.go` covers the unary, streaming and saved paths).
 
 ---
 

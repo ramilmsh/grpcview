@@ -1,5 +1,16 @@
 # Codebase audit plan
 
+**Status:** partly run, pinned to `1440d82`. Phases 0–3 are done and their results are
+recorded inline below (scans, 17 module audits, cross-cutting synthesis, 91 triage
+decisions). **W0 shipped** on 2026-08-03 (11 commits, `bazel test //...` green): the
+deletions, the `gv.invoke` seam and unary-log status fixes, the `serviceName` guard, the
+capabilities copy correction, and the `ScriptsView.tsx` 956→92-line split. **W1–W3 and
+Phase 5 (reconcile the docs) have not run.** Note the audit's largest item — renaming
+`workspace` to `collection` across the wire and UI (D-X1-1) — is **rejected**, in both
+directions; only the narrow in-package Go rename landed. Behavior defects the audit found
+and deliberately did not fix live in
+[`known-bugs.md`](../known-bugs.md).
+
 A repo-wide tightening pass: one agent per module, run in parallel, in the spirit
 of `/simplify` — reuse, simplification, altitude — plus the two things
 `/simplify` on a diff cannot see: **naming drift** and **cross-module
@@ -95,6 +106,8 @@ Already found while sizing this plan, no agent needed:
   and `:870` cite it as the rationale for rejecting the monaco-tree approach,
   and that plan is still live (T3 typeahead unbuilt). Deleting the findings doc
   therefore also means rewriting those two references. Left for W0 + triage.
+  **Since deleted in `76bea60`**, with those citations rewritten to state their
+  conclusion inline — so the path above no longer resolves.
 
 ### Phase 0 results (run 2026-08-03)
 

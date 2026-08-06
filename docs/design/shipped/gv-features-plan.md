@@ -1,7 +1,9 @@
 # grpcview — `gv` scripting features plan
 
-**Status:** Planning complete (this doc). **Implementation not started** — by
-decision we write the plan and stop here for review.
+**Status:** **Shipped** (on `trunk` 2026-07-29). All three features landed over one
+frozen `gv` global; behavior is documented in `AGENTS.md` §"The `gv` global". The
+`.proto` descriptor-explorer follow-up split out of feature 2 is still unbuilt —
+[`descriptor-explorer-plan.md`](../planned/descriptor-explorer-plan.md).
 
 Three requested features, planned together because two of them share one new
 scripting global:
@@ -13,7 +15,7 @@ scripting global:
 3. **`gv.invoke()`** — run any saved request from inside a script, passing kwargs
    that the target reads as `gv.request.params`.
 
-**Companion docs:** [`descriptor-explorer-plan.md`](./descriptor-explorer-plan.md)
+**Companion docs:** [`descriptor-explorer-plan.md`](../planned/descriptor-explorer-plan.md)
 (the follow-up `.proto`/descriptor-explorer track split out of feature 2),
 [`scripting-ui-plan.md`](./scripting-ui-plan.md),
 [`storage.md`](./storage.md).
@@ -74,7 +76,7 @@ so the cached generator prelude stays identical run-to-run.
 
 | # | Decision | Choice | Note |
 |---|----------|--------|------|
-| D1 | Feature 2 approach | **TS types now** (reuse in-browser `protoc-gen-es`) | `.proto`/descriptor-explorer split to [`descriptor-explorer-plan.md`](./descriptor-explorer-plan.md) |
+| D1 | Feature 2 approach | **TS types now** (reuse in-browser `protoc-gen-es`) | `.proto`/descriptor-explorer split to [`descriptor-explorer-plan.md`](../planned/descriptor-explorer-plan.md) |
 | D2 | Folder inheritance semantics | **Spread-driven replace** ("explicit over implicit") | New requests **and folders** seeded with `{ ...gv.metadata.inherit() }` so inheritance is included by default |
 | D3 | Root/workspace metadata layer | **Folder-only for v1** | Future: make root a real folder rather than a special `Collection` metadata field |
 | D4 | Capabilities in folder metadata scripts | **Uniform** | Folder scripts see `gv.request.params` and may call `gv.invoke` — same capabilities as a request's own script |
@@ -421,7 +423,7 @@ snake_case JSON aliases).
   keep it off the shared `gv.d.ts` path.
 - **Fidelity:** the TS view drops proto field **numbers** and **comments**. That is
   the entire reason for the follow-up descriptor-explorer track (D1) — see
-  [`descriptor-explorer-plan.md`](./descriptor-explorer-plan.md).
+  [`descriptor-explorer-plan.md`](../planned/descriptor-explorer-plan.md).
 
 ---
 
@@ -475,7 +477,7 @@ by ascending risk and data-flow dependency:
 
 - **Descriptor explorer** (`.proto` view with field numbers + comments) — the
   jhump/`protoprint` track split out of feature 2 →
-  [`descriptor-explorer-plan.md`](./descriptor-explorer-plan.md).
+  [`descriptor-explorer-plan.md`](../planned/descriptor-explorer-plan.md).
 - **Root as a real folder** (D3) — rather than a special `Collection` metadata
   field, unify root into the folder model later so it participates in inheritance
   without a special case.
