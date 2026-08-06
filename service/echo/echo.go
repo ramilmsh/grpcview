@@ -1,5 +1,4 @@
-// Package echo implements a grpc-go EchoService with one method of each streaming
-// kind plus server reflection, to drive grpcview's invokes against a real server.
+// Package echo is an EchoService with one method of each streaming kind, to invoke against.
 package echo
 
 import (
@@ -16,7 +15,6 @@ import (
 	echov1 "codeberg.org/ramilmsh/grpcview/proto/echo/v1"
 )
 
-// streamDelay paces streamed sends so streaming is observable in a browser client.
 const streamDelay = 120 * time.Millisecond
 
 type Server struct {
@@ -29,7 +27,6 @@ func NewServer() echov1.EchoServiceServer {
 	return &Server{}
 }
 
-// Register registers the echo service and gRPC server reflection on s.
 func Register(s *grpc.Server) {
 	echov1.RegisterEchoServiceServer(s, NewServer())
 	reflection.Register(s)
@@ -42,7 +39,6 @@ func (*Server) Unary(_ context.Context, req *echov1.EchoRequest) (*echov1.EchoRe
 	}, nil
 }
 
-// ServerStream emits req.Count responses, or 3 when unset.
 func (*Server) ServerStream(req *echov1.EchoRequest, stream grpc.ServerStreamingServer[echov1.EchoResponse]) error {
 	ctx := stream.Context()
 

@@ -1,7 +1,4 @@
-// Package store persists a grpcview collection as a git-versionable directory tree of
-// protojson files: a grpcview.json manifest plus tree/ and scripts/. A collection's local
-// state (resolved-schema cache, run history) is kept OUTSIDE that tree entirely, under a
-// separate state root the caller supplies — see Store.New and Collection.state.
+// Package store persists a collection as a git-versionable tree of protojson files.
 package store
 
 import (
@@ -27,8 +24,6 @@ var (
 	ErrInvalidCollectionID = errors.New("invalid collection id")
 )
 
-// RequestPatch is a partial update to a request; a nil field is left unchanged.
-// Middleware and Target have no nil "unset", so SetMiddleware/SetTarget gate them.
 type RequestPatch struct {
 	Name                *string
 	Service             *string
@@ -41,22 +36,16 @@ type RequestPatch struct {
 	SetTarget           bool
 }
 
-// ScriptPatch is a partial update to a script; a nil field is left unchanged.
 type ScriptPatch struct {
 	Name   *string
 	Source *string
 }
 
-// FolderPatch is a partial update to a folder; a nil field is left unchanged.
 type FolderPatch struct {
 	Name                *string
 	DraftMetadataScript *string
 }
 
-// Store manages filesystem-backed collections rooted under a workspace: root is the
-// workspace's own directory (a collection at id "foo/bar" lives at root/foo/bar), and
-// stateRoot is where each collection's local state (caches, history) is kept instead —
-// see Collection.state for why that can't simply be a subdirectory of the collection.
 type Store struct {
 	root      string
 	stateRoot string
@@ -65,16 +54,14 @@ type Store struct {
 	mu    sync.Mutex
 	colls map[string]*Collection
 
-	// blobMu serializes the whole descriptor-store critical section — write the blobs, rewrite
-	// the writing collection's index, collect garbage — across every collection in this
-	// workspace. Collection.mu cannot do that job: it serializes ONE collection, while the
-	// blob store and its GC are workspace-wide, so without this a GC could delete a blob a
-	// concurrent writer in another collection had already written but not yet indexed.
+	// blobMu serializes the whole descriptor-store critical section — write the blobs, rewrite the writing
+	// collection's index, collect garbage — across every collection in this workspace. Collection.mu
+	// cannot do that job: it serializes ONE collection, while the blob store and its GC are
+	// workspace-wide, so a GC could delete a blob a writer in another collection had written but not yet
+	// indexed.
 	blobMu sync.Mutex
 }
 
-// New returns a Store rooting collections under root (the workspace root) and keeping
-// their local state under stateRoot; a nil logger uses slog.Default().
 func New(root, stateRoot string, logger *slog.Logger) *Store {
 	if logger == nil {
 		logger = slog.Default()
@@ -87,25 +74,15 @@ func New(root, stateRoot string, logger *slog.Logger) *Store {
 	}
 }
 
-// Root is the workspace root — the directory collection ids are relative to. It is exposed
-// so a client with a cwd of its own (the CLI) can resolve that cwd against the workspace it
-// is talking to, which it cannot do from a relative id alone.
 func (s *Store) Root() string { return s.root }
 
-// Open returns the collection handle addressed by id, a workspace-relative path ("." for
-// the workspace root itself, "services/payments/requests" for a subdirectory); it does not
-// create the collection on disk. id comes off the wire, so it is cleaned and checked against
-// traversal before anything else: an absolute path or a ".." that would resolve outside root
-// is rejected with ErrInvalidCollectionID.
 func (s *Store) Open(_ context.Context, id string) (*Collection, error) {
 	cleaned, err := cleanCollectionID(id)
 	if err != nil {
 		return nil, err
 	}
-	// Fold case before using id as a map key: on macOS's (default) case-insensitive
-	// filesystem, "Requests" and "requests" name the SAME directory, and Collection.mu is
-	// the only thing serializing writes to it — two *Collection handles on one directory
-	// would let two writers race. layout.go's uniqueSlug folds case for the identical reason.
+	// Fold case before using id as a map key: on macOS's case-insensitive filesystem "Requests" and
+	// "requests" name the SAME directory, and Collection.mu is the only thing serializing writes to it.
 	key := strings.ToLower(cleaned)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,9 +101,6 @@ func (s *Store) Open(_ context.Context, id string) (*Collection, error) {
 	return coll, nil
 }
 
-// cleanCollectionID cleans id and rejects anything that could name a path outside the
-// workspace root: an absolute path, or a ".." that survives Clean because it walks above
-// the root. "." (the workspace root itself) is legal.
 func cleanCollectionID(id string) (string, error) {
 	cleaned := filepath.Clean(id)
 	if filepath.IsAbs(cleaned) {
@@ -138,35 +112,20 @@ func cleanCollectionID(id string) (string, error) {
 	return cleaned, nil
 }
 
-// collectionStateDir computes a collection's local-state directory as a FLAT child of
-// stateRoot, keyed by a hash of the whole (case-folded) id — never by nesting the id's own
-// path segments under stateRoot.
-//
-// Nesting would collide: a collection's id is a workspace-relative path, and id "."
-// addresses the workspace root itself, so "<stateRoot>/collections/<id>/cache" would put
-// that collection's cache at "<stateRoot>/collections/cache" — exactly where a sibling
-// collection literally named "cache" would ALSO land. Any id that happens to be a prefix or
-// suffix of another id has the same problem one level up. Hashing the whole id into one
-// path segment sidesteps it regardless of depth or naming.
-//
-// foldedID must already be case-folded (strings.ToLower) by the caller: this dir is keyed
-// off the same identity as the s.colls handle map, because two different-case ids that name
-// one directory on a case-insensitive filesystem must not also get two different state dirs.
+// A FLAT child of stateRoot keyed by a hash of the whole id, never the id's own path segments nested:
+// id "." is the workspace root, so "<stateRoot>/collections/<id>/cache" would land exactly where a
+// sibling collection literally named "cache" does, and any id that is a prefix of another collides one
+// level up. foldedID must already be case-folded — this is keyed off the same identity as s.colls.
 func collectionStateDir(stateRoot, foldedID string) string {
 	return filepath.Join(stateRoot, collectionsStateSubdir, hashedName(foldedID))
 }
 
-// Collection serializes its mutations, so concurrent RPCs for one workspace can't interleave writes.
 type Collection struct {
-	// store is the workspace this collection belongs to. It is needed for the descriptor
-	// blobs, which live under the workspace state root and are shared between collections —
-	// so writing and collecting them is a workspace-level operation a collection can only ask
-	// for, never perform alone.
 	store  *Store
-	root   string // committed content: manifest, tree/, scripts/
-	state  string // local state: descriptor index, run history — see collectionStateDir
-	id     string // the workspace-relative address Store.Open was called with; never a display name
-	key    string // the case-folded id Store.Open keys its handle map on — see Key
+	root   string
+	state  string
+	id     string
+	key    string
 	logger *slog.Logger
 
 	mu sync.Mutex
@@ -175,11 +134,9 @@ type Collection struct {
 func (c *Collection) Root() string  { return c.root }
 func (c *Collection) State() string { return c.state }
 
-// Key is the store's canonical identity for this collection's DIRECTORY: the cleaned,
-// case-folded id. Anything outside the store that memoizes per collection must key it on
-// this rather than on the id it passed to Open — on a case-insensitive filesystem
-// "Requests" and "requests" are one directory (see Open), and two memo entries for one
-// directory would let an invalidation miss the entry a reader is about to use.
+// Key is the cleaned, case-folded id. Anything memoizing per collection must key on THIS rather than
+// on the id it passed to Open: two memo entries for one directory would let an invalidation miss the
+// entry a reader is about to use.
 func (c *Collection) Key() string { return c.key }
 
 func (c *Collection) collectionFilePath() string { return filepath.Join(c.root, CollectionFileName) }
@@ -187,7 +144,4 @@ func (c *Collection) treeRoot() string           { return filepath.Join(c.root, 
 func (c *Collection) scriptsRoot() string        { return filepath.Join(c.root, scriptsDir) }
 func (c *Collection) historyRoot() string        { return filepath.Join(c.state, historyDir) }
 
-// defaultName is the display name a collection gets when its manifest doesn't specify one:
-// the base name of its own directory. This holds even for id ".", since c.root for that
-// collection IS the workspace root directory — its base name is the right default too.
 func (c *Collection) defaultName() string { return filepath.Base(c.root) }

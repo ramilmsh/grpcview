@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// isolateUserConfig points os.UserConfigDir at a temp directory. HOME covers darwin
-// (~/Library/Application Support) and XDG_CONFIG_HOME covers linux, so the same test passes on
-// both without either platform reaching the developer's real trust list.
 func isolateUserConfig(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -35,8 +32,6 @@ func TestTrustRoundTrip(t *testing.T) {
 		t.Fatalf("IsTrusted after Trust = %v, %v; want true, nil", trusted, err)
 	}
 
-	// Trust is on the folder, not its content: nothing about the workspace was recorded, so
-	// changing what is in it cannot revoke it.
 	if err := os.WriteFile(filepath.Join(root, "grpcview.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +47,6 @@ func TestTrustRoundTrip(t *testing.T) {
 	}
 }
 
-// A relative path, a trailing slash and an absolute path all name one entry.
 func TestTrustNormalizesTheRoot(t *testing.T) {
 	isolateUserConfig(t)
 	root := t.TempDir()
@@ -90,7 +84,6 @@ func TestTrustIsIdempotent(t *testing.T) {
 			t.Fatalf("Trust: %v", err)
 		}
 	}
-	// One Revoke must be enough — three Trusts may not have written three entries.
 	if err := Revoke(root); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
@@ -102,8 +95,6 @@ func TestTrustIsIdempotent(t *testing.T) {
 	}
 }
 
-// A corrupt list reads as "not trusted" and is overwritten by the next Trust, rather than failing
-// forever and leaving the user with no way back.
 func TestTrustCorruptFile(t *testing.T) {
 	isolateUserConfig(t)
 	root := t.TempDir()

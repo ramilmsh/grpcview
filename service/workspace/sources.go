@@ -25,15 +25,11 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
-// Descriptor sources: each resolves independently to its own descriptors (cached per source),
-// and the workspace's services + descriptor_set are re-derived by merging those resolves in the
-// source list's priority order.
-
 type resolvedSource struct {
 	id       string
-	server   *grpcviewv1.Server // dial target; nil for an upload, which has no address
+	server   *grpcviewv1.Server
 	files    *descriptorpb.FileDescriptorSet
-	services []string // names this source SERVES — narrower than what files defines
+	services []string
 	err      error
 }
 
@@ -70,9 +66,6 @@ func resolveReflection(ctx context.Context, id string, server *grpcviewv1.Server
 	}, nil
 }
 
-// resolveUpload resolves from bytes that ARE the answer: an upload's payload, or what a bazel build
-// wrote (see resolveBazel). Neither has a ListServices to narrow it, so every service the set
-// defines is served — the one place a reflection source is different.
 func resolveUpload(id string, fds *descriptorpb.FileDescriptorSet) (*resolvedSource, error) {
 	files, err := desc.CreateFileDescriptorsFromSet(fds)
 	if err != nil {
@@ -91,9 +84,6 @@ func resolveUpload(id string, fds *descriptorpb.FileDescriptorSet) (*resolvedSou
 	return &resolvedSource{id: id, files: fds, services: names}, nil
 }
 
-// parseUpload is a plain parse: normalizing a `buf build` image's extension fields away belongs
-// at the store's write boundary (normalizeDescriptorSet), where it applies to every kind rather
-// than only to the bytes that happen to arrive through this door.
 func parseUpload(raw []byte) (*descriptorpb.FileDescriptorSet, error) {
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(raw, fds); err != nil {
@@ -102,10 +92,9 @@ func parseUpload(raw []byte) (*descriptorpb.FileDescriptorSet, error) {
 	return fds, nil
 }
 
-// bazelBuilder is the ONLY place a bazelbuild.Builder is constructed, which is what makes the
-// trust check unskippable: a build can only be started through a Builder, so every future caller
-// that wants one comes through this door and cannot add a second one that forgets to ask. Putting
-// the gate in bazelbuild itself was the alternative and is worse — that package is the mechanism and
+// The ONLY place a bazelbuild.Builder is constructed, which is what makes the trust check unskippable:
+// a build can only be started through a Builder, so no future caller can add a second door that
+// forgets to ask. Putting the gate in bazelbuild itself is worse — that package is the mechanism and
 // knows nothing about workspaces, manifests or roots.
 func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
 	root := w.store.Root()
@@ -116,8 +105,6 @@ func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
 			fmt.Errorf("failed to read whether this workspace is trusted: %w", err))
 	}
 	if !trusted {
-		// FailedPrecondition, not PermissionDenied: nothing is refusing the user, the workspace is
-		// simply in a state where building is not allowed yet, and the fix is one call away.
 		return bazelbuild.Builder{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"the workspace %s is not trusted, and resolving a bazel source runs `bazel build` — arbitrary code from this repo's BUILD files: trust the workspace first if it is yours", root))
 	}
@@ -127,16 +114,6 @@ func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
 		return bazelbuild.Builder{}, toConnectError(err)
 	}
 
-	// bazel.root is authored config naming a build cwd, not a file whose bytes are read back, so it
-	// is NOT confined to the workspace root the way an upload's path is: a grpcview workspace opened
-	// at a subdirectory of a monorepo has its bazel root ABOVE it, which is the common case and the
-	// only reason the field exists.
-	//
-	// It is still bounded, because the trust decision is about ONE root: the value is repo state a
-	// colleague commits, and without a bound trusting this workspace would authorize a build whose
-	// cwd is inside a DIFFERENT, untrusted repo — whose BUILD files then execute. So the resolved
-	// root has to be on the same line as the trusted one, an ancestor (the monorepo case) or a
-	// descendant (a nested bazel tree inside the workspace); anything sideways is refused.
 	bazelRoot := cfg.GetRoot()
 	switch {
 	case bazelRoot == "":
@@ -150,24 +127,23 @@ func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
 		bazelRoot = filepath.Join(root, bazelRoot)
 	}
 	bazelRoot = filepath.Clean(bazelRoot)
+	// bazel.root is authored config naming a build cwd, not a file whose bytes are read, so it is NOT
+	// confined to the workspace root: a grpcview workspace opened at a subdirectory of a monorepo has its
+	// bazel root ABOVE it, which is the only reason the field exists. It is still bounded, because the
+	// trust decision is about ONE root — without this, trusting this workspace would authorize a build
+	// whose cwd is inside a DIFFERENT, untrusted repo, whose BUILD files then execute.
 	if err := relatedToRoot(root, bazelRoot); err != nil {
 		return bazelbuild.Builder{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"bazel.root in %s resolves to %s, which is neither inside the trusted workspace %s nor an ancestor of it: trust covers one workspace root, and building with a cwd in an unrelated repo would run that repo's BUILD files instead",
 			store.WorkspaceFileName, bazelRoot, root))
 	}
 
-	// A zero timeout_seconds means "the default", which Builder already spells; passing 0 through
-	// keeps that one definition rather than duplicating the number here.
 	return bazelbuild.Builder{
-		Root:    bazelRoot, // cleaned above, before the bound was checked against it
+		Root:    bazelRoot,
 		Timeout: time.Duration(cfg.GetTimeoutSeconds()) * time.Second,
 	}, nil
 }
 
-// resolveBazel builds label and resolves this source from what the build wrote.
-//
-// The label is canonicalized FIRST, before anything derives an id from it, so "//pkg" and
-// "//pkg:pkg" cannot become two sources (see bazelbuild.CanonicalLabel).
 func (w Workspace) resolveBazel(ctx context.Context, id, label string) (*resolvedSource, error) {
 	canon, err := bazelbuild.CanonicalLabel(label)
 	if err != nil {
@@ -181,17 +157,13 @@ func (w Workspace) resolveBazel(ctx context.Context, id, label string) (*resolve
 	if err != nil {
 		return nil, bazelResolveError(ctx, err)
 	}
-	// A bazel source has no ListServices to narrow it, so what it SERVES is every service the built
-	// set defines — exactly an upload's rule, which is why this shares an upload's resolve.
 	return resolveUpload(id, dedupeFiles(sets))
 }
 
-// dedupeFiles concatenates the built sets, first spelling of each proto file name winning, in the
-// order cquery printed them. It is not an optimization: a merging rule (a proto_descriptor_set over
-// several proto_librarys) emits its inputs' per-target sets, so one file name legitimately appears
-// in more than one of them, and desc.CreateFileDescriptorsFromSet REJECTS a duplicate file name.
-// Deduping by name alone is safe because every copy came out of one build of one target — they are
-// the same file by construction, not two sources disagreeing (that is mergeSources' problem).
+// First spelling of each proto file name wins. Not an optimization: a merging rule emits its inputs'
+// per-target sets, so one file name legitimately appears in more than one of them, and
+// desc.CreateFileDescriptorsFromSet REJECTS a duplicate. Deduping by name alone is safe because every
+// copy came out of one build of one target.
 func dedupeFiles(sets []*descriptorpb.FileDescriptorSet) *descriptorpb.FileDescriptorSet {
 	out := &descriptorpb.FileDescriptorSet{}
 	seen := make(map[string]bool)
@@ -207,20 +179,11 @@ func dedupeFiles(sets []*descriptorpb.FileDescriptorSet) *descriptorpb.FileDescr
 	return out
 }
 
-// bazelResolveError is the ONE seam where bazelbuild's plain errors become connect codes — that
-// package returns plain errors on purpose so it stays usable outside an RPC. The message is passed
-// through untouched: each one already names its own fix (--remote_download_toplevel,
-// bazel.timeout_seconds, the stderr tail), and rewording it here would lose that.
-//
-// FailedPrecondition is the default because it describes every remaining case: the label is fine
-// and the request is fine, the workspace is simply not in a state where it can produce descriptors —
-// an unbuildable target, a target that is not a descriptor set, outputs left on a remote cache. A
-// build that ran out of its own timeout lands here too, carrying the message that names
-// bazel.timeout_seconds; only a deadline that arrives as a real context error is reported as one.
+// The ONE seam where bazelbuild's plain errors become connect codes — that package returns plain errors
+// so it stays usable outside an RPC. Messages pass through untouched: each already names its own fix.
 func bazelResolveError(ctx context.Context, err error) error {
 	switch {
 	case ctx.Err() != nil:
-		// The caller went away, so this is not the workspace's fault at all.
 		return connect.NewError(connect.CodeCanceled, err)
 	case errors.Is(err, context.DeadlineExceeded):
 		return connect.NewError(connect.CodeDeadlineExceeded, err)
@@ -229,16 +192,10 @@ func bazelResolveError(ctx context.Context, err error) error {
 	}
 }
 
-// resolveOne re-acquires one source from its POINTER. Reflection dials, bazel builds, and an upload
-// re-reads the file its add recorded — an upload with NO path is the only kind with nothing to
-// re-acquire from, and saying so is the point: silently succeeding would report a refresh that
-// re-fetched nothing.
-//
-// Every path into it is a source-MUTATING RPC: add and refresh call it directly, and the rest reach
-// it through resolveConfigured when a listed source has no stored resolve yet. Nothing on the READ
-// path stats a recipe or rebuilds a label — deriveDefinitions reports an unresolved source with
-// unresolvedReason instead — so an untrusted or unbuildable bazel source still LOADS, with the reason
-// in its Resolved.error and no acquisition triggered by somebody opening a collection.
+// Re-acquires one source from its POINTER; an upload with no path is the only kind with nothing to
+// re-acquire from. Every path into it is a source-MUTATING RPC: nothing on the READ path stats a recipe
+// or rebuilds a label, so an untrusted or unbuildable bazel source still LOADS, with the reason in its
+// Resolved.error and no acquisition triggered by opening a collection.
 func (w Workspace) resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSource) (*resolvedSource, error) {
 	id := src.GetId()
 	switch s := src.GetSource().(type) {
@@ -252,11 +209,6 @@ func (w Workspace) resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSou
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 				"source %q was uploaded with no path — a browser has a file picker and never learns one — so there is nothing to re-read: refresh it by handing the file over again", id))
 		}
-		// The recorded path is wire input too (a colleague's grpcview.json wrote it), so it is
-		// confined here exactly as it was on the add — and the READ side is where the confinement
-		// has to be STRICT: an add may decline to record a recipe it cannot confine, but nothing
-		// may ever re-read one that leaves the workspace. What comes back is the symlink-resolved
-		// path, which is what closes the check-then-read window on it.
 		real, _, err := resolveWorkspaceFile(w.store.Root(), path)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -277,20 +229,12 @@ func (w Workspace) resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSou
 	}
 }
 
-// errMissingDefinition is the one failure a REFERENCE has of its own. An entry in a collection's
-// list carrying an id and no config means "resolve this against the workspace manifest", so a
-// source that reaches any consumer with no kind at all is exactly that entry with nothing behind
-// it — a definition renamed, deleted, or (for an upload) never legal at the workspace level. The
-// message names the file to fix, because the row is in one manifest and the fix is in another.
 func errMissingDefinition(id string) error {
 	return fmt.Errorf(
 		"%s does not define the source %q this collection references: define it there, or remove the reference from this collection",
 		store.WorkspaceFileName, id)
 }
 
-// unresolvedReason is why a source in the list contributed nothing. Both cases contribute nothing
-// and neither is fatal, but only one is fixed by a refresh — a reference with no definition would
-// resolve forever without ever acquiring anything.
 func unresolvedReason(src *grpcviewv1.DescriptorSource) error {
 	if src.GetSource() == nil {
 		return errMissingDefinition(src.GetId())
@@ -336,21 +280,13 @@ func (w Workspace) resolveConfigured(
 	return out, nil
 }
 
-// mergedView is what merging the resolved sources in priority order produced: the whole derived
-// half of a collection, which is held in memory and never written to disk.
 type mergedView struct {
 	services      []*grpcviewv1.Service
 	descriptorSet []byte
 	summaries     map[string]*grpcviewv1.Resolved
-	// serviceDescs is descriptorSet in LINKED form, indexed by service full name. It is carried
-	// out of the merge rather than re-linked by whoever consumes it: linking is the expensive
-	// half of the whole operation, and the merge has already done it to decide which services
-	// survived.
-	serviceDescs map[string]*desc.ServiceDescriptor
+	serviceDescs  map[string]*desc.ServiceDescriptor
 }
 
-// summarize is the per-source half of a merge, which is independent of whether the merge itself
-// succeeds — a caller that has to report an unmergeable source list still needs these rows.
 func summarize(resolved []*resolvedSource) map[string]*grpcviewv1.Resolved {
 	summaries := make(map[string]*grpcviewv1.Resolved, len(resolved))
 	for _, rs := range resolved {
@@ -398,8 +334,6 @@ func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
 		}
 	}
 
-	// Dial attribution is deliberately separate from who won the descriptors: an upload has no
-	// address, so a service it wins still dials the first reflection source serving it.
 	dialFor := make(map[string]*grpcviewv1.Server)
 	for _, rs := range resolved {
 		if rs.server == nil {
@@ -421,8 +355,6 @@ func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
 			}
 			sd := serviceDescs[name]
 			if sd == nil {
-				// It lost its defining file to a higher-priority source that doesn't define
-				// the service, so there is nothing to resolve it against.
 				continue
 			}
 			seen[name] = true
@@ -468,9 +400,6 @@ func (w Workspace) putDescriptorState(
 	if err != nil {
 		return err
 	}
-	// A mutation still FAILS on an unmergeable source list, unlike a read (see
-	// deriveDefinitions): the user is changing the sources right now, so refusing the change is
-	// actionable where refusing to load a collection they did not touch would not be.
 	view, err := mergeSources(resolved)
 	if err != nil {
 		return err
@@ -500,10 +429,6 @@ func (w Workspace) putDescriptorState(
 	}); err != nil {
 		return err
 	}
-	// The writer invalidates, and that is the whole of the memo's coherency: nothing but these
-	// four RPCs can change a collection's descriptors. The freshly computed view is deliberately
-	// NOT grafted in — the next reader re-derives from the blobs that were just written, so
-	// there is one derivation path rather than two that could disagree.
 	w.defs.invalidate(coll.Key())
 	return nil
 }
@@ -532,7 +457,7 @@ func reorderSources(sources []*grpcviewv1.DescriptorSource, ids []string) ([]*gr
 		if !ok {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source id %q", id))
 		}
-		delete(byID, id) // so a duplicate id is rejected as unknown
+		delete(byID, id)
 		out = append(out, s)
 	}
 	return out, nil

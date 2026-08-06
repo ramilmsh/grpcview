@@ -5,8 +5,7 @@
 import { WorkspaceService } from "./service_pb";
 
 /**
- * AddDescriptorSource appends at LOWEST priority, or refreshes in place when
- * the source's id already exists.
+ * Appends at LOWEST priority, or refreshes in place when the id already exists.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.AddDescriptorSource
  */
@@ -20,55 +19,45 @@ export const removeDescriptorSource: typeof WorkspaceService["method"]["removeDe
  */
 export const refreshDescriptorSource: typeof WorkspaceService["method"]["refreshDescriptorSource"];
 /**
- * ReorderDescriptorSources sets which source wins when several describe the
- * same protos.
+ * Sets which source wins when several describe the same protos.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.ReorderDescriptorSources
  */
 export const reorderDescriptorSources: typeof WorkspaceService["method"]["reorderDescriptorSources"];
 /**
- * SetDescriptorSourceCommit moves one source's descriptors between the
- * committed sidecar and the local blob store. It never dials or builds: the
- * bytes it writes are the ones already stored, so committing a source that has
- * never resolved is InvalidArgument rather than a resolve.
+ * Moves one source's descriptors between the committed sidecar and the local
+ * blob store. Never dials or builds, so committing a source that has never
+ * resolved is InvalidArgument.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.SetDescriptorSourceCommit
  */
 export const setDescriptorSourceCommit: typeof WorkspaceService["method"]["setDescriptorSourceCommit"];
 /**
- * Get reports NOTHING implicitly: a collection that does not exist is NotFound,
- * never created on demand.
+ * A collection that does not exist is NotFound, never created on demand.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.Get
  */
 export const get: typeof WorkspaceService["method"]["get"];
 /**
- * ListCollections is deliberately cheap: it reads manifests, never trees. It is the
- * only thing a client needs before it knows which collection to Get, and since
- * Collection.descriptor_set is a merged FileDescriptorSet in bytes, eagerly Getting
- * every collection instead is the one way to make this design feel slow.
+ * Deliberately cheap: reads manifests, never trees. Eagerly Getting every
+ * collection instead is the one way to make this design feel slow.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.ListCollections
  */
 export const listCollections: typeof WorkspaceService["method"]["listCollections"];
 /**
- * SetWorkspaceTrust trusts or un-trusts this workspace ROOT — the same decision VS Code's
- * Workspace Trust makes, for the same reason: a committed bazel label means opening a repo
- * could run `bazel build`, i.e. arbitrary code. Trust is on the folder and not on its
- * content, so a manifest that changes tomorrow is still trusted.
- *
- * Revoking un-resolves NOTHING: the descriptors already stored stay, every collection keeps
- * loading, describing and invoking from them, and only a future build is refused.
+ * Trusts or un-trusts this workspace ROOT, like VS Code's Workspace Trust: a
+ * committed bazel label means opening a repo could run arbitrary code. Trust is
+ * on the folder, not its content. Revoking un-resolves nothing — only a future
+ * build is refused.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.SetWorkspaceTrust
  */
 export const setWorkspaceTrust: typeof WorkspaceService["method"]["setWorkspaceTrust"];
 /**
- * ListBazelTargets lists the workspace's descriptor-set-producing labels, so adding a
- * bazel source can be a pick instead of a recalled label. It runs `bazel query`, which
- * loads BUILD files and may fetch external repos — code from this repo — so it is
- * trust-gated exactly like a build is, and an untrusted workspace gets
- * FailedPrecondition rather than an empty list.
+ * Lists the workspace's descriptor-set-producing labels, so adding a bazel
+ * source can be a pick. Runs `bazel query`, which loads BUILD files, so it is
+ * trust-gated: an untrusted workspace gets FailedPrecondition, not an empty list.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.ListBazelTargets
  */
@@ -102,28 +91,26 @@ export const updateFolder: typeof WorkspaceService["method"]["updateFolder"];
  */
 export const moveItem: typeof WorkspaceService["method"]["moveItem"];
 /**
- * Invoke returns the status, response body, request/response metadata and latency.
+ * Returns the status, response body, request/response metadata and latency.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.Invoke
  */
 export const invoke: typeof WorkspaceService["method"]["invoke"];
 /**
- * InvokeSaved reports a status the target returned in the response, never as
- * an error.
+ * Reports a status the target returned in the response, never as an error.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.InvokeSaved
  */
 export const invokeSaved: typeof WorkspaceService["method"]["invokeSaved"];
 /**
- * DescribeMethod answers from already-resolved definitions, so it works with
- * the target down. Doc comments survive only if the winning source carried
- * them — reflection strips them, an uploaded descriptor set keeps them.
+ * Answers from already-resolved definitions, so it works with the target down.
+ * Doc comments survive only if the winning source carried them.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.DescribeMethod
  */
 export const describeMethod: typeof WorkspaceService["method"]["describeMethod"];
 /**
- * RunScript uses a fresh isolated instance: no capabilities, no collection state.
+ * Uses a fresh isolated instance: no capabilities, no collection state.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.RunScript
  */

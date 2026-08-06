@@ -10,9 +10,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 )
 
-// RunScript evaluates a script through the engine, with kind selecting the profile and calling
-// convention. A failure of the script itself is reported in the response's Error, not as a
-// Connect error.
 func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcviewv1.RunScriptRequest]) (*connect.Response[grpcviewv1.RunScriptResponse], error) {
 	if w.engine == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("scripting engine not available"))
@@ -32,12 +29,11 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 		res, runErr = w.engine.RunRequestBody(ctx, source, transitiveGenerators(source, allGens), scripting.Grant{}, scripting.Input{})
 	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
 		res, runErr = w.engine.RunMiddleware(ctx, source, scripting.Grant{}, scripting.Input{})
-	default: // UNSPECIFIED (scratchpad) or SCENARIO
+	default:
 		res, runErr = w.engine.RunScenario(ctx, source, scripting.Grant{}, scripting.Input{})
 	}
 
 	out := &grpcviewv1.RunScriptResponse{}
-	// Logs are returned even on failure, so a script that throws still surfaces what it printed.
 	for _, line := range res.Logs {
 		out.Logs = append(out.Logs, &grpcviewv1.ScriptLog{Level: line.Level, Message: line.Message})
 	}

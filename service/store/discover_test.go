@@ -10,8 +10,6 @@ import (
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 )
 
-// writeCollectionAt materializes a collection manifest at a workspace-relative path, with one
-// reflection source per address so SourceCount has something to count.
 func writeCollectionAt(t *testing.T, root, rel, name string, addresses ...string) {
 	t.Helper()
 	dir := filepath.Join(root, rel)
@@ -80,7 +78,6 @@ func TestListScansAtEveryDepth(t *testing.T) {
 	if infos[0].Name != "Payments" || infos[0].SourceCount != 2 {
 		t.Fatalf("payments = %+v, want name Payments with 2 sources", infos[0])
 	}
-	// An unnamed manifest displays as its own directory's base name, never as the id.
 	if infos[1].Name != "loadgen" || infos[1].SourceCount != 0 {
 		t.Fatalf("loadgen = %+v, want name loadgen with 0 sources", infos[1])
 	}
@@ -94,8 +91,6 @@ func TestListScansAtEveryDepth(t *testing.T) {
 func TestListPrunesAtACollection(t *testing.T) {
 	s := newTestStore(t)
 	writeCollectionAt(t, s.Root(), "requests", "Outer")
-	// Nested collections are not a supported shape, and the non-nesting invariant is what
-	// makes "<collection id>/<slug path>" an unambiguous key.
 	writeCollectionAt(t, s.Root(), "requests/tree/nested", "Inner")
 
 	assertIDs(t, mustList(t, s, false), "requests")
@@ -130,8 +125,6 @@ func TestListHonorsNestedGitignore(t *testing.T) {
 	}
 	writeCollectionAt(t, s.Root(), "app/requests", "Real")
 	writeCollectionAt(t, s.Root(), "app/target/requests", "Copied")
-	// The same name outside the .gitignore's own directory is NOT ignored: a pattern's
-	// domain is the directory that declared it.
 	writeCollectionAt(t, s.Root(), "target/requests", "Elsewhere")
 
 	assertIDs(t, mustList(t, s, false), "app/requests", "target/requests")
@@ -155,9 +148,9 @@ func TestListDeclaredWinsOverScanning(t *testing.T) {
 	writeCollectionAt(t, s.Root(), "services/ledger/requests", "Ledger")
 	writeCollectionAt(t, s.Root(), "other/requests", "Undeclared")
 	writeWorkspaceManifest(t, s.Root(),
-		"services/*/requests",    // a glob: matches what is there
-		"tools/*/requests",       // a glob matching nothing is not an error
-		"tools/loadgen/requests", // a literal typo, which must be visible
+		"services/*/requests",
+		"tools/*/requests",
+		"tools/loadgen/requests",
 	)
 
 	infos := mustList(t, s, false)
@@ -189,15 +182,12 @@ func TestListServesTheCachedIndexUntilRefresh(t *testing.T) {
 
 	assertIDs(t, mustList(t, s, false), "requests")
 
-	// Removing a manifest below the root leaves the ROOT's own mtime untouched, so a
-	// second List can only still see the collection if it came from the index.
 	if err := os.Remove(filepath.Join(s.Root(), "requests", CollectionFileName)); err != nil {
 		t.Fatalf("remove manifest: %v", err)
 	}
 	assertIDs(t, mustList(t, s, false), "requests")
 
 	assertIDs(t, mustList(t, s, true))
-	// The refreshed answer replaces the index rather than leaving the stale one behind.
 	assertIDs(t, mustList(t, s, false))
 }
 
@@ -212,7 +202,6 @@ func TestInvalidateListDropsTheIndex(t *testing.T) {
 	s.InvalidateList()
 	assertIDs(t, mustList(t, s, false))
 
-	// Dropping an index that is not there is not an error — nothing to undo.
 	s.InvalidateList()
 }
 

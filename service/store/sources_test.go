@@ -42,9 +42,6 @@ func TestNormalizeSourcesDropsAmbiguity(t *testing.T) {
 	}
 }
 
-// TestManifestBazelLabelIsCanonicalized is the other door a label comes through: `sources add //pkg`
-// canonicalizes before deriving an id, and a hand-written manifest must reach the same id — or one
-// target becomes two sources and refresh-in-place breaks.
 func TestManifestBazelLabelIsCanonicalized(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	manifest := `{
@@ -67,7 +64,6 @@ func TestManifestBazelLabelIsCanonicalized(t *testing.T) {
 		t.Fatalf("sources = %d, want 2 (an uncanonicalizable label stays visible): %v", len(got), got)
 	}
 
-	// The id `sources add //pkg` produces: the add path canonicalizes first, so the two must agree.
 	want := SourceID(&grpcviewv1.DescriptorSource{
 		Source: &grpcviewv1.DescriptorSource_Bazel{Bazel: &grpcviewv1.Bazel{Label: "//pkg:pkg"}},
 	})
@@ -77,8 +73,6 @@ func TestManifestBazelLabelIsCanonicalized(t *testing.T) {
 	if label := got[0].GetBazel().GetLabel(); label != "//pkg:pkg" {
 		t.Errorf("label = %q, want it canonicalized in place so the next write persists it", label)
 	}
-	// A label that will not canonicalize keeps its raw spelling AND its raw-derived id: it is
-	// committed config, and the row has to stay in the list carrying its own resolve error.
 	if id := got[1].GetId(); id != "bazel://x --output_base=/tmp" {
 		t.Errorf("uncanonicalizable label id = %q, want it kept raw", id)
 	}
@@ -118,8 +112,6 @@ func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 			want: "upload:buf_image.binpb",
 		},
 		{
-			// A canonical label is already a unique name for a target, so it goes into the id
-			// verbatim: the scheme prefix and the label's own leading slashes both stay.
 			name: "bazel label",
 			wire: &grpcviewv1.DescriptorSource{
 				Source: &grpcviewv1.DescriptorSource_Bazel{
@@ -129,8 +121,6 @@ func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 			want: "bazel://proto/echo/v1:echov1_proto",
 		},
 		{
-			// The path is a refresh recipe, never identity: the same file name from a different
-			// directory is the same source, so re-adding it after a git mv refreshes in place.
 			name: "upload with a path keeps the file name as its id",
 			wire: &grpcviewv1.DescriptorSource{
 				Source: &grpcviewv1.DescriptorSource_Upload{
@@ -155,9 +145,6 @@ func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 	}
 }
 
-// writeSharedDefinitions writes a workspace manifest holding shared reflection DEFINITIONS (and
-// optionally the defaults a new collection is seeded from). It never lists collections, so
-// discovery still scans — the two halves of grpcview.work.json are independent.
 func writeSharedDefinitions(t *testing.T, root string, defaults []string, addresses ...string) {
 	t.Helper()
 	ws := &grpcviewstorev1.Workspace{SchemaVersion: schemaVersion, Name: "acme"}
@@ -176,8 +163,6 @@ func writeSharedDefinitions(t *testing.T, root string, defaults []string, addres
 	}
 }
 
-// writeSourceEntries writes a collection manifest whose source list is exactly entries, so a test
-// can author a bare REFERENCE — the shape no converter produces from a wire message.
 func writeSourceEntries(t *testing.T, coll *Collection, entries ...*grpcviewstorev1.DescriptorSource) {
 	t.Helper()
 	if err := writeMessage(coll.collectionFilePath(), &grpcviewstorev1.Collection{
@@ -208,9 +193,6 @@ func diskSources(t *testing.T, coll *Collection) []*grpcviewstorev1.DescriptorSo
 	return col.GetSources()
 }
 
-// TestWorkspaceReferenceJoinsTheDefinition is the read half of the definition/list split: the
-// collection's manifest says only "this id, at this position", and the config comes from the
-// workspace.
 func TestWorkspaceReferenceJoinsTheDefinition(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	writeSharedDefinitions(t, coll.store.root, nil, "shared.example:50051")
@@ -232,7 +214,6 @@ func TestWorkspaceReferenceJoinsTheDefinition(t *testing.T) {
 	if got[0].GetOrigin() != grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
 		t.Errorf("reference origin = %v, want WORKSPACE", got[0].GetOrigin())
 	}
-	// The referencing ENTRY owns commit_descriptors; a definition never does.
 	if !got[0].GetCommitDescriptors() {
 		t.Errorf("reference lost its own commit_descriptors")
 	}
@@ -241,9 +222,6 @@ func TestWorkspaceReferenceJoinsTheDefinition(t *testing.T) {
 	}
 }
 
-// TestReferenceSurvivesAListRewrite is the invariant the whole tier rests on: every mutation
-// round-trips the list through the wire form, so a reorder must leave the manifest holding a bare
-// reference rather than a copy of the shared config.
 func TestReferenceSurvivesAListRewrite(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	const id = "reflection:shared.example:50051"
@@ -272,10 +250,6 @@ func TestReferenceSurvivesAListRewrite(t *testing.T) {
 	}
 }
 
-// TestInlineSourceTheWorkspaceDefinesCollapses is the dedup an add relies on: identity is
-// config-derived, so an entry whose id the workspace already declares carries the same config and
-// is written as a reference to it. It also pins origin as read-only — the input here claims
-// COLLECTION, there is no disk field to hold that claim, and the read says WORKSPACE.
 func TestInlineSourceTheWorkspaceDefinesCollapses(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	writeSharedDefinitions(t, coll.store.root, nil, "shared.example:50051")
@@ -300,9 +274,6 @@ func TestInlineSourceTheWorkspaceDefinesCollapses(t *testing.T) {
 	}
 }
 
-// TestWorkspaceOriginAloneWritesABareReference covers the dangling case: a reference whose
-// definition has gone must survive a rewrite as a reference rather than being erased or inlined,
-// which is what keeps it visible and removable.
 func TestWorkspaceOriginAloneWritesABareReference(t *testing.T) {
 	got := wireToDiskSource(&grpcviewv1.DescriptorSource{
 		Id:     "reflection:gone.example:50051",
@@ -316,9 +287,6 @@ func TestWorkspaceOriginAloneWritesABareReference(t *testing.T) {
 	}
 }
 
-// TestWorkspaceDefinitionRejectsAnUpload: an upload has no pointer and its bytes belong to the
-// collection that supplied them, so a workspace-level one is skipped — and a collection
-// referencing it gets a row with no kind, which the layer above reports.
 func TestWorkspaceDefinitionRejectsAnUpload(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	if err := writeMessage(filepath.Join(coll.store.root, WorkspaceFileName), &grpcviewstorev1.Workspace{
@@ -350,10 +318,6 @@ func TestWorkspaceDefinitionRejectsAnUpload(t *testing.T) {
 	}
 }
 
-// TestWorkspaceDefinitionAcceptsBazelNotUpload pins WHY an upload is skipped: the rule is the
-// missing pointer, not locality. A label re-produces its own bytes, so five collections can share
-// one definition of it — while an upload that happens to know a path is still skipped, because
-// sharing bytes a collection handed over is deliberately unbuilt.
 func TestWorkspaceDefinitionAcceptsBazelNotUpload(t *testing.T) {
 	s := newTestStore(t)
 	const label = "//proto/echo/v1:echov1_proto"
@@ -380,9 +344,6 @@ func TestWorkspaceDefinitionAcceptsBazelNotUpload(t *testing.T) {
 	}
 }
 
-// TestUploadPathRoundTrips: the recipe is authored config, and every mutation rewrites the whole
-// list through the wire form, so dropping it here would make the next reorder quietly turn a
-// refreshable upload back into a dead end.
 func TestUploadPathRoundTrips(t *testing.T) {
 	disk := &grpcviewstorev1.DescriptorSource{
 		Id: "upload:image.binpb",
@@ -422,9 +383,6 @@ func TestBazelSourceRoundTrips(t *testing.T) {
 	}
 }
 
-// TestBazelSourceTheWorkspaceDefinesStaysABareReference is the definition tier applied to the new
-// kind: a shared label must collapse to id-only on write and pick its config back up on read, so a
-// reorder in one collection cannot copy the label into every collection referencing it.
 func TestBazelSourceTheWorkspaceDefinesStaysABareReference(t *testing.T) {
 	const label = "//proto/echo/v1:echov1_proto"
 	const id = "bazel:" + label
@@ -452,8 +410,6 @@ func TestBazelSourceTheWorkspaceDefinesStaysABareReference(t *testing.T) {
 	}
 }
 
-// TestWorkspaceDefinitionIgnoresCommitDescriptors: a sidecar can only live in a collection, so the
-// flag is meaningless on a shared definition and never leaks into the collections referencing it.
 func TestWorkspaceDefinitionIgnoresCommitDescriptors(t *testing.T) {
 	s := newTestStore(t)
 	if err := writeMessage(filepath.Join(s.root, WorkspaceFileName), &grpcviewstorev1.Workspace{
@@ -480,8 +436,6 @@ func TestWorkspaceDefinitionIgnoresCommitDescriptors(t *testing.T) {
 	}
 }
 
-// TestDefaultsSeedANewCollection: defaults.sources gives a new collection a list of POINTERS, in
-// order, skipping ids nothing defines. Creating it acquires nothing.
 func TestDefaultsSeedANewCollection(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -515,9 +469,6 @@ func TestDefaultsSeedANewCollection(t *testing.T) {
 	}
 }
 
-// TestOneBlobServesTwoReferencingCollections is the sharing the definition tier promises: the CAS
-// is per workspace, so two collections referencing one definition hold one copy of its bytes with
-// no id-keyed scheme of its own.
 func TestOneBlobServesTwoReferencingCollections(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -542,8 +493,6 @@ func TestOneBlobServesTwoReferencingCollections(t *testing.T) {
 		if err := coll.PutDescriptorState(ctx, DescriptorState{
 			Sources: wire,
 			Resolves: map[string]*grpcviewstorev1.ResolvedSource{
-				// Independently built, byte-identical: two collections resolved the one target the
-				// workspace defines.
 				id: {Id: id, DescriptorSet: fdsNamed("acme/v1/user.proto"), ServiceNames: []string{"acme.v1.UserService"}},
 			},
 		}); err != nil {

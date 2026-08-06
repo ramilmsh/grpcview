@@ -21,7 +21,6 @@ func (fakeStreamConn) Send(any) error               { return nil }
 func (fakeStreamConn) ResponseHeader() http.Header  { return http.Header{} }
 func (fakeStreamConn) ResponseTrailer() http.Header { return http.Header{} }
 
-// captureHandler records every attr by key so a duplicated one is visible as such.
 type captureHandler struct{ attrs map[string][]slog.Value }
 
 func (*captureHandler) Enabled(context.Context, slog.Level) bool { return true }

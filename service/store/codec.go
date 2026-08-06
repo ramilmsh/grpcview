@@ -9,16 +9,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// schemaVersion is stamped into grpcview.json; bump it on an incompatible on-disk change.
 const schemaVersion = 1
 
 var marshalOpts = protojson.MarshalOptions{Multiline: true, Indent: "  ", EmitDefaultValues: true}
 
-// DiscardUnknown so a file written by a newer grpcview still loads.
 var unmarshalOpts = protojson.UnmarshalOptions{DiscardUnknown: true}
 
-// marshalMessage is the exact bytes of a managed file, newline included, so a caller that wants
-// to compare them against what is already on disk sees the same thing writeMessage would write.
 func marshalMessage(m proto.Message) ([]byte, error) {
 	data, err := marshalOpts.Marshal(m)
 	if err != nil {
@@ -35,7 +31,6 @@ func writeMessage(path string, m proto.Message) error {
 	return writeFileAtomic(path, data, 0o644)
 }
 
-// readMessage returns the read error unwrapped, so callers can test os.ErrNotExist.
 func readMessage(path string, m proto.Message) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -47,7 +42,6 @@ func readMessage(path string, m proto.Message) error {
 	return nil
 }
 
-// writeFileAtomic writes via a temp file + rename, so a reader never sees a torn write.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) (err error) {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
 	if err != nil {

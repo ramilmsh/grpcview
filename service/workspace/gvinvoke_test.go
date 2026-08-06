@@ -58,9 +58,6 @@ func TestGvInvokeNestedReentrancy(t *testing.T) {
 	}
 }
 
-// The Invoker rides resolvePreSend, not invokeUnary: a STREAMING request's body must be able to
-// call gv.invoke too. While it was installed by invokeUnary alone this rejected with
-// "invoke is not available in this context" and streamInvoke returned FailedPrecondition.
 func TestGvInvokeFromStreamingPath(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -99,8 +96,6 @@ func TestGvInvokeFromStreamingPath(t *testing.T) {
 	}
 }
 
-// The same seam covers the saved-request DRY RUN, which stops after resolvePreSend and so never
-// reaches invokeUnary at all: its body's gv.invoke used to reject unconditionally.
 func TestGvInvokeFromSavedDryRun(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -108,7 +103,6 @@ func TestGvInvokeFromSavedDryRun(t *testing.T) {
 	port := echoTarget(t, w, ctx, startEchoServer)
 
 	gvTarget(t, w, ctx, nil, "B", `export default () => ({ message: "id-" + gv.request.params.id })`, port)
-	// A's own target is dead: a dry run must not dial it, but B's real one is still invoked.
 	saveRequest(t, w, ctx, nil, "A", "Unary", `export default async () => {
   const b = await gv.invoke("B", { id: 5 });
   return { message: "D-ok=" + b.ok + "-body=" + b.body.message };

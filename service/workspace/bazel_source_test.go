@@ -15,9 +15,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
-// isolateTrust points wsroot's trust file at a temp directory: HOME covers darwin
-// (~/Library/Application Support), XDG_CONFIG_HOME covers linux. Without it these tests would read
-// — and write — the developer's real trust list.
 func isolateTrust(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -25,10 +22,6 @@ func isolateTrust(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
 }
 
-// fakeBazelOnPath puts an executable `bazel` shell script on PATH, so the resolve path exercises
-// exactly what it does in production — Builder.Binary is empty and the binary is looked up — rather
-// than a test-only injection point. The real PATH is kept behind it so the script's own interpreter
-// and any tool it calls still resolve.
 func fakeBazelOnPath(t *testing.T, script string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -38,14 +31,11 @@ func fakeBazelOnPath(t *testing.T, script string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// bazelWorkspace makes w's root a bazel root too (the common case: one repo, one MODULE.bazel), so
-// bazelBuilder's discovery finds it without any bazel.root config.
 func bazelWorkspace(t *testing.T, w Workspace) {
 	t.Helper()
 	writeFile(t, filepath.Join(w.store.Root(), "MODULE.bazel"), []byte("module(name = \"test\")\n"))
 }
 
-// cqueryPrinting is a fake bazel that succeeds and, for cquery, prints the given output paths.
 func cqueryPrinting(paths ...string) string {
 	return "if [ \"$1\" = cquery ]; then\n" +
 		"  printf '%s\\n' " + strings.Join(quoteAll(paths), " ") + "\n" +
@@ -67,9 +57,6 @@ func bazelAddReq(label string) *grpcviewv1.AddDescriptorSourceRequest {
 	}
 }
 
-// The whole bazel path end to end: a trusted workspace, a build, cquery naming two outputs, and a
-// proto file appearing in BOTH of them — which a merging rule produces and which the linker rejects
-// unless the resolve deduped by file name first.
 func TestAddBazelSourceResolvesAndDedupes(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -82,8 +69,6 @@ func TestAddBazelSourceResolvesAndDedupes(t *testing.T) {
 
 	health := fileDescriptorSet(t, "grpc/health/v1/health.proto")
 	writeFile(t, filepath.Join(w.store.Root(), "out", "one.bin"), health)
-	// The same file name again, in a second output. Deduping is what keeps this a resolve instead
-	// of a "duplicate file" link failure.
 	writeFile(t, filepath.Join(w.store.Root(), "out", "two.bin"), health)
 	fakeBazelOnPath(t, cqueryPrinting("out/one.bin", "out/two.bin"))
 
@@ -105,15 +90,11 @@ func TestAddBazelSourceResolvesAndDedupes(t *testing.T) {
 	if !hasService(coll.GetServices(), "Health") {
 		t.Fatalf("Health missing after a bazel resolve: %v", coll.GetServices())
 	}
-	// A build has no dial target of its own, so the service it wins has no address until some
-	// reflection source supplies one.
 	if addr := hasServiceNamed(coll.GetServices(), "grpc.health.v1.Health").GetSource().GetAddress(); addr != "" {
 		t.Errorf("a bazel source must contribute no dial target, got %q", addr)
 	}
 }
 
-// Re-adding the OTHER spelling of one label refreshes that source in place: canonicalizing before
-// the id is derived is what makes "//pkg" and "//pkg:pkg" the same source.
 func TestAddBazelSourceCanonicalizesTheID(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -142,7 +123,6 @@ func TestAddBazelSourceCanonicalizesTheID(t *testing.T) {
 	}
 }
 
-// An untrusted workspace refuses to build at all — and says trust is the fix.
 func TestAddBazelSourceRefusedWhenUntrusted(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -167,7 +147,6 @@ func TestAddBazelSourceRefusedWhenUntrusted(t *testing.T) {
 		t.Fatal("bazel was exec'd for an untrusted workspace")
 	}
 
-	// Trusting it is the whole difference.
 	writeFile(t, filepath.Join(w.store.Root(), "out.bin"), fileDescriptorSet(t, "grpc/health/v1/health.proto"))
 	fakeBazelOnPath(t, cqueryPrinting("out.bin"))
 	if err := wsroot.Trust(w.store.Root()); err != nil {
@@ -182,7 +161,6 @@ func TestAddBazelSourceRefusedWhenUntrusted(t *testing.T) {
 	}
 }
 
-// A bazel label that is really a flag never reaches a build.
 func TestAddBazelSourceRejectsABadLabel(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -207,8 +185,6 @@ func TestAddBazelSourceRejectsABadLabel(t *testing.T) {
 	}
 }
 
-// A build that fails fails the ADD, exactly as an undialable reflection target does, and the
-// bazel error text (which names the fix) survives the trip through connect.
 func TestAddBazelSourceBuildFailureFailsTheAdd(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -232,9 +208,6 @@ func TestAddBazelSourceBuildFailureFailsTheAdd(t *testing.T) {
 	}
 }
 
-// An unbuildable (here: untrusted) bazel source must still LOAD, with the reason on its row —
-// nothing on the read path may build, so a colleague's committed label cannot stop the collection
-// from opening.
 func TestBazelSourceLoadsUnresolvedWhenUntrusted(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -250,7 +223,6 @@ func TestBazelSourceLoadsUnresolvedWhenUntrusted(t *testing.T) {
 		t.Fatalf("AddDescriptorSource: %v", err)
 	}
 
-	// Revoke, drop the memo, and re-read: the stored resolve is still served, and nothing rebuilds.
 	if err := wsroot.Revoke(w.store.Root()); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
@@ -312,8 +284,6 @@ func TestSetWorkspaceTrustFlipsTheListing(t *testing.T) {
 	}
 }
 
-// An upload WITH a path has a real refresh recipe: the file is re-read and the new schema is what
-// resolves.
 func TestRefreshUploadRereadsItsPath(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -324,7 +294,7 @@ func TestRefreshUploadRereadsItsPath(t *testing.T) {
 	writeFile(t, onDisk, fileDescriptorSet(t, "grpc/health/v1/health.proto"))
 
 	add := descriptorSetAddReq(fileDescriptorSet(t, "grpc/health/v1/health.proto"))
-	add.Path = onDisk // an absolute path is accepted and stored root-relative
+	add.Path = onDisk
 	resp, err := w.AddDescriptorSource(ctx, connect.NewRequest(add))
 	if err != nil {
 		t.Fatalf("AddDescriptorSource: %v", err)
@@ -334,7 +304,6 @@ func TestRefreshUploadRereadsItsPath(t *testing.T) {
 		t.Fatalf("stored path = %q, want the root-relative %q", got, want)
 	}
 
-	// Rebuild the image with a different schema; a refresh must pick THAT up.
 	writeFile(t, onDisk, fileDescriptorSet(t, "grpc/reflection/v1/reflection.proto"))
 	refreshed, err := w.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
 		Collection: testWorkspace,
@@ -352,8 +321,6 @@ func TestRefreshUploadRereadsItsPath(t *testing.T) {
 	}
 }
 
-// Identity is the file name, so re-adding the same upload from a MOVED file edits the recipe rather
-// than spawning a second source — which is the whole reason the path is not part of the id.
 func TestAddUploadUpdatesTheRecipeInPlace(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -382,10 +349,6 @@ func TestAddUploadUpdatesTheRecipeInPlace(t *testing.T) {
 	}
 }
 
-// A path that does not confine costs the RECIPE and nothing else: the bytes are already in the
-// request and already valid, so the ordinary "add the buf image from ~/Downloads" (or a bazel-bin/
-// path, which is a symlink out of the repo) still lands — it is simply not refreshable. The strict
-// confinement lives on the READ side, which TestRefreshRefusesAnUnconfinedRecipe pins.
 func TestAddUploadOutsideTheWorkspaceRecordsNoRecipe(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -408,7 +371,6 @@ func TestAddUploadOutsideTheWorkspaceRecordsNoRecipe(t *testing.T) {
 		t.Errorf("recorded recipe = %q, want none for a file outside the workspace", got)
 	}
 
-	// With no recipe there is nothing to re-read, which is the refusal a pathless upload gets.
 	_, err = w.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
 		Collection: testWorkspace,
 		Id:         coll.GetSources()[0].GetId(),
@@ -418,8 +380,6 @@ func TestAddUploadOutsideTheWorkspaceRecordsNoRecipe(t *testing.T) {
 	}
 }
 
-// The read side stays strict: a recipe a hand-edited manifest points out of the workspace is
-// refused rather than read, which is where the untrusted-path hazard actually lives.
 func TestRefreshRefusesAnUnconfinedRecipe(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -435,7 +395,6 @@ func TestRefreshRefusesAnUnconfinedRecipe(t *testing.T) {
 	}
 	src := resp.Msg.GetCollection().GetSources()[0]
 
-	// Re-point the recorded recipe out of the workspace, the way an editor can.
 	outside := filepath.Join(t.TempDir(), "secret.binpb")
 	writeFile(t, outside, set)
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -463,8 +422,6 @@ func TestRefreshRefusesAnUnconfinedRecipe(t *testing.T) {
 	}
 }
 
-// writeBazelRoot hand-writes grpcview.work.json's bazel block, which is the repo state a colleague
-// commits — and therefore the input the confinement in bazelBuilder is about.
 func writeBazelRoot(t *testing.T, root, bazelRoot string) {
 	t.Helper()
 	manifest := fmt.Sprintf(`{
@@ -478,9 +435,6 @@ func writeBazelRoot(t *testing.T, root, bazelRoot string) {
 	}
 }
 
-// The case bazel.root exists for: a grpcview workspace opened at a subdirectory of a monorepo, whose
-// bazel root is ABOVE it. An ancestor is on the same line of descent as the trusted root, so it is
-// accepted.
 func TestBazelRootMayBeAnAncestorOfTheWorkspace(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -493,7 +447,6 @@ func TestBazelRootMayBeAnAncestorOfTheWorkspace(t *testing.T) {
 	monorepo := filepath.Dir(w.store.Root())
 	writeFile(t, filepath.Join(monorepo, "MODULE.bazel"), []byte("module(name = \"acme\")\n"))
 	writeBazelRoot(t, w.store.Root(), monorepo)
-	// cquery prints paths relative to the bazel root, so the output lands there.
 	writeFile(t, filepath.Join(monorepo, "out.bin"), fileDescriptorSet(t, "grpc/health/v1/health.proto"))
 	fakeBazelOnPath(t, cqueryPrinting("out.bin"))
 
@@ -506,8 +459,6 @@ func TestBazelRootMayBeAnAncestorOfTheWorkspace(t *testing.T) {
 	}
 }
 
-// A bazel.root pointing at an UNRELATED tree is refused: trust covers one root, and a build whose
-// cwd is somewhere else would run that repo's BUILD files on the strength of this repo's grant.
 func TestBazelRootOutsideTheTrustedWorkspaceIsRefused(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -517,7 +468,7 @@ func TestBazelRootOutsideTheTrustedWorkspaceIsRefused(t *testing.T) {
 		t.Fatalf("Trust: %v", err)
 	}
 
-	elsewhere := t.TempDir() // a sibling: neither inside the workspace nor above it
+	elsewhere := t.TempDir()
 	writeFile(t, filepath.Join(elsewhere, "MODULE.bazel"), []byte("module(name = \"other\")\n"))
 	writeBazelRoot(t, w.store.Root(), elsewhere)
 	marker := filepath.Join(w.store.Root(), "bazel-ran")
@@ -538,8 +489,6 @@ func TestBazelRootOutsideTheTrustedWorkspaceIsRefused(t *testing.T) {
 	}
 }
 
-// An upload with NO path records none, which is what keeps its refresh a refusal
-// (TestRefreshAnUploadFails) rather than a read of some other file.
 func TestAddPathlessUploadRecordsNoRecipe(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -555,8 +504,6 @@ func TestAddPathlessUploadRecordsNoRecipe(t *testing.T) {
 	}
 }
 
-// The picker's listing: a trusted workspace queries, and what bazel printed comes back
-// canonical and sorted.
 func TestListBazelTargets(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
@@ -580,8 +527,6 @@ func TestListBazelTargets(t *testing.T) {
 	}
 }
 
-// Listing EXECUTES (bazel query loads BUILD files and can fetch repos), so it is gated on
-// trust exactly like a build — and refuses before exec'ing anything.
 func TestListBazelTargetsRefusedWhenUntrusted(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)

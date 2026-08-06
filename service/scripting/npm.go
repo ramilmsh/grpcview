@@ -1,8 +1,5 @@
 package scripting
 
-// The embedded npm registry: a curated set of npm packages compiled into the binary and
-// extracted per Engine, so bare imports resolve offline while the host FS stays closed.
-
 import (
 	"embed"
 	"fmt"
@@ -11,8 +8,6 @@ import (
 	"path/filepath"
 )
 
-// BUILD.bazel's embedsrcs must glob the same tree (npm/**) for Bazel to embed these files.
-//
 //go:embed npm
 var npmRegistry embed.FS
 
@@ -45,8 +40,6 @@ func materializeNpmRegistry() (string, error) {
 		_ = os.RemoveAll(root)
 		return "", fmt.Errorf("scripting: extract npm registry: %w", err)
 	}
-	// Canonicalize: the containment check compares against the realpath esbuild reports,
-	// and on macOS os.TempDir() is /var/…, a symlink to /private/var/… .
 	if canon, err := filepath.EvalSymlinks(root); err == nil {
 		return canon, nil
 	}

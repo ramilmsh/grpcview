@@ -29,8 +29,6 @@ func uploadSource(fileName string, resolved *grpcviewv1.Resolved) *grpcviewv1.De
 	}
 }
 
-// uploadSourceWithPath is an upload the CLI added, so it recorded where the bytes came from.
-// That path is a refresh RECIPE and not an identity — the file name is still the identity.
 func uploadSourceWithPath(fileName, path string, resolved *grpcviewv1.Resolved) *grpcviewv1.DescriptorSource {
 	src := uploadSource(fileName, resolved)
 	src.GetUpload().Path = path
@@ -50,8 +48,6 @@ func committed(src *grpcviewv1.DescriptorSource) *grpcviewv1.DescriptorSource {
 	return src
 }
 
-// shared marks a row as coming from a definition in grpcview.work.json rather than from this
-// collection's own manifest — the read-only origin the server stamps.
 func shared(src *grpcviewv1.DescriptorSource) *grpcviewv1.DescriptorSource {
 	src.Origin = grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE
 	return src
@@ -60,13 +56,11 @@ func shared(src *grpcviewv1.DescriptorSource) *grpcviewv1.DescriptorSource {
 func sourcesWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Sources = []*grpcviewv1.DescriptorSource{
-		// A monorepo's shared reflection target: listed here, defined once for the workspace.
 		shared(reflectionSource("localhost:50055", &grpcviewv1.Resolved{
 			FileCount:       4,
 			ServiceNames:    []string{"auth.v1.AuthService", "echo.v1.EchoService"},
 			WonServiceNames: []string{"auth.v1.AuthService", "echo.v1.EchoService"},
 		})),
-		// The upload is the kind that most wants committing: it cannot be re-fetched.
 		committed(uploadSource("echo.binpb", &grpcviewv1.Resolved{
 			FileCount:    3,
 			ServiceNames: []string{"echo.v1.EchoService"},
@@ -78,8 +72,6 @@ func sourcesWorkspace() *grpcviewv1.Collection {
 	return ws
 }
 
-// refreshableWorkspace holds one of every kind, in priority order, so a bare refresh has to
-// make a decision about each row. Only the PATHLESS upload has no way to re-acquire itself.
 func refreshableWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Sources = []*grpcviewv1.DescriptorSource{
@@ -116,9 +108,6 @@ func TestSourcesLs(t *testing.T) {
 	}
 }
 
-// The untrusted note lives here and not on `collections ls`, and it is gated on a row that would
-// actually need the permission: a workspace full of reflection and upload sources is never nagged
-// about a capability nothing is using.
 func TestSourcesLsTrust(t *testing.T) {
 	bazelWorkspace := func(labels ...string) *grpcviewv1.Collection {
 		ws := testWorkspace()
@@ -138,8 +127,6 @@ func TestSourcesLsTrust(t *testing.T) {
 		trusted  bool
 		snapshot *grpcviewv1.Collection
 		wantNote string
-		// wantList is how many ListCollections calls the verb should make: one to resolve the
-		// collection, plus one for the trust bit only when a bazel row is there to need it.
 		wantList int
 	}{
 		{
@@ -314,10 +301,6 @@ func TestSourcesLsEmptyAndFailing(t *testing.T) {
 	}
 }
 
-// A cold `bazel build` of a real target is minutes, so the ordinary 30s deadline would kill the
-// very first bazel source anybody adds — and report it as a cancellation, which reads like a bug.
-// The verbs that may build get a long default instead; everything that only dials or reads keeps
-// the short one, and an explicit --timeout is an instruction that wins everywhere.
 func TestTheBuildingVerbsGetALongerDefaultTimeout(t *testing.T) {
 	const label = "//proto/echo/v1:echov1_proto"
 
@@ -383,8 +366,6 @@ func TestTheBuildingVerbsGetALongerDefaultTimeout(t *testing.T) {
 			fc := newFake()
 			fc.snapshot = refreshableWorkspace()
 
-			// The session opens inside the window withSession sets up, so the deadline it sees is
-			// the budget every RPC of the verb shares — the same thing invoke's timeout test reads.
 			var budget time.Duration
 			factory := func(ctx context.Context, _ *globalFlags) (session, error) {
 				deadline, ok := ctx.Deadline()
@@ -399,9 +380,6 @@ func TestTheBuildingVerbsGetALongerDefaultTimeout(t *testing.T) {
 			if code != 0 {
 				t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, out.String(), errBuf.String())
 			}
-			// The deadline was set microseconds ago, so the remaining budget is the wanted value
-			// less a sliver; a whole second of slack is generous and still cannot confuse 30s
-			// with 10m.
 			if budget > tc.want || budget < tc.want-time.Second {
 				t.Errorf("deadline is %s away, want %s", budget, tc.want)
 			}

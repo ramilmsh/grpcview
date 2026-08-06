@@ -1,9 +1,5 @@
 package cli
 
-// Which collection a verb addresses is a question about where the caller is standing, not a
-// flag they should have to repeat — see Decision 11 of docs/design/vscode/phase-1-workspace.md.
-// This file answers it, and `collections ls` shows that answer next to the alternatives.
-
 import (
 	"context"
 	"fmt"
@@ -19,16 +15,10 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// resolveCollection answers which collection this invocation addresses, in the order
-// Decision 11 fixes: an explicit --collection, else the nearest collection at or above the
-// current directory but never above the workspace root, else the workspace's only
-// collection. Anything past that is genuinely ambiguous and exits 2 — a guess here runs a
-// request against the wrong service.
 func resolveCollection(ctx context.Context, sess session, g *globalFlags) (string, error) {
 	if g.Collection != "" {
 		return g.Collection, nil
 	}
-	// Memoized: a verb that resolves twice must not list the workspace twice.
 	if g.resolved != "" {
 		return g.resolved, nil
 	}
@@ -53,10 +43,6 @@ func listCollections(ctx context.Context, sess session, refresh bool) (*grpcview
 	return resp.Msg, nil
 }
 
-// collectionForCwd applies Decision 11's rules 2 through 4 to a listing already fetched. The
-// root it walks under is the one the SERVER reported, so `--server` pointed at another
-// checkout resolves against THAT workspace; a cwd outside it simply leaves rule 2 with
-// nothing to say rather than failing.
 func collectionForCwd(listing *grpcviewv1.ListCollectionsResponse) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -85,16 +71,10 @@ func collectionForCwd(listing *grpcviewv1.ListCollectionsResponse) (string, erro
 		root, len(collections), candidates.String())}
 }
 
-// nearestCollection walks up from cwd to root, root included, and answers with the first
-// directory holding a grpcview.json — its path relative to root, slash-separated, "." for the
-// root itself. It never walks above root: what lives outside the workspace is not addressable.
 func nearestCollection(root, cwd string) (string, bool) {
 	if root == "" {
 		return "", false
 	}
-	// Symlinks resolved on both sides: on macOS a root handed over as /var/folders/... is the
-	// same directory os.Getwd reads back as /private/var/folders/..., and filepath.Rel is
-	// purely lexical.
 	root, cwd = realPath(root), realPath(cwd)
 	rel, err := filepath.Rel(root, cwd)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -136,7 +116,6 @@ func newCollectionsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Com
 			"typically one per service directory. These verbs report what is in it.\n\n" +
 			"There is no create here: `grpcview init` is the one verb that brings a\n" +
 			"collection into being.",
-		// ArbitraryArgs plus an explicit RunE: without one, cobra prints help on stdout and exits 0.
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -184,15 +163,6 @@ func newCollectionsLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.C
 	return cmd
 }
 
-// runCollectionsLs deliberately does NOT resolve a collection: a workspace with none, or with
-// too many to decide between, is precisely when this listing is worth reading.
-//
-// The text form also says NOTHING about workspace trust, though the response it was handed
-// carries the bit and `-o json` passes it straight through. This listing reads manifests and
-// never source lists — CollectionSummary carries a source COUNT and nothing about the kinds — so
-// it cannot tell a workspace that would really build something from one where no source has ever
-// needed the permission, and a warning on every listing of the latter is noise that teaches
-// people to ignore it. `sources ls` holds the full list, and prints the note there.
 func runCollectionsLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, output string, refresh bool) error {
 	switch output {
 	case outputText, outputJSON:
@@ -214,8 +184,6 @@ func runCollectionsLs(ctx context.Context, s Streams, g *globalFlags, open clien
 			return writeLine(s.Out, line)
 		}
 
-		// The marker is what a verb run from here would address, an explicit --collection
-		// included; an ambiguous cwd marks nothing rather than picking a row.
 		current := g.Collection
 		if current == "" {
 			current, _ = collectionForCwd(listing)

@@ -27,16 +27,9 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// Options configures the server. argv parsing lives in the callers, never here.
 type Options struct {
-	Port int
-	// Root is the raw --workspace override (see wsroot.Discover): the repository whose
-	// collections and local state this instance owns. Empty discovers one by walking up
-	// from the process's current directory to the nearest .git.
-	Root string
-	// DevOrigins are the cross-origin callers allowed to reach the API. The production
-	// binary serves its UI same-origin and needs none; only //service/cmd/dev, talking to
-	// the vite dev server, sets this. Empty installs no CORS handler at all.
+	Port       int
+	Root       string
 	DevOrigins []string
 }
 
@@ -102,8 +95,6 @@ func Run(
 		}).Handler(mux)
 	}
 
-	// Loopback only: nothing off-machine ever needs to connect, and a LAN-reachable
-	// grpcview hands strangers your internal services. There is deliberately no --host.
 	address := net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: opts.Port}
 	logger.InfoContext(ctx, "starting server", "address", address.String())
 	err = http.ListenAndServe(

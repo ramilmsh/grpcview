@@ -16,7 +16,6 @@ func TestCanonicalLabel(t *testing.T) {
 	accepted := []struct{ in, want string }{
 		{"//pkg/sub:target", "//pkg/sub:target"},
 		{"//pkg:target", "//pkg:target"},
-		// The shorthand takes the LAST path segment, not the whole package.
 		{"//pkg", "//pkg:pkg"},
 		{"//proto/echo/v1", "//proto/echo/v1:v1"},
 		{"pkg:target", "//pkg:target"},
@@ -26,17 +25,12 @@ func TestCanonicalLabel(t *testing.T) {
 		{"@repo//pkg", "@repo//pkg:pkg"},
 		{"@rules_go//go:def.bzl", "@rules_go//go:def.bzl"},
 		{"//proto/grpcview/v1:grpcviewv1_proto", "//proto/grpcview/v1:grpcviewv1_proto"},
-		// A target may itself contain "/".
 		{"//pkg:sub/target", "//pkg:sub/target"},
-		// A "+" in a package or target: a versioned directory.
 		{"//pkg+1:target+2", "//pkg+1:target+2"},
-		// The canonical repo names bzlmod prints, which is what a user pastes:
-		// "@@repo+" on bazel 7.2+, "@repo~version" before it.
 		{"@@rules_go+//go:def.bzl", "@@rules_go+//go:def.bzl"},
 		{"@@rules_go+//go", "@@rules_go+//go:go"},
 		{"@repo~1.0//pkg:target", "@repo~1.0//pkg:target"},
 		{"@@protobuf~3.19.6//:protoc", "@@protobuf~3.19.6//:protoc"},
-		// Surrounding whitespace is trimmed, not rejected.
 		{"  //pkg:target\t", "//pkg:target"},
 	}
 	for _, c := range accepted {
@@ -53,7 +47,6 @@ func TestCanonicalLabel(t *testing.T) {
 	rejected := []string{
 		"",
 		"   ",
-		// no package, no target, a repo without "//"
 		":target",
 		"//",
 		"@repo",
@@ -61,7 +54,6 @@ func TestCanonicalLabel(t *testing.T) {
 		"@@rules_go+",
 		"@@rules_go+:def.bzl",
 		"@repo~1.0",
-		// the flag-injection attempts
 		"//x --output_base=/tmp",
 		"--output_base=/tmp",
 		"-//pkg:target",
@@ -76,7 +68,6 @@ func TestCanonicalLabel(t *testing.T) {
 		"//pkg//sub:target",
 		"//pkg/:target",
 		"//pkg:sub/",
-		// target patterns: they expand to every target in the package
 		"//pkg/...",
 		"//...",
 		"//pkg:*",
@@ -84,7 +75,6 @@ func TestCanonicalLabel(t *testing.T) {
 		"//pkg:all-targets",
 		"pkg:all",
 		"@repo//pkg:all",
-		// the shorthand must not smuggle one in either: //pkg/all is //pkg/all:all
 		"//pkg/all",
 		"//pkg:$USER",
 		"//pkg:`id`",
@@ -103,11 +93,7 @@ func TestCanonicalLabel(t *testing.T) {
 	}
 }
 
-// Plain names that resemble rejected spellings must still be accepted, so the
-// rejection table above cannot silently over-reject.
 func TestCanonicalLabelPlainNames(t *testing.T) {
-	// "allocator" only starts with "all"; "//pkg:all" itself is a pattern and
-	// lives in the rejection table above.
 	for _, in := range []string{"//pkg:allocator", "//pkg:all_protos", "//pkg:a.b-c_d", "//a1/b2:c3"} {
 		if _, err := CanonicalLabel(in); err != nil {
 			t.Errorf("CanonicalLabel(%q) = error %v, want accepted", in, err)
@@ -115,8 +101,6 @@ func TestCanonicalLabelPlainNames(t *testing.T) {
 	}
 }
 
-// A pattern's rejection has to say WHY, because ":all" is a spelling people type
-// on the bazel command line every day and the fix is to name one target.
 func TestCanonicalLabelPatternMessage(t *testing.T) {
 	for _, in := range []string{"//pkg:all", "//pkg:all-targets", "//pkg/all"} {
 		_, err := CanonicalLabel(in)
@@ -270,9 +254,6 @@ exit 0
 	}
 }
 
-// proto.Unmarshal succeeds on the bytes of a go_binary as readily as on a
-// descriptor set, so an output that decodes to zero files means the label is the
-// wrong target — it must not resolve the source to nothing in silence.
 func TestDescriptorSetsEmptyOutput(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "out", "empty.bin"), setBytes(t))
@@ -293,8 +274,6 @@ exit 0
 	}
 }
 
-// An empty output is also caught when it is one of several: a partly-wrong
-// label must not half-resolve.
 func TestDescriptorSetsEmptyAmongOutputs(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "out", "one.bin"), setBytes(t, "a.proto"))
@@ -311,8 +290,6 @@ exit 0
 
 func TestDescriptorSetsBuildFailure(t *testing.T) {
 	root := t.TempDir()
-	// 25 lines of stderr, so the tail cap (20) is exercised: the last line must
-	// survive, the first must not.
 	binary := fakeBazel(t, `
 i=1
 while [ $i -le 24 ]; do echo "noise line $i" >&2; i=$((i+1)); done
@@ -394,9 +371,6 @@ exit 0
 	if warning != "" {
 		t.Errorf("warning = %q, want none on a clean query", warning)
 	}
-	// "//a/pkg" canonicalizes to "//a/pkg:pkg" — a THIRD label, not a duplicate of
-	// "//a/pkg:a_pkg"; deduping happens after canonicalizing, so a repeat of one spelling
-	// would have collapsed.
 	want := "//a/pkg:a_pkg,//a/pkg:a_proto,//a/pkg:pkg,//b/pkg:descriptors"
 	if got := strings.Join(labels, ","); got != want {
 		t.Errorf("labels = %q, want %q", got, want)
@@ -414,8 +388,6 @@ exit 0
 	}
 }
 
-// --keep_going: bazel exits nonzero with a partial listing on stdout, and the picker gets
-// those targets plus a warning rather than nothing at all.
 func TestQueryTargetsKeepsPartialResults(t *testing.T) {
 	root := t.TempDir()
 	binary := fakeBazel(t, `
@@ -435,7 +407,6 @@ exit 3
 	}
 }
 
-// Nonzero exit with NOTHING on stdout is a failed query, not a short one.
 func TestQueryTargetsFailsWithNoOutput(t *testing.T) {
 	root := t.TempDir()
 	binary := fakeBazel(t, "echo 'ERROR: query interrupted' >&2\nexit 7\n")
@@ -455,9 +426,6 @@ func TestQueryTargetsNeedsRoot(t *testing.T) {
 	}
 }
 
-// --- helpers ---
-
-// fakeBazel writes body into an executable /bin/sh script and returns its path.
 func fakeBazel(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "fake-bazel")
@@ -502,8 +470,6 @@ func write(t *testing.T, path string, data []byte) {
 	}
 }
 
-// assertSameDir compares two directory paths through EvalSymlinks, because
-// macOS's temp tree is reached through /var -> /private/var.
 func assertSameDir(t *testing.T, got, want string) {
 	t.Helper()
 	if got == "" {
@@ -522,9 +488,6 @@ func assertSameDir(t *testing.T, got, want string) {
 	}
 }
 
-// markerAbove reports a bazel root marker in a strict ancestor of dir, so the
-// negative FindRoot case can skip rather than fail when the temp tree happens to
-// sit inside somebody's bazel workspace.
 func markerAbove(dir string) string {
 	abs, err := filepath.Abs(dir)
 	if err != nil {

@@ -30,9 +30,6 @@ func startEchoServer(t *testing.T) int {
 	return lis.Addr().(*net.TCPAddr).Port
 }
 
-// echoTarget starts an echo server AND registers it as w's descriptor source. Invoke resolves the
-// method descriptor from the workspace's definitions, never by reflecting on the target, so a bare
-// server with nothing pointing at it is not enough to invoke against.
 func echoTarget(t *testing.T, w Workspace, ctx context.Context, start func(*testing.T) int) int {
 	t.Helper()
 	port := start(t)

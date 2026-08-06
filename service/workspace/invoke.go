@@ -40,27 +40,22 @@ const historyLimit = 50
 
 const emptyBody = "{}"
 
-// MaxFolderMetadataDepth bounds the ancestor-folder metadata chain foldAncestorMetadata walks.
 const MaxFolderMetadataDepth = 16
 
-// invokeSpec is the internal twin of grpcviewv1.InvokeSpec, plus the three things no ad-hoc
-// caller supplies: the payload, this run's params, and whether to record history.
 type invokeSpec struct {
 	workspaceName  string
-	path           []string // parent-folder display-name path, NOT including itemName
+	path           []string
 	itemName       string
 	service        string
 	method         string
 	target         *grpcviewv1.Server
 	body           string
 	metadataScript string
-	metadata       *structpb.Struct // fallback used when metadataScript is empty
+	metadata       *structpb.Struct
 	params         map[string]any
 	recordHistory  bool
 }
 
-// specFrom is the one place the wire InvokeSpec becomes the internal one, shared by both
-// ad-hoc RPCs — which is the whole point of the two of them embedding the same message.
 func specFrom(in *grpcviewv1.InvokeSpec) invokeSpec {
 	return invokeSpec{
 		workspaceName:  in.GetCollection(),
@@ -147,9 +142,8 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 	return out, nil
 }
 
-// resolvePreSend is the ONE seam every invoke path shares, so the gv.invoke Invoker is installed
-// here and nowhere else: hanging it off a single caller left it missing from the streaming and
-// dry-run paths.
+// The ONE seam every invoke path shares, so the gv.invoke Invoker is installed here and nowhere else:
+// hanging it off a single caller left it missing from the streaming and dry-run paths.
 func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies []string) ([]string, *structpb.Struct, error) {
 	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))
 
@@ -164,8 +158,6 @@ func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies [
 	return w.applyRequestMiddleware(ctx, spec.workspaceName, spec.path, spec.itemName, spec.service, spec.target, evaluatedBodies, outgoingMD, spec.params)
 }
 
-// Invoke executes a single unary RPC against the target server. A gRPC-level failure of the
-// *invoked* call is reported in the response's Status, not as a Connect error.
 func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error) {
 	spec := specFrom(request.Msg.GetSpec())
 	spec.body = request.Msg.GetBody()
@@ -177,15 +169,12 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
 }
 
-// InvokeStreaming adapts the Connect server-streaming handler onto streamInvoke.
 func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
 	spec := specFrom(request.Msg.GetSpec())
 	spec.recordHistory = true
 	return w.streamInvoke(ctx, spec, request.Msg.GetMessages(), stream.Send)
 }
 
-// streamInvoke takes the spec and the messages separately, mirroring InvokeStreamRequest, so the
-// saved form can hand over its already-resolved spec instead of re-encoding one field by field.
 func (w Workspace) streamInvoke(ctx context.Context, spec invokeSpec, messages []string, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	conn, methodDesc, cleanup, err := w.resolveMethod(ctx, spec.target, spec.workspaceName, spec.service, spec.method)
 	if err != nil {
@@ -265,8 +254,8 @@ func (w Workspace) streamInvoke(ctx context.Context, spec invokeSpec, messages [
 					return serr
 				}
 			}
-			// Header blocks until the server sends headers; Trailer is only valid once
-			// RecvMsg has returned an error (EOF included).
+			// Header blocks until the server sends headers; Trailer is only valid once RecvMsg has returned an
+			// error (EOF included).
 			header, _ = ss.Header()
 			trailer = ss.Trailer()
 		}
@@ -347,7 +336,6 @@ func (w Workspace) streamInvoke(ctx context.Context, spec invokeSpec, messages [
 	}
 
 	if spec.recordHistory {
-		// The caller's own first message, not the "{}" default and not the evaluated form.
 		var body string
 		if len(messages) > 0 {
 			body = messages[0]
@@ -368,8 +356,6 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 	}
 	out := make([]string, len(bodies))
 	for i, body := range bodies {
-		// Valid JSON is a valid TS expression but not a valid TS module; the wrapped source is
-		// also what transitiveGenerators must scan.
 		if !scripting.HasDefaultExport(body) {
 			body = "export default async () => (\n" + body + "\n)"
 		}
@@ -536,7 +522,6 @@ func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName strin
 		if lerr != nil {
 			return nil, wrapFolderError(folderPath, lerr)
 		}
-		// Whole-replace, never merge: transitivity is the script's own spread.
 		accum = lists
 	}
 	return accum, nil
@@ -614,8 +599,8 @@ func (w Workspace) recordHistory(ctx context.Context, workspaceName string, path
 			Metadata: out.GetRequestMetadata(),
 		},
 		Response: &grpcviewv1.History_Response{
-			// details is dropped: its target-defined Any types aren't in grpcview's registry
-			// and would break protojson round-tripping.
+			// details is dropped: its target-defined Any types are not in grpcview's registry and would break
+			// protojson round-tripping.
 			Status:    &grpcviewv1.Status{Code: st.GetCode(), Message: st.GetMessage()},
 			Response:  out.GetResponse(),
 			Metadata:  out.GetResponseMetadata(),
@@ -638,10 +623,10 @@ func (w Workspace) recordHistory(ctx context.Context, workspaceName string, path
 
 const codeOK = 0
 
-// resolveMethod pairs a connection to the target with the method's descriptor. The descriptor comes
-// from the workspace's merged definitions, NOT from reflection on the target: the descriptor sources
-// already resolved and cached it, and re-resolving here would both duplicate that work and confine
-// invoke to targets that serve reflection — which the deployment you actually call often doesn't.
+// The descriptor comes from the workspace's merged definitions, NOT from reflection on the target: the
+// sources already resolved and cached it, and re-resolving here would both duplicate that work and
+// confine invoke to targets that serve reflection — which the deployment you actually call often does
+// not.
 func (w Workspace) resolveMethod(ctx context.Context, target *grpcviewv1.Server, workspaceName, service, method string) (*grpc.ClientConn, *desc.MethodDescriptor, func(), error) {
 	defs, err := w.definitions(ctx, workspaceName)
 	if err != nil {
@@ -683,7 +668,7 @@ func (w Workspace) resolveTarget(ctx context.Context, target *grpcviewv1.Server,
 			if src := svc.GetSource(); src != nil {
 				return src, nil
 			}
-			break // found but unattributed: fall through to the first reflection source
+			break
 		}
 	}
 
@@ -778,8 +763,7 @@ func scalarToString(v *structpb.Value) string {
 	}
 }
 
-// encodeMetadataValue prepares a user-typed value for the wire: grpc-go base64s "-bin" keys
-// itself, so the base64 the Struct carries is decoded back to raw bytes here.
+// grpc-go base64s "-bin" keys itself, so the base64 the Struct carries is decoded back to raw bytes.
 func encodeMetadataValue(key, value string) string {
 	if !strings.HasSuffix(key, "-bin") {
 		return value

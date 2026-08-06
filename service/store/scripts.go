@@ -14,8 +14,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// Scripts are a flat, ordered list in scripts/<slug>/script.json, a committed sibling of tree/.
-
 type scriptEntry struct {
 	slug   string
 	name   string
@@ -25,7 +23,6 @@ type scriptEntry struct {
 func (s scriptEntry) orderSlug() string { return s.slug }
 func (s scriptEntry) orderName() string { return s.name }
 
-// CreateScript creates a new, empty script; its name must be unique among scripts.
 func (c *Collection) CreateScript(_ context.Context, name string, kind grpcviewv1.ScriptKind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -58,7 +55,6 @@ func (c *Collection) CreateScript(_ context.Context, name string, kind grpcviewv
 	return c.writeScriptOrder(append(base, slug))
 }
 
-// UpdateScript rewrites only meta.name on a rename; the slug/dir stays stable.
 func (c *Collection) UpdateScript(_ context.Context, name string, patch ScriptPatch) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -93,7 +89,6 @@ func (c *Collection) UpdateScript(_ context.Context, name string, patch ScriptPa
 	return writeMessage(filepath.Join(c.scriptsRoot(), se.slug, scriptFileName), sf)
 }
 
-// DeleteScript is idempotent: deleting a missing script is a no-op.
 func (c *Collection) DeleteScript(_ context.Context, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -172,7 +167,6 @@ func (c *Collection) reconcileScripts(listed []string, present []scriptEntry) []
 	return ordered
 }
 
-// reconciledScriptSlugs uses an already-read snapshot, so a caller cannot race its own writes.
 func (c *Collection) reconciledScriptSlugs(present []scriptEntry) ([]string, error) {
 	col, err := c.readCollection()
 	if err != nil {

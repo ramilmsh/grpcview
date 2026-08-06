@@ -1,10 +1,5 @@
 package cli
 
-// grpcview init is the one verb that brings a collection into being. Every other RPC
-// requires one to already exist: with a collection addressed by its path inside the
-// user's repo, a handler that created one on demand would let a typo'd --collection or a
-// stale query scatter grpcview.json among project files.
-
 import (
 	"context"
 	"fmt"
@@ -81,10 +76,6 @@ func runInit(ctx context.Context, s Streams, g *globalFlags, open clientFactory,
 	return reportSeededSources(s, created.GetSources())
 }
 
-// reportSeededSources tells the user what a seeded list does NOT include. defaults.sources writes
-// references, and a reference is a pointer: the collection lists sources and resolves nothing until
-// something acquires their descriptors, and `init` is not that. Saying it on stderr keeps stdout
-// the one created-collection line while still putting the next step where the user is looking.
 func reportSeededSources(s Streams, seeded []*grpcviewv1.DescriptorSource) error {
 	if len(seeded) == 0 {
 		return nil
@@ -98,10 +89,6 @@ func reportSeededSources(s Streams, seeded []*grpcviewv1.DescriptorSource) error
 		len(seeded), noun)))
 }
 
-// resolveInitCollection is dir verbatim when given, or else the current directory's own
-// path relative to the discovered workspace root. The warning wsroot.Discover can return
-// is deliberately dropped here: openClient's own Discover call (opening the session that
-// follows) surfaces it, and printing it twice for one command would be noise.
 func resolveInitCollection(g *globalFlags, dir string) (string, error) {
 	if dir != "" {
 		return dir, nil

@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-// readBody returns nil when no body was supplied at all, which is not an empty body.
-// The bytes come back unchanged; the backend normalizes protojson and TypeScript.
 func readBody(s Streams, file string) ([]byte, error) {
 	switch {
 	case file == "-":
@@ -46,7 +44,6 @@ func blankToNil(raw []byte) []byte {
 	return raw
 }
 
-// A reader that is not an *os.File — a test's strings.Reader — counts as piped.
 func isPiped(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
@@ -59,8 +56,6 @@ func isPiped(r io.Reader) bool {
 	return info.Mode()&os.ModeCharDevice == 0
 }
 
-// Client-streaming and bidi read the input as NDJSON; every other kind is one message
-// verbatim and must NOT be split on newlines, since a TypeScript body is multi-line.
 func bodyMessages(raw []byte, kind methodKind) ([]string, error) {
 	if len(raw) == 0 {
 		return nil, nil

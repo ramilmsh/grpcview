@@ -1,8 +1,5 @@
 package cli
 
-// Workspace trust: the one decision in this CLI that is about the machine and not about a
-// collection. It gates the definition-source kinds that EXECUTE — a bazel label, today.
-
 import (
 	"context"
 	"fmt"
@@ -59,8 +56,6 @@ func newTrustCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	return cmd
 }
 
-// runTrust deliberately does NOT resolve a collection: trust is a property of the workspace
-// root, and a repository with no collection in it yet is a perfectly good thing to trust.
 func runTrust(ctx context.Context, g *globalFlags, open clientFactory, trusted bool) error {
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		_, err := sess.SetWorkspaceTrust(ctx, connect.NewRequest(&grpcviewv1.SetWorkspaceTrustRequest{

@@ -35,9 +35,6 @@ func TestInitEndToEnd(t *testing.T) {
 		t.Errorf("collection manifest missing at %s: %v", manifest, err)
 	}
 
-	// A repeat run must not succeed: this is the one verb that creates a collection, and
-	// silently reusing an existing address would defeat the point of removing the old
-	// implicit auto-create.
 	_, _, code2 := run("init", "requests")
 	if code2 == 0 {
 		t.Fatalf("second init at the same address exit code = %d, want non-zero (AlreadyExists)", code2)
@@ -99,9 +96,6 @@ func TestResolveInitCollection(t *testing.T) {
 	})
 }
 
-// TestInitReportsSeededSources: defaults.sources gives a new collection POINTERS, and nothing
-// resolves them, so the verb has to say what still has to happen. It goes on stderr, which keeps
-// stdout the one created-collection line.
 func TestInitReportsSeededSources(t *testing.T) {
 	fc := newFake()
 	fc.writes.createdCollection = &grpcviewv1.Collection{
@@ -122,7 +116,6 @@ func TestInitReportsSeededSources(t *testing.T) {
 		t.Errorf("stderr = %q, want it to name the refresh that makes a seeded collection resolve", errOut)
 	}
 
-	// Nothing seeded, nothing to say.
 	quiet := newFake()
 	quiet.writes.createdCollection = &grpcviewv1.Collection{Name: "requests"}
 	_, quietErr, quietCode := runCLI(quiet, "", "init", "requests")

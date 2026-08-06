@@ -1,8 +1,5 @@
 package cli
 
-// The collection and script write verbs. A mutation that succeeds prints
-// nothing on either stream and exits 0; `script run` is the one that prints.
-
 import (
 	"context"
 	"errors"
@@ -18,7 +15,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
 )
 
-// withSession opens one session for the whole verb; a verb making several calls must share one.
 func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn func(context.Context, session) error) error {
 	if g.Timeout > 0 {
 		var cancel context.CancelFunc
@@ -34,8 +30,6 @@ func withSession(ctx context.Context, g *globalFlags, open clientFactory, fn fun
 	return fn(ctx, sess)
 }
 
-// withCollection is withSession plus resolving which collection the verb addresses, so no
-// verb reads a raw --collection flag that may be empty.
 func withCollection(ctx context.Context, g *globalFlags, open clientFactory, fn func(ctx context.Context, sess session, collection string) error) error {
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
 		collection, err := resolveCollection(ctx, sess, g)
@@ -60,7 +54,6 @@ func splitItemPath(arg string) ([]string, string, error) {
 	return parent, name, nil
 }
 
-// splitFolderPath parses a destination folder path; "" and "/" are the collection root.
 func splitFolderPath(arg string) ([]string, error) {
 	if arg == "" || arg == "/" {
 		return nil, nil
@@ -198,7 +191,6 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 		return err
 	}
 
-	// Read the body first: an unreadable -f must not leave a bodyless request behind.
 	raw, err := readBody(s, f.file)
 	if err != nil {
 		return err
@@ -293,7 +285,6 @@ func newRequestMvCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Changed, not the empty string: unset means append.
 			var beforeArg *string
 			if cmd.Flags().Changed("before") {
 				beforeArg = proto.String(before)
@@ -521,9 +512,7 @@ func scriptNamed(scripts []*grpcviewv1.Script, name string) *grpcviewv1.Script {
 	return nil
 }
 
-// renderScriptRun writes the value on stdout and the logs on stderr; a script that threw is exit 1.
 func renderScriptRun(s Streams, label string, resp *grpcviewv1.RunScriptResponse) error {
-	// Logs first, whatever the outcome: they were emitted before the run ended.
 	for _, log := range resp.GetLogs() {
 		fmt.Fprintf(s.Err, "%s: %s\n", log.GetLevel(), log.GetMessage())
 	}
@@ -536,7 +525,6 @@ func renderScriptRun(s Streams, label string, resp *grpcviewv1.RunScriptResponse
 		return statusError{code: 1, err: fmt.Errorf("%s threw: %s", label, message)}
 	}
 
-	// An unset value is a script that returned undefined, not the JSON null.
 	if resp.Value == nil {
 		return nil
 	}

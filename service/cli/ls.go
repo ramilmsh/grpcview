@@ -72,7 +72,6 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 	})
 }
 
-// lsRoot picks the item to list and the prefix that keeps a subtree listing pasteable.
 func lsRoot(ws *grpcviewv1.Collection, path string) (*grpcviewv1.Item, string, error) {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
@@ -94,7 +93,6 @@ func lsRoot(ws *grpcviewv1.Collection, path string) (*grpcviewv1.Item, string, e
 }
 
 type lsRow struct {
-	// path carries a trailing slash for a folder, the only marker folders get.
 	path string
 	what string
 	note string
@@ -143,7 +141,6 @@ func renderLs(w io.Writer, rows []lsRow) error {
 
 	for _, row := range rows {
 		line := fmt.Sprintf("%-*s  %-*s  %s", pathWidth, row.path, whatWidth, row.what, row.note)
-		// TrimRight: trailing whitespace breaks a golden diff and a line compare.
 		if err := writeLine(w, []byte(strings.TrimRight(line, " "))); err != nil {
 			return err
 		}

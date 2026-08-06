@@ -47,8 +47,8 @@ message Service {
   optional Server source  = 4;
 }
 
-// Where a source's config lives: inline in this collection's own grpcview.json, or in the
-// workspace manifest with the collection's list holding only a reference to it by id.
+// Where a source's config lives: this collection's grpcview.json, or the
+// workspace manifest with the collection holding only a reference by id.
 enum SourceOrigin {
   SOURCE_ORIGIN_UNSPECIFIED = 0;
   SOURCE_ORIGIN_COLLECTION  = 1;
@@ -69,39 +69,26 @@ message DescriptorSource {
 
   Resolved resolved = 4;
 
-  // Read-only: server-set from where the config was found, and ignored on input.
-  //
-  // Everything a client may do to a WORKSPACE source is per collection — reorder it, remove
-  // it (which drops THIS collection's reference, never the shared definition), refresh it,
-  // toggle commit_descriptors. What it may not do is edit its address, which lives in
-  // grpcview.work.json. No RPC edits a definition in place, deliberately: identity is
-  // config-derived, so a different address is a different source.
-  //
-  // A WORKSPACE source with no oneof arm is a reference the manifest does not define; the
-  // row stays visible and Resolved.error says so.
+  // Read-only: server-set, ignored on input. No RPC edits a WORKSPACE source's
+  // config in place; a WORKSPACE row with no oneof arm is an undefined reference
+  // and Resolved.error says so.
   SourceOrigin origin = 6;
 
-  // The descriptors this source resolved to are committed to the repo as a
-  // protojson sidecar (descriptors/<slug>-<hash of id>.json in the collection)
-  // instead of cached in local state. It changes only WHERE the store writes,
-  // never how anything resolves, and toggling it acquires nothing.
+  // Commit this source's descriptors as descriptors/<slug>-<hash of id>.json
+  // instead of caching them in local state. Changes only WHERE the store writes.
   bool commit_descriptors = 5;
 }
 
 // The descriptor bytes are never sent to the client, only this file name.
 message Upload {
   string file_name = 1;
-  // Workspace-root-relative path the bytes were last read from, empty when they came
-  // from a browser file picker. Identity is still the file name — a git mv changes the
-  // recipe and not the source — so this is ONLY a refresh recipe: a path that has gone
-  // costs a refresh and nothing else, since the collection still links, describes and
-  // invokes from the bytes already stored.
+  // Root-relative refresh recipe; empty when the bytes came from a browser file
+  // picker. Never identity — the file name is, so a git mv edits this recipe.
   string path = 2;
 }
 
-// A canonical bazel label ("//pkg:target") whose default outputs are descriptor sets.
-// Unlike an upload it knows how to PRODUCE its bytes: refreshing it builds the label and
-// then reads what the build wrote.
+// A canonical bazel label whose default outputs are descriptor sets. Unlike an
+// upload it can PRODUCE its bytes: refreshing it builds the label.
 message Bazel {
   string label = 1;
 }
@@ -163,10 +150,8 @@ message Request {
 
 message Item {
   string  name    = 1;
-  // The stable on-disk directory name. A rename never changes it, so UI state
-  // (tabs, drafts, expansion) is keyed by it. RPC addressing stays on
-  // display-name paths; this is identity, not an address. Empty on the synthetic
-  // root item, which has no directory of its own.
+  // Stable on-disk directory name: identity, not an address. A rename never
+  // changes it, so UI state is keyed by it. Empty on the synthetic root item.
   string  slug    = 4;
   oneof content {
     Folder  folder  = 2;
@@ -189,10 +174,8 @@ message Script {
 
 message Collection {
   string                    name     = 1;
-  // The workspace-relative path this collection is addressed by; "." is the root.
-  // Echoed back so a response identifies which collection it is about — the write
-  // RPCs seed the Get cache off it rather than off the id the caller happened to send.
-  // Addressing only, and never written to disk: the id IS the disk location.
+  // Workspace-relative path this collection is addressed by; "." is the root.
+  // Addressing only, never written to disk: the id IS the disk location.
   string                    id       = 7;
   Item                      item     = 2;
   repeated DescriptorSource sources  = 3;

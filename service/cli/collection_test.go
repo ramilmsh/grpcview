@@ -10,7 +10,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// mustCollectionDir plants a collection's manifest: the marker resolveCollection walks up for.
 func mustCollectionDir(t *testing.T, dir string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -36,7 +35,6 @@ func TestResolveCollectionFromTheCwd(t *testing.T) {
 	collection := mustCollectionDir(t, filepath.Join(root, "services", "payments", "requests"))
 	mustCollectionDir(t, filepath.Join(root, "tools", "loadgen", "requests"))
 
-	// A directory INSIDE the collection, so the answer can only come from the walk up.
 	inside := filepath.Join(collection, "tree", "Auth")
 	if err := os.MkdirAll(inside, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", inside, err)
@@ -79,7 +77,6 @@ func TestResolveCollectionAtTheWorkspaceRoot(t *testing.T) {
 func TestResolveCollectionFallsBackToTheOnlyOne(t *testing.T) {
 	root := t.TempDir()
 	mustCollectionDir(t, filepath.Join(root, "requests"))
-	// Somewhere else entirely: nothing to walk, so only the "exactly one" rule can answer.
 	t.Chdir(t.TempDir())
 
 	fc := newFake()
@@ -203,9 +200,6 @@ func TestCollectionsLsText(t *testing.T) {
 	}
 }
 
-// This listing cannot see what KIND a collection's sources are, so it says nothing about trust in
-// either shape: the untrusted note belongs to `sources ls`, which holds the list — see
-// TestSourcesLsTrust. `-o json` still carries the `trusted` field it was handed.
 func TestCollectionsLsSaysNothingAboutTrust(t *testing.T) {
 	for _, shape := range [][]string{
 		{"collections", "ls"},
@@ -260,8 +254,6 @@ func TestCollectionsLsJSONAndRefresh(t *testing.T) {
 	}
 }
 
-// A workspace with no collection is exactly where `init` is run, so it must never go through
-// the resolver that refuses to answer there.
 func TestInitNeedsNoCollectionToResolve(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

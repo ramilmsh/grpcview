@@ -56,7 +56,6 @@ func (f *fakeClient) Get(_ context.Context, r *connect.Request[grpcviewv1.GetReq
 	return connect.NewResponse(&grpcviewv1.GetResponse{Collection: f.snapshot}), nil
 }
 
-// ListCollections is what resolveCollection consults, so every verb reaches it now.
 func (f *fakeClient) ListCollections(_ context.Context, r *connect.Request[grpcviewv1.ListCollectionsRequest]) (*connect.Response[grpcviewv1.ListCollectionsResponse], error) {
 	f.gotList = append(f.gotList, r.Msg)
 	if f.listErr != nil {
@@ -111,10 +110,6 @@ func (f *fakeClient) invokeCalls() int {
 	return len(f.gotSaved) + len(f.gotSavedStream) + len(f.gotAdhoc) + len(f.gotAdhocStream)
 }
 
-// newFake's workspace holds one collection at its root, so resolveCollection's
-// single-collection rule answers "." — the address the verbs used to default to. It is
-// TRUSTED, because that is the unremarkable state every other verb's test should not have to
-// think about; the untrusted listing is exercised explicitly in TestCollectionsLsTrust.
 func newFake() *fakeClient {
 	return &fakeClient{
 		snapshot:    testWorkspace(),

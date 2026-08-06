@@ -22,8 +22,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// newTestStore returns a Store rooted at two independent temp dirs — a workspace root and
-// a state root — mirroring how a real Store never keeps state inside the workspace.
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	return New(t.TempDir(), t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -148,8 +146,6 @@ func TestSlugUniqueness(t *testing.T) {
 	}
 }
 
-// The wire Item carries the on-disk slug, and a rename never changes it — the
-// invariant the UI's slug-keyed tree state depends on.
 func TestWireItemCarriesStableSlug(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 	if err := coll.CreateFolder(ctx, nil, "Users"); err != nil {
@@ -497,8 +493,6 @@ func TestMoveSlugCollision(t *testing.T) {
 	}
 }
 
-// fdsNamed is a minimal descriptor set: the store never links what it stores, so a file name is
-// enough to tell two schemas apart by content.
 func fdsNamed(names ...string) *descriptorpb.FileDescriptorSet {
 	fds := &descriptorpb.FileDescriptorSet{}
 	for _, name := range names {
@@ -514,8 +508,6 @@ func reflectionSourceAt(address string) *grpcviewv1.DescriptorSource {
 	}
 }
 
-// blobNames lists the descriptor blobs in a workspace's state root, which is where the sharing
-// between collections is visible: one file per distinct content, whoever points at it.
 func blobNames(t *testing.T, s *Store) []string {
 	t.Helper()
 	entries, err := os.ReadDir(s.blobsRoot())
@@ -553,8 +545,6 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetReflection().GetAddress() != "localhost:50051" {
 		t.Errorf("sources not round-tripped: %v", ws.GetSources())
 	}
-	// The store persists no merged view at all any more: Load answers the manifest, the tree and
-	// the scripts, and the layer above derives the rest from the blobs.
 	if len(ws.GetServices()) != 0 || len(ws.GetDescriptorSet()) != 0 {
 		t.Errorf("Load returned a merged view the store must not hold: %v / %d bytes",
 			ws.GetServices(), len(ws.GetDescriptorSet()))
@@ -593,9 +583,6 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	}
 }
 
-// TestDescriptorBlobsAreSharedAcrossCollections is the reason the blobs are content-addressed and
-// workspace-scoped: a monorepo where five collections point at one schema must hold one copy of
-// it, and collecting one collection's garbage must not reach into another's.
 func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -614,8 +601,6 @@ func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 		if err := coll.PutDescriptorState(ctx, DescriptorState{
 			Sources: []*grpcviewv1.DescriptorSource{reflectionSourceAt("localhost:50051")},
 			Resolves: map[string]*grpcviewstorev1.ResolvedSource{
-				// Independently built, byte-identical: the two collections resolved the same
-				// target, which is exactly the case CAS has to collapse.
 				id: {Id: id, DescriptorSet: proto.CloneOf(shared), ServiceNames: []string{"acme.v1.UserService"}},
 			},
 		}); err != nil {
@@ -628,8 +613,6 @@ func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 		t.Fatalf("two collections resolving to identical bytes must share one blob, got %v", got)
 	}
 
-	// Re-writing identical content is not a write at all, so nothing churns and a reorder costs
-	// no file system traffic.
 	before, err := os.Stat(s.blobPath(strings.TrimSuffix(blobNames(t, s)[0], blobFileExt)))
 	if err != nil {
 		t.Fatalf("Stat blob: %v", err)
@@ -653,7 +636,6 @@ func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 		t.Errorf("an identical resolve rewrote the blob (mtime %v -> %v)", before.ModTime(), after.ModTime())
 	}
 
-	// One collection dropping the source must not collect bytes the other still points at.
 	if err := colls[0].PutDescriptorState(ctx, DescriptorState{}); err != nil {
 		t.Fatalf("PutDescriptorState (drop in payments): %v", err)
 	}
@@ -668,7 +650,6 @@ func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 		t.Errorf("ledger lost its source's descriptors when payments dropped its own: %v", blobs)
 	}
 
-	// With the last reference gone it is garbage, and the next write collects it.
 	if err := colls[1].PutDescriptorState(ctx, DescriptorState{}); err != nil {
 		t.Fatalf("PutDescriptorState (drop in ledger): %v", err)
 	}
@@ -677,9 +658,6 @@ func TestDescriptorBlobsAreSharedAcrossCollections(t *testing.T) {
 	}
 }
 
-// TestPutDescriptorStateKeepsUnresolvedIDs pins the contract every non-acquiring mutation relies
-// on: a reorder or an unrelated add re-resolves nothing, so an id absent from Resolves must keep
-// pointing at what it last resolved to rather than going blank.
 func TestPutDescriptorStateKeepsUnresolvedIDs(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
@@ -720,8 +698,6 @@ func TestPutDescriptorStateKeepsUnresolvedIDs(t *testing.T) {
 	}
 }
 
-// sidecarNames lists a collection's COMMITTED descriptor sidecars. Unlike blobNames it reads the
-// collection directory, which is the whole difference commit_descriptors makes.
 func sidecarNames(t *testing.T, coll *Collection) []string {
 	t.Helper()
 	entries, err := os.ReadDir(coll.descriptorSidecarsRoot())
@@ -761,9 +737,6 @@ func uploadSourceNamed(fileName string, commit bool) *grpcviewv1.DescriptorSourc
 	}
 }
 
-// TestCommitDescriptorsChoosesOneLocation pins the flag's whole contract: each source is written to
-// exactly one place, so a committed source has a sidecar and NO blob and no index entry, while an
-// uncommitted one has a blob and an entry and no sidecar.
 func TestCommitDescriptorsChoosesOneLocation(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
@@ -794,8 +767,6 @@ func TestCommitDescriptorsChoosesOneLocation(t *testing.T) {
 		t.Errorf("want one blob — the uncommitted source's — got %v", got)
 	}
 
-	// Both halves come back through one map, so nothing above the store has to know which
-	// location a given source used.
 	resolves, err := coll.DescriptorResolves(ctx)
 	if err != nil {
 		t.Fatalf("DescriptorResolves: %v", err)
@@ -810,8 +781,6 @@ func TestCommitDescriptorsChoosesOneLocation(t *testing.T) {
 		t.Errorf("the uncommitted source's descriptors did not come back: %v", got)
 	}
 
-	// The manifest holds no descriptor bytes for any kind, uploads included: an inline
-	// FileDescriptorSet would mean dragging one request rewrites megabytes.
 	info, err := os.Stat(coll.collectionFilePath())
 	if err != nil {
 		t.Fatalf("Stat manifest: %v", err)
@@ -831,9 +800,6 @@ func hexPrefix(id string) string {
 	return hex.EncodeToString(sum[:6])
 }
 
-// TestCommitDescriptorsToggleMovesTheBytes is the reason SetDescriptorSourceCommit can promise it
-// never acquires: the store finds the bytes in whichever location the last write used, so flipping
-// the flag with no fresh resolve moves them.
 func TestCommitDescriptorsToggleMovesTheBytes(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
@@ -895,9 +861,6 @@ func TestCommitDescriptorsToggleMovesTheBytes(t *testing.T) {
 	}
 }
 
-// TestCommittedSidecarIsByteStable is the hard requirement committing rests on: refreshing twice
-// against an unchanged upstream must leave `git status` clean, so identical content must produce
-// identical bytes — and not even move the mtime.
 func TestCommittedSidecarIsByteStable(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
@@ -944,9 +907,6 @@ func TestCommittedSidecarIsByteStable(t *testing.T) {
 	}
 }
 
-// TestCommittedSidecarSurvivesAFreshClone is what the flag is FOR: the collection directory alone,
-// with an empty state root — a clone on a machine that has never opened this repo — still knows
-// what the source resolved to, with no refresh and no network.
 func TestCommittedSidecarSurvivesAFreshClone(t *testing.T) {
 	root, ctx := t.TempDir(), context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -970,7 +930,6 @@ func TestCommittedSidecarSurvivesAFreshClone(t *testing.T) {
 		t.Fatalf("PutDescriptorState: %v", err)
 	}
 
-	// Same committed content, a state root that has never been written to.
 	cloned, err := New(root, t.TempDir(), logger).Open(ctx, "requests")
 	if err != nil {
 		t.Fatalf("Open (clone): %v", err)
@@ -987,8 +946,6 @@ func TestCommittedSidecarSurvivesAFreshClone(t *testing.T) {
 	}
 }
 
-// TestRemovingACommittedSourceDeletesItsSidecar covers the other way a sidecar becomes garbage:
-// its source left the list entirely.
 func TestRemovingACommittedSourceDeletesItsSidecar(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
@@ -1528,10 +1485,6 @@ func TestDisplayNameIsNeverTheID(t *testing.T) {
 	}
 }
 
-// TestLocalStateStaysOutOfCollectionDir exercises every kind of local state (the descriptor
-// index, the descriptor blobs it points at, run history) and asserts none of it lands next to the
-// committed manifest/tree — it must all be reachable only under the state root passed to
-// New, which for a real workspace is wsroot.StateDir's directory, never the repo.
 func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 	root, state := t.TempDir(), t.TempDir()
 	s := New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil)))

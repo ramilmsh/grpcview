@@ -21,8 +21,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// startEchoServerWithoutReflection has the shape of a real deployment: it serves its RPCs and
-// nothing else — there is no reflection service to interrogate.
 func startEchoServerWithoutReflection(t *testing.T) int {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -44,9 +42,6 @@ func addEchoUpload(t *testing.T, w Workspace, ctx context.Context) {
 	}
 }
 
-// TestInvokeTargetWithoutReflection is the case invoke used to be unable to serve: the definitions
-// come from an uploaded descriptor set, and the call goes to a server that serves no reflection.
-// Reflecting on the target at invoke time would have failed here with Unimplemented.
 func TestInvokeTargetWithoutReflection(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -74,8 +69,6 @@ func TestInvokeTargetWithoutReflection(t *testing.T) {
 	}
 }
 
-// TestStreamInvokeTargetWithoutReflection covers the same for the streaming path, which resolves
-// its method through the very same seam.
 func TestStreamInvokeTargetWithoutReflection(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
@@ -96,15 +89,12 @@ func TestStreamInvokeTargetWithoutReflection(t *testing.T) {
 	}
 }
 
-// TestInvokeWithoutDefinitionsIsRefused pins the other side of the contract: invoke no longer
-// discovers a method on its own, so an unresolved workspace is a FailedPrecondition that names
-// the fix rather than a reflection error from the target.
 func TestInvokeWithoutDefinitionsIsRefused(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	port := startEchoServer(t) // reflects, but nothing points at it
+	port := startEchoServer(t)
 	_, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
 			Collection: testWorkspace,
@@ -122,8 +112,6 @@ func TestInvokeWithoutDefinitionsIsRefused(t *testing.T) {
 	}
 }
 
-// TestDefinitionsMemoizesLinking asserts the merged view is derived once and reused: a second
-// call must hand back the very same descriptors, and a write must invalidate it.
 func TestDefinitionsMemoizesLinking(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -145,7 +133,6 @@ func TestDefinitionsMemoizesLinking(t *testing.T) {
 		t.Error("a second definitions() re-linked an unchanged descriptor set; the memo did not hit")
 	}
 
-	// Adding a source is a write, and the writer invalidates the memo.
 	grown := descriptorSetAddReq(fileDescriptorSet(t, "proto/grpcview/v1/workspace.proto"))
 	grown.FileName = "workspace.binpb"
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(grown)); err != nil {
@@ -163,9 +150,6 @@ func TestDefinitionsMemoizesLinking(t *testing.T) {
 	}
 }
 
-// TestGetCarriesTheDerivedMergedView is the overlay end to end. The store persists no services,
-// no descriptor_set and no per-source summary, so a client sees them only because every handler
-// that returns a Collection fills them in from the derivation.
 func TestGetCarriesTheDerivedMergedView(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -192,9 +176,6 @@ func TestGetCarriesTheDerivedMergedView(t *testing.T) {
 	}
 }
 
-// TestDefinitionsMemoDoesNoIO proves the memo is a plain map lookup rather than a read that
-// re-validates itself: with the entry warm, everything the derivation would read is deleted, so a
-// hit that stats, reads or re-hashes anything at all can only fail.
 func TestDefinitionsMemoDoesNoIO(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -209,8 +190,6 @@ func TestDefinitionsMemoDoesNoIO(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	// The collection's own state dir holds its descriptor index; the blobs it points at sit
-	// beside collections/ under the workspace state root (store.collectionStateDir).
 	stateRoot := filepath.Dir(filepath.Dir(coll.State()))
 	if err := os.RemoveAll(filepath.Join(stateRoot, "blobs")); err != nil {
 		t.Fatalf("remove blobs: %v", err)
@@ -235,10 +214,6 @@ func TestDefinitionsMemoDoesNoIO(t *testing.T) {
 	}
 }
 
-// dependentSet is a file that imports common.proto and uses a message from it; commonSet is a
-// common.proto that does NOT define that message. Either source is fine on its own; the claimed
-// set built from both cannot link, which is what "sources that disagree about the protos they
-// share" means concretely — one of them has an older idea of a shared file than the other.
 func dependentSet() *descriptorpb.FileDescriptorSet {
 	return &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{{
 		Name:       proto.String("dup/a.proto"),
@@ -267,10 +242,6 @@ func commonSet() *descriptorpb.FileDescriptorSet {
 	}}}
 }
 
-// TestGetSurvivesAnUnmergeableSourceList is why the merge moved to first touch WITHOUT taking Get
-// with it: a colleague can commit a grpcview.json whose sources cannot be merged, and the tree,
-// the scripts and the source rows are all still answerable. Only the services go missing, with the
-// reason on every implicated source — the same shape a fresh clone with no blobs has.
 func TestGetSurvivesAnUnmergeableSourceList(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -290,8 +261,6 @@ func TestGetSurvivesAnUnmergeableSourceList(t *testing.T) {
 	)
 	one := dependentSet()
 	two := commonSet()
-	// Written straight to the store: the acquisition RPCs deliberately refuse this state, so the
-	// only way into it is a manifest and blobs that were already there.
 	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
 		Sources: []*grpcviewv1.DescriptorSource{
 			{Id: oneID, Source: &grpcviewv1.DescriptorSource_Upload{Upload: &grpcviewv1.Upload{FileName: "one.binpb"}}},
@@ -326,7 +295,6 @@ func TestGetSurvivesAnUnmergeableSourceList(t *testing.T) {
 		}
 	}
 
-	// A consumer of the definitions still gets told, and gets told why.
 	if _, err := w.definitions(ctx, testWorkspace); err == nil {
 		t.Error("want an error from definitions() when the sources cannot be merged")
 	} else if code := connect.CodeOf(err); code != connect.CodeFailedPrecondition {
@@ -334,18 +302,14 @@ func TestGetSurvivesAnUnmergeableSourceList(t *testing.T) {
 	}
 }
 
-// TestMemoRefusesAStaleDerivation is the race a plain delete-on-write cannot express. A reader
-// derives from the blobs as they are, a write lands and invalidates while it is still linking, and
-// the reader then arrives at the memo holding a view of the state before the write. Storing it
-// would outlive the invalidation it lost to and be served until the NEXT write.
 func TestMemoRefusesAStaleDerivation(t *testing.T) {
 	cache := newDefinitionsCache()
 	const key = "requests"
 
-	reader := cache.epoch(key) // the reader begins deriving
-	cache.invalidate(key)      // a write lands mid-derivation
+	reader := cache.epoch(key)
+	cache.invalidate(key)
 	stale := &definitions{}
-	cache.store(key, reader, stale) // the reader finishes and offers what it derived
+	cache.store(key, reader, stale)
 	if got := cache.lookup(key); got != nil {
 		t.Error("the memo kept a derivation that predates an invalidation it raced")
 	}
@@ -357,18 +321,12 @@ func TestMemoRefusesAStaleDerivation(t *testing.T) {
 	}
 }
 
-// TestGetNoticesAHandEditedSourceList is the coherency hole writer invalidation cannot close.
-// grpcview.json is a committed file: a pull, a branch switch or an editor changes which sources a
-// collection lists without any RPC being involved, so a memo entry keyed only by collection would
-// answer for a list that is no longer there — a hand-added source came back carrying no summary at
-// all, and a hand-removed one kept serving its services out of the merged view.
 func TestGetNoticesAHandEditedSourceList(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 	addEchoUpload(t, w, ctx)
 
-	// Warm the memo with the list as it stands.
 	if _, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace})); err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -382,7 +340,6 @@ func TestGetNoticesAHandEditedSourceList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
-	// Drop the source list the way a colleague's commit would, leaving every blob in place.
 	edited := strings.Replace(string(data), `"sources"`, `"sourcesWasHere"`, 1)
 	if edited == string(data) {
 		t.Fatalf("the manifest has no sources to remove:\n%s", data)

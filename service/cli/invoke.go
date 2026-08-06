@@ -152,12 +152,10 @@ func invokeSaved(ctx context.Context, s Streams, sess session, collection string
 		Target:     buildTarget(f),
 		Messages:   messages,
 	}
-	// record_history defaults to true server-side, so only the opt-out is sent.
 	if f.noHistory {
 		spec.RecordHistory = proto.Bool(false)
 	}
 
-	// A dry run reports one resolved request, so it is the unary RPC even for a streaming kind.
 	if f.dryRun {
 		resp, err := sess.InvokeSaved(ctx, connect.NewRequest(&grpcviewv1.InvokeSavedRequest{Spec: spec, DryRun: true}))
 		if err != nil {
@@ -317,7 +315,6 @@ func buildMetadata(file string, kvs []string) (*structpb.Struct, error) {
 	return md, nil
 }
 
-// Under -o body and -o raw a non-OK status writes nothing to stdout; -o json always writes.
 func renderUnary(s Streams, output, label string, response *grpcviewv1.Request_Response) error {
 	if output == outputJSON {
 		line, err := marshalOneLine(response)
@@ -386,7 +383,6 @@ func renderStream(s Streams, output, label string, call func(send func(*grpcview
 	return nil
 }
 
-// A non-OK status arrives inside Request.Response with a nil transport error: exit 1, not 2.
 func statusFailure(label string, response *grpcviewv1.Request_Response) error {
 	code := response.GetStatus().GetCode()
 	if code == 0 {
@@ -408,7 +404,6 @@ func renderDryRun(s Streams, label string, resolved *grpcviewv1.ResolvedRequest)
 	return writeLine(s.Out, indentJSON(compact))
 }
 
-// json.Indent, not protojson's Multiline: protojson randomizes indentation between runs.
 func indentJSON(raw []byte) []byte {
 	var indented bytes.Buffer
 	if err := json.Indent(&indented, raw, "", "  "); err != nil {
@@ -417,7 +412,6 @@ func indentJSON(raw []byte) []byte {
 	return indented.Bytes()
 }
 
-// connect's Code.String is the same vocabulary in lower snake case.
 func statusCodeName(code int32) string {
 	if code == 0 {
 		return "OK"
@@ -436,7 +430,6 @@ func formatLatency(response *grpcviewv1.Request_Response) string {
 	return d.Round(time.Millisecond).String()
 }
 
-// protojson injects unstable whitespace by design, hence the json.Compact.
 func marshalOneLine(m proto.Message) ([]byte, error) {
 	raw, err := protojson.Marshal(m)
 	if err != nil {
@@ -452,7 +445,6 @@ func marshalOneLine(m proto.Message) ([]byte, error) {
 func compactJSON(raw []byte) []byte {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
-		// The JSON literal null, matching gv.invoke's rendering of a missing body.
 		return []byte("null")
 	}
 	var compact bytes.Buffer

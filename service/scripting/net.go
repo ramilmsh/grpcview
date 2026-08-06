@@ -1,8 +1,5 @@
 package scripting
 
-// The network capability: an unconditional browser-style global `fetch` for every script,
-// bridged to Go by a SYNCHRONOUS host call bounded by the run's context deadline.
-
 import (
 	"context"
 	"encoding/json"
@@ -16,7 +13,6 @@ import (
 
 const maxNetResponseBytes = 10 << 20
 
-// No client-level timeout on purpose: each request is bounded by the run's ctx deadline.
 var netClient = &http.Client{}
 
 type netRequest struct {
@@ -26,7 +22,6 @@ type netRequest struct {
 	Body    *string           `json:"body"`
 }
 
-// Header keys are lowercased and multi-valued headers comma-joined, as Headers.get expects.
 type netResponse struct {
 	Status     int               `json:"status"`
 	StatusText string            `json:"statusText"`
@@ -35,8 +30,9 @@ type netResponse struct {
 	URL        string            `json:"url"`
 }
 
-// netFetchPrelude installs the global `fetch` as a globalThis assignment, so re-evaluating it
-// in a reused context cannot raise a redeclaration error. It never throws synchronously.
+// Installs the global `fetch` as a globalThis assignment, so re-evaluating it in a reused context
+// cannot raise a redeclaration error, and it never throws synchronously. The host call is SYNCHRONOUS
+// and bounded by the run's ctx deadline — no client-level timeout, on purpose.
 const netFetchPrelude = `globalThis.fetch=(function(){
 function headersOf(h){var out={};if(!h)return out;
 if(typeof h.forEach==="function"&&!Array.isArray(h)){h.forEach(function(v,k){out[String(k)]=String(v);});return out;}
@@ -98,7 +94,6 @@ func doNetFetch(ctx context.Context, reqJSON []byte) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	// One byte past the cap, so an at-the-limit body is distinguishable from an over-limit one.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxNetResponseBytes+1))
 	if err != nil {
 		return nil, err

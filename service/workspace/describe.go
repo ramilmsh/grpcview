@@ -27,8 +27,6 @@ func (w Workspace) describeMethod(ctx context.Context, collectionID, service, me
 	return methodDesc, defs.wonBy(service), nil
 }
 
-// DescribeMethod reports one method's input and output shape from the collection's resolved
-// definitions, as rendered .proto text and as a self-contained FileDescriptorSet. It never dials.
 func (w Workspace) DescribeMethod(ctx context.Context, request *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error) {
 	msg := request.Msg
 	methodDesc, sourceID, err := w.describeMethod(ctx, msg.GetCollection(), msg.GetService(), msg.GetMethod())
@@ -70,8 +68,6 @@ func typeClosure(methodDesc *desc.MethodDescriptor) []desc.Descriptor {
 		visited[d.GetFullyQualifiedName()] = true
 		out = append(out, d)
 
-		// renderProtoText prints the DECLARING type whole, so its fields must be in the
-		// closure too or the text would name types it never shows.
 		if top := topLevel(d); top != d {
 			queue = append(queue, top)
 		}
@@ -108,8 +104,6 @@ func fieldTypes(fd *desc.FieldDescriptor) []desc.Descriptor {
 }
 
 func renderProtoText(methodDesc *desc.MethodDescriptor, closure []desc.Descriptor) (string, error) {
-	// A fresh Printer per call: protoprint writes its defaulted Indent back into the struct, so
-	// a shared one would be a data race between concurrent requests.
 	printer := protoprint.Printer{Compact: true, OmitDetachedComments: true}
 
 	var b strings.Builder

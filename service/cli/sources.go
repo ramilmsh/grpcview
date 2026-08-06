@@ -29,7 +29,6 @@ func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command
 			"Where each source's resolved descriptors are STORED is a separate, per-source\n" +
 			"choice: cached in local state by default, or committed to the repo as a\n" +
 			"sidecar so a fresh clone resolves with no network — `sources commit`.",
-		// ArbitraryArgs plus an explicit RunE: without one, cobra prints help on stdout and exits 0.
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -99,7 +98,6 @@ func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFac
 		if err != nil {
 			return err
 		}
-		// Collection.sources is already in priority order; never sort it.
 		if err := renderSources(s.Out, ws.GetSources()); err != nil {
 			return err
 		}
@@ -107,16 +105,6 @@ func runSourcesLs(ctx context.Context, s Streams, g *globalFlags, open clientFac
 	})
 }
 
-// renderSourceTrust names an untrusted workspace after the rows, and ONLY when one of those rows
-// is a source that would have to execute a build to resolve. A permission request for a
-// capability nobody is using is noise that teaches people to click through, which is the rule the
-// UI's trust banner already follows — so `collections ls`, which reads manifests and never source
-// lists, deliberately says nothing about trust at all. This listing is the surface that holds the
-// information, so it is the one that carries the note.
-//
-// The trust bit costs a second call: it is a property of the workspace ROOT and the collection
-// snapshot carries nothing about it, so it comes from the same ListCollections that
-// resolveCollection consults. That is paid only when a bazel row is actually present.
 func renderSourceTrust(ctx context.Context, w io.Writer, sess session, sources []*grpcviewv1.DescriptorSource) error {
 	building := 0
 	for _, src := range sources {
@@ -193,10 +181,6 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Built here, before any session opens, so a bad argument — or an unreadable file —
-			// fails without touching the workspace; only the address it carries is filled in
-			// later. It also decides the deadline, since the KIND is what says whether this add
-			// runs a build.
 			msg, err := buildAddSource(args[0], tls, commit)
 			if err != nil {
 				return err
@@ -215,8 +199,6 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	return cmd
 }
 
-// runSourcesAdd sends a request its caller already built; arg is carried along only to name the
-// source in an error, in the spelling the user typed.
 func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, msg *grpcviewv1.AddDescriptorSourceRequest, arg string) error {
 	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
 		msg.Collection = collection
@@ -247,18 +229,13 @@ func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSour
 		if err != nil {
 			return nil, fmt.Errorf("failed to read the descriptor set: %w", err)
 		}
-		// Absolute, because the server resolves the path against the WORKSPACE ROOT and not
-		// against this process's cwd; it confines it there and stores it root-relative.
 		abs, err := filepath.Abs(arg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve the path of the descriptor set %q: %w", arg, err)
 		}
 		return &grpcviewv1.AddDescriptorSourceRequest{
-			Source: &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
-			// The basename, deliberately: file_name is the source's identity.
-			FileName: filepath.Base(arg),
-			// The path is only a refresh recipe, never the identity — a `git mv` changes what
-			// gets re-read and not which source this is.
+			Source:            &grpcviewv1.AddDescriptorSourceRequest_DescriptorSet{DescriptorSet: raw},
+			FileName:          filepath.Base(arg),
 			Path:              abs,
 			CommitDescriptors: commit,
 		}, nil
@@ -268,7 +245,6 @@ func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSour
 			return nil, fmt.Errorf(
 				"--tls does not apply to %q: it names a bazel label, and TLS selects how a reflection TARGET is dialed", arg)
 		}
-		// Verbatim: the server canonicalizes, so `//pkg` and `//pkg:pkg` are one source.
 		return &grpcviewv1.AddDescriptorSourceRequest{
 			Source:            &grpcviewv1.AddDescriptorSourceRequest_Bazel{Bazel: &grpcviewv1.Bazel{Label: arg}},
 			CommitDescriptors: commit,
@@ -286,14 +262,6 @@ func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSour
 	}
 }
 
-// isBazelLabel decides, from argv alone, whether an argument that is not a file is a bazel
-// label rather than a dial address. Only the two unambiguous spellings count: `//pkg:target`
-// and `@repo//pkg:target`.
-//
-// Bazel's `pkg:target` shorthand is deliberately NOT accepted here, and cannot be: it is
-// indistinguishable from `localhost:8080`. Whichever way this command guessed, it would
-// sometimes dial a label and sometimes try to build an address — so the CLI requires the full
-// spelling and the ambiguity never arises. `sources add` help says so.
 func isBazelLabel(arg string) bool {
 	return strings.HasPrefix(arg, "//") || strings.HasPrefix(arg, "@")
 }
@@ -380,8 +348,6 @@ func newSourcesRefreshCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// A bazel source in the list makes this a build, and a build is not a 30-second
-			// operation. A bare refresh spends this budget across every source it walks.
 			useBuildTimeout(cmd, g)
 			var id string
 			if len(args) == 1 {
@@ -402,9 +368,6 @@ func runSourcesRefresh(ctx context.Context, g *globalFlags, open clientFactory, 
 			}
 			ids = make([]string, 0, len(ws.GetSources()))
 			for _, src := range ws.GetSources() {
-				// An upload that recorded no path has no pointer to re-read, so a bare refresh
-				// passes over it instead of failing the whole run on a source nothing could have
-				// re-acquired. An upload WITH a path, and a bazel source, both have one.
 				if src.GetUpload() != nil && src.GetUpload().GetPath() == "" {
 					continue
 				}
@@ -483,7 +446,6 @@ func newSourcesReorderCmd(g *globalFlags, open clientFactory) *cobra.Command {
 
 func runSourcesReorder(ctx context.Context, g *globalFlags, open clientFactory, ids []string) error {
 	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
-		// Verbatim: the RPC's permutation check is what protects a stale caller.
 		_, err := sess.ReorderDescriptorSources(ctx, connect.NewRequest(&grpcviewv1.ReorderDescriptorSourcesRequest{
 			Collection: collection,
 			Ids:        ids,
@@ -526,10 +488,6 @@ func sourceRows(sources []*grpcviewv1.DescriptorSource) []sourceRow {
 	return rows
 }
 
-// sourceOrigin names where this row's CONFIG lives, spelled out for the same reason the stored
-// column is: a shared definition and a collection's own are equally normal answers, so neither
-// gets a blank. A workspace source's priority, its presence in this list and where its descriptors
-// are stored are all still this collection's own; only its address is edited elsewhere.
 func sourceOrigin(src *grpcviewv1.DescriptorSource) string {
 	if src.GetOrigin() == grpcviewv1.SourceOrigin_SOURCE_ORIGIN_WORKSPACE {
 		return "workspace"
@@ -537,9 +495,6 @@ func sourceOrigin(src *grpcviewv1.DescriptorSource) string {
 	return "collection"
 }
 
-// sourceStorage names where this source's descriptors live. Both values are spelled out rather
-// than one being a blank marker: "where the bytes are" is the question the column answers, and a
-// committed source and an uncommitted one are equally normal answers to it.
 func sourceStorage(src *grpcviewv1.DescriptorSource) string {
 	if src.GetCommitDescriptors() {
 		return "committed"
@@ -560,7 +515,6 @@ func sourceKind(src *grpcviewv1.DescriptorSource) string {
 	}
 }
 
-// sourceStatus distinguishes shadowed — resolved, but outranked — from serving nothing.
 func sourceStatus(resolved *grpcviewv1.Resolved) string {
 	if err := resolved.GetError(); err != "" {
 		return "error: " + oneLine(err)
@@ -585,7 +539,6 @@ func fileCount(n int32) string {
 	return fmt.Sprintf("%d files", n)
 }
 
-// oneLine collapses whitespace runs: a resolve error is often multi-line.
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func renderSources(w io.Writer, sources []*grpcviewv1.DescriptorSource) error {

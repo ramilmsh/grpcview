@@ -1,8 +1,5 @@
 package workspace
 
-// Pre-send middleware: each attached script rewrites a { body, metadata, target } ctx over the
-// already-evaluated body and metadata, and the ctx it returns threads into the next script.
-
 import (
 	"context"
 	"encoding/json"
@@ -48,8 +45,6 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 		chain[i] = middlewareScript{name: name, source: src}
 	}
 
-	// ctx.target is informational: the connection was already dialed, so a middleware's rewrite
-	// of it threads through the chain but is not applied to this call.
 	targetStr := ""
 	if resolved, terr := w.resolveTarget(ctx, target, workspaceName, service); terr == nil {
 		targetStr = resolved.GetAddress()

@@ -13,7 +13,6 @@ import (
 //go:embed index.html
 var ui embed.FS
 
-// serve owns the UI embed, which is why //service/cli must not import //service.
 func serve(ctx context.Context, opts cli.ServeOptions) error {
 	indexPageFile, err := ui.Open("index.html")
 	if err != nil {

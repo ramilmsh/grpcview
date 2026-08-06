@@ -1,8 +1,5 @@
 package scripting
 
-// Capability-layer tests, exercised through Engine.RunScenario (Gate 1 at compile time,
-// Gate 2 at call time in the Go host functions).
-
 import (
 	"context"
 	"encoding/json"
@@ -179,7 +176,6 @@ const j = await res.json();
 
 func TestFetchRejects(t *testing.T) {
 	e := newEngine(t)
-	// 127.0.0.1:0 is never listening, so the dial fails immediately.
 	res, err := e.RunScenario(context.Background(),
 		`await fetch("http://127.0.0.1:0").then(() => "resolved").catch((e) => "caught:" + String(e.message || e))`,
 		Grant{}, Input{})

@@ -16,14 +16,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// Load assembles the whole collection as a wire Collection — the manifest, the tree, the
-// scripts and the configured sources.
-//
-// It deliberately leaves the DERIVED half of that message empty: services, descriptor_set and
-// each source's Resolved summary. The store holds only what each source resolved to (the
-// descriptor blobs); merging those in priority order is an in-memory derivation the layer above
-// owns and memoizes, so persisting its output here would be a cache of a cache that every
-// mutation had to rewrite. A caller that needs the merged view fills it in on top of this.
 func (c *Collection) Load(ctx context.Context) (*grpcviewv1.Collection, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -54,8 +46,6 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 
 	name := cmp.Or(col.GetName(), c.defaultName())
 	return &grpcviewv1.Collection{
-		// Addressing only: the id is where this collection lives, so a response says
-		// which collection it is about without the caller having to remember.
 		Id:   c.id,
 		Name: name,
 		Item: &grpcviewv1.Item{
@@ -67,14 +57,6 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 	}, nil
 }
 
-// Summary reads only this collection's own manifest — never its tree — so listing a workspace
-// stays cheap. Load's walkFolder routes through readChildren, which reads every folder's
-// config to order it; that is exactly the cost a listing must not pay, once for each of N
-// collections.
-//
-// name falls back to the collection directory's base name, never to the id: the id addresses,
-// the name displays, and a monorepo id like "services/payments/requests" rendered as a panel
-// header is the leak that split them.
 func (c *Collection) Summary(_ context.Context) (name string, sourceCount int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -88,8 +70,6 @@ func (c *Collection) Summary(_ context.Context) (name string, sourceCount int, e
 	return cmp.Or(col.GetName(), c.defaultName()), len(col.GetSources()), nil
 }
 
-// Sources returns just the manifest's descriptor-source list, in priority order, with any bare
-// reference in it joined to the workspace definition it names.
 func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -120,17 +100,10 @@ func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	return c.loadScripts(col.GetScripts())
 }
 
-// Create creates a new, empty collection (manifest, tree/) at this address, with the
-// manifest's display name set to name — or, when name is empty, to the collection
-// directory's own base name. A collection that already exists here is ErrAlreadyExists,
-// wrapped with this collection's id: unlike the old EnsureCreated this replaces, a typo'd
-// address must not silently materialize a collection or silently reuse one.
 func (c *Collection) Create(_ context.Context, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if fileExists(c.collectionFilePath()) {
-		// Its own sentinel, not ErrAlreadyExists: that one reads "item already exists" and
-		// is about tree items, and it maps to FailedPrecondition where this wants AlreadyExists.
 		return fmt.Errorf("%w: %q", ErrCollectionExists, c.id)
 	}
 	if err := os.MkdirAll(c.treeRoot(), 0o755); err != nil {
@@ -146,17 +119,6 @@ func (c *Collection) Create(_ context.Context, name string) error {
 	return c.writeCollection(&grpcviewstorev1.Collection{Name: name, Sources: seeded})
 }
 
-// seededSources is the source list a new collection starts with: bare REFERENCES to the ids the
-// workspace manifest's defaults.sources names, in that order.
-//
-// References rather than copies, so a monorepo's shared target stays one definition however many
-// collections are created against it. And pointers only: nothing here acquires, so a seeded
-// collection lists sources and still resolves nothing until something refreshes them — which is
-// what `grpcview init` says on stderr when it seeded any.
-//
-// An id no definition matches is skipped with a warning rather than seeded, because a brand-new
-// collection carrying a broken row nobody typed is noise; a reference that BREAKS later is the
-// different case, and that one keeps its row.
 func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error) {
 	ws, err := c.store.readWorkspaceManifest()
 	if err != nil {
@@ -184,7 +146,6 @@ func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error
 	return out, nil
 }
 
-// CreateFolder creates a folder inside the folder addressed by the display-name path parent.
 func (c *Collection) CreateFolder(_ context.Context, parent []string, name string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
 		return writeMessage(filepath.Join(itemDir, folderFileName), &grpcviewstorev1.Folder{
@@ -193,7 +154,6 @@ func (c *Collection) CreateFolder(_ context.Context, parent []string, name strin
 	})
 }
 
-// CreateRequest creates a request with an empty body inside the folder addressed by parent.
 func (c *Collection) CreateRequest(_ context.Context, parent []string, name, service, method string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
 		return writeMessage(filepath.Join(itemDir, requestFileName), &grpcviewstorev1.Request{
@@ -265,8 +225,6 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 	p := filepath.Join(itemDir, requestFileName)
 	dr := ch.request
-	// A rename rewrites only meta.name; the slug/dir is stable, so slug-keyed state
-	// (tabs, history) survives.
 	if patch.Name != nil && *patch.Name != name {
 		if _, exists := findByName(present, *patch.Name); exists {
 			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
@@ -339,8 +297,6 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 	return writeMessage(p, ff)
 }
 
-// FolderMetadataChain returns the ancestor folder metadata scripts (root→leaf) for
-// the node whose PARENT-folder path is path; path excludes the node's own name.
 func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -367,7 +323,7 @@ func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]st
 	return scripts, nil
 }
 
-// resolveChild's callers must hold c.mu and have already called c.ensureExists.
+// Callers must hold c.mu and have already called c.ensureExists.
 func (c *Collection) resolveChild(parent []string, name string) (parentDir string, present []childEntry, ch childEntry, ok bool, err error) {
 	parentDir, err = c.resolveFolder(parent)
 	if err != nil {
@@ -421,7 +377,6 @@ func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name 
 	return ch.request.GetMiddleware(), nil
 }
 
-// AppendHistory records one completed invoke, keeping the newest max entries (max <= 0 keeps all).
 func (c *Collection) AppendHistory(_ context.Context, parent []string, name string, entry *grpcviewv1.History, max int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -450,7 +405,6 @@ func (c *Collection) AppendHistory(_ context.Context, parent []string, name stri
 	return writeHistoryFile(histPath, entries)
 }
 
-// Delete is idempotent: deleting a missing item is a no-op.
 func (c *Collection) Delete(_ context.Context, parent []string, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -474,8 +428,6 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	return c.writeOrder(parentDir, slices.DeleteFunc(base, func(s string) bool { return s == ch.slug }))
 }
 
-// Move places the item named name in parent into newParent (empty = the tree root)
-// ahead of the sibling named before there; a nil or no-longer-present before appends.
 func (c *Collection) Move(_ context.Context, parent []string, name string, newParent []string, before *string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -495,7 +447,6 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	}
 
 	srcDir := filepath.Join(parentDir, ch.slug)
-	// filepath.Rel, not a string prefix: ".../foo" is a prefix of ".../foobar", a legal sibling.
 	rel, err := filepath.Rel(srcDir, destDir)
 	if err != nil {
 		return err
@@ -520,7 +471,6 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	if _, exists := findByName(destChildren, ch.name); exists {
 		return fmt.Errorf("%w: %q", ErrAlreadyExists, ch.name)
 	}
-	// A slug is unique only WITHIN a folder, so a reparent must allocate a fresh one.
 	newSlug := uniqueSlug(ch.name, slugSet(destChildren))
 
 	srcBase, err := c.reconciledSlugsFrom(parentDir, present)
@@ -531,8 +481,8 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	if err != nil {
 		return err
 	}
-	// The directory must move FIRST: "moved, order not" is the half-applied state
-	// reconcileOrder self-heals on the next load.
+	// The directory must move FIRST: "moved, order not" is the half-applied state reconcileOrder
+	// self-heals on the next load.
 	if err := os.Rename(srcDir, filepath.Join(destDir, newSlug)); err != nil {
 		return err
 	}
@@ -553,24 +503,15 @@ func insertSlug(slugs []string, slug string, before *string, siblings []childEnt
 	return append(slugs, slug)
 }
 
-// DescriptorState is a collection's whole descriptor configuration. It holds no merged view:
-// services and the merged descriptor set are derived in memory from what is written here (see
-// Load).
 type DescriptorState struct {
-	// Sources is in PRIORITY order (earlier wins).
-	Sources []*grpcviewv1.DescriptorSource
-	// Keyed by source id; an absent id keeps whatever the store already holds for that source,
-	// so a mutation that re-resolved nothing (a reorder, a remove, a commit_descriptors
-	// toggle) keeps every surviving source's schema.
+	Sources  []*grpcviewv1.DescriptorSource
 	Resolves map[string]*grpcviewstorev1.ResolvedSource
 }
 
-// PutDescriptorState writes the whole state under one lock — so a reader never sees a source
-// list and a descriptor store that disagree — and collects what nothing points at any more.
-//
-// Each source is written to exactly ONE place, chosen by its commit_descriptors flag: a
-// committed sidecar, or a blob plus an index entry. That is what makes toggling the flag a move
-// rather than a copy, and it is why a source whose flag is on has no index entry at all.
+// Writes the whole state under one lock — so a reader never sees a source list and a descriptor store
+// that disagree — and collects what nothing points at any more. Each source is written to exactly ONE
+// place, chosen by its commit_descriptors flag, which is what makes toggling that flag a move rather
+// than a copy.
 func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -582,8 +523,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 	if err != nil {
 		return err
 	}
-	// The definitions are consulted on the WRITE too, not only on the read: a source the workspace
-	// declares goes back as a bare reference, so no mutation can inline shared config here.
 	defs, err := c.store.workspaceDefinitions()
 	if err != nil {
 		return err
@@ -593,9 +532,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 		return err
 	}
 
-	// The blobs and the garbage collection that follows them are workspace-wide, not this
-	// collection's alone, so they take the store's lock as well: the GC below must not be able
-	// to see another collection's freshly written blob before that collection's index names it.
 	c.store.blobMu.Lock()
 	defer c.store.blobMu.Unlock()
 
@@ -610,12 +546,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 		fresh := state.Resolves[id]
 
 		if src.GetCommitDescriptors() {
-			// With no fresh resolve the bytes come from wherever the last write put them: this
-			// source's own sidecar (a byte-identical rewrite, so nothing changes) or, when the
-			// flag has just been turned on, the blob the index still names. That is the whole of
-			// "toggling never acquires". A source that has never resolved either way has
-			// nothing to commit and gets no file; the workspace layer refuses to turn the flag
-			// on in that state, so what lands here is an add whose resolve failed.
 			r := fresh
 			if r == nil {
 				if r, err = c.storedResolve(id, existingIndex); err != nil {
@@ -633,10 +563,6 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 		}
 
 		if fresh == nil {
-			// No fresh resolve: carry the previous index entry forward untouched, which is what
-			// keeps a reorder or an unrelated add from reading, re-hashing and rewriting every
-			// blob in the collection. A source whose flag has just been turned OFF has no entry
-			// to carry, and its bytes are in the sidecar this write is about to prune.
 			if prev, ok := existingIndex[id]; ok {
 				entries = append(entries, prev)
 				continue
@@ -667,8 +593,8 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 	return c.store.gcBlobs()
 }
 
-// storedResolve returns what a source last resolved to from whichever location the previous write
-// used, or nil when it has never resolved. Callers must hold c.mu.
+// Returns what a source last resolved to from whichever location the previous write used, or nil when
+// it never has. Callers must hold c.mu.
 func (c *Collection) storedResolve(id string, index map[string]*grpcviewstorev1.DescriptorIndexEntry) (*grpcviewstorev1.ResolvedSource, error) {
 	if sidecar, err := c.readDescriptorSidecar(id); err != nil || sidecar != nil {
 		return sidecar, err
@@ -823,7 +749,6 @@ func (c *Collection) writeOrder(dir string, slugs []string) error {
 	return writeMessage(p, ff)
 }
 
-// reconciledSlugsFrom uses an already-read children snapshot, so a caller cannot race its own writes.
 func (c *Collection) reconciledSlugsFrom(dir string, present []childEntry) ([]string, error) {
 	listed, err := c.readOrder(dir)
 	if err != nil {
@@ -861,7 +786,6 @@ func (c *Collection) writeCollection(col *grpcviewstorev1.Collection) error {
 	return writeMessage(c.collectionFilePath(), col)
 }
 
-// historyFilePath keys history by tree-relative SLUG path, so it survives a rename and stays out of git.
 func (c *Collection) historyFilePath(itemDir string) (string, error) {
 	rel, err := filepath.Rel(c.treeRoot(), itemDir)
 	if err != nil {
@@ -870,7 +794,6 @@ func (c *Collection) historyFilePath(itemDir string) (string, error) {
 	return filepath.Join(c.historyRoot(), rel, historyFileName), nil
 }
 
-// readHistory swallows errors: a corrupt local history file must never block a load.
 func (c *Collection) readHistory(itemDir string) []*grpcviewv1.History {
 	histPath, err := c.historyFilePath(itemDir)
 	if err != nil {
@@ -885,7 +808,6 @@ func (c *Collection) readHistory(itemDir string) []*grpcviewv1.History {
 	return entries
 }
 
-// historyMarshal omits default values, unlike the managed committed files.
 var historyMarshal = protojson.MarshalOptions{Multiline: true, Indent: "  "}
 
 func readHistoryFile(path string) ([]*grpcviewv1.History, error) {

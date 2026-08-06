@@ -8,42 +8,32 @@ import (
 	"strings"
 )
 
-// Input is the read-only data a script sees as frozen globals. Each field is serialized to
-// JSON and re-parsed in the guest, so the script only ever touches a copied, inert POJO.
 type Input struct {
-	Request RequestInput
-	Vars    map[string]any
-	Secrets map[string]any
-	Env     map[string]any
-	// Args are the positional arguments a generator's exported entry point is called with.
-	Args []any
-	// Params backs gv.request.params.
-	Params map[string]any
-	// InheritedMetadata backs gv.metadata.inherit().
+	Request           RequestInput
+	Vars              map[string]any
+	Secrets           map[string]any
+	Env               map[string]any
+	Args              []any
+	Params            map[string]any
 	InheritedMetadata map[string][]string
 }
 
-// RequestInput mirrors the gRPC request a middleware/generator script operates on.
 type RequestInput struct {
 	Body     any               `json:"body"`
 	Metadata map[string]string `json:"metadata"`
 	Target   string            `json:"target"`
 }
 
-// Result is a script run's structured outcome: the return value as raw JSON — nil when the
-// script returned undefined, distinct from a JSON `null` — plus the buffered console output.
 type Result struct {
 	Value json.RawMessage
 	Logs  []LogLine
 }
 
-// LogLine is one buffered console call.
 type LogLine struct {
-	Level   string // debug | log | warn | error
+	Level   string
 	Message string
 }
 
-// No lock: host functions run on the calling goroutine and an Instance is never shared.
 type logCollector struct {
 	lines []LogLine
 }
@@ -65,8 +55,7 @@ func levelName(l int32) string {
 	}
 }
 
-// preludeHelpers defines the deep-freeze helper and the console object. `var` plus a
-// globalThis assignment, so re-evaluating it in a reused context cannot redeclare.
+// `var` plus a globalThis assignment, so re-evaluating this in a reused context cannot redeclare.
 const preludeHelpers = `var __ff=function f(o){if(o&&typeof o==="object"){` +
 	`if(Array.isArray(o)){for(var i=0;i<o.length;i++)f(o[i]);}else{for(var k in o)f(o[k]);}` +
 	`Object.freeze(o);}return o;};` +
@@ -99,8 +88,8 @@ func buildInputPrelude(in Input) string {
 	return b.String()
 }
 
-// jsonLit JSON-encodes v, then JSON-encodes that JSON to a string literal: a JSON string is
-// also a valid JS string literal, so the payload cannot break out of it.
+// JSON-encodes v, then JSON-encodes that JSON to a string literal: a JSON string is also a valid JS
+// string literal, so the payload cannot break out of it.
 func jsonLit(v any) string {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
@@ -128,8 +117,6 @@ func orEmptyMetadata(m map[string][]string) map[string][]string {
 	return m
 }
 
-// gvInvokeShim is installed as gv.invoke. Every failure — including the host's throw when no
-// Invoker rides the context — becomes a rejected promise, never a synchronous throw.
 const gvInvokeShim = `function (path, params) {
   try {
     var req = JSON.stringify({ path: String(path), params: (params == null ? {} : params) });
@@ -139,9 +126,9 @@ const gvInvokeShim = `function (path, params) {
   }
 }`
 
-// `gv` must be assembled and frozen in ONE statement: the freeze blocks later member
-// addition and a second assignment would clobber it. The inherited map needs its own __ff
-// because it hangs off the inherit() closure, not gv's property graph.
+// `gv` must be assembled and frozen in ONE statement: the freeze blocks later member addition, and a
+// second assignment would clobber it. The inherited map needs its own __ff because it hangs off the
+// inherit() closure, not gv's property graph.
 func buildGvPrelude(in Input) string {
 	data := map[string]any{
 		"request": map[string]any{"params": orEmptyMap(in.Params)},

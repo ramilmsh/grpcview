@@ -38,8 +38,6 @@ func startReflectionServer(t *testing.T, withHealth bool) int {
 	return port
 }
 
-// startStoppableReflectionServer also hands back the stop function, for tests that have to take
-// the target away mid-test to prove an operation does not dial.
 func startStoppableReflectionServer(t *testing.T, withHealth bool) (int, func()) {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -132,9 +130,6 @@ func fileDescriptorSet(t *testing.T, path string) []byte {
 	return raw
 }
 
-// ensureWorkspace explicitly creates the test collection: Get no longer does this on
-// demand (see TestGetMissingCollectionIsNotFound), so every test that needs the collection
-// to already exist must ask for that itself.
 func ensureWorkspace(t *testing.T, w Workspace, ctx context.Context) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -314,9 +309,6 @@ func TestRemoveDescriptorSourceUnknownID(t *testing.T) {
 	}
 }
 
-// TestGetMissingCollectionIsNotFound is the point of removing the implicit-create behavior
-// (see AGENTS.md): a stale query for a collection that was never created must fail cleanly
-// and leave nothing behind on disk, not materialize one.
 func TestGetMissingCollectionIsNotFound(t *testing.T) {
 	root := t.TempDir()
 	w := Workspace{
@@ -339,9 +331,6 @@ func TestGetMissingCollectionIsNotFound(t *testing.T) {
 	}
 }
 
-// TestMutateOnMissingCollectionIsNotFound is Get's counterpart for the write side: a
-// mutating RPC against a collection that was never created must fail the same way, not
-// stand one up on demand.
 func TestMutateOnMissingCollectionIsNotFound(t *testing.T) {
 	root := t.TempDir()
 	w := Workspace{
@@ -367,9 +356,6 @@ func TestMutateOnMissingCollectionIsNotFound(t *testing.T) {
 	}
 }
 
-// TestCreateCollection covers the RPC that replaces the implicit auto-create: it must
-// default the display name to the directory's own base name, honor an explicit one, and
-// refuse to silently reuse an address that already holds a collection.
 func TestCreateCollection(t *testing.T) {
 	root := t.TempDir()
 	w := Workspace{
@@ -611,8 +597,6 @@ func commitReq(id string, commit bool) *grpcviewv1.SetDescriptorSourceCommitRequ
 	return &grpcviewv1.SetDescriptorSourceCommitRequest{Collection: testWorkspace, Id: id, Commit: commit}
 }
 
-// sourceByID finds a row in the response's source list; the flag is round-tripped through the
-// manifest, so reading it back off a handler's Collection is the assertion that it persisted.
 func sourceByID(ws *grpcviewv1.Collection, id string) *grpcviewv1.DescriptorSource {
 	for _, src := range ws.GetSources() {
 		if src.GetId() == id {
@@ -647,9 +631,6 @@ func committedSidecars(t *testing.T, w Workspace) []string {
 	return names
 }
 
-// TestSetDescriptorSourceCommitNeverDials is the promise the RPC exists for: the toggle moves the
-// bytes the store already holds between the two locations, so it still works with the reflection
-// target gone — a dial would fail the call outright.
 func TestSetDescriptorSourceCommitNeverDials(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -695,8 +676,6 @@ func TestSetDescriptorSourceCommitNeverDials(t *testing.T) {
 	}
 }
 
-// TestSetDescriptorSourceCommitRejectsUnresolved answers the question the plan left open: an
-// unresolved source is refused, because resolve-then-commit would make a config change acquire.
 func TestSetDescriptorSourceCommitRejectsUnresolved(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -706,7 +685,6 @@ func TestSetDescriptorSourceCommitRejectsUnresolved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	// Listed but never resolved — the state a fresh clone of an uncommitted source is in.
 	const id = "reflection:127.0.0.1:1"
 	if err := coll.PutDescriptorState(ctx, store.DescriptorState{
 		Sources: []*grpcviewv1.DescriptorSource{{
@@ -729,9 +707,6 @@ func TestSetDescriptorSourceCommitRejectsUnresolved(t *testing.T) {
 	}
 }
 
-// TestCommittedDescriptorsResolveInAFreshClone is the whole point of the flag: the same collection
-// directory, opened with a state root that has never seen it — a colleague's clone — resolves with
-// no refresh and no network.
 func TestCommittedDescriptorsResolveInAFreshClone(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -763,10 +738,6 @@ func TestCommittedDescriptorsResolveInAFreshClone(t *testing.T) {
 	}
 }
 
-// TestReAddNeverUnCommits: an add whose id already exists IS the refresh gesture — it is how the
-// browser refreshes an upload or a bazel label — so re-adding with the checkbox off must not flip a
-// committed source back to cached and DELETE the sidecar the repo carries. A re-add can turn
-// committing on, never off; SetDescriptorSourceCommit is the one way off.
 func TestReAddNeverUnCommits(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -784,7 +755,6 @@ func TestReAddNeverUnCommits(t *testing.T) {
 		t.Fatalf("want one sidecar after a committed add, got %v", got)
 	}
 
-	// The same source again, with the flag unset — a plain refresh.
 	again, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(set)))
 	if err != nil {
 		t.Fatalf("AddDescriptorSource (re-add): %v", err)
@@ -796,7 +766,6 @@ func TestReAddNeverUnCommits(t *testing.T) {
 		t.Errorf("a re-add deleted the committed sidecar, got %v", got)
 	}
 
-	// Turning it off is still possible — through the RPC that exists for it.
 	off, err := w.SetDescriptorSourceCommit(ctx, connect.NewRequest(commitReq(id, false)))
 	if err != nil {
 		t.Fatalf("SetDescriptorSourceCommit(off): %v", err)
@@ -808,7 +777,6 @@ func TestReAddNeverUnCommits(t *testing.T) {
 		t.Errorf("--off must delete the sidecar, got %v", got)
 	}
 
-	// And a re-add can still turn it ON.
 	on := descriptorSetAddReq(set)
 	on.CommitDescriptors = true
 	backOn, err := w.AddDescriptorSource(ctx, connect.NewRequest(on))
@@ -820,9 +788,6 @@ func TestReAddNeverUnCommits(t *testing.T) {
 	}
 }
 
-// TestUploadsAreNotStoredInTheManifest pins the deletion of upload's special case: the bytes go into
-// the descriptor store like every other kind's, so grpcview.json stays a small file that a request
-// reorder can rewrite.
 func TestUploadsAreNotStoredInTheManifest(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -854,10 +819,6 @@ func TestUploadsAreNotStoredInTheManifest(t *testing.T) {
 	}
 }
 
-// TestRefreshAnUploadFails: an upload with no path is the null-pointer kind, so there is nothing to
-// re-resolve from. Failing is deliberate — a silent success would report a refresh that re-fetched
-// nothing. An upload that DOES carry a path re-reads it instead; see
-// TestRefreshUploadRereadsItsPath.
 func TestRefreshAnUploadFails(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -882,7 +843,6 @@ func TestRefreshAnUploadFails(t *testing.T) {
 		}
 	}
 
-	// The failed refresh changed nothing: the upload still resolves from what the add stored.
 	got, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
 	if err != nil {
 		t.Fatalf("Get after the failed refresh: %v", err)
@@ -892,12 +852,6 @@ func TestRefreshAnUploadFails(t *testing.T) {
 	}
 }
 
-// Shared definitions (1d-C): the workspace manifest holds the source DEFINITIONS, each collection
-// holds the ordered LIST, and an entry in that list may be a bare reference by id.
-
-// writeWorkspaceDefinitions hand-writes grpcview.work.json the way a user commits it — one shared
-// reflection definition plus the defaults a new collection is seeded from — and returns the id that
-// definition is addressed by.
 func writeWorkspaceDefinitions(t *testing.T, root string, port int) string {
 	t.Helper()
 	id := fmt.Sprintf("reflection:127.0.0.1:%d", port)
@@ -927,9 +881,6 @@ func manifestText(t *testing.T, w Workspace, collectionID string) string {
 	return string(data)
 }
 
-// assertBareReference parses the collection's own committed manifest, which is the only place the
-// sharing can be verified: a wire response looks identical either way, because a reference is
-// joined to its definition on the way out.
 func assertBareReference(t *testing.T, w Workspace, collectionID, id string) {
 	t.Helper()
 	col := &grpcviewstorev1.Collection{}
@@ -954,8 +905,6 @@ func workspaceBlobNames(t *testing.T, w Workspace, collectionID string) []string
 	if err != nil {
 		t.Fatalf("Open %s: %v", collectionID, err)
 	}
-	// A collection's state dir is <state root>/collections/<hash>, so two levels up is the state
-	// root the blobs are shared in.
 	entries, err := os.ReadDir(filepath.Join(filepath.Dir(filepath.Dir(coll.State())), "blobs"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -991,13 +940,6 @@ func createCollectionAt(t *testing.T, w Workspace, ctx context.Context, collecti
 	return resp.Msg.GetCollection()
 }
 
-// TestSharedDefinitionServesTwoCollections is the monorepo shape this tier exists for: one
-// definition in grpcview.work.json, two collections seeded with references to it, both resolving,
-// and ONE copy of the descriptor bytes for the two.
-//
-// It also pins the correction to the plan's claim that seeding "produces a collection that already
-// resolves": seeding writes pointers, so the freshly created collection's row carries an
-// unresolved error until something acquires.
 func TestSharedDefinitionServesTwoCollections(t *testing.T) {
 	root := t.TempDir()
 	w := newWorkspaceAt(t, root)
@@ -1043,8 +985,6 @@ func TestSharedDefinitionServesTwoCollections(t *testing.T) {
 	}
 }
 
-// TestRemovingAReferenceLeavesTheDefinition: removing a shared source removes THIS collection's
-// reference. Nothing in that path may write the workspace manifest — no RPC in this sub-phase does.
 func TestRemovingAReferenceLeavesTheDefinition(t *testing.T) {
 	root := t.TempDir()
 	w := newWorkspaceAt(t, root)
@@ -1093,8 +1033,6 @@ func TestRemovingAReferenceLeavesTheDefinition(t *testing.T) {
 	}
 }
 
-// TestAddingASourceTheWorkspaceDefinesReferencesIt: the dedup users actually hit. Adding the
-// address the workspace already declares must produce a reference, not a fifth copy of the config.
 func TestAddingASourceTheWorkspaceDefinesReferencesIt(t *testing.T) {
 	root := t.TempDir()
 	w := newWorkspaceAt(t, root)
@@ -1102,8 +1040,6 @@ func TestAddingASourceTheWorkspaceDefinesReferencesIt(t *testing.T) {
 	port := startReflectionServer(t, true)
 	id := writeWorkspaceDefinitions(t, root, port)
 
-	// No defaults are involved: this collection is created, its seeded reference removed, and the
-	// same address then added by hand.
 	const cid = "services/payments/requests"
 	createCollectionAt(t, w, ctx, cid)
 	if _, err := w.RemoveDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RemoveDescriptorSourceRequest{
@@ -1135,9 +1071,6 @@ func TestAddingASourceTheWorkspaceDefinesReferencesIt(t *testing.T) {
 	assertBareReference(t, w, cid, id)
 }
 
-// TestReferenceWithNoDefinitionKeepsItsRow: a reference whose definition is missing must be
-// VISIBLE — that is what makes it removable — and its error has to name the manifest that should
-// define it, because the row is in one file and the fix is in another.
 func TestReferenceWithNoDefinitionKeepsItsRow(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -1169,7 +1102,6 @@ func TestReferenceWithNoDefinitionKeepsItsRow(t *testing.T) {
 		t.Errorf("error = %q, want it to name both %s and the id", reason, store.WorkspaceFileName)
 	}
 
-	// Refreshing it says the same thing rather than dialing something that isn't configured.
 	_, err = w.RefreshDescriptorSource(ctx, connect.NewRequest(&grpcviewv1.RefreshDescriptorSourceRequest{
 		Collection: testWorkspace,
 		Id:         id,
@@ -1179,9 +1111,6 @@ func TestReferenceWithNoDefinitionKeepsItsRow(t *testing.T) {
 	}
 }
 
-// TestCommitAndRefreshWorkOnAReference: neither RPC needs to know about the tier, but both have to
-// keep working through it — and committing a reference writes the sidecar into the COLLECTION,
-// which is exactly why commit_descriptors is meaningless on a shared definition.
 func TestCommitAndRefreshWorkOnAReference(t *testing.T) {
 	root := t.TempDir()
 	w := newWorkspaceAt(t, root)
@@ -1213,7 +1142,6 @@ func TestCommitAndRefreshWorkOnAReference(t *testing.T) {
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("committing a reference must write one sidecar in the collection: %v, %v", entries, err)
 	}
-	// The flag is the collection's own, so it rides on the reference and the config still isn't here.
 	assertBareReference(t, w, cid, id)
 
 	if got := refreshSource(t, w, ctx, cid, id); !hasService(got.GetServices(), "Health") {
@@ -1232,8 +1160,6 @@ func TestCommitAndRefreshWorkOnAReference(t *testing.T) {
 	assertBareReference(t, w, cid, id)
 }
 
-// TestReorderKeepsAReferenceShared: a reorder rewrites the whole list, which is the mutation most
-// likely to inline shared config by accident.
 func TestReorderKeepsAReferenceShared(t *testing.T) {
 	root := t.TempDir()
 	w := newWorkspaceAt(t, root)

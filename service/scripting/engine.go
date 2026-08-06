@@ -1,5 +1,4 @@
-// Package scripting embeds QuickJS compiled to WebAssembly and evaluates untrusted
-// JavaScript under enforceable memory and wall-clock bounds on the wazero runtime.
+// Package scripting evaluates untrusted JavaScript in QuickJS-on-wazero under memory and time bounds.
 package scripting
 
 import (
@@ -22,29 +21,23 @@ var quickjsWasm []byte
 
 const WasmPageSize = 65536
 
-// The result envelope qjs_result returns, mirrored from third_party/quickjs/qjs_wasm.c.
 const (
-	resultHeaderSize       = 5 // [tag u8][len u32 LE][payload]
+	resultHeaderSize       = 5
 	tagValue         uint8 = 0
 	tagThrow         uint8 = 1
 	tagUndefined     uint8 = 2
 )
 
-// qjs_eval / qjs_pump status codes, mirrored from qjs_wasm.c.
 const (
 	statusDone    = 0
 	statusPending = 1
 	statusError   = 2
 )
 
-// ErrInterrupted is returned when a run is cancelled or its deadline elapses; the
-// instance it ran on is left dead and must be discarded.
 var ErrInterrupted = errors.New("scripting: evaluation interrupted")
 
-// ErrUnsettled is returned when a script's top-level Promise never settles.
 var ErrUnsettled = errors.New("scripting: top-level promise did not settle")
 
-// JSError is a JavaScript exception that propagated out of an evaluation.
 type JSError struct {
 	Message string
 	Stack   string
@@ -53,27 +46,23 @@ type JSError struct {
 
 func (e *JSError) Error() string { return "scripting: uncaught " + e.Message }
 
-// Runtime is a compiled-once, instantiate-many QuickJS engine; safe for concurrent use.
 type Runtime struct {
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
 }
 
-// New builds a Runtime whose instances may grow linear memory to at most maxPages pages.
 func New(ctx context.Context, maxPages uint32) (*Runtime, error) {
 	cfg := wazero.NewRuntimeConfig().
-		WithCloseOnContextDone(true). // lets ctx cancel/deadline interrupt a running guest
+		WithCloseOnContextDone(true).
 		WithMemoryLimitPages(maxPages)
 
 	rt := wazero.NewRuntimeWithConfig(ctx, cfg)
 
-	// The wasm32-wasi reactor build needs WASI preview1 for libc; no FS/args/env is granted.
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		_ = rt.Close(ctx)
 		return nil, fmt.Errorf("scripting: instantiate wasi: %w", err)
 	}
 
-	// quickjs.wasm statically imports these, so they must be present at every instantiation.
 	if err := registerHostModule(ctx, rt); err != nil {
 		_ = rt.Close(ctx)
 		return nil, err
@@ -87,11 +76,10 @@ func New(ctx context.Context, maxPages uint32) (*Runtime, error) {
 	return &Runtime{rt: rt, compiled: compiled}, nil
 }
 
-// Close releases the runtime and all instances derived from it.
 func (r *Runtime) Close(ctx context.Context) error { return r.rt.Close(ctx) }
 
-// Instance is one live QuickJS wasm instance; not safe for concurrent use, and it must be
-// discarded once dead.
+// Instance is one live QuickJS wasm instance: not safe for concurrent use, and it must be discarded
+// once Dead — an interrupt or trap leaves it unusable.
 type Instance struct {
 	mod     api.Module
 	malloc  api.Function
@@ -105,9 +93,7 @@ type Instance struct {
 	dead    bool
 }
 
-// Instantiate creates a fresh QuickJS instance granting no FS, args, or env.
 func (r *Runtime) Instantiate(ctx context.Context) (*Instance, error) {
-	// "_initialize" runs the reactor's libc init; an empty name keeps instances anonymous.
 	cfg := wazero.NewModuleConfig().
 		WithName("").
 		WithStartFunctions("_initialize")
@@ -138,7 +124,6 @@ func (r *Runtime) Instantiate(ctx context.Context) (*Instance, error) {
 
 func (i *Instance) Close(ctx context.Context) error { return i.mod.Close(ctx) }
 
-// Dead reports whether an interrupt or trap left the instance unusable.
 func (i *Instance) Dead() bool { return i.dead }
 
 func (i *Instance) mapErr(ctx context.Context, err error) error {
@@ -174,8 +159,8 @@ func (i *Instance) callEval(ctx context.Context, src string, async bool) (int, e
 		return 0, i.mapErr(ctx, err)
 	}
 	srcPtr := uint32(mallocRet[0])
+	// NULL from qjs_malloc: writing at offset 0 would clobber low memory, not fail.
 	if len(src) > 0 && srcPtr == 0 {
-		// NULL from qjs_malloc: writing at offset 0 would clobber low memory, not fail.
 		return 0, errors.New("scripting: guest out of memory allocating source")
 	}
 	if len(src) > 0 && !i.mem.WriteString(srcPtr, src) {
@@ -217,6 +202,7 @@ func (i *Instance) callResult(ctx context.Context, asJSON bool) (uint8, []byte, 
 	}
 	defer i.free.Call(context.WithoutCancel(ctx), uint64(resPtr))
 
+	// mem.Read returns a view into guest memory that i.free invalidates.
 	header, ok := i.mem.Read(resPtr, resultHeaderSize)
 	if !ok {
 		return 0, nil, errors.New("scripting: result header out of range")
@@ -227,7 +213,6 @@ func (i *Instance) callResult(ctx context.Context, asJSON bool) (uint8, []byte, 
 	if !ok {
 		return 0, nil, errors.New("scripting: result payload out of range")
 	}
-	// mem.Read returns a view into guest memory that i.free invalidates.
 	out := make([]byte, len(payload))
 	copy(out, payload)
 	return tag, out, nil
@@ -248,12 +233,11 @@ func (i *Instance) evalRaw(ctx context.Context, src string, async, asJSON bool) 
 			return 0, nil, err
 		}
 		if st == statusPending {
-			// Every host call is synchronous, so a drained queue can never advance the promise.
+			// Do not pump again: a detached spinning `.then` could burn the deadline and lose the value already
+			// settled here. Every host call is synchronous, so a drained queue can never advance the promise.
 			return 0, nil, ErrUnsettled
 		}
 	}
-	// Do not pump again: a detached spinning `.then` could burn the deadline and lose the
-	// value already settled here.
 	return i.callResult(ctx, asJSON)
 }
 
@@ -284,17 +268,16 @@ func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Inpu
 	return Result{Value: val, Logs: sink.lines}, derr
 }
 
-// Grant is the set of capabilities a run is allowed; a nil sub-grant denies that capability.
 type Grant struct {
 	FS *FSGrant
 }
 
 // FSGrant scopes the fs capability to an allowlist of paths.
+// NOTE: prefix containment on cleaned paths only; symlinks are not resolved.
 type FSGrant struct {
 	AllowedPaths []string
 }
 
-// NOTE: prefix containment on cleaned paths only; symlinks are not resolved.
 func (f *FSGrant) allows(cleaned string) bool {
 	for _, p := range f.AllowedPaths {
 		pc := filepath.Clean(p)
@@ -318,7 +301,6 @@ func (g Grant) fsRead(path string) ([]byte, error) {
 
 type grantCtxKey struct{}
 
-// WithGrant returns a context carrying g for the host functions to enforce against.
 func WithGrant(ctx context.Context, g Grant) context.Context {
 	return context.WithValue(ctx, grantCtxKey{}, g)
 }
@@ -330,13 +312,10 @@ func grantFromContext(ctx context.Context) Grant {
 	return Grant{}
 }
 
-// Invoker is the ctx-carried bridge gv.invoke calls into: a JSON {path, params} request in,
-// the InvokeResult envelope JSON out.
 type Invoker func(ctx context.Context, req []byte) ([]byte, error)
 
 type invokerCtxKey struct{}
 
-// WithInvoker returns a context carrying inv for hostInvoke to call.
 func WithInvoker(ctx context.Context, inv Invoker) context.Context {
 	return context.WithValue(ctx, invokerCtxKey{}, inv)
 }
@@ -405,12 +384,12 @@ func hostConsole(ctx context.Context, mod api.Module, stack []uint64) {
 		return
 	}
 	if sink := sinkFromContext(ctx); sink != nil {
-		sink.add(levelName(level), string(msg)) // string() copies out of guest memory
+		sink.add(levelName(level), string(msg))
 	}
 }
 
-// writeResult allocates the result envelope in GUEST memory via qjs_malloc; the guest reads
-// and frees it. Returns 0 on failure, which the guest turns into an error.
+// Allocates the result envelope in GUEST memory via qjs_malloc; the guest reads and frees it. Returns
+// 0 on failure, which the guest turns into an error.
 func writeResult(ctx context.Context, mod api.Module, tag uint8, payload []byte) uint32 {
 	malloc := mod.ExportedFunction("qjs_malloc")
 	if malloc == nil {

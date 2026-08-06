@@ -31,8 +31,6 @@ func listCollections(t *testing.T, w Workspace, ctx context.Context, refresh boo
 	return resp.Msg
 }
 
-// TestListCollectionsEmptyWorkspace: a repo nobody has run grpcview in yet is a legitimate
-// state, not an error — it is what the UI's empty state renders from.
 func TestListCollectionsEmptyWorkspace(t *testing.T) {
 	root := t.TempDir()
 	msg := listCollections(t, newWorkspaceAt(t, root), context.Background(), false)
@@ -71,10 +69,6 @@ func TestListCollectionsAfterCreate(t *testing.T) {
 	}
 }
 
-// TestListCollectionsSeesCreateWithoutRefresh is the test for the invalidation in
-// CreateCollection. The parent directory exists before the first listing so that creating the
-// collection under it cannot change the ROOT's mtime — which is the index's cache key, and
-// therefore the one thing that would otherwise mask a missing InvalidateList.
 func TestListCollectionsSeesCreateWithoutRefresh(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "services", "payments"), 0o755); err != nil {

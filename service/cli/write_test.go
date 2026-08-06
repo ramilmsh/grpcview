@@ -94,8 +94,6 @@ func (f *fakeClient) SetDescriptorSourceCommit(_ context.Context, r *connect.Req
 	return connect.NewResponse(&grpcviewv1.SetDescriptorSourceCommitResponse{Collection: f.snapshot}), nil
 }
 
-// SetWorkspaceTrust answers with the state it was asked for, the way the server does after
-// re-reading it: the CLI ignores the response, and a test that wants a mismatch sets writes.err.
 func (f *fakeClient) SetWorkspaceTrust(_ context.Context, r *connect.Request[grpcviewv1.SetWorkspaceTrustRequest]) (*connect.Response[grpcviewv1.SetWorkspaceTrustResponse], error) {
 	f.writes.setTrust = append(f.writes.setTrust, r.Msg)
 	f.writes.order = append(f.writes.order, "SetWorkspaceTrust")
@@ -206,7 +204,6 @@ func TestSourcesAdd(t *testing.T) {
 					t.Errorf("file_name = %q, want %q: the identity is the basename, never the path",
 						got.GetFileName(), "image.binpb")
 				}
-				// The path rides along so the upload is refreshable; the server rel-izes it.
 				if got.GetPath() != file {
 					t.Errorf("path = %q, want the file's absolute path %q", got.GetPath(), file)
 				}
@@ -308,7 +305,6 @@ func TestSourcesAdd(t *testing.T) {
 			},
 		},
 		{
-			// The reason the CLI refuses bazel's `pkg:target` shorthand: it is this, exactly.
 			name: "a host:port is an ADDRESS and never the `pkg:target` shorthand",
 			arg:  "localhost:8080",
 			check: func(t *testing.T, fc *fakeClient) {
@@ -443,8 +439,6 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 	}
 }
 
-// A relative argument is resolved against THIS process's cwd before it is sent, because the
-// server resolves the recorded path against the workspace root instead.
 func TestSourcesAddRecordsAnAbsolutePath(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "image.binpb"), []byte("x"), 0o600); err != nil {
@@ -477,9 +471,6 @@ func TestSourcesRefresh(t *testing.T) {
 		for _, msg := range fc.writes.refreshSource {
 			got = append(got, msg.GetId())
 		}
-		// Only the browser upload is passed over: it alone has no pointer to re-acquire itself,
-		// so the RPC refuses it, and a bare refresh means "everything that can re-acquire". The
-		// upload that recorded a path re-reads that file and a bazel label builds.
 		want := []string{
 			"reflection:localhost:50055",
 			"upload:built.binpb",

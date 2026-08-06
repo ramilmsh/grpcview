@@ -13,10 +13,8 @@ type methodKind struct {
 	server bool
 }
 
-// streaming is "streams at all": InvokeSaved rejects a server-streaming method with Unimplemented.
 func (k methodKind) streaming() bool { return k.client || k.server }
 
-// ndjson: only client-streaming and bidi take many messages.
 func (k methodKind) ndjson() bool { return k.client }
 
 type invokeTarget struct {
@@ -88,11 +86,9 @@ func unknownArgError(ws *grpcviewv1.Collection, arg string, saved savedLookup) e
 		arg, ws.GetName(), service, method, len(ws.GetServices()))
 }
 
-// lookupSaved walks the collection tree by display name from the root Item.
 func lookupSaved(ws *grpcviewv1.Collection, arg string) savedLookup {
 	parent, name, err := workspace.SplitInvokePath(arg)
 	if err != nil {
-		// SplitInvokePath's error text names gv.invoke, so it is not surfaced here.
 		return savedLookup{}
 	}
 
@@ -139,7 +135,6 @@ func lookupAdhoc(ws *grpcviewv1.Collection, arg string) (service, method string,
 	return service, method, kind, true
 }
 
-// splitMethodPath splits on the LAST slash: a service's full name has dots, never slashes.
 func splitMethodPath(arg string) (service, method string) {
 	i := strings.LastIndex(arg, "/")
 	if i < 0 {

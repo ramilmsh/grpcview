@@ -84,7 +84,6 @@ func runDescribe(ctx context.Context, s Streams, g *globalFlags, open clientFact
 	return writeLine(s.Out, []byte(described.GetProtoText()))
 }
 
-// describeJSON re-marshals the serialized FileDescriptorSet so jq reaches its fields.
 func describeJSON(s Streams, arg string, raw []byte) error {
 	set := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(raw, set); err != nil {

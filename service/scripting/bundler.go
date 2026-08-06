@@ -1,7 +1,5 @@
 package scripting
 
-// Gate 1 of the capability system, and the esbuild-backed TS/dependency front end.
-
 import (
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,25 +15,19 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
-// authorSource is the virtual filename esbuild records for the author's own code.
 const authorSource = "script.ts"
 
-// entryGlobalName is the global esbuild's IIFE build assigns the entry module's exports to.
 const entryGlobalName = "__grpcview_entry"
 
 // ES2022 is the floor that permits top-level await (esbuild rejects it at es2020).
 const esbuildTarget = api.ES2022
 
 type compiled struct {
-	code      string
-	sourceMap []byte
-	// synthetic-prelude lines ahead of the author's body in the esbuild input (compose.go)
+	code               string
+	sourceMap          []byte
 	authorPreludeLines int
 }
 
-// bundler compiles scripts via esbuild, caching by (resolver identity, grant, source).
-// resolveDir/nodePaths are empty in production, so nothing resolves from the host FS;
-// registryDir is served by a plugin instead. Safe for concurrent use.
 type bundler struct {
 	resolveDir  string
 	nodePaths   []string
@@ -65,8 +57,6 @@ func (b *bundler) compile(source string, g Grant) (compiled, error) {
 		c   compiled
 		err error
 	)
-	// Transpile-only when there is nothing to resolve: the bundler drops bare no-op
-	// statements and needs an export convention; Transform keeps the body verbatim.
 	if needsBundling(source) {
 		c, err = b.buildBundle(source, g)
 	} else {
@@ -84,7 +74,7 @@ func (b *bundler) compile(source string, g Grant) (compiled, error) {
 func (b *bundler) cacheKey(source string, g Grant, variant string) (string, bool) {
 	gj, err := json.Marshal(g)
 	if err != nil {
-		return "", false // a grant that will not marshal must not share a cache slot
+		return "", false
 	}
 	h := sha256.New()
 	io.WriteString(h, b.cacheSalt)
@@ -122,11 +112,11 @@ func (b *bundler) esbuildBundle(source string, g Grant, format api.Format, globa
 			Sourcefile: authorSource,
 			ResolveDir: b.resolveDir,
 		},
-		Outfile:       "script.js", // required for an external source map even with Write:false
+		Outfile:       "script.js",
 		Bundle:        true,
 		Write:         false,
 		Format:        format,
-		GlobalName:    globalName, // ignored by esbuild unless format is IIFE
+		GlobalName:    globalName,
 		Target:        esbuildTarget,
 		Platform:      api.PlatformBrowser,
 		TreeShaking:   api.TreeShakingFalse,
@@ -143,25 +133,22 @@ func (b *bundler) esbuildBundle(source string, g Grant, format api.Format, globa
 	return outputToCompiled(result.OutputFiles), nil
 }
 
-// buildBundle emits one ESM blob that evaluates as global code, so its last top-level
-// expression is the run's value.
 func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
 	return b.esbuildBundle(source, g, api.FormatESModule, "")
 }
 
-// buildEntryBundle captures the entry module's exports onto entryGlobalName. IIFE output
-// cannot contain top-level await (esbuild rejects it).
+// Captures the entry module's exports onto entryGlobalName. IIFE output cannot contain top-level await
+// (esbuild rejects it).
 func (b *bundler) buildEntryBundle(source string, g Grant) (compiled, error) {
 	return b.esbuildBundle(source, g, api.FormatIIFE, entryGlobalName)
 }
 
-// buildBundleComposed bypasses the compile cache: gens folds into the blob, so a key over
-// (source, grant) alone would be unsound.
+// Bypasses the compile cache: gens folds into the blob, so a key over (source, grant) alone would be
+// unsound.
 func (b *bundler) buildBundleComposed(source string, g Grant, gens map[string]string) (compiled, error) {
 	return b.esbuildBundle(source, g, api.FormatESModule, "", generatorResolverPlugin(gens))
 }
 
-// buildEntryBundleComposed is buildEntryBundle with the generator resolver; also uncached.
 func (b *bundler) buildEntryBundleComposed(source string, g Grant, gens map[string]string) (compiled, error) {
 	return b.esbuildBundle(source, g, api.FormatIIFE, entryGlobalName, generatorResolverPlugin(gens))
 }
@@ -169,7 +156,7 @@ func (b *bundler) buildEntryBundleComposed(source string, g Grant, gens map[stri
 func transformScript(source string) (compiled, error) {
 	result := api.Transform(source, api.TransformOptions{
 		Loader:     api.LoaderTS,
-		Format:     api.FormatESModule, // makes top-level await valid
+		Format:     api.FormatESModule,
 		Target:     esbuildTarget,
 		Sourcemap:  api.SourceMapExternal,
 		Sourcefile: authorSource,
@@ -218,14 +205,11 @@ const capNamespace = "grpcview-cap"
 
 var capFilter = `^(node:)?(fs|path)$`
 
-// A nil `granted` marks an INERT module (always injected); a non-nil one is Gate-1 gated.
 type capModule struct {
 	shim    string
 	granted func(Grant) bool
 }
 
-// The vendored node:* shims. Each exports both a default and named bindings so either
-// import form resolves.
 const (
 	capShimPath = `const join = (...parts) => parts.join("/").replace(/\/+/g, "/");
 const basename = (p) => { p = String(p); const i = p.lastIndexOf("/"); return i < 0 ? p : p.slice(i + 1); };
@@ -242,7 +226,7 @@ var capModules = map[string]capModule{
 	"fs":   {shim: capShimFS, granted: func(g Grant) bool { return g.FS != nil }},
 }
 
-// esbuild takes the first plugin whose OnResolve returns a path, so the order is a contract:
+// esbuild takes the first plugin whose OnResolve returns a path, so the order is a CONTRACT:
 // grpcview:gen/* must be claimed before the registry plugin's `^[^./]` filter matches it.
 func (b *bundler) plugins(g Grant, extra ...api.Plugin) []api.Plugin {
 	ps := []api.Plugin{capabilityPlugin(g)}
@@ -253,22 +237,18 @@ func (b *bundler) plugins(g Grant, extra ...api.Plugin) []api.Plugin {
 	return ps
 }
 
-// registryResolverPlugin maps a bare import to an absolute path inside registryDir, so a
-// vendored package resolves without the build having a filesystem-anchored entry.
 func registryResolverPlugin(registryDir string) api.Plugin {
 	return api.Plugin{
 		Name: "grpcview-npm-registry",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(api.OnResolveOptions{Filter: `^[^./]`},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					// node:* also matches this filter, but the capability plugin owns those.
 					if strings.HasPrefix(args.Path, "node:") {
 						return api.OnResolveResult{}, nil
 					}
 					pkg := npmPackageName(args.Path)
 					pkgDir := filepath.Join(registryDir, filepath.FromSlash(pkg))
 					if _, err := os.Stat(filepath.Join(pkgDir, "package.json")); err != nil {
-						// Not vendored: pass through to esbuild's own resolver.
 						return api.OnResolveResult{}, nil
 					}
 					target := filepath.Join(registryDir, filepath.FromSlash(args.Path))
@@ -314,8 +294,6 @@ const (
 	generatorNamespace  = "grpcview-generator"
 )
 
-// generatorResolverPlugin resolves grpcview:gen/<name> (compose.go) to that generator's
-// source; a name absent from gens is a resolve error, so the bundle fails.
 func generatorResolverPlugin(gens map[string]string) api.Plugin {
 	return api.Plugin{
 		Name: "grpcview-generators",
@@ -338,8 +316,8 @@ func generatorResolverPlugin(gens map[string]string) api.Plugin {
 	}
 }
 
-// Gate 1: a capability module resolves only if the grant permits it, so an ungranted import
-// leaves no call site at all.
+// Gate 1: a capability module resolves only if the grant permits it, so an ungranted import leaves no
+// call site at all.
 func capabilityPlugin(g Grant) api.Plugin {
 	return api.Plugin{
 		Name: "grpcview-capabilities",

@@ -1,8 +1,5 @@
 package scripting
 
-// Tests for the shared gv global and the gv.invoke host bridge, exercised through
-// Engine.RunScenario.
-
 import (
 	"context"
 	"encoding/json"
@@ -174,4 +171,3 @@ func TestGvInvokeStubRejects(t *testing.T) {
 		t.Fatalf("value = %s, want %s", res.Value, want)
 	}
 }
-

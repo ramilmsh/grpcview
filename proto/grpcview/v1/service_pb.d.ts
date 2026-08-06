@@ -51,18 +51,15 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
   fileName: string;
 
   /**
-   * Where a descriptor_set upload's bytes were read from, so the source can be refreshed
-   * later. Absolute or workspace-relative is accepted; the server stores it root-relative.
-   * Empty from a browser, which has a file picker and no path — the upload then keeps
-   * working and only its refresh is unavailable.
+   * Refresh recipe for a descriptor_set upload. Absolute or workspace-relative;
+   * stored root-relative. Empty from a browser, which only loses refresh.
    *
    * @generated from field: string path = 7;
    */
   path: string;
 
   /**
-   * Commit this source's descriptors to the repo instead of caching them in
-   * local state — see DescriptorSource.commit_descriptors.
+   * See DescriptorSource.commit_descriptors.
    *
    * @generated from field: bool commit_descriptors = 5;
    */
@@ -642,15 +639,14 @@ export declare const ListCollectionsRequestSchema: GenMessage<ListCollectionsReq
  */
 export declare type CollectionSummary = Message<"grpcview.v1.CollectionSummary"> & {
   /**
-   * The workspace-relative path that addresses this collection; "." is the root itself.
+   * Workspace-relative path that addresses this collection; "." is the root.
    *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * Display name. Never the id — a collection is addressed by its path and named
-   * separately, so five of them may all be called "requests".
+   * Display name, never the id — five collections may all be called "requests".
    *
    * @generated from field: string name = 2;
    */
@@ -662,8 +658,7 @@ export declare type CollectionSummary = Message<"grpcview.v1.CollectionSummary">
   sourceCount: number;
 
   /**
-   * Why this collection could not be summarized. A broken collection is a visible row,
-   * not a failed listing.
+   * Why this collection could not be summarized; a broken one is a visible row.
    *
    * @generated from field: string error = 4;
    */
@@ -681,7 +676,7 @@ export declare const CollectionSummarySchema: GenMessage<CollectionSummary>;
  */
 export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectionsResponse"> & {
   /**
-   * Absolute path of the workspace root, so a caller with a cwd of its own (the CLI) can
+   * Absolute workspace root, so a caller with a cwd of its own (the CLI) can
    * resolve that cwd against the workspace it is talking to.
    *
    * @generated from field: string root = 1;
@@ -694,11 +689,8 @@ export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectio
   collections: CollectionSummary[];
 
   /**
-   * Whether this workspace root is trusted, so a client can show a banner before anything
-   * needs it. Trust gates ONLY the source kinds that EXECUTE — a bazel label, today — because
-   * opening a repo whose grpcview.json names one would otherwise be enough to run its BUILD
-   * files. Everything else (reflection, uploads) loads and resolves regardless, and nothing
-   * already resolved is hidden by an untrusted workspace.
+   * Whether this root is trusted. Trust gates ONLY the source kinds that EXECUTE
+   * (a bazel label); reflection and uploads resolve regardless.
    *
    * @generated from field: bool trusted = 3;
    */
@@ -746,10 +738,8 @@ export declare type SetWorkspaceTrustResponse = Message<"grpcview.v1.SetWorkspac
 export declare const SetWorkspaceTrustResponseSchema: GenMessage<SetWorkspaceTrustResponse>;
 
 /**
- * ListBazelTargets takes no arguments on purpose. The query it runs is built here and
- * never from client input: a caller-supplied pattern or kind regex would be text handed
- * to `bazel query`, and the label validator that guards every other bazel entry point
- * cannot check a query expression.
+ * Takes no arguments on purpose: the query is built here, never from client
+ * input, since the label validator cannot check a query expression.
  *
  * @generated from message grpcview.v1.ListBazelTargetsRequest
  */
@@ -767,18 +757,16 @@ export declare const ListBazelTargetsRequestSchema: GenMessage<ListBazelTargetsR
  */
 export declare type ListBazelTargetsResponse = Message<"grpcview.v1.ListBazelTargetsResponse"> & {
   /**
-   * Canonical labels ("//pkg:target"), sorted, deduped. A SUGGESTION list: the field the
-   * user types into stays free text, because a rule this query does not know about can
-   * still produce a descriptor set.
+   * Canonical labels, sorted, deduped. A SUGGESTION list: the field stays free
+   * text, because an unknown rule can still produce a descriptor set.
    *
    * @generated from field: repeated string labels = 1;
    */
   labels: string[];
 
   /**
-   * Why the listing is short or empty, when bazel reported an error the query survived —
-   * one unloadable package under --keep_going, say. Empty on a clean query. Never a
-   * reason to refuse the labels that did come back.
+   * Why the listing is short, when bazel errored but the query survived (one
+   * unloadable package under --keep_going). Never a reason to refuse the labels.
    *
    * @generated from field: string warning = 2;
    */
@@ -792,9 +780,8 @@ export declare type ListBazelTargetsResponse = Message<"grpcview.v1.ListBazelTar
 export declare const ListBazelTargetsResponseSchema: GenMessage<ListBazelTargetsResponse>;
 
 /**
- * A collection is only ever created by an explicit act — this RPC, or `grpcview
- * init`. Nothing else may materialize one, or a stale query would scatter
- * grpcview.json among a repo's project files.
+ * A collection is only ever created by an explicit act — this RPC, or
+ * `grpcview init` — or a stale query would scatter grpcview.json around a repo.
  *
  * @generated from message grpcview.v1.CreateCollectionRequest
  */
@@ -992,8 +979,7 @@ export declare type InvokeStreamingResponse = Message<"grpcview.v1.InvokeStreami
 export declare const InvokeStreamingResponseSchema: GenMessage<InvokeStreamingResponse>;
 
 /**
- * Addresses the request SAVED at path/item_name and says how to run it once;
- * everything the unary and streaming saved forms share.
+ * Addresses the request SAVED at path/item_name and says how to run it once.
  *
  * @generated from message grpcview.v1.SavedInvokeSpec
  */
@@ -1037,7 +1023,7 @@ export declare type SavedInvokeSpec = Message<"grpcview.v1.SavedInvokeSpec"> & {
   messages: string[];
 
   /**
-   * Whether to append this run to the request's history. Defaults to TRUE.
+   * Append this run to the request's history. Defaults to TRUE.
    *
    * @generated from field: optional bool record_history = 7;
    */
@@ -1076,8 +1062,7 @@ export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest
 export declare const InvokeSavedRequestSchema: GenMessage<InvokeSavedRequest>;
 
 /**
- * The streaming saved form has no dry_run: a dry run reports one resolved
- * request, which is the unary shape.
+ * No dry_run: a dry run reports one resolved request, which is the unary shape.
  *
  * @generated from message grpcview.v1.InvokeSavedStreamRequest
  */
@@ -1467,8 +1452,7 @@ export declare const RunScriptResponseSchema: GenMessage<RunScriptResponse>;
  */
 export declare const WorkspaceService: GenService<{
   /**
-   * AddDescriptorSource appends at LOWEST priority, or refreshes in place when
-   * the source's id already exists.
+   * Appends at LOWEST priority, or refreshes in place when the id already exists.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.AddDescriptorSource
    */
@@ -1494,8 +1478,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof RefreshDescriptorSourceResponseSchema;
   },
   /**
-   * ReorderDescriptorSources sets which source wins when several describe the
-   * same protos.
+   * Sets which source wins when several describe the same protos.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.ReorderDescriptorSources
    */
@@ -1505,10 +1488,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof ReorderDescriptorSourcesResponseSchema;
   },
   /**
-   * SetDescriptorSourceCommit moves one source's descriptors between the
-   * committed sidecar and the local blob store. It never dials or builds: the
-   * bytes it writes are the ones already stored, so committing a source that has
-   * never resolved is InvalidArgument rather than a resolve.
+   * Moves one source's descriptors between the committed sidecar and the local
+   * blob store. Never dials or builds, so committing a source that has never
+   * resolved is InvalidArgument.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.SetDescriptorSourceCommit
    */
@@ -1518,8 +1500,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof SetDescriptorSourceCommitResponseSchema;
   },
   /**
-   * Get reports NOTHING implicitly: a collection that does not exist is NotFound,
-   * never created on demand.
+   * A collection that does not exist is NotFound, never created on demand.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.Get
    */
@@ -1529,10 +1510,8 @@ export declare const WorkspaceService: GenService<{
     output: typeof GetResponseSchema;
   },
   /**
-   * ListCollections is deliberately cheap: it reads manifests, never trees. It is the
-   * only thing a client needs before it knows which collection to Get, and since
-   * Collection.descriptor_set is a merged FileDescriptorSet in bytes, eagerly Getting
-   * every collection instead is the one way to make this design feel slow.
+   * Deliberately cheap: reads manifests, never trees. Eagerly Getting every
+   * collection instead is the one way to make this design feel slow.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.ListCollections
    */
@@ -1542,13 +1521,10 @@ export declare const WorkspaceService: GenService<{
     output: typeof ListCollectionsResponseSchema;
   },
   /**
-   * SetWorkspaceTrust trusts or un-trusts this workspace ROOT — the same decision VS Code's
-   * Workspace Trust makes, for the same reason: a committed bazel label means opening a repo
-   * could run `bazel build`, i.e. arbitrary code. Trust is on the folder and not on its
-   * content, so a manifest that changes tomorrow is still trusted.
-   *
-   * Revoking un-resolves NOTHING: the descriptors already stored stay, every collection keeps
-   * loading, describing and invoking from them, and only a future build is refused.
+   * Trusts or un-trusts this workspace ROOT, like VS Code's Workspace Trust: a
+   * committed bazel label means opening a repo could run arbitrary code. Trust is
+   * on the folder, not its content. Revoking un-resolves nothing — only a future
+   * build is refused.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.SetWorkspaceTrust
    */
@@ -1558,11 +1534,9 @@ export declare const WorkspaceService: GenService<{
     output: typeof SetWorkspaceTrustResponseSchema;
   },
   /**
-   * ListBazelTargets lists the workspace's descriptor-set-producing labels, so adding a
-   * bazel source can be a pick instead of a recalled label. It runs `bazel query`, which
-   * loads BUILD files and may fetch external repos — code from this repo — so it is
-   * trust-gated exactly like a build is, and an untrusted workspace gets
-   * FailedPrecondition rather than an empty list.
+   * Lists the workspace's descriptor-set-producing labels, so adding a bazel
+   * source can be a pick. Runs `bazel query`, which loads BUILD files, so it is
+   * trust-gated: an untrusted workspace gets FailedPrecondition, not an empty list.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.ListBazelTargets
    */
@@ -1628,7 +1602,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof MoveItemResponseSchema;
   },
   /**
-   * Invoke returns the status, response body, request/response metadata and latency.
+   * Returns the status, response body, request/response metadata and latency.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.Invoke
    */
@@ -1638,7 +1612,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof InvokeResponseSchema;
   },
   /**
-   * InvokeStreaming handles any streaming kind, modeled as server-streaming.
+   * Handles any streaming kind, modeled as server-streaming.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.InvokeStreaming
    */
@@ -1648,8 +1622,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof InvokeStreamingResponseSchema;
   },
   /**
-   * InvokeSaved reports a status the target returned in the response, never as
-   * an error.
+   * Reports a status the target returned in the response, never as an error.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.InvokeSaved
    */
@@ -1659,7 +1632,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof InvokeSavedResponseSchema;
   },
   /**
-   * InvokeSavedStreaming is InvokeSaved for any streaming kind.
+   * InvokeSaved for any streaming kind.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.InvokeSavedStreaming
    */
@@ -1669,9 +1642,8 @@ export declare const WorkspaceService: GenService<{
     output: typeof InvokeStreamingResponseSchema;
   },
   /**
-   * DescribeMethod answers from already-resolved definitions, so it works with
-   * the target down. Doc comments survive only if the winning source carried
-   * them — reflection strips them, an uploaded descriptor set keeps them.
+   * Answers from already-resolved definitions, so it works with the target down.
+   * Doc comments survive only if the winning source carried them.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.DescribeMethod
    */
@@ -1681,7 +1653,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof DescribeMethodResponseSchema;
   },
   /**
-   * RunScript uses a fresh isolated instance: no capabilities, no collection state.
+   * Uses a fresh isolated instance: no capabilities, no collection state.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.RunScript
    */

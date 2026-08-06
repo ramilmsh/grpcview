@@ -19,9 +19,6 @@ func writeFile(t *testing.T, path string, data []byte) {
 func TestResolveWorkspaceFileAccepts(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "protos", "image.binpb"), []byte("x"))
-	// What the caller is handed back is the SYMLINK-RESOLVED path — the one confinement was proven
-	// about, so that reading it cannot traverse a link that changed in between. On macOS t.TempDir()
-	// itself lives under /var -> /private/var, so this is not the same string as root.
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatalf("EvalSymlinks(root): %v", err)
@@ -45,15 +42,11 @@ func TestResolveWorkspaceFileAccepts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolveWorkspaceFile: %v", err)
 		}
-		// The recorded recipe is root-relative whichever spelling arrived, so the manifest is
-		// portable across checkouts.
 		if rel != "protos/image.binpb" {
 			t.Errorf("rel = %q, want %q", rel, "protos/image.binpb")
 		}
 	})
 
-	// The returned path is the one to READ, and it is resolved: a legal link inside root comes back
-	// as its target, so os.ReadFile cannot re-traverse the link after the confinement check.
 	t.Run("link inside root resolves to its target", func(t *testing.T) {
 		link := filepath.Join(root, "link.binpb")
 		if err := os.Symlink(filepath.Join(root, "protos", "image.binpb"), link); err != nil {
@@ -66,15 +59,11 @@ func TestResolveWorkspaceFileAccepts(t *testing.T) {
 		if want := filepath.Join(realRoot, "protos", "image.binpb"); real != want {
 			t.Errorf("real = %q, want the link's target %q", real, want)
 		}
-		// The RECIPE is still the path as named, root-relative: it is re-resolved (and re-checked)
-		// on every use, so recording the target would freeze today's link.
 		if rel != "link.binpb" {
 			t.Errorf("rel = %q, want the recorded recipe %q", rel, "link.binpb")
 		}
 	})
 
-	// A workspace REACHED through a symlink is fine: root is resolved first, so both sides are
-	// compared in the same namespace. (This is macOS's /var -> /private/var case.)
 	t.Run("symlinked root", func(t *testing.T) {
 		link := filepath.Join(t.TempDir(), "link-to-root")
 		if err := os.Symlink(root, link); err != nil {
@@ -104,12 +93,9 @@ func TestResolveWorkspaceFileRejects(t *testing.T) {
 	}
 
 	cases := []struct{ name, path string }{
-		// Textual traversal, caught after Clean.
 		{"dot-dot escape", filepath.Join("..", filepath.Base(outside), "secret.binpb")},
 		{"deep dot-dot escape", "a/b/../../../etc/passwd"},
-		// An absolute path that is simply somewhere else.
 		{"absolute outside", secret},
-		// The one the textual checks cannot see: a link INSIDE root pointing out of it.
 		{"symlink escape", "escape.binpb"},
 		{"directory", "adir"},
 		{"root itself", "."},
@@ -125,7 +111,6 @@ func TestResolveWorkspaceFileRejects(t *testing.T) {
 		})
 	}
 
-	// The rejection table must not be over-broad: an ordinary in-root file still resolves.
 	if _, rel, err := resolveWorkspaceFile(root, "in.binpb"); err != nil || rel != "in.binpb" {
 		t.Errorf("resolveWorkspaceFile(in.binpb) = %q, %v; want it accepted", rel, err)
 	}

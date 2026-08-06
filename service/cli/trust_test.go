@@ -74,8 +74,6 @@ func TestTrust(t *testing.T) {
 	}
 }
 
-// Trust is a property of the ROOT, so it must never go through the collection resolver — a
-// repository with no collection in it yet is a perfectly good thing to trust.
 func TestTrustNeedsNoCollection(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

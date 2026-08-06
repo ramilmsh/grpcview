@@ -1,8 +1,5 @@
 package scripting
 
-// Validates the esbuild front end: TypeScript transpilation, npm/relative-module
-// bundling, and error-line remapping back to the author's source through source maps.
-
 import (
 	"context"
 	"embed"
@@ -155,8 +152,6 @@ func TestBundleUnknownPackageErrors(t *testing.T) {
 func TestBundleErrorLineRemapped(t *testing.T) {
 	t.Run("transform-path", func(t *testing.T) {
 		e := newEngine(t)
-		// esbuild strips leading blank lines, shifting generated positions; the map must
-		// still land on the author's line 4.
 		_, err := e.RunScenario(context.Background(),
 			"\n\n\nthrow new Error(\"boom\")", Grant{}, Input{})
 		var je *JSError
@@ -223,9 +218,9 @@ func TestDecodeVLQ(t *testing.T) {
 	}{
 		{"A", []int{0}},
 		{"AAAA", []int{0, 0, 0, 0}},
-		{"AACA", []int{0, 0, 1, 0}}, // C -> 2 -> +1
-		{"D", []int{-1}},            // D -> 3 -> sign bit set -> -1
-		{"gB", []int{16}},           // continuation group: 0|cont, then 1 -> (1<<5)>>1 = 16
+		{"AACA", []int{0, 0, 1, 0}},
+		{"D", []int{-1}},
+		{"gB", []int{16}},
 	}
 	for _, c := range cases {
 		got, err := decodeVLQ(c.in)

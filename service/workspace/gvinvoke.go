@@ -1,8 +1,5 @@
 package workspace
 
-// Builds the scripting.Invoker every gv.invoke call re-enters the workspace through: scripting
-// is a leaf package and cannot import workspace, so it only carries the closure on the context.
-
 import (
 	"context"
 	"encoding/json"
@@ -14,11 +11,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// maxInvokeDepth bounds gv.invoke's nesting. Deliberately a depth cap alone, with no cycle set:
-// a request that re-invokes itself with a next-page token must keep working.
 const maxInvokeDepth = 8
 
-// gvInvokeDepthCtxKey carries the count; the cap is workspace-side policy.
 type gvInvokeDepthCtxKey struct{}
 
 func withGvInvokeDepth(ctx context.Context, depth int) context.Context {
@@ -35,7 +29,6 @@ type invokeEnvelope struct {
 	Params map[string]any `json:"params"`
 }
 
-// gvInvokeResult's JSON shape is a contract with the frontend's gv.d.ts InvokeResult type.
 type gvInvokeResult struct {
 	OK              bool                `json:"ok"`
 	Status          gvInvokeStatus      `json:"status"`
@@ -50,8 +43,6 @@ type gvInvokeStatus struct {
 	Message string `json:"message"`
 }
 
-// scriptInvoker returns the Invoker for collectionID. An error return here becomes a REJECTED
-// gv.invoke promise; a gRPC-status failure of the invoked call resolves with ok:false instead.
 func (w Workspace) scriptInvoker(collectionID string) scripting.Invoker {
 	return func(ctx context.Context, req []byte) ([]byte, error) {
 		var env invokeEnvelope
@@ -74,7 +65,7 @@ func (w Workspace) scriptInvoker(collectionID string) scripting.Invoker {
 			parent:        parent,
 			itemName:      name,
 			params:        env.Params,
-			recordHistory: false, // a script fan-out must not spam N requests' histories
+			recordHistory: false,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("gv.invoke(%q): %w", env.Path, err)
@@ -89,8 +80,6 @@ func (w Workspace) scriptInvoker(collectionID string) scripting.Invoker {
 	}
 }
 
-// SplitInvokePath splits a slash path into a parent display-name path and the item name, shared
-// by every surface that addresses a saved request that way.
 func SplitInvokePath(path string) (parent []string, name string, err error) {
 	return splitInvokePath(path)
 }

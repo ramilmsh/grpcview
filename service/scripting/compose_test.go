@@ -77,8 +77,6 @@ func TestRunRequestBody(t *testing.T) {
 	})
 
 	t.Run("a body runtime error maps back to the author line despite the prelude", func(t *testing.T) {
-		// One generator => a 2-line synthetic prelude; body line 3 lands on composed line 5,
-		// and the source map must still report the author's body line 3.
 		gens := map[string]string{"mkmsg": `export default () => 42`}
 		body := `export default () => {
 	mkmsg();

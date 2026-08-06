@@ -12,8 +12,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-// serviceFileSet is a hand-built descriptor set declaring one methodless service per name — all
-// the merge needs to link them, and all a dial-attribution test needs to tell them apart.
 func serviceFileSet(fileName, pkg string, services ...string) *descriptorpb.FileDescriptorSet {
 	file := &descriptorpb.FileDescriptorProto{
 		Name:    proto.String(fileName),
@@ -26,9 +24,6 @@ func serviceFileSet(fileName, pkg string, services ...string) *descriptorpb.File
 	return &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{file}}
 }
 
-// TestResolveTargetServiceAware drives resolveTarget off the descriptor blobs, because that is
-// the only thing services are derived from now: which source SERVES a service decides the dial
-// target, and a service nobody serves over reflection falls back to the first reflection source.
 func TestResolveTargetServiceAware(t *testing.T) {
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -37,8 +32,6 @@ func TestResolveTargetServiceAware(t *testing.T) {
 	serverA := &grpcviewv1.Server{Address: "a.example.com:50051"}
 	serverB := &grpcviewv1.Server{Address: "b.example.com:50052"}
 
-	// A is first and serves nothing, B serves OrderService, and the upload serves LegacyService
-	// with no address of its own — so LegacyService resolves but is unattributed.
 	const uploadID = "upload:legacy.binpb"
 	sources := []*grpcviewv1.DescriptorSource{
 		{Id: "reflection:" + serverA.GetAddress(), Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: serverA}},

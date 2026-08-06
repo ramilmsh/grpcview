@@ -34,7 +34,6 @@ func runGet(ctx context.Context, s Streams, g *globalFlags, open clientFactory) 
 		if err != nil {
 			return err
 		}
-		// The whole GetResponse, so `get` output and the RPC read the same paths.
 		line, err := marshalOneLine(snapshot)
 		if err != nil {
 			return fmt.Errorf("failed to render collection %q: %w", collection, err)
@@ -43,7 +42,6 @@ func runGet(ctx context.Context, s Streams, g *globalFlags, open clientFactory) 
 	})
 }
 
-// readWorkspace is the one snapshot read ls, get and `sources ls` share.
 func readWorkspace(ctx context.Context, sess session, collection string) (*grpcviewv1.GetResponse, error) {
 	resp, err := sess.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: collection}))
 	if err != nil {

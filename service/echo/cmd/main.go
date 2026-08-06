@@ -1,4 +1,3 @@
-// Command echo runs the standalone gRPC EchoService test server.
 package main
 
 import (

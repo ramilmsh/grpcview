@@ -28,7 +28,6 @@ func withComments(fds *descriptorpb.FileDescriptorSet) *descriptorpb.FileDescrip
 	out := proto.CloneOf(fds)
 	for _, f := range out.GetFile() {
 		f.SourceCodeInfo = &descriptorpb.SourceCodeInfo{
-			// path [2] is FileDescriptorProto.package; a well-formed span is required or the linker rejects the file.
 			Location: []*descriptorpb.SourceCodeInfo_Location{{
 				Path:            []int32{2},
 				Span:            []int32{0, 0, 10},

@@ -1,115 +1,69 @@
 syntax = "proto3";
 
 // Package grpcview.store.v1 is the on-disk schema for a grpcview collection.
-//
-// These messages are intentionally DISTINCT from the wire messages in
-// grpcview.v1: they describe how a collection is laid out on disk (one message
-// per managed file), shaped for git-friendly protojson and minimal per-file
-// diffs rather than for the RPC surface. The store package converts between the
-// two (see service/store/convert.go); there is no requirement that they match.
-//
-// The package imports only well-known types, never grpcview.v1, so the disk
-// format can evolve independently of the API.
+// Deliberately distinct from the wire messages in grpcview.v1; see
+// service/store/convert.go.
 package grpcview.store.v1;
 
 import "google/protobuf/descriptor.proto";
 
 option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1;grpcviewstorev1";
 
-// Workspace is grpcview.work.json at the workspace root. It is OPTIONAL: the
-// zero-config case is a repo with no such file, and it appears only once the user
-// has something to pin. Nothing creates it implicitly.
-//
-// A non-empty collections list WINS over discovery: it is fast, deterministic,
-// reviewable, and it survives a colleague's stray grpcview.json. Only when the
-// file is absent (or lists nothing) does the store scan for collections.
+// grpcview.work.json at the workspace root. Optional; a non-empty collections
+// list wins over discovery.
 message Workspace {
   int32 schema_version = 1;
   string name = 2;
   // Workspace-relative paths or globs ("services/*/requests"); empty means "scan".
   repeated string collections = 3;
-  // sources are descriptor-source DEFINITIONS shared by every collection in the
-  // workspace, keyed by the same config-derived id a collection's own entry uses — so a
-  // source declared here and listed there is literally the same source, and five
-  // collections pointing at one target need one copy of its config.
-  //
-  // It is a SET, deliberately NOT an order: precedence is per collection and only per
-  // collection, so what the merge walks is the collection's list (Collection.sources).
-  // An entry there with an id and no oneof arm of its own is a REFERENCE resolved
-  // against this set, keeping its own position and its own commit_descriptors.
-  //
-  // A definition may not be an Upload: an upload is the null-pointer kind, and its bytes
-  // belong to whichever collection handed them over, so a workspace-level one would have
-  // nowhere to live. commit_descriptors on a definition is meaningless and ignored,
-  // because a sidecar can only live inside a collection — that flag belongs to the
-  // referencing collection's entry, which carries its own.
+  // Source DEFINITIONS shared by every collection, keyed by the same
+  // config-derived id. A SET, not an order: precedence is per collection. May
+  // not be an Upload, and commit_descriptors here is ignored.
   repeated DescriptorSource sources = 4;
   Defaults defaults = 5;
-  // bazel configures how a Bazel source is built. It lives at the workspace level because
-  // there is one bazel workspace for the whole repo, not one per collection, and because a
-  // colleague's checkout needs the same answer.
   BazelConfig bazel = 6;
 }
 
-// BazelConfig is the workspace's bazel settings, all optional.
 message BazelConfig {
-  // root overrides where the bazel workspace is: absolute, or relative to the grpcview
-  // workspace root. Empty walks up from the workspace root for MODULE.bazel, WORKSPACE or
-  // WORKSPACE.bazel — the bazel root is often the same directory and must not be assumed to be.
+  // Absolute, or relative to the workspace root; empty walks up for MODULE.bazel.
   string root = 1;
-  // timeout_seconds caps one build; 0 means the default (600). A descriptor build is seconds in
-  // practice, so this is for the pathological case.
+  // Caps one build; 0 means the default (600).
   int32 timeout_seconds = 2;
 }
 
-// Defaults is what a NEW collection in this workspace starts from, so `grpcview init` in a
-// configured monorepo does not begin with an empty source list.
+// What a NEW collection in this workspace starts from.
 message Defaults {
-  // sources are definition ids seeded into a new collection's list, in this order, as bare
-  // references; an id no definition matches is skipped. Seeding writes POINTERS and
-  // resolves nothing — a seeded collection has no descriptors until something acquires
-  // them.
+  // Definition ids seeded as bare references; an unmatched id is skipped.
   repeated string sources = 1;
 }
 
-// CollectionIndex is the cached result of a workspace scan. Unlike every other
-// message here it is LOCAL STATE, not committed content: it lives under the
-// workspace state root, and losing it costs one rescan.
+// Cached workspace scan. LOCAL STATE, not committed content.
 message CollectionIndex {
   int32 schema_version = 1;
-  // The workspace root directory's own mtime when the scan ran; a different mtime
-  // invalidates the whole index. It covers grpcview.work.json too, since editing
-  // the manifest touches the directory holding it.
+  // Workspace root's mtime when the scan ran; a different one invalidates the index.
   int64 root_mtime_unix_nano = 2;
   repeated CollectionIndexEntry entries = 3;
 }
 
-// CollectionIndexEntry is one collection as a listing sees it: enough to render a
-// row, and never enough to require reading a tree.
+// One collection as a listing sees it: never enough to require reading a tree.
 message CollectionIndexEntry {
   string id = 1;
   string name = 2;
   int32 source_count = 3;
-  // error is why this collection could not be summarized — a declared path with no
-  // grpcview.json, or a manifest that would not parse. A broken collection is a
-  // visible row, not a failed listing.
+  // Why this collection could not be summarized; a broken one is a visible row.
   string error = 4;
 }
 
-// Collection is grpcview.json at the collection root: the committed manifest,
-// the root folder's child ordering, and the descriptor-source config. It
-// doubles as the root folder's config (its items are the top-level ordering).
+// grpcview.json at the collection root; doubles as the root folder's config.
 message Collection {
   int32 schema_version = 1;
   string name = 2;
   repeated string items = 3;              // ordered root-level slugs
-  repeated DescriptorSource sources = 4;  // committed sources, highest priority first
+  repeated DescriptorSource sources = 4;  // highest priority first
   repeated string scripts = 5;            // ordered script slugs (scripts/<slug>/)
 }
 
-// ScriptKind classifies a saved script by how it is invoked. It mirrors the wire
-// grpcview.v1.ScriptKind (same ordinals) so convert.go can bridge them; the two
-// stay distinct types so the disk format can evolve independently.
+// Mirrors grpcview.v1.ScriptKind (same ordinals).
 enum ScriptKind {
   SCRIPT_KIND_UNSPECIFIED = 0;
   SCRIPT_KIND_GENERATOR = 1;
@@ -117,194 +71,112 @@ enum ScriptKind {
   SCRIPT_KIND_SCENARIO = 3;
 }
 
-// Script is script.json inside a script directory under scripts/. Like Request's
-// draft_body, source is an inline UTF-8 string so script.json stays human-readable
-// and diffable rather than a base64 blob.
+// script.json inside scripts/<slug>/. source is inline UTF-8, not a blob.
 message Script {
   ItemMeta meta = 1;
   ScriptKind kind = 2;
   string source = 3;
 }
 
-// Folder is folder.json inside a (non-root) folder directory.
+// folder.json inside a (non-root) folder directory.
 message Folder {
   ItemMeta meta = 1;
   repeated string items = 2;  // ordered child slugs
-  // draft_metadata_script is the folder's metadata authored as a TypeScript
-  // module, evaluated as part of the ancestor-folder metadata chain
-  // (gv.metadata.inherit()). Mirrors the wire
-  // grpcview.v1.Folder.draft_metadata_script and, like a request's
-  // draft_metadata_script, is an inline UTF-8 string so folder.json stays
-  // human-readable rather than a base64 blob.
+  // TypeScript module feeding the gv.metadata.inherit() chain; inline UTF-8.
   string draft_metadata_script = 3;
 }
 
-// Request is request.json inside a request directory.
-//
-// The draft body is the raw text the user typed in the editor. It is a string
-// (not bytes) so protojson stores it as a plain JSON string rather than a base64
-// blob: the body is always UTF-8 text, and keeping it a string keeps request.json
-// human-readable.
+// request.json inside a request directory. The text fields are strings, not
+// bytes, so protojson keeps them readable instead of base64.
 message Request {
   ItemMeta meta = 1;
   string service = 2;
   string method = 3;
   string draft_body = 5;
-  // middleware is the ordered display names of the MIDDLEWARE-kind scripts
-  // attached to this request; each runs (in this order) before the call to
-  // rewrite the outgoing body/metadata (scripting-ui-plan §S3).
+  // Ordered display names of the MIDDLEWARE scripts run before the call.
   repeated string middleware = 6;
-  // draft_metadata_script is the request's metadata authored as a TypeScript
-  // module whose returned {[key: string]: string[]} object is evaluated on
-  // invoke to build the outgoing metadata. Mirrors the wire
-  // grpcview.v1.Request.draft_metadata_script and, like draft_body, is an inline
-  // UTF-8 string so request.json stays human-readable.
+  // TypeScript module returning {[key: string]: string[]}, evaluated on invoke.
   string draft_metadata_script = 8;
-  // target is the optional per-request invoke destination. Unset means "use the
-  // workspace's first reflection source" (resolveTarget). Mirrors the wire
-  // grpcview.v1.Request.target.
+  // Unset means "use the workspace's first reflection source" (resolveTarget).
   Target target = 9;
 }
 
-// ItemMeta is the identity block embedded in every managed tree file. The
-// directory name is the stable slug; this display name lets a rename edit only
-// the file and never move a directory.
+// Identity block in every managed tree file: the directory name is the stable
+// slug, this is the display name, so a rename never moves a directory.
 message ItemMeta {
   string name = 1;
 }
 
-// DescriptorSource is where schemas come from. The list order in Collection is
-// the PRIORITY order the merge respects (earlier wins) — see the wire
-// grpcview.v1.DescriptorSource.
-//
-// It is a POINTER plus authored config, never descriptor bytes: every kind's
-// bytes go into the descriptor store (a local blob, or a committed sidecar when
-// commit_descriptors is set), so grpcview.json stays a small file that a request
-// reorder can rewrite cheaply.
+// A POINTER plus authored config, never descriptor bytes. List order in
+// Collection is the priority order (earlier wins).
 message DescriptorSource {
-  // id is the source's stable identity, mirroring the wire field: "upload:<file
-  // name>", "reflection:<address>[+tls]" or "bazel:<//pkg:target>". It keys the
-  // per-source resolve cache and makes re-adding the same source a refresh instead
-  // of a duplicate.
+  // "upload:<file name>", "reflection:<address>[+tls]" or "bazel:<//pkg:target>".
   string id = 3;
   oneof source {
     Upload upload = 1;
     Reflection reflection = 2;
     Bazel bazel = 5;
   }
-  // commit_descriptors puts what this source resolves to in the repo — a
-  // protojson ResolvedSource sidecar under the collection's descriptors/ — rather
-  // than in the workspace's local blob store. It is authored config, so it
-  // belongs here; it changes only where the store writes.
+  // Write what this resolves to as a committed sidecar under descriptors/
+  // instead of the local blob store.
   bool commit_descriptors = 4;
 }
 
-// Upload is a FileDescriptorSet a human handed over, identified by the file name
-// it came from. It is the null-pointer kind: the name is all there is to identify
-// and label it by, and its bytes live in the descriptor store like every other
-// kind's — so an upload whose descriptors are not committed has its only copy in
-// local state.
+// A FileDescriptorSet a human handed over. The null-pointer kind: nothing to
+// re-acquire from, so an uncommitted upload's only copy is in local state.
 message Upload {
   string file_name = 1;
-  // path is the workspace-root-relative path the bytes were last read from; empty means
-  // there is no recipe, which is what a browser file picker leaves behind. It is stored
-  // root-relative so the manifest stays portable across checkouts, and it is never part of
-  // the identity: the file name is, so a git mv of the descriptor set edits this recipe
-  // instead of spawning a second source.
+  // Root-relative refresh recipe; empty from a browser file picker. Never identity.
   string path = 2;
 }
 
-// Bazel is a build label whose default outputs are descriptor sets. It is the one kind that
-// can PRODUCE its own bytes: refreshing it runs a build and then reads the outputs the
-// build reports, so unlike an upload it is a real pointer and may be a shared workspace
-// definition. The label is stored canonical ("//pkg:target"), which is what makes it a
-// stable identity.
+// A build label whose default outputs are descriptor sets — the one kind that can
+// produce its own bytes. Stored canonical ("//pkg:target").
 message Bazel {
   string label = 1;
 }
 
-// DescriptorIndex is descriptors.json in a collection's state directory. Like
-// CollectionIndex — and unlike every committed message here — it is LOCAL STATE:
-// it lives under the workspace state root, and losing it costs a re-resolve of
-// every source rather than any authored content.
-//
-// It is the `id -> current digest` half of the descriptor store, and it covers
-// exactly the sources whose descriptors are NOT committed: a source with
-// commit_descriptors set is written to its sidecar instead, and has no entry here
-// and no blob.
-//
-// The other half is
-// the content-addressed blob (`<state root>/blobs/<sha256>.binpb`, the binary
-// FileDescriptorSet the digest names), which is workspace-scoped so five
-// collections pointing at one source hold one copy of its bytes. The two keys stay
-// separate on purpose: the source id is a POINTER (an address, a file name) and is
-// stable while its content changes, which is exactly what makes re-adding a source
-// a refresh in place rather than a duplicate; the digest is the content key and
-// changes with every byte. Collapsing them would break refresh-in-place.
-//
-// Nothing in here is the merged view: services, the merged descriptor set and the
-// per-source summaries are a pure function of (these blobs, the manifest's source
-// order) and are derived in memory on first touch, never persisted.
+// descriptors.json in a collection's state directory: LOCAL STATE, the
+// `id -> digest` half of the descriptor store. Covers exactly the sources whose
+// descriptors are NOT committed. The other half is the content-addressed blob
+// (`<state root>/blobs/<sha256>.binpb`), workspace-scoped so five collections
+// share one copy. The two keys stay separate: the id is a stable pointer, which
+// is what makes re-adding a source a refresh; the digest is the content key.
 message DescriptorIndex {
   int32 schema_version = 1;
-  // One entry per source that has resolved at least once, so a source listed in the
-  // manifest but never resolved simply has none.
+  // One entry per source that has resolved at least once.
   repeated DescriptorIndexEntry entries = 2;
 }
 
-// DescriptorIndexEntry points one source at the blob holding what it last resolved
-// to.
 message DescriptorIndexEntry {
   string source_id = 1;
-  // digest is the sha256 hex of the blob's bytes, and so its file name.
+  // sha256 hex of the blob's bytes, and so its file name.
   string digest = 2;
-  // service_names are the fully-qualified services this source SERVES. They are
-  // stored rather than derived because they are not derivable: a reflection
-  // server's ListServices is authoritative and narrower than "every service
-  // defined in the descriptor set", since a dependency file pulled in for its
-  // messages may define services the server does not expose. Re-deriving them from
-  // the blob would silently widen every reflection source.
+  // Stored, not derived: a reflection server's ListServices is authoritative and
+  // narrower than "every service in the descriptor set".
   repeated string service_names = 3;
 }
 
-// ResolvedSource is what one descriptor source last resolved to, and it is the
-// shape the store hands to and takes from the layer above whichever of the two
-// locations holds it: for an uncommitted source it is the assembled pair of a
-// DescriptorIndexEntry and the blob that entry's digest names, and for a source
-// with commit_descriptors set it IS the committed file —
-// <collection>/descriptors/<slug>-<hash of id>.json, protojson like every other
-// committed file, named by source id rather than by digest so a refresh is a diff
-// instead of an add plus a delete.
-//
-// It exists so the merged view can be rebuilt for ANY mutation — remove, reorder,
-// or adding an unrelated source — and on any first touch of a collection, without
-// re-dialing every reflection target. Acquisition happens only on an explicit
-// add/refresh, so between refreshes this is the workspace's only copy of a
-// source's schema — and for an upload, which has no pointer to re-acquire from, it
-// is the only copy there will ever be.
+// What one source last resolved to, and the shape the store hands the layer
+// above either location: the blob plus its index entry, or — with
+// commit_descriptors — the committed <collection>/descriptors/<slug>-<hash>.json.
+// It exists so the merged view can be rebuilt for any mutation without
+// re-dialing, and between refreshes it is the only copy of a source's schema.
 message ResolvedSource {
   string id = 1;
   google.protobuf.FileDescriptorSet descriptor_set = 2;
-  // service_names are the fully-qualified services this source SERVES, which is
-  // narrower than "every service defined in descriptor_set": a reflection
-  // server's ListServices is authoritative, and a dependency file pulled in for
-  // its messages may define services the server does not expose.
+  // Narrower than "every service in descriptor_set" — see DescriptorIndexEntry.
   repeated string service_names = 3;
 }
 
-// Reflection addresses a server to reflect schemas from. Disk-local (not the
-// wire grpcview.v1.Server) so this package stays decoupled from the API.
+// A server to reflect schemas from; disk-local, not the wire grpcview.v1.Server.
 message Reflection {
   string address = 1;  // host:port dial string
   bool tls = 2;
 }
 
-// Target is a per-request invoke destination (host:port + TLS) — where this
-// request's call is sent, independent of the descriptor/reflection source it
-// resolves schema from. The first slice of the storage.md §6 target-vs-source
-// split (inline only; no refs/inheritance yet). Structurally identical to
-// Reflection but kept a distinct message: the two are different concepts
-// (invoke destination vs schema source) and evolve independently.
+// A per-request invoke destination, independent of the schema source.
+// Structurally like Reflection, kept distinct: different concept.
 message Target {
   string address = 1;  // host:port dial string
   bool tls = 2;

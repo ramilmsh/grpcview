@@ -214,26 +214,17 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
   resolved?: Resolved | undefined;
 
   /**
-   * Read-only: server-set from where the config was found, and ignored on input.
-   *
-   * Everything a client may do to a WORKSPACE source is per collection — reorder it, remove
-   * it (which drops THIS collection's reference, never the shared definition), refresh it,
-   * toggle commit_descriptors. What it may not do is edit its address, which lives in
-   * grpcview.work.json. No RPC edits a definition in place, deliberately: identity is
-   * config-derived, so a different address is a different source.
-   *
-   * A WORKSPACE source with no oneof arm is a reference the manifest does not define; the
-   * row stays visible and Resolved.error says so.
+   * Read-only: server-set, ignored on input. No RPC edits a WORKSPACE source's
+   * config in place; a WORKSPACE row with no oneof arm is an undefined reference
+   * and Resolved.error says so.
    *
    * @generated from field: grpcview.v1.SourceOrigin origin = 6;
    */
   origin: SourceOrigin;
 
   /**
-   * The descriptors this source resolved to are committed to the repo as a
-   * protojson sidecar (descriptors/<slug>-<hash of id>.json in the collection)
-   * instead of cached in local state. It changes only WHERE the store writes,
-   * never how anything resolves, and toggling it acquires nothing.
+   * Commit this source's descriptors as descriptors/<slug>-<hash of id>.json
+   * instead of caching them in local state. Changes only WHERE the store writes.
    *
    * @generated from field: bool commit_descriptors = 5;
    */
@@ -258,11 +249,8 @@ export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
   fileName: string;
 
   /**
-   * Workspace-root-relative path the bytes were last read from, empty when they came
-   * from a browser file picker. Identity is still the file name — a git mv changes the
-   * recipe and not the source — so this is ONLY a refresh recipe: a path that has gone
-   * costs a refresh and nothing else, since the collection still links, describes and
-   * invokes from the bytes already stored.
+   * Root-relative refresh recipe; empty when the bytes came from a browser file
+   * picker. Never identity — the file name is, so a git mv edits this recipe.
    *
    * @generated from field: string path = 2;
    */
@@ -276,9 +264,8 @@ export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
 export declare const UploadSchema: GenMessage<Upload>;
 
 /**
- * A canonical bazel label ("//pkg:target") whose default outputs are descriptor sets.
- * Unlike an upload it knows how to PRODUCE its bytes: refreshing it builds the label and
- * then reads what the build wrote.
+ * A canonical bazel label whose default outputs are descriptor sets. Unlike an
+ * upload it can PRODUCE its bytes: refreshing it builds the label.
  *
  * @generated from message grpcview.v1.Bazel
  */
@@ -549,10 +536,8 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
   name: string;
 
   /**
-   * The stable on-disk directory name. A rename never changes it, so UI state
-   * (tabs, drafts, expansion) is keyed by it. RPC addressing stays on
-   * display-name paths; this is identity, not an address. Empty on the synthetic
-   * root item, which has no directory of its own.
+   * Stable on-disk directory name: identity, not an address. A rename never
+   * changes it, so UI state is keyed by it. Empty on the synthetic root item.
    *
    * @generated from field: string slug = 4;
    */
@@ -618,10 +603,8 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   name: string;
 
   /**
-   * The workspace-relative path this collection is addressed by; "." is the root.
-   * Echoed back so a response identifies which collection it is about — the write
-   * RPCs seed the Get cache off it rather than off the id the caller happened to send.
-   * Addressing only, and never written to disk: the id IS the disk location.
+   * Workspace-relative path this collection is addressed by; "." is the root.
+   * Addressing only, never written to disk: the id IS the disk location.
    *
    * @generated from field: string id = 7;
    */
@@ -664,8 +647,8 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
 export declare const CollectionSchema: GenMessage<Collection>;
 
 /**
- * Where a source's config lives: inline in this collection's own grpcview.json, or in the
- * workspace manifest with the collection's list holding only a reference to it by id.
+ * Where a source's config lives: this collection's grpcview.json, or the
+ * workspace manifest with the collection holding only a reference by id.
  *
  * @generated from enum grpcview.v1.SourceOrigin
  */

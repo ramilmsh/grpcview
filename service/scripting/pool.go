@@ -5,8 +5,6 @@ import (
 	"sync"
 )
 
-// Pool is a warm pool of QuickJS instances for the middleware profile. An instance left dead
-// by an interrupt or trap is discarded on return, never reused. Safe for concurrent use.
 type Pool struct {
 	rt        *Runtime
 	memLimit  uint64
@@ -19,14 +17,12 @@ type Pool struct {
 	closed bool
 }
 
-// PoolOption configures a Pool.
 type PoolOption func(*Pool)
 
-// WithLongLivedContext makes pooled instances reuse one JSContext across runs. Re-evaluating
-// a blob with top-level `const`/`let` — which esbuild output has — then throws.
+// WithLongLivedContext makes pooled instances reuse one JSContext across runs. Re-evaluating a blob
+// with top-level `const`/`let` — which esbuild output has — then throws.
 func WithLongLivedContext() PoolOption { return func(p *Pool) { p.longLived = true } }
 
-// WithMaxIdle caps how many idle instances the pool retains (default 8).
 func WithMaxIdle(n int) PoolOption {
 	return func(p *Pool) {
 		if n > 0 {
@@ -35,10 +31,8 @@ func WithMaxIdle(n int) PoolOption {
 	}
 }
 
-// WithBundler gives the pool the shared bundler, so its compile cache is shared.
 func WithBundler(b *bundler) PoolOption { return func(p *Pool) { p.bundler = b } }
 
-// NewPool builds a warm pool over rt. memLimit 0 => only the outer wazero page ceiling.
 func NewPool(rt *Runtime, memLimit uint64, opts ...PoolOption) *Pool {
 	p := &Pool{rt: rt, memLimit: memLimit, maxIdle: 8}
 	for _, o := range opts {
@@ -73,6 +67,7 @@ func (p *Pool) get(ctx context.Context) (*Instance, error) {
 	return inst, nil
 }
 
+// An instance left dead by an interrupt or trap is discarded, never reused.
 func (p *Pool) put(inst *Instance) {
 	if inst.Dead() {
 		_ = inst.Close(context.WithoutCancel(context.Background()))
@@ -88,8 +83,6 @@ func (p *Pool) put(inst *Instance) {
 	p.mu.Unlock()
 }
 
-// Close closes every idle instance and marks the pool closed, so an in-flight run closes its
-// instance on return instead of re-pooling it.
 func (p *Pool) Close(ctx context.Context) {
 	p.mu.Lock()
 	p.closed = true
@@ -101,7 +94,6 @@ func (p *Pool) Close(ctx context.Context) {
 	}
 }
 
-// Run compiles source and executes one invoke through the pool.
 func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Result, error) {
 	c, err := p.bundler.compile(source, g)
 	if err != nil {
@@ -110,7 +102,6 @@ func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Resul
 	return p.RunCompiled(ctx, c, g, in, "")
 }
 
-// RunCompiled is Run for an already-compiled blob plus an optional entry-point postlude.
 func (p *Pool) RunCompiled(ctx context.Context, c compiled, g Grant, in Input, postlude string) (Result, error) {
 	inst, err := p.get(ctx)
 	if err != nil {
@@ -126,7 +117,6 @@ func (p *Pool) RunCompiled(ctx context.Context, c compiled, g Grant, in Input, p
 		p.put(inst)
 		return Result{}, err
 	}
-	// LIFO: dispose the context before the instance goes back to the pool.
 	defer p.put(inst)
 	defer inst.disposeContext(context.WithoutCancel(ctx))
 	return inst.runCompiled(ctx, c, g, in, postlude)

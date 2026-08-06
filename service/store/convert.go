@@ -5,8 +5,6 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-// The only place that knows both the on-disk schema (grpcview.store.v1) and the wire one.
-
 func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Request {
 	return &grpcviewv1.Request{
 		Name:                name,
@@ -53,14 +51,6 @@ func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
 	}
 }
 
-// Both source conversions preserve priority order, and neither carries descriptor bytes: a
-// source is a pointer plus authored config on both sides of the boundary, and its bytes live in
-// the descriptor store (see blobs.go).
-//
-// Both also take the workspace's shared definitions (Store.workspaceDefinitions), because the
-// collection/workspace tiering is a property of the BOUNDARY and of nothing else: a collection's
-// manifest holds the ordered list, an entry in it may be a bare reference into that set, and the
-// wire form is where the two are joined.
 func diskToWireSources(
 	in []*grpcviewstorev1.DescriptorSource,
 	defs map[string]*grpcviewstorev1.DescriptorSource,
@@ -75,14 +65,6 @@ func diskToWireSources(
 	return out
 }
 
-// diskToWireSource resolves a REFERENCE — a disk entry with an id and no oneof arm — against the
-// workspace's definitions as it builds the wire form. Only the arm comes from the definition: the
-// entry keeps its own position in this collection's list and its own commit_descriptors, which is
-// what makes precedence and storage location per collection while the config is shared.
-//
-// A reference the workspace does not define keeps its row, arm and all left empty. It must be
-// visible and removable rather than silently absent, and the layer above turns "origin WORKSPACE,
-// no kind" into the error naming the manifest that should define it.
 func diskToWireSource(
 	ds *grpcviewstorev1.DescriptorSource,
 	defs map[string]*grpcviewstorev1.DescriptorSource,
@@ -101,9 +83,6 @@ func diskToWireSource(
 	case *grpcviewstorev1.DescriptorSource_Reflection:
 		out.Source = &grpcviewv1.DescriptorSource_Reflection{Reflection: reflectionToServer(src.Reflection)}
 	case *grpcviewstorev1.DescriptorSource_Upload:
-		// path rides along in both directions: it is authored config (a refresh recipe), not a
-		// resolve result, so dropping it on a round trip would make the next reorder silently
-		// turn a refreshable upload back into a dead end.
 		out.Source = &grpcviewv1.DescriptorSource_Upload{
 			Upload: &grpcviewv1.Upload{
 				FileName: src.Upload.GetFileName(),
@@ -132,15 +111,9 @@ func wireToDiskSources(
 	return out
 }
 
-// wireToDiskSource writes a source back as the BARE reference the manifest should hold whenever the
-// workspace defines its id — id plus this collection's own commit_descriptors, no arm.
-//
-// This is the load-bearing invariant of the shared-definition tier: every mutation round-trips the
-// whole list through the wire form, so inlining here would copy shared config into all five
-// collections on the first reorder and quietly undo the sharing. Collapsing an inline entry whose
-// id the workspace already defines loses nothing, because identity is config-derived — the same id
-// IS the same config — and it is what makes re-adding a target the workspace already declares
-// produce a reference rather than a duplicate copy.
+// Writes a source back as the BARE reference the manifest should hold whenever the workspace defines
+// its id. Load-bearing: every mutation round-trips the whole list through the wire form, so inlining
+// here would copy shared config into all five collections on the first reorder.
 func wireToDiskSource(
 	ws *grpcviewv1.DescriptorSource,
 	defs map[string]*grpcviewstorev1.DescriptorSource,
@@ -167,7 +140,6 @@ func wireToDiskSource(
 	return out
 }
 
-// serverFromAddressTLS builds a wire Server from the address/tls pair on-disk messages carry.
 func serverFromAddressTLS(address string, tls bool) *grpcviewv1.Server {
 	s := &grpcviewv1.Server{Address: address}
 	if tls {

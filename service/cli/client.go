@@ -13,8 +13,6 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
-// Client is the slice of WorkspaceService the CLI verbs use. The streaming methods
-// take a frame callback, the one shape both bindings can satisfy.
 type Client interface {
 	Get(context.Context, *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error)
 	ListCollections(context.Context, *connect.Request[grpcviewv1.ListCollectionsRequest]) (*connect.Response[grpcviewv1.ListCollectionsResponse], error)
@@ -40,7 +38,6 @@ type Client interface {
 	DeleteRequest(context.Context, *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error)
 	MoveItem(context.Context, *connect.Request[grpcviewv1.MoveItemRequest]) (*connect.Response[grpcviewv1.MoveItemResponse], error)
 
-	// RunScript evaluates an inline source, not a saved script's name.
 	RunScript(context.Context, *connect.Request[grpcviewv1.RunScriptRequest]) (*connect.Response[grpcviewv1.RunScriptResponse], error)
 }
 
@@ -88,13 +85,8 @@ type session struct {
 	close func(context.Context) error
 }
 
-// clientFactory opens a session on demand, so building the command tree opens nothing.
 type clientFactory func(ctx context.Context, g *globalFlags) (session, error)
 
-// openClient is the production factory: --server talks to a running server, empty is
-// in-process, discovering the workspace root via wsroot.Discover. A warning from Discover
-// (no .git found, silently rooting at the cwd) is printed to s.Err — the failure mode it
-// exists to catch is exactly the one a silent CLI run would hide.
 func openClient(ctx context.Context, g *globalFlags, s Streams) (session, error) {
 	if g != nil && g.Server != "" {
 		return session{
@@ -111,8 +103,6 @@ func openClient(ctx context.Context, g *globalFlags, s Streams) (session, error)
 	if err != nil {
 		return session{}, fmt.Errorf("failed to resolve the current directory: %w", err)
 	}
-	// A --workspace that isn't an existing directory returns a plain error here, which
-	// exitCode maps to 2 — exactly the "bad argument" exit this deserves.
 	root, warn, err := wsroot.Discover(override, cwd)
 	if err != nil {
 		return session{}, err

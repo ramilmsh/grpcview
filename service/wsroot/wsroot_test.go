@@ -130,9 +130,6 @@ func TestDiscover_GitAsFileFromNestedCwd(t *testing.T) {
 }
 
 func TestDiscover_NoGitAnywhereReturnsCwdWithWarning(t *testing.T) {
-	// t.TempDir() paths live under the system temp dir, which in CI/local dev has
-	// no .git anywhere above it — if that ever changes this test will need its own
-	// isolated tree, but for now this keeps it simple.
 	cwd := t.TempDir()
 
 	root, warn, err := Discover("", cwd)

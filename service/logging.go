@@ -13,12 +13,10 @@ type loggingInterceptor struct {
 	logger *slog.Logger
 }
 
-// WrapStreamingClient must return a real handler: connect panics on a nil one.
 func (l loggingInterceptor) WrapStreamingClient(handler connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return handler
 }
 
-// WrapStreamingHandler must return a real handler: connect panics on a nil one.
 func (l loggingInterceptor) WrapStreamingHandler(handler connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		start := time.Now()

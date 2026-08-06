@@ -1,5 +1,4 @@
-// Package wsroot resolves the workspace root — the repository grpcview was opened
-// in — and the durable local-state directory belonging to it.
+// Package wsroot resolves the workspace root and its local-state directory.
 package wsroot
 
 import (
@@ -11,13 +10,9 @@ import (
 	"strings"
 )
 
-// Discover resolves the workspace root, first hit winning:
-//  1. override, which must already exist and be a directory;
-//  2. the nearest ancestor of cwd holding .git;
-//  3. cwd, with warn set.
-//
-// The returned path is absolute and cleaned. warn is a sentence to log, empty
-// unless rule 3 applied.
+// Discover resolves the workspace root: override, else the nearest ancestor of cwd holding .git, else
+// cwd with warn set. .git may be a regular FILE (a git worktree or submodule), which counts. Symlinks
+// are deliberately not resolved: a user who cd's through one means the path they typed.
 func Discover(override, cwd string) (root string, warn string, err error) {
 	if override != "" {
 		abs := override
@@ -43,11 +38,6 @@ func Discover(override, cwd string) (root string, warn string, err error) {
 	}
 	absCwd = filepath.Clean(absCwd)
 
-	// Rule 2: walk up from cwd looking for a .git entry. It may be a directory (an
-	// ordinary repo) or a regular file (a git worktree or submodule, whose .git
-	// file points elsewhere) — either is enough to call dir the workspace root.
-	// We deliberately do not resolve symlinks: a user who cd's through a symlink
-	// means the path they typed.
 	for dir := absCwd; ; {
 		if _, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil {
 			return dir, "", nil
@@ -59,7 +49,6 @@ func Discover(override, cwd string) (root string, warn string, err error) {
 		dir = parent
 	}
 
-	// Rule 3: nothing found. Fall back to cwd itself and say so.
 	warn = fmt.Sprintf(
 		"no repository (.git) found above %q; treating it as the workspace root — pass --workspace to name one explicitly",
 		absCwd,
@@ -67,8 +56,10 @@ func Discover(override, cwd string) (root string, warn string, err error) {
 	return absCwd, warn, nil
 }
 
-// StateDir returns the durable local-state directory for the workspace at root:
-// one directory per workspace, keyed by root's absolute path.
+// os.UserConfigDir, not os.UserCacheDir: run history and other local state are user data, not
+// disposable cache — a cache directory is fair game for the OS or the user to reclaim, and losing
+// history silently on the next reboot is not acceptable. Uniqueness comes from the hash suffix, not
+// from the slug, which is there so a human can tell workspaces apart by eye.
 func StateDir(root string) (string, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -76,10 +67,6 @@ func StateDir(root string) (string, error) {
 	}
 	absRoot = filepath.Clean(absRoot)
 
-	// os.UserConfigDir, not os.UserCacheDir: run history and other local state are
-	// user data, not disposable cache — ~/Library/Caches (and its XDG_CACHE_HOME
-	// equivalent) is fair game for the OS or the user to reclaim at any time, and
-	// losing history silently on the next reboot is not acceptable.
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user config dir: %w", err)
@@ -92,10 +79,6 @@ func StateDir(root string) (string, error) {
 	return filepath.Join(configDir, "grpcview", "workspaces", key), nil
 }
 
-// slugify lowercases s and collapses every run of characters outside [a-z0-9] into
-// a single '-', trimming any leading or trailing '-'. It exists purely so a human
-// browsing the state directory can tell workspaces apart by eye; uniqueness comes
-// from the hash suffix in StateDir, not from this.
 func slugify(s string) string {
 	s = strings.ToLower(s)
 	var b strings.Builder

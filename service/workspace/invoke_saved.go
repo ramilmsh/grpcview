@@ -1,8 +1,5 @@
 package workspace
 
-// The ADDRESSED invoke: run the request saved at a display-name path, resolved server-side, for
-// a caller with no editor buffer of its own.
-
 import (
 	"context"
 	"strings"
@@ -14,7 +11,7 @@ import (
 
 type savedInvoke struct {
 	workspaceName string
-	parent        []string // PARENT-folder display-name path, NOT including itemName
+	parent        []string
 	itemName      string
 	params        map[string]any
 	target        *grpcviewv1.Server
@@ -24,7 +21,7 @@ type savedInvoke struct {
 
 type savedRun struct {
 	spec     invokeSpec
-	messages []string // every message, in send order; spec.body is just the first
+	messages []string
 }
 
 func (w Workspace) resolveSavedRun(ctx context.Context, in savedInvoke) (savedRun, error) {
@@ -65,7 +62,6 @@ func (w Workspace) resolveSavedRun(ctx context.Context, in savedInvoke) (savedRu
 	}, nil
 }
 
-// normalizeBodies replaces every blank message with emptyBody: an empty source would not parse.
 func normalizeBodies(messages []string) []string {
 	out := make([]string, len(messages))
 	for i, m := range messages {
@@ -77,8 +73,6 @@ func normalizeBodies(messages []string) []string {
 	return out
 }
 
-// InvokeSaved runs the request saved at path/item_name with its own stored body, metadata
-// script, middleware and target, under Invoke's error policy.
 func (w Workspace) InvokeSaved(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedRequest]) (*connect.Response[grpcviewv1.InvokeSavedResponse], error) {
 	msg := request.Msg
 	run, err := w.resolveSavedRun(ctx, savedInvokeFrom(msg.GetSpec()))
@@ -99,18 +93,14 @@ func (w Workspace) InvokeSaved(ctx context.Context, request *connect.Request[grp
 	return connect.NewResponse(&grpcviewv1.InvokeSavedResponse{Response: out}), nil
 }
 
-// InvokeSavedStreaming adapts the Connect server-streaming handler onto invokeSavedStream.
 func (w Workspace) InvokeSavedStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
 	return w.invokeSavedStream(ctx, request.Msg, stream.Send)
 }
 
-// InvokeSavedStream is the send-func form of InvokeSavedStreaming, for an in-process caller:
-// connect exposes no way to build a *connect.ServerStream outside a served request.
 func (w Workspace) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	return w.invokeSavedStream(ctx, msg, send)
 }
 
-// InvokeStream is the send-func form of InvokeStreaming, for the same in-process reason.
 func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	spec := specFrom(msg.GetSpec())
 	spec.recordHistory = true
@@ -125,9 +115,6 @@ func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.Invoke
 	return w.streamInvoke(ctx, run.spec, run.messages, send)
 }
 
-// savedInvokeFrom is the one place the wire SavedInvokeSpec becomes the internal one, shared by
-// both saved RPCs. savedInvoke survives as its own type because gv.invoke builds one directly
-// and carries params as a map, not a Struct.
 func savedInvokeFrom(spec *grpcviewv1.SavedInvokeSpec) savedInvoke {
 	recordHistory := true
 	if spec != nil && spec.RecordHistory != nil {

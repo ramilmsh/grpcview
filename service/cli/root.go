@@ -1,5 +1,4 @@
-// Package cli is the argv surface of the grpcview binary: the cobra command
-// tree, the exit-code contract, and the two client bindings.
+// Package cli is the argv surface: the cobra command tree, exit codes, and client bindings.
 package cli
 
 import (
@@ -12,24 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is stamped at link time by the go_binary's x_defs; an untagged --stamp build links it empty.
 var version = "dev"
 
 const defaultPort = 10000
 
 const (
-	// defaultTimeout bounds a verb that dials or reads — which is every verb but two.
 	defaultTimeout = 30 * time.Second
-	// buildTimeout is what the two verbs that may run `bazel build` default to instead.
-	// 30 seconds is a guaranteed failure there: a COLD build of a real monorepo target is
-	// minutes, and the wait is the normal case rather than the pathological one. It is the
-	// same order as the server's own bazelbuild.DefaultTimeout (10 minutes), deliberately —
-	// a workspace that raised bazel.timeout_seconds past this wants an explicit --timeout,
-	// because the server's message about its own limit is the more useful of the two.
-	buildTimeout = 10 * time.Minute
+	buildTimeout   = 10 * time.Minute
 )
 
-// Streams are the process's stdio, injected so every verb is table-testable.
 type Streams struct {
 	In  io.Reader
 	Out io.Writer
@@ -38,13 +28,9 @@ type Streams struct {
 
 type ServeOptions struct {
 	Port int
-	// Root is the raw --workspace override, passed through unresolved: service.Run does
-	// its own wsroot.Discover(Root, cwd) and logs the warning, so serving is the one path
-	// that discovers relative to the SERVER's cwd, not the CLI process invoking it.
 	Root string
 }
 
-// statusError carries an explicit process exit code out of a verb's RunE.
 type statusError struct {
 	code int
 	err  error
@@ -71,15 +57,11 @@ func exitCode(err error) int {
 }
 
 type globalFlags struct {
-	// Workspace is the raw --workspace override: the workspace ROOT, not a collection
-	// address. Empty means "discover one" — see wsroot.Discover, called from
-	// service/cli/client.go's openClient and from service.Run.
 	Workspace  string
 	Collection string
 	Server     string
 	Timeout    time.Duration
 
-	// resolved memoizes resolveCollection's answer for this invocation.
 	resolved string
 }
 
@@ -87,9 +69,6 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	g := &globalFlags{}
 	f := cmd.PersistentFlags()
 	f.StringVar(&g.Workspace, "workspace", "", "workspace root; empty walks up from the current directory to the nearest .git")
-	// Empty, not ".": where you stand decides what you address, the same way `git` and
-	// `bazel` work — resolveCollection walks up from the cwd. A "." default would instead
-	// point every invocation at the workspace root, which in a monorepo holds no collection.
 	f.StringVar(&g.Collection, "collection", "", "collection to operate on; empty resolves from the current directory")
 	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
 	f.DurationVar(&g.Timeout, "timeout", defaultTimeout,
@@ -97,13 +76,6 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	return g
 }
 
-// useBuildTimeout raises this invocation's deadline to buildTimeout for a verb that may BUILD,
-// and does nothing when the caller passed --timeout: an explicit value is an instruction, and
-// wins everywhere. "Passed" is read off the flag and never inferred by comparing against
-// defaultTimeout, which would silently ignore `--timeout 30s`.
-//
-// --timeout is registered on the ROOT's persistent flags, and cobra folds a parent's persistent
-// flags into the executing command's own set before RunE runs, so the subcommand can be asked.
 func useBuildTimeout(cmd *cobra.Command, g *globalFlags) {
 	if flag := cmd.Flags().Lookup("timeout"); flag != nil && flag.Changed {
 		return
@@ -124,9 +96,6 @@ func newRootCmd(
 	open clientFactory,
 ) *cobra.Command {
 	var rootPort int
-	// globals is assigned below, before Execute ever runs RunE — registerGlobalFlags needs
-	// the *cobra.Command literal to already exist, so it can't run before this closure is
-	// written, but it does run before the closure is ever CALLED.
 	var globals *globalFlags
 
 	root := &cobra.Command{
@@ -134,7 +103,6 @@ func newRootCmd(
 		Short: "grpcview — a gRPC request client",
 		Long: "grpcview serves its own UI and API, and exposes the same collection as\n" +
 			"command-line verbs. Invoked with no subcommand, it serves.",
-		// ArbitraryArgs alone would make `grpcview typoe` serve the UI, hence RunE's check.
 		Args:          cobra.ArbitraryArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -171,7 +139,6 @@ func newRootCmd(
 }
 
 func unknownCommand(cmd *cobra.Command, arg string) error {
-	// cobra's Usage writes to OutOrStdout, which is stdout here.
 	out := cmd.OutOrStdout()
 	cmd.SetOut(cmd.ErrOrStderr())
 	defer cmd.SetOut(out)
@@ -205,11 +172,7 @@ func newVersionCmd() *cobra.Command {
 	}
 }
 
-// Main builds the command tree, executes it, and returns the process exit code.
 func Main(ctx context.Context, args []string, s Streams, serve func(context.Context, ServeOptions) error) int {
-	// openClient needs Streams (to surface wsroot.Discover's warning on s.Err), but
-	// clientFactory does not carry one — every verb already has its own s — so it is
-	// bound here, once, at the production wiring.
 	open := func(ctx context.Context, g *globalFlags) (session, error) { return openClient(ctx, g, s) }
 	return execute(ctx, newRootCmd(s, serve, open), args, s)
 }
