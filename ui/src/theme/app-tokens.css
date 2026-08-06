@@ -270,9 +270,12 @@ input.bare::placeholder { color: var(--color-neutral-600); }
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 /* Labels are long and monospaced. They ellipsize rather than wrap or add a second
-   scrollbar; each row carries the full text as its tooltip. */
+   scrollbar; each row carries the full text as its tooltip.
+   flex: none is load-bearing, not cosmetic: in a flex column with a max-height, rows SHRINK
+   past their line-height once enough of them overflow, and a long listing renders as a stack
+   of unreadable slivers instead of scrolling. */
 .combo-list .menuitem {
-  display: block; font-family: var(--mono); font-size: 12px;
+  display: block; flex: none; font-family: var(--mono); font-size: 12px;
   overflow: hidden; text-overflow: ellipsis;
 }
 .combo-note { padding: 6px 9px; font-size: 12px; color: var(--color-neutral-500); }

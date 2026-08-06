@@ -10,9 +10,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       style={{ height: "100vh", overflow: "hidden", fontFamily: "var(--font-body)" }}
     >
       <TopBar />
-      <div className="flex" style={{ flex: 1, minHeight: 0 }}>
+      {/* minWidth:0 all the way down: without it a flex row sizes to its widest
+          descendant, so one long service name or source id widens the whole shell
+          past the viewport instead of truncating. */}
+      <div className="flex" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
         <Rail />
-        <div className="flex" style={{ flex: 1, minHeight: 0 }}>
+        <div className="flex" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           {children}
         </div>
       </div>

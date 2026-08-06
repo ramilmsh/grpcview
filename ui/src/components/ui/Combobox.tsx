@@ -24,6 +24,12 @@ export function filterOptions(options: readonly string[], query: string): string
   return prefix.concat(hits.filter((o) => !o.toLowerCase().startsWith(q)));
 }
 
+// How many matches the popup renders. A monorepo has thousands of proto_library targets, and
+// a list that long is neither scrollable-through nor cheap to mount; past this, filtering is
+// the only usable way through it, and the row under the cap says so rather than letting the
+// list end silently.
+const MAX_VISIBLE = 100;
+
 // Combobox is an editable selector: a text field that accepts ANYTHING, with a filtered
 // list of known values under it. Editable is the point — the list is a shortcut, never the
 // set of legal answers — so nothing here ever rejects, rewrites or completes what is typed.
@@ -64,13 +70,17 @@ export function Combobox({
   const optionId = (index: number): string => `${idPrefix}opt-${index}`;
 
   const matches = filterOptions(options, value);
+  // Everything below — picking, the arrow keys, aria-activedescendant — addresses the RENDERED
+  // rows, so a capped list keeps its keyboard model exactly as long as the list on screen.
+  const visible = matches.slice(0, MAX_VISIBLE);
+  const hidden = matches.length - visible.length;
   // An open popup always has something in it: options, the no-match note that stands in
   // for them, "Loading…", or the caller's hint. With none of those it stays shut rather
   // than flashing an empty card.
   const showList = open && (loading === true || options.length > 0 || !!emptyHint);
 
   const pick = (index: number): void => {
-    const option = matches[index];
+    const option = visible[index];
     if (option === undefined) return;
     onChange(option);
     setOpen(false);
@@ -79,11 +89,11 @@ export function Combobox({
   };
 
   const step = (delta: 1 | -1): void => {
-    if (matches.length === 0) return;
+    if (visible.length === 0) return;
     setOpen(true);
     setHighlighted((from) => {
       const start = from ?? (delta === 1 ? -1 : 0);
-      return (((start + delta) % matches.length) + matches.length) % matches.length;
+      return (((start + delta) % visible.length) + visible.length) % visible.length;
     });
   };
 
@@ -172,7 +182,7 @@ export function Combobox({
 
       {showList && (
         <div className="combo-list" id={listId} role="listbox">
-          {matches.map((option, index) => (
+          {visible.map((option, index) => (
             <button
               type="button"
               key={option}
@@ -189,7 +199,7 @@ export function Combobox({
               {option}
             </button>
           ))}
-          {matches.length === 0 && (
+          {visible.length === 0 && (
             <div className="combo-note">
               {loading
                 ? "Loading…"
@@ -200,7 +210,12 @@ export function Combobox({
                   : `No suggestion matches “${value.trim()}” — it can still be typed in full.`}
             </div>
           )}
-          {matches.length > 0 && loading && <div className="combo-note">Loading…</div>}
+          {hidden > 0 && (
+            <div className="combo-note">
+              {hidden} more {hidden === 1 ? "match" : "matches"} — type to narrow the list.
+            </div>
+          )}
+          {visible.length > 0 && loading && <div className="combo-note">Loading…</div>}
         </div>
       )}
     </div>

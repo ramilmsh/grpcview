@@ -8,7 +8,12 @@ import {
   createQueryOptions,
   skipToken,
 } from "@connectrpc/connect-query";
-import { useQueries, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useQueries,
+  useQueryClient,
+  useQuery as useTanStackQuery,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { createClient, ConnectError, Code, type Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { WorkspaceService } from "@grpcview/v1/service_pb";
@@ -301,17 +306,31 @@ export function useSetWorkspaceTrust() {
 //
 //   - It is enabled only while the form is open, because it starts a `bazel query` over
 //     the whole repo — seconds on a cold server, and pointless on a screen nobody opened.
-//   - Its result is cached for the session (staleTime Infinity): the answer changes when
+//   - Its result is cached per workspace root (staleTime Infinity): the answer changes when
 //     someone edits a BUILD file, not while a modal is open, and a re-query per open would
 //     be the slowest thing in the UI.
 //   - It never retries. The expected failure is FailedPrecondition on an untrusted
 //     workspace (querying loads BUILD files, so it is gated like a build is), and retrying
 //     a refusal three times only delays the hint that says so.
 //
-// The caller renders the error as a hint under a field that still accepts free text; a
-// missing listing costs suggestions and nothing else.
+// The root is in the KEY, not in the request: ListBazelTargets takes no arguments, and the
+// server that answers it can be restarted in another directory behind the same URL — so
+// without the root a cached listing outlives the workspace whose labels it holds, and the
+// picker offers another repo's targets. It also gates the query: an empty root means the
+// listing has not landed, and caching an answer under "" is the same bug.
 export function useBazelTargets(enabled: boolean) {
-  const query = useQuery(listBazelTargets, {}, { enabled, retry: false, staleTime: Infinity });
+  const transport = useTransport();
+  const { root } = useCollections();
+  const options = createQueryOptions(listBazelTargets, {}, { transport });
+  const query = useTanStackQuery({
+    ...options,
+    // Cast because connect-query types its key as a fixed-shape tuple; an extra segment is
+    // legal to react-query (a key is any serializable array) but not to that type.
+    queryKey: [...options.queryKey, root] as unknown as typeof options.queryKey,
+    enabled: enabled && root !== "",
+    retry: false,
+    staleTime: Infinity,
+  });
   return {
     labels: query.data?.labels ?? [],
     // Bazel's own reason when the query came back partial (an unloadable package under

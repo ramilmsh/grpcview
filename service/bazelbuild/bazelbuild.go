@@ -2,17 +2,17 @@
 // mechanism, and knows nothing about grpcview's protos, store or RPCs.
 //
 // A label is untrusted text out of a committed grpcview.json, so nothing here builds a shell string:
-// bazel is exec'd with an argv slice and a "--" before the label, and CanonicalLabel rejects anything
-// that is not a plain label.
+// bazel is exec'd with an argv slice and a "--" before the labels, and CanonicalLabel rejects anything
+// that is not a plain label — including every label bazel itself prints back.
 //
 // Two things this package deliberately does NOT do:
 //
 //   - It does not check trust. Building a label runs arbitrary build code, so THE CALLER MUST HAVE
 //     CHECKED that the workspace is trusted — see workspace.bazelBuilder, the only place a Builder is
 //     constructed.
-//   - It does not dedupe or link. THE CALLER dedupes by proto file name: a merging rule emits its
-//     inputs' per-target sets, so one file name can appear in several returned sets, and
-//     desc.CreateFileDescriptorsFromSet REJECTS a duplicate file name.
+//   - It does not dedupe or link. THE CALLER dedupes by proto file name: a label resolves to its own
+//     descriptor set plus its deps' (see protoClosure), so one file name can appear in several
+//     returned sets, and desc.CreateFileDescriptorsFromSet REJECTS a duplicate file name.
 package bazelbuild
 
 import (
@@ -41,8 +41,8 @@ type Builder struct {
 	Timeout time.Duration
 }
 
-// Passed to BOTH invocations, identically and on purpose: cquery reports the output path of the
-// configuration it is asked about, so a flag differing between the two would report a path the build
+// Passed to EVERY invocation, identically and on purpose: cquery reports the output path of the
+// configuration it is asked about, so a flag differing from the build's would report a path the build
 // never wrote.
 var commonArgs = []string{"--curses=no", "--color=no", "--noshow_progress"}
 
@@ -141,10 +141,17 @@ func (b Builder) DescriptorSets(ctx context.Context, label string) ([]*descripto
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if _, err := b.run(ctx, runCtx, timeout, canon, "build"); err != nil {
+	targets, err := b.protoClosure(ctx, runCtx, timeout, canon)
+	if err != nil {
 		return nil, err
 	}
-	stdout, err := b.run(ctx, runCtx, timeout, canon, "cquery", "--output=files")
+
+	if _, err := b.run(ctx, runCtx, timeout, canon, "build", nil, targets...); err != nil {
+		return nil, err
+	}
+	// cquery takes ONE expression, so the closure is unioned into it; `bazel build` takes patterns and
+	// gets them as separate arguments. Same configuration in both, see commonArgs.
+	stdout, err := b.run(ctx, runCtx, timeout, canon, "cquery", []string{"--output=files"}, strings.Join(targets, " + "))
 	if err != nil {
 		return nil, err
 	}
@@ -186,6 +193,34 @@ func (b Builder) DescriptorSets(ctx context.Context, label string) ([]*descripto
 // with targets that fail the moment they are added.
 const descriptorSetKinds = `proto_library|proto_descriptor_set`
 
+// The label, then every descriptor-set-producing target below it. Load-bearing, not an optimization: a
+// proto_library's descriptor set holds ONLY the files that target declares, so a label whose protos
+// import another target's — google/protobuf/any.proto, most often — links to nothing on its own
+// ("no such file: google/protobuf/any.proto"). Reading the closure's sets and deduping by file name
+// (the caller's job) is what reconstitutes the transitive set protoc --include_imports would emit.
+//
+// A dep whose kind produces no descriptor set is filtered out here rather than tolerated later,
+// because an output that is not a FileDescriptorSet is a hard error further down.
+func (b Builder) protoClosure(parent, ctx context.Context, timeout time.Duration, canon string) ([]string, error) {
+	expr := fmt.Sprintf(`kind("^(%s) rule$", deps(%s))`, descriptorSetKinds, canon)
+	stdout, err := b.run(parent, ctx, timeout, canon, "query", []string{"--output=label", "--order_output=no"}, expr)
+	if err != nil {
+		return nil, err
+	}
+	// canon leads, and stays even if the query listed nothing: its own outputs are what the user asked
+	// for, and a rule kind this query does not recognize can still emit a descriptor set.
+	targets, seen := []string{canon}, map[string]bool{canon: true}
+	for _, line := range splitLines(stdout) {
+		dep, cerr := CanonicalLabel(line)
+		if cerr != nil || seen[dep] {
+			continue
+		}
+		seen[dep] = true
+		targets = append(targets, dep)
+	}
+	return targets, nil
+}
+
 // Runs no actions, but `bazel query` still loads BUILD files and can fetch external repos — code from
 // this repo — so THE CALLER MUST HAVE CHECKED TRUST here too. A partial result is a listing plus a
 // warning, never an error: one unloadable package must not blank a picker.
@@ -201,7 +236,7 @@ func (b Builder) QueryTargets(ctx context.Context) ([]string, string, error) {
 	defer cancel()
 
 	expr := fmt.Sprintf(`kind("^(%s) rule$", //...)`, descriptorSetKinds)
-	stdout, err := b.run(ctx, runCtx, timeout, expr, "query", "--output=label", "--order_output=no", "--keep_going")
+	stdout, err := b.run(ctx, runCtx, timeout, expr, "query", []string{"--output=label", "--order_output=no", "--keep_going"}, expr)
 
 	labels, seen := []string(nil), map[string]bool{}
 	for _, line := range splitLines(stdout) {
@@ -223,16 +258,20 @@ func (b Builder) QueryTargets(ctx context.Context) ([]string, string, error) {
 	return labels, "", nil
 }
 
+// `subject` names the target in error messages only — with a closure of labels after "--", no single
+// argument is the thing the user asked about.
+//
 // stdout comes back on the error paths too, for the one caller that can use a partial answer
 // (QueryTargets). stdout and stderr are captured, never inherited: this runs inside a server.
-func (b Builder) run(parent, ctx context.Context, timeout time.Duration, label, verb string, extra ...string) (string, error) {
+func (b Builder) run(parent, ctx context.Context, timeout time.Duration, subject, verb string, extra []string, targets ...string) (string, error) {
 	binary := b.Binary
 	if binary == "" {
 		binary = "bazel"
 	}
 	args := append([]string{verb}, extra...)
 	args = append(args, commonArgs...)
-	args = append(args, "--", label)
+	args = append(args, "--")
+	args = append(args, targets...)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, binary, args...)
@@ -246,14 +285,14 @@ func (b Builder) run(parent, ctx context.Context, timeout time.Duration, label, 
 	case err == nil:
 		return out, nil
 	case parent.Err() != nil:
-		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, label, parent.Err())
+		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, subject, parent.Err())
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if the build really takes this long", verb, label, timeout)
+		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if the build really takes this long", verb, subject, timeout)
 	}
 	if tail := tailOf(stderr.String()); tail != "" {
-		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, label, err, tail)
+		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, subject, err, tail)
 	}
-	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, label, err)
+	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, subject, err)
 }
 
 func splitLines(s string) []string {

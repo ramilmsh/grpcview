@@ -30,6 +30,7 @@ const request = (name: string, path: string[] = []): ItemWithPath => ({
 const spies = (): CollectionMenuActions & Record<keyof CollectionMenuActions, ReturnType<typeof vi.fn>> => ({
   newRequest: vi.fn(),
   newFolder: vi.fn(),
+  newCollection: vi.fn(),
   startRename: vi.fn(),
   requestDelete: vi.fn(),
   editFolderMetadata: vi.fn(),
@@ -40,9 +41,16 @@ const labels = (items: { label: string }[]): string[] => items.map((i) => i.labe
 const CAN_CREATE = { canCreateRequest: true };
 
 describe("collectionMenuItems: empty space / the collection root", () => {
-  it("offers only the root's two creation actions", () => {
+  it("offers the root's creation actions, plus the workspace-level one behind a separator", () => {
     const items = collectionMenuItems([], spies(), CAN_CREATE);
-    expect(labels(items)).toEqual(["New request", "New folder"]);
+    expect(labels(items)).toEqual(["New request", "New folder", "New collection\u2026"]);
+    expect(items.map((i) => i.separatorBefore ?? false)).toEqual([false, false, true]);
+  });
+
+  it("routes New collection at the workspace, with no parent to speak of", () => {
+    const actions = spies();
+    collectionMenuItems([], actions, CAN_CREATE)[2].onSelect();
+    expect(actions.newCollection).toHaveBeenCalledWith();
   });
 
   it("targets the root (null parent) for both", () => {
@@ -56,9 +64,11 @@ describe("collectionMenuItems: empty space / the collection root", () => {
 
   it("disables — never omits — New request when there are no services yet", () => {
     const items = collectionMenuItems([], spies(), { canCreateRequest: false });
-    expect(labels(items)).toEqual(["New request", "New folder"]);
+    expect(labels(items)).toEqual(["New request", "New folder", "New collection\u2026"]);
     expect(items[0].disabled).toBe(true);
     expect(items[1].disabled).toBeUndefined();
+    // A collection needs no service, so this one is reachable in an empty workspace too.
+    expect(items[2].disabled).toBeUndefined();
   });
 });
 

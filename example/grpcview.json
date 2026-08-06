@@ -21,5 +21,7 @@
       "commitDescriptors": false
     }
   ],
-  "scripts": []
+  "scripts": [
+    "test-goals"
+  ]
 }

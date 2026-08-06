@@ -310,7 +310,7 @@ export function RequestWorkspace() {
         input={activeMethod?.input}
         output={activeMethod?.output}
       />
-      <div className="flex" style={{ flex: 1, minHeight: 0 }}>
+      <div className="flex" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
         <RequestPane
           kind={kind}
           body={body}

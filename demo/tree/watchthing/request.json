@@ -1,0 +1,10 @@
+{
+  "meta":  {
+    "name":  "WatchThing"
+  },
+  "service":  "grpcview.v1.WorkspaceService",
+  "method":  "DescribeMethod",
+  "draftBody":  "",
+  "middleware":  [],
+  "draftMetadataScript":  ""
+}

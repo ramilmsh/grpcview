@@ -4,6 +4,7 @@ import {
   childPathOf,
   findByKey,
   itemKey,
+  middleEllipsis,
   pruneNestedSelections,
   resolveMethod,
   rootItemsOf,
@@ -257,5 +258,25 @@ describe("pruneNestedSelections", () => {
 
   it("is empty for an empty selection", () => {
     expect(pruneNestedSelections([])).toEqual([]);
+  });
+});
+
+describe("middleEllipsis", () => {
+  it("leaves a string that fits alone", () => {
+    expect(middleEllipsis("bazel://a:b", 34)).toBe("bazel://a:b");
+    expect(middleEllipsis("x".repeat(34), 34)).toBe("x".repeat(34));
+  });
+
+  it("keeps both ends of a long bazel source id and never exceeds the cap", () => {
+    const id = "bazel://protos/acme/orbit/ledger/v1:ledger_proto";
+    const short = middleEllipsis(id, 34);
+    expect(short.length).toBe(34);
+    expect(short.startsWith("bazel://protos")).toBe(true);
+    expect(short.endsWith("v1:ledger_proto")).toBe(true);
+  });
+
+  it("holds at tiny caps", () => {
+    expect(middleEllipsis("abcdef", 3)).toBe("a…f");
+    expect(middleEllipsis("abcdef", 2)).toBe("a…");
   });
 });

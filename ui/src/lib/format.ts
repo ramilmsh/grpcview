@@ -179,6 +179,16 @@ export const timestampLabel = (t?: Timestamp): string => {
   return new Date(Number(t.seconds) * 1000 + t.nanos / 1e6).toLocaleTimeString();
 };
 
+// Shortens from the MIDDLE, because both ends of an id carry meaning a head or tail
+// ellipsis would eat: a bazel source id is scheme-then-target, and it is the target
+// half a user recognises. Callers pair it with a title holding the full string.
+export const middleEllipsis = (s: string, max: number): string => {
+  if (s.length <= max) return s;
+  const head = Math.ceil((max - 1) / 2);
+  const tail = max - 1 - head;
+  return `${s.slice(0, head)}…${s.slice(s.length - tail)}`;
+};
+
 export const prettyBody = (bytes: Uint8Array): string => {
   const text = new TextDecoder().decode(bytes);
   try {

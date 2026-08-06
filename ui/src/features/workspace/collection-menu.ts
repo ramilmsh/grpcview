@@ -7,6 +7,7 @@ import { deleteConfirmCopy } from "./delete-confirm";
 export interface CollectionMenuActions {
   newRequest(parent: ItemWithPath | null): void;
   newFolder(parent: ItemWithPath | null): void;
+  newCollection(): void;
   startRename(item: ItemWithPath): void;
   requestDelete(nodes: ItemWithPath[]): void;
   editFolderMetadata(folder: ItemWithPath): void;
@@ -25,6 +26,8 @@ export function collectionMenuItems(
     onSelect: () => actions.requestDelete(batch),
   };
 
+  // Empty space, or a collection row (whose node unwraps to no item): the only menu that can
+  // offer a WORKSPACE-level act, since every other one describes rows inside one collection.
   if (nodes.length === 0) {
     return [
       {
@@ -33,6 +36,7 @@ export function collectionMenuItems(
         onSelect: () => actions.newRequest(null),
       },
       { label: "New folder", onSelect: () => actions.newFolder(null) },
+      { label: "New collection…", separatorBefore: true, onSelect: () => actions.newCollection() },
     ];
   }
 

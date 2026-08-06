@@ -240,10 +240,14 @@ export function SourceRow({
       </span>
       <KindIcon size={18} style={{ color: kindIconColor }} />
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div className="font-mono" style={{ fontSize: 13, color: "var(--color-text)" }}>
+        <div
+          className="font-mono truncate"
+          style={{ fontSize: 13, color: "var(--color-text)" }}
+          title={label}
+        >
           {label}
         </div>
-        <div style={{ fontSize: 11, color: toneColor }}>
+        <div className="truncate" style={{ fontSize: 11, color: toneColor }}>
           {info.text}
           {recipe && (
             <span

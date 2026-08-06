@@ -1,10 +1,20 @@
+import { useRef, useState } from "react";
 import { Broadcast, CaretDown, MagnifyingGlass, Gear } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
-import { useActiveWorkspace, hostLabel } from "@/lib/workspace-query";
+import { Menu } from "@/components/ui/Menu";
+import { useActiveWorkspace, hostLabel, useCollections } from "@/lib/workspace-query";
+import { useUIStore } from "@/lib/ui-store";
+import { collectionSwitcherItems } from "@/features/workspace/collection-switcher";
+import { NewCollectionDialog } from "@/features/workspace/NewCollectionDialog";
 
 export function TopBar() {
   const { collection, workspace, reflection, sources } = useActiveWorkspace();
+  const { collections } = useCollections();
+  const setActiveCollection = useUIStore((s) => s.setActiveCollection);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [creating, setCreating] = useState(false);
   // The NAME, disambiguated by the id in the tooltip: a collection is addressed by its
   // path and named separately, so five of them may all be called "requests".
   const collectionLabel = workspace?.name || collection || "";
@@ -40,16 +50,37 @@ export function TopBar() {
 
       <div style={{ width: 1, height: 20, background: "var(--line)" }} />
 
+      {/* The workspace's collections, and the one always-reachable place a further collection
+          is created: switching is UI state (every query key is built from the active id),
+          creating writes to the repo. Anchored under the button, not at the pointer — this is
+          a dropdown, not a context menu. */}
       <Button
+        ref={buttonRef}
         className="text-neutral-200"
-        style={{ padding: "4px 9px", fontSize: 13, gap: 7, cursor: "default" }}
+        style={{ padding: "4px 9px", fontSize: 13, gap: 7 }}
         title={collection ?? "No collection"}
-        disabled
+        onClick={() => {
+          const rect = buttonRef.current?.getBoundingClientRect();
+          setMenu({ x: rect?.left ?? 0, y: (rect?.bottom ?? 0) + 4 });
+        }}
       >
         <span className="text-accent" style={{ fontSize: 13 }}>❯</span>
-        {collectionLabel}
+        {collectionLabel || "No collection"}
         <CaretDown size={11} style={{ opacity: 0.5 }} />
       </Button>
+
+      {menu ? (
+        <Menu
+          x={menu.x}
+          y={menu.y}
+          items={collectionSwitcherItems(collections, collection, {
+            select: setActiveCollection,
+            createNew: () => setCreating(true),
+          })}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+      <NewCollectionDialog open={creating} onClose={() => setCreating(false)} />
 
       <div className="ml-auto flex items-center gap-[10px]">
         <Button

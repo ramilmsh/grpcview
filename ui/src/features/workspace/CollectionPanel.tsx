@@ -45,6 +45,7 @@ import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import type { GeneratorDef } from "./generator-libs";
 import { deleteConfirmCopy } from "./delete-confirm";
 import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
+import { NewCollectionDialog } from "./NewCollectionDialog";
 
 export function CollectionPanel() {
   const { collection: activeCollection, workspace, services } = useActiveWorkspace();
@@ -74,6 +75,7 @@ export function CollectionPanel() {
   const [pickerParent, setPickerParent] = useState<ItemWithPath | null | undefined>(undefined);
   const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
   const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
+  const [newCollection, setNewCollection] = useState(false);
   const treeRef = useRef<TreeHandle<PanelNode>>(null);
   // Empty `nodes` = a right-click on the panel's empty space, i.e. the collection root.
   const [menu, setMenu] = useState<{ x: number; y: number; nodes: PanelNode[] } | null>(null);
@@ -162,7 +164,8 @@ export function CollectionPanel() {
   };
 
   // The tiers the item callbacks cannot speak are dropped: a collection row is neither
-  // renameable nor deletable here (creating and deleting collections is `grpcview init` and
+  // renameable nor deletable here (deleting one is `grpcview` on the command line or the
+  // filesystem; creating one is the context menu's "New collection…", the TopBar picker and
   // the empty state), and a status row is not a thing at all.
   const onTreeDelete = (nodes: PanelNode[]): void =>
     setConfirm(pruneNestedSelections(panelItems(nodes)));
@@ -233,6 +236,7 @@ export function CollectionPanel() {
       setNewFolderParent(parent);
       if (parent) expandFolder(parent);
     },
+    newCollection: () => setNewCollection(true),
     startRename: (item) => treeRef.current?.startRename(itemKey(item)),
     requestDelete: (items) => setConfirm(pruneNestedSelections(items)),
     editFolderMetadata: setMetadataFolder,
@@ -381,6 +385,8 @@ export function CollectionPanel() {
           </Button>
         </div>
       </Dialog>
+
+      <NewCollectionDialog open={newCollection} onClose={() => setNewCollection(false)} />
 
       {/* Keyed on the summon point plus the row set so a second right-click remounts.
           panelNodeId, not itemKey: an empty-space right-click and a collection right-click

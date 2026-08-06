@@ -419,17 +419,33 @@ refreshing twice against an unchanged upstream leave `git status` clean.
 A `Bazel{label}` source — id `bazel:<canonical label>` — is the one kind that **produces**
 its own bytes, which is exactly what a monorepo needs: the descriptors are a build output
 of the repo the collection lives in, and they change on every proto edit. So refreshing it
-**builds**: `bazel build --curses=no --color=no --noshow_progress -- <label>`, then
-`bazel cquery --output=files` with *identical* flags, because cquery reports the output
-path of the configuration it is asked about and a flag differing between the two would name
-a path the build never wrote. Both run as an argv slice and never as a shell string, with
-`--` before the label so a label can never arrive as a flag (`//x --output_base=/tmp`) —
-a label is untrusted text out of a committed manifest. cquery hands back
+**builds** — three invocations, all with *identical* flags, because cquery reports the
+output path of the configuration it is asked about and a flag differing from the build's
+would name a path the build never wrote:
+
+1. `bazel query --output=label --order_output=no -- kind("^(proto_library|proto_descriptor_set) rule$", deps(<label>))`
+   — the label's **descriptor-set closure**. This is not an optimization: a `proto_library`'s
+   descriptor set holds only the files *that* target declares, so a label whose protos import
+   another target's — `google/protobuf/any.proto`, most often — links to nothing on its own
+   (`link descriptor set: no such file: "google/protobuf/any.proto"`). Reading the closure's
+   per-target sets and deduping by file name is what reconstitutes what
+   `protoc --include_imports` would emit. A failed query is fatal rather than degraded to the
+   bare label, since resolving without the closure is the very failure it prevents.
+2. `bazel build --curses=no --color=no --noshow_progress -- <label> <closure…>` — patterns,
+   so the closure arrives as separate arguments.
+3. `bazel cquery --output=files` over `<label> + <dep> + …` — cquery takes ONE expression, so
+   the same closure arrives unioned into it.
+
+All three run as an argv slice and never as a shell string, with `--` before the labels so a
+label can never arrive as a flag (`//x --output_base=/tmp`) — a label is untrusted text out
+of a committed manifest, and so is every label bazel prints back, which is re-canonicalized
+before it reaches an argv. cquery hands back
 workspace-root-relative paths, which are read from disk as they come rather than assembled
 as `bazel-bin/<pkg>/<name>-descriptor-set.proto.bin`, which would bake in both the rule's
 output naming and `--symlink_prefix`. Several outputs, and the same proto file name in more
-than one of them, are the expected case and not an error — a merging rule concatenates its
-inputs' per-target sets — so the sets are deduped by file name, first spelling winning,
+than one of them, are the expected case and not an error — the closure above emits one set
+per target, and a merging rule concatenates its inputs' sets on top of that — so the sets
+are deduped by file name, first spelling winning,
 before anything links, because `desc.CreateFileDescriptorsFromSet` rejects a duplicate.
 Deduping by name is safe *here* precisely because every copy came out of one build of one
 target; two different sources disagreeing is `mergeSources`' problem, not this one's.
@@ -469,9 +485,16 @@ and the add form's label field is an editable selector over the result
   targets that fail on add — and a ruleset the regex does not know about must still be
   reachable by typing its label.
 - **Nothing waits for it.** The query is issued only while the form is open, never
-  retried, and cached for the session (`useBazelTargets`, `staleTime: Infinity`): a cold
-  bazel server answers in tens of seconds, so a form that blocked on it would be unusable.
-  A failure is a hint *under* the field, in the server's own words.
+  retried, and cached with `staleTime: Infinity` (`useBazelTargets`): a cold bazel server
+  answers in tens of seconds, so a form that blocked on it would be unusable. A failure is
+  a hint *under* the field, in the server's own words. The cache is keyed by **workspace
+  root**, which is in the react-query key and not in the request: `ListBazelTargets` takes
+  no arguments, and the server answering a given URL can be restarted in another directory,
+  so without the root a page that was never reloaded offers another repo's targets forever.
+- **The popup renders at most 100 matches**, each `flex: none`. Both are about a monorepo
+  with thousands of `proto_library` targets: the cap keeps the mount cheap and says how many
+  matches it dropped, and without `flex: none` a flex column with a `max-height` *shrinks*
+  its rows past their line-height instead of scrolling — 60 labels render as 10px slivers.
 - **It is trust-gated like a build**, and refuses with `FailedPrecondition` rather than
   answering an empty list — `bazel query` loads BUILD files and can fetch external repos,
   which is the same "runs this repo's code" that trust exists for. The query expression is
@@ -567,7 +590,10 @@ host.
 - **The context menu is the host's.** The tree selects/focuses the row and hands
   over `(nodes, ev)`; `CollectionPanel` renders `components/ui/Menu.tsx`, because
   the items are gRPC-shaped. Empty-space right-click is the panel's own handler,
-  guarded on `defaultPrevented`.
+  guarded on `defaultPrevented`. Its items come from `collection-menu.ts`, keyed off
+  the selection: no rows means the collection root — and, behind a separator, the one
+  workspace-level item ("New collection…"), since a collection row unwraps to no item
+  and lands on that same menu.
 - **Drag and drop is native HTML5, no library.** A row is `draggable`; every other
   drag event is delegated to the container, which recovers the row from
   `data-index` (monaco's own structure). Geometry: a folder row splits into
@@ -622,10 +648,20 @@ is shipped.
   escapes, and keys its handle map **case-folded**, because `Requests` and
   `requests` are one directory on macOS and `Collection.mu` is the only write
   serializer.
-- **Nothing is created that the user did not ask for.** `grpcview init [dir]` (or
-  the UI's empty state) is the only thing that creates a collection; every other
-  handler returns `NotFound`. An id joined onto a repo root means a typo'd
-  `--collection` would otherwise materialise a collection among project files.
+- **Nothing is created that the user did not ask for.** `CreateCollection` is the
+  only thing that creates a collection; every other handler returns `NotFound`. An
+  id joined onto a repo root means a typo'd `--collection` would otherwise
+  materialise a collection among project files. Three surfaces reach it — `grpcview
+  init [dir]`, the UI's empty state (`NoCollection`), and `NewCollectionDialog` from
+  either the TopBar collection picker or the tree's empty-space context menu. The
+  dialog suggests **no** directory, unlike the empty state, which offers the path
+  that just came back `NotFound`: with nothing already asked for, a default of `"."`
+  would scatter a `grpcview.json` across the repo root on a stray Enter.
+- **The TopBar picker is where a collection is switched**, and switching is pure UI
+  state (`activeCollection`) because every query key is built from the active id —
+  no reload, no refetch of anything but the collection now addressed. A row is
+  labelled by name, with the id appended only when another collection shares that
+  name, since a collection is addressed by its path and named separately.
 - **Local state lives outside the collection directory** — one durable
   per-workspace state root under `os.UserConfigDir()` keyed by a hash of the
   root's absolute path (`wsroot.StateDir`), holding the resolve caches, run

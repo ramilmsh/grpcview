@@ -198,16 +198,90 @@ exit 0
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(argv)), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("bazel was invoked %d times, want 2: %q", len(lines), lines)
+	if len(lines) != 3 {
+		t.Fatalf("bazel was invoked %d times, want 3: %q", len(lines), lines)
 	}
+	wantQuery := `query --output=label --order_output=no --curses=no --color=no --noshow_progress -- kind("^(proto_library|proto_descriptor_set) rule$", deps(//pkg:pkg))`
 	wantBuild := "build --curses=no --color=no --noshow_progress -- //pkg:pkg"
 	wantCquery := "cquery --output=files --curses=no --color=no --noshow_progress -- //pkg:pkg"
-	if lines[0] != wantBuild {
-		t.Errorf("build argv = %q, want %q", lines[0], wantBuild)
+	if lines[0] != wantQuery {
+		t.Errorf("query argv = %q, want %q", lines[0], wantQuery)
 	}
-	if lines[1] != wantCquery {
-		t.Errorf("cquery argv = %q, want %q", lines[1], wantCquery)
+	if lines[1] != wantBuild {
+		t.Errorf("build argv = %q, want %q", lines[1], wantBuild)
+	}
+	if lines[2] != wantCquery {
+		t.Errorf("cquery argv = %q, want %q", lines[2], wantCquery)
+	}
+}
+
+// The transitive half: a proto_library's own descriptor set holds only its own files, so the deps
+// query's labels have to reach BOTH the build (as patterns) and the cquery (as one union expression),
+// or an import of google/protobuf/any.proto has nothing to link against.
+func TestDescriptorSetsReadsTheDepClosure(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "out", "own.bin"), setBytes(t, "a.proto"))
+	write(t, filepath.Join(root, "out", "any.bin"), setBytes(t, "google/protobuf/any.proto"))
+
+	log := filepath.Join(root, "argv.log")
+	binary := fakeBazel(t, `
+printf '%s\n' "$*" >> `+shquote(log)+`
+case "$1" in
+query)
+  # The label under query, one dep, a duplicate of it, and a line no label parses out of.
+  echo //pkg:pkg
+  echo '@protobuf//src/google/protobuf:any_proto'
+  echo '@protobuf//src/google/protobuf:any_proto'
+  echo 'Loading: 3 packages loaded'
+  ;;
+cquery)
+  echo out/own.bin
+  echo out/any.bin
+  ;;
+esac
+exit 0
+`)
+
+	sets, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg")
+	if err != nil {
+		t.Fatalf("DescriptorSets: %v", err)
+	}
+	if len(sets) != 2 {
+		t.Fatalf("got %d sets, want 2", len(sets))
+	}
+
+	argv, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(argv)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("bazel was invoked %d times, want 3: %q", len(lines), lines)
+	}
+	wantBuild := "build --curses=no --color=no --noshow_progress -- //pkg:pkg @protobuf//src/google/protobuf:any_proto"
+	wantCquery := "cquery --output=files --curses=no --color=no --noshow_progress -- //pkg:pkg + @protobuf//src/google/protobuf:any_proto"
+	if lines[1] != wantBuild {
+		t.Errorf("build argv = %q, want %q", lines[1], wantBuild)
+	}
+	if lines[2] != wantCquery {
+		t.Errorf("cquery argv = %q, want %q", lines[2], wantCquery)
+	}
+}
+
+// A failed deps query is fatal, not degraded to the label alone: silently resolving without the
+// closure is exactly the "no such file: google/protobuf/any.proto" the closure exists to prevent.
+func TestDescriptorSetsQueryFailure(t *testing.T) {
+	root := t.TempDir()
+	binary := fakeBazel(t, `
+if [ "$1" = query ]; then echo 'ERROR: no such package' >&2; exit 7; fi
+exit 0
+`)
+	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
+	if err == nil {
+		t.Fatal("DescriptorSets succeeded, want an error")
+	}
+	if !strings.Contains(err.Error(), "query") || !strings.Contains(err.Error(), "//pkg:target") {
+		t.Errorf("error %q should name the invocation and the label", err)
 	}
 }
 
@@ -291,6 +365,7 @@ exit 0
 func TestDescriptorSetsBuildFailure(t *testing.T) {
 	root := t.TempDir()
 	binary := fakeBazel(t, `
+if [ "$1" = query ]; then exit 0; fi
 i=1
 while [ $i -le 24 ]; do echo "noise line $i" >&2; i=$((i+1)); done
 echo 'ERROR: no such package' >&2
