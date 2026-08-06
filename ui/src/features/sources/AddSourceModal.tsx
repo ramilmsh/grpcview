@@ -1,7 +1,30 @@
 import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Field } from "@/components/ui/Input";
+import { Combobox } from "@/components/ui/Combobox";
 import { Button } from "@/components/ui/Button";
+import { useBazelTargets } from "@/lib/workspace-query";
+
+// bazelHint is what the label picker says when it has nothing to offer. A failed listing is
+// reported in bazel's own words — the untrusted-workspace refusal names trust as the fix and
+// a query failure names the package that broke — because none of it stops the user: the
+// field takes a typed label either way, which is what this sentence has to make obvious.
+export function bazelHint(targets: {
+  labels: readonly string[];
+  isPending: boolean;
+  error: unknown;
+}): string {
+  if (targets.isPending) return "";
+  if (targets.error) {
+    const reason =
+      targets.error instanceof Error ? targets.error.message : "the target listing failed";
+    return `Targets could not be listed, so type the label: ${reason}`;
+  }
+  if (targets.labels.length === 0) {
+    return "No proto_library or proto_descriptor_set target in this bazel workspace.";
+  }
+  return "";
+}
 
 // AddSourceModal adds a reflection target, a bazel label, or an uploaded FileDescriptorSet.
 export function AddSourceModal({
@@ -32,6 +55,12 @@ export function AddSourceModal({
   // in git history, and it applies to whichever of the kinds below is added.
   const [commit, setCommit] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Suggestions for the label field, queried only while this form is open and never waited
+  // on: the field renders and accepts typing on the first frame, and the list drops in
+  // whenever `bazel query` gets back. A failure (an untrusted workspace, most often) is a
+  // hint under the field, not an error — typing a label still works.
+  const targets = useBazelTargets(open);
 
   const submitReflection = () => {
     if (address.trim()) onAddReflection(address.trim(), tls, commit);
@@ -86,11 +115,15 @@ export function AddSourceModal({
 
       <div style={{ borderTop: "1px solid var(--line)" }} />
       <Field label="Bazel target">
-        <Input
+        <Combobox
           value={label}
-          onChange={(e) => setLabel(e.target.value)}
+          onChange={setLabel}
+          options={targets.labels}
+          loading={targets.isPending}
+          emptyHint={bazelHint(targets)}
           placeholder="//pkg:target"
-          onKeyDown={onEnter(submitBazel)}
+          ariaLabel="Bazel target"
+          onSubmit={submitBazel}
         />
         <span
           className="text-muted"
@@ -98,6 +131,11 @@ export function AddSourceModal({
         >
           A label whose default outputs are descriptor sets — a plain proto_library is enough.
           Adding or refreshing it runs bazel build, so the workspace has to be trusted.
+          {targets.warning && (
+            <span style={{ display: "block", color: "var(--warn)" }}>
+              Some packages could not be listed: {targets.warning}
+            </span>
+          )}
         </span>
       </Field>
 

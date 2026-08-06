@@ -64,6 +64,16 @@ export const listCollections: typeof WorkspaceService["method"]["listCollections
  */
 export const setWorkspaceTrust: typeof WorkspaceService["method"]["setWorkspaceTrust"];
 /**
+ * ListBazelTargets lists the workspace's descriptor-set-producing labels, so adding a
+ * bazel source can be a pick instead of a recalled label. It runs `bazel query`, which
+ * loads BUILD files and may fetch external repos — code from this repo — so it is
+ * trust-gated exactly like a build is, and an untrusted workspace gets
+ * FailedPrecondition rather than an empty list.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.ListBazelTargets
+ */
+export const listBazelTargets: typeof WorkspaceService["method"]["listBazelTargets"];
+/**
  * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection
  */
 export const createCollection: typeof WorkspaceService["method"]["createCollection"];

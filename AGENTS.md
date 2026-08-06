@@ -458,6 +458,28 @@ on a remote cache gets an error of its own naming `--remote_download_toplevel`, 
 download flags to somebody's build; every other failure carries the tail of bazel's stderr,
 which is where a bazel failure's reason actually lives.
 
+**Adding one is a pick, not a recall.** `ListBazelTargets` runs
+`bazel query --output=label --order_output=no --keep_going -- kind("^(proto_library|proto_descriptor_set) rule$", //...)`
+and the add form's label field is an editable selector over the result
+(`ui/src/components/ui/Combobox.tsx`). Three things about it are load bearing:
+
+- **The field still takes anything.** It is a combobox and not a `<select>`, because the
+  kind regex is exact — `go_proto_library`, `cc_proto_library` and friends carry "proto"
+  in their kind and output no descriptor set, so a loose pattern would fill the list with
+  targets that fail on add — and a ruleset the regex does not know about must still be
+  reachable by typing its label.
+- **Nothing waits for it.** The query is issued only while the form is open, never
+  retried, and cached for the session (`useBazelTargets`, `staleTime: Infinity`): a cold
+  bazel server answers in tens of seconds, so a form that blocked on it would be unusable.
+  A failure is a hint *under* the field, in the server's own words.
+- **It is trust-gated like a build**, and refuses with `FailedPrecondition` rather than
+  answering an empty list — `bazel query` loads BUILD files and can fetch external repos,
+  which is the same "runs this repo's code" that trust exists for. The query expression is
+  a constant assembled server-side and never client input, because the label validator
+  that guards every other bazel entry point cannot check a query expression. A partial
+  listing (`--keep_going` over an unloadable package) comes back as labels *plus* a
+  `warning`, never as an error: one broken package must not blank the picker.
+
 **There is still no load-time acquisition, and that is the invariant to keep.** Only the
 source-mutating RPCs build, so a bazel source's descriptors change on an explicit refresh
 and never because a terminal `bazel build` happened. Opening a collection stats no recipe

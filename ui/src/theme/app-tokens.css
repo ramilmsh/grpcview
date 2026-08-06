@@ -249,3 +249,30 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 .menuitem[aria-disabled="true"] { color: var(--color-neutral-600); cursor: default; }
 .menuitem[aria-disabled="true"].hl { background: transparent; }
 .menusep { height: 1px; margin: 4px 3px; background: var(--line); }
+
+/* ── editable selector (components/ui/Combobox.tsx) ── */
+
+/* The list is absolute over the form, not in flow: a dialog must not resize as it opens. */
+.combo { position: relative; }
+.combo-field { position: relative; display: flex; align-items: center; }
+.combo-field .input { padding-right: 30px; }
+.combo-caret {
+  position: absolute; right: 6px; display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border: none; border-radius: 4px;
+  background: transparent; color: var(--color-neutral-400); cursor: pointer;
+}
+.combo-caret:hover { color: var(--color-text); background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.combo-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
+  display: flex; flex-direction: column; padding: 4px; max-height: 216px; overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: var(--panel-2); border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+/* Labels are long and monospaced. They ellipsize rather than wrap or add a second
+   scrollbar; each row carries the full text as its tooltip. */
+.combo-list .menuitem {
+  display: block; font-family: var(--mono); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.combo-note { padding: 6px 9px; font-size: 12px; color: var(--color-neutral-500); }

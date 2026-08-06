@@ -38,6 +38,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -240,7 +241,72 @@ func (b Builder) DescriptorSets(ctx context.Context, label string) ([]*descripto
 	return sets, nil
 }
 
-// run execs one bazel invocation with cmd.Dir = b.Root and returns its stdout.
+// descriptorSetKinds is the rule-kind alternation QueryTargets matches: the two rules
+// whose DEFAULT OUTPUTS are FileDescriptorSets. It is deliberately exact rather than
+// something like `.*proto.*` — `go_proto_library`, `cc_proto_library` and friends all
+// carry "proto" in their kind and none of them outputs a descriptor set, so a loose
+// pattern would fill the picker with targets that fail the moment they are added.
+//
+// A ruleset this list does not know about is exactly why the label field it feeds stays
+// free text: the picker is a shortcut, never the set of legal answers.
+const descriptorSetKinds = `proto_library|proto_descriptor_set`
+
+// QueryTargets lists the main repository's descriptor-set-producing labels, canonical,
+// sorted and deduped, plus a warning when bazel reported trouble the query survived.
+//
+// Partial results are returned rather than discarded, and that is the whole design of
+// the second return value: this feeds a picker, and one unloadable package in a monorepo
+// must not blank out every target the query DID find. The caller shows the warning and
+// keeps the labels.
+//
+// Unlike DescriptorSets this runs no actions — but `bazel query` still loads BUILD files
+// and can fetch external repositories, i.e. it executes this repo's code, so THE CALLER
+// MUST HAVE CHECKED TRUST here too (see the package comment).
+func (b Builder) QueryTargets(ctx context.Context) ([]string, string, error) {
+	if b.Root == "" {
+		return nil, "", errors.New("no bazel workspace root: no MODULE.bazel, WORKSPACE or WORKSPACE.bazel above this workspace")
+	}
+	timeout := b.Timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// kind() matches against bazel's own "<rule class> rule" spelling, anchored so
+	// `proto_library` cannot also match `go_proto_library`. The expression is a constant
+	// assembled here and never client input; --order_output=no skips a graph sort whose
+	// result is thrown away by the sort below.
+	expr := fmt.Sprintf(`kind("^(%s) rule$", //...)`, descriptorSetKinds)
+	stdout, err := b.run(ctx, runCtx, timeout, expr, "query", "--output=label", "--order_output=no", "--keep_going")
+
+	labels, seen := []string(nil), map[string]bool{}
+	for _, line := range splitLines(stdout) {
+		// A label bazel printed is well-formed by construction; canonicalizing is for the
+		// ids derived from it downstream, where "//pkg" and "//pkg:pkg" must be one source.
+		canon, cerr := CanonicalLabel(line)
+		if cerr != nil || seen[canon] {
+			continue
+		}
+		seen[canon] = true
+		labels = append(labels, canon)
+	}
+	sort.Strings(labels)
+
+	if err != nil {
+		// Any nonzero exit with labels on stdout is the --keep_going partial case, whatever
+		// code bazel chose for it; with nothing on stdout there is no listing to salvage.
+		if len(labels) == 0 {
+			return nil, "", err
+		}
+		return labels, err.Error(), nil
+	}
+	return labels, "", nil
+}
+
+// run execs one bazel invocation with cmd.Dir = b.Root and returns its stdout. That
+// stdout comes back on the error paths too, for the one caller that can use a partial
+// answer (QueryTargets); every other caller checks err first and ignores it.
 // stdout and stderr are captured, never inherited: this runs inside a server.
 func (b Builder) run(parent, ctx context.Context, timeout time.Duration, label, verb string, extra ...string) (string, error) {
 	binary := b.Binary
@@ -260,19 +326,20 @@ func (b Builder) run(parent, ctx context.Context, timeout time.Duration, label, 
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
+	out := stdout.String()
 	switch {
 	case err == nil:
-		return stdout.String(), nil
+		return out, nil
 	case parent.Err() != nil:
 		// The caller went away (a cancelled request); not our timeout.
-		return "", fmt.Errorf("bazel %s of %s was cancelled: %w", verb, label, parent.Err())
+		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, label, parent.Err())
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return "", fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if the build really takes this long", verb, label, timeout)
+		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if the build really takes this long", verb, label, timeout)
 	}
 	if tail := tailOf(stderr.String()); tail != "" {
-		return "", fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, label, err, tail)
+		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, label, err, tail)
 	}
-	return "", fmt.Errorf("bazel %s of %s failed: %w", verb, label, err)
+	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, label, err)
 }
 
 func splitLines(s string) []string {

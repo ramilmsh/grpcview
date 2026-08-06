@@ -554,3 +554,55 @@ func TestAddPathlessUploadRecordsNoRecipe(t *testing.T) {
 		t.Fatalf("an upload with no path must record none, got %q", got)
 	}
 }
+
+// The picker's listing: a trusted workspace queries, and what bazel printed comes back
+// canonical and sorted.
+func TestListBazelTargets(t *testing.T) {
+	isolateTrust(t)
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	bazelWorkspace(t, w)
+	if err := wsroot.Trust(w.store.Root()); err != nil {
+		t.Fatalf("Trust: %v", err)
+	}
+	fakeBazelOnPath(t, "printf '%s\\n' //proto/pay:pay_proto //proto/health\nexit 0\n")
+
+	resp, err := w.ListBazelTargets(ctx, connect.NewRequest(&grpcviewv1.ListBazelTargetsRequest{}))
+	if err != nil {
+		t.Fatalf("ListBazelTargets: %v", err)
+	}
+	if got, want := strings.Join(resp.Msg.GetLabels(), ","), "//proto/health:health,//proto/pay:pay_proto"; got != want {
+		t.Errorf("labels = %q, want %q", got, want)
+	}
+	if resp.Msg.GetWarning() != "" {
+		t.Errorf("warning = %q, want none", resp.Msg.GetWarning())
+	}
+}
+
+// Listing EXECUTES (bazel query loads BUILD files and can fetch repos), so it is gated on
+// trust exactly like a build — and refuses before exec'ing anything.
+func TestListBazelTargetsRefusedWhenUntrusted(t *testing.T) {
+	isolateTrust(t)
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	bazelWorkspace(t, w)
+
+	marker := filepath.Join(w.store.Root(), "bazel-ran")
+	fakeBazelOnPath(t, "touch '"+marker+"'\nexit 0\n")
+
+	_, err := w.ListBazelTargets(ctx, connect.NewRequest(&grpcviewv1.ListBazelTargetsRequest{}))
+	if err == nil {
+		t.Fatal("ListBazelTargets on an untrusted workspace succeeded, want a refusal")
+	}
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Errorf("code = %s, want FailedPrecondition", got)
+	}
+	if !strings.Contains(err.Error(), "not trusted") {
+		t.Errorf("error %q does not say the workspace is untrusted", err)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("bazel was exec'd for an untrusted workspace")
+	}
+}

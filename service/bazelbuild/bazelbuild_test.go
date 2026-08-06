@@ -373,6 +373,88 @@ func TestDescriptorSetsNeedsRoot(t *testing.T) {
 	}
 }
 
+func TestQueryTargetsSortsDedupesAndCanonicalizes(t *testing.T) {
+	root := t.TempDir()
+	log := filepath.Join(root, "argv.log")
+	binary := fakeBazel(t, `
+printf '%s\n' "$*" >> `+shquote(log)+`
+cat <<'EOF'
+//b/pkg:descriptors
+//a/pkg:a_proto
+
+//a/pkg
+//a/pkg:a_pkg
+EOF
+exit 0
+`)
+	labels, warning, err := Builder{Binary: binary, Root: root}.QueryTargets(context.Background())
+	if err != nil {
+		t.Fatalf("QueryTargets: %v", err)
+	}
+	if warning != "" {
+		t.Errorf("warning = %q, want none on a clean query", warning)
+	}
+	// "//a/pkg" canonicalizes to "//a/pkg:pkg" — a THIRD label, not a duplicate of
+	// "//a/pkg:a_pkg"; deduping happens after canonicalizing, so a repeat of one spelling
+	// would have collapsed.
+	want := "//a/pkg:a_pkg,//a/pkg:a_proto,//a/pkg:pkg,//b/pkg:descriptors"
+	if got := strings.Join(labels, ","); got != want {
+		t.Errorf("labels = %q, want %q", got, want)
+	}
+
+	argv, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.TrimSpace(string(argv))
+	wantArgv := `query --output=label --order_output=no --keep_going --curses=no --color=no ` +
+		`--noshow_progress -- kind("^(proto_library|proto_descriptor_set) rule$", //...)`
+	if line != wantArgv {
+		t.Errorf("query argv = %q, want %q", line, wantArgv)
+	}
+}
+
+// --keep_going: bazel exits nonzero with a partial listing on stdout, and the picker gets
+// those targets plus a warning rather than nothing at all.
+func TestQueryTargetsKeepsPartialResults(t *testing.T) {
+	root := t.TempDir()
+	binary := fakeBazel(t, `
+echo //a:a_proto
+echo 'ERROR: no such package b: BUILD file not found' >&2
+exit 3
+`)
+	labels, warning, err := Builder{Binary: binary, Root: root}.QueryTargets(context.Background())
+	if err != nil {
+		t.Fatalf("QueryTargets: %v", err)
+	}
+	if strings.Join(labels, ",") != "//a:a_proto" {
+		t.Errorf("labels = %v, want [//a:a_proto]", labels)
+	}
+	if !strings.Contains(warning, "no such package b") {
+		t.Errorf("warning %q does not carry bazel's reason", warning)
+	}
+}
+
+// Nonzero exit with NOTHING on stdout is a failed query, not a short one.
+func TestQueryTargetsFailsWithNoOutput(t *testing.T) {
+	root := t.TempDir()
+	binary := fakeBazel(t, "echo 'ERROR: query interrupted' >&2\nexit 7\n")
+	_, _, err := Builder{Binary: binary, Root: root}.QueryTargets(context.Background())
+	if err == nil {
+		t.Fatal("QueryTargets succeeded, want an error")
+	}
+	if !strings.Contains(err.Error(), "query interrupted") {
+		t.Errorf("error %q does not carry bazel's stderr tail", err)
+	}
+}
+
+func TestQueryTargetsNeedsRoot(t *testing.T) {
+	_, _, err := Builder{Binary: "true"}.QueryTargets(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "MODULE.bazel") {
+		t.Fatalf("err = %v, want it to explain the missing bazel root", err)
+	}
+}
+
 // --- helpers ---
 
 // fakeBazel writes body into an executable /bin/sh script and returns its path.

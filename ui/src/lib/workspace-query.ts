@@ -28,6 +28,7 @@ import {
   reorderDescriptorSources,
   setDescriptorSourceCommit,
   setWorkspaceTrust,
+  listBazelTargets,
   invoke,
   runScript,
   createScript,
@@ -293,6 +294,32 @@ export function useSetWorkspaceTrust() {
       void qc.invalidateQueries({ queryKey: listKey });
     },
   });
+}
+
+// The bazel labels the add-source form offers as suggestions. Everything about it is
+// shaped by "must never hold up the form":
+//
+//   - It is enabled only while the form is open, because it starts a `bazel query` over
+//     the whole repo — seconds on a cold server, and pointless on a screen nobody opened.
+//   - Its result is cached for the session (staleTime Infinity): the answer changes when
+//     someone edits a BUILD file, not while a modal is open, and a re-query per open would
+//     be the slowest thing in the UI.
+//   - It never retries. The expected failure is FailedPrecondition on an untrusted
+//     workspace (querying loads BUILD files, so it is gated like a build is), and retrying
+//     a refusal three times only delays the hint that says so.
+//
+// The caller renders the error as a hint under a field that still accepts free text; a
+// missing listing costs suggestions and nothing else.
+export function useBazelTargets(enabled: boolean) {
+  const query = useQuery(listBazelTargets, {}, { enabled, retry: false, staleTime: Infinity });
+  return {
+    labels: query.data?.labels ?? [],
+    // Bazel's own reason when the query came back partial (an unloadable package under
+    // --keep_going); the labels that did arrive are still in `labels`.
+    warning: query.data?.warning ?? "",
+    isPending: query.isFetching,
+    error: query.error,
+  };
 }
 
 export function useCreateScript() {

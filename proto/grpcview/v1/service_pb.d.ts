@@ -746,6 +746,52 @@ export declare type SetWorkspaceTrustResponse = Message<"grpcview.v1.SetWorkspac
 export declare const SetWorkspaceTrustResponseSchema: GenMessage<SetWorkspaceTrustResponse>;
 
 /**
+ * ListBazelTargets takes no arguments on purpose. The query it runs is built here and
+ * never from client input: a caller-supplied pattern or kind regex would be text handed
+ * to `bazel query`, and the label validator that guards every other bazel entry point
+ * cannot check a query expression.
+ *
+ * @generated from message grpcview.v1.ListBazelTargetsRequest
+ */
+export declare type ListBazelTargetsRequest = Message<"grpcview.v1.ListBazelTargetsRequest"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.ListBazelTargetsRequest.
+ * Use `create(ListBazelTargetsRequestSchema)` to create a new message.
+ */
+export declare const ListBazelTargetsRequestSchema: GenMessage<ListBazelTargetsRequest>;
+
+/**
+ * @generated from message grpcview.v1.ListBazelTargetsResponse
+ */
+export declare type ListBazelTargetsResponse = Message<"grpcview.v1.ListBazelTargetsResponse"> & {
+  /**
+   * Canonical labels ("//pkg:target"), sorted, deduped. A SUGGESTION list: the field the
+   * user types into stays free text, because a rule this query does not know about can
+   * still produce a descriptor set.
+   *
+   * @generated from field: repeated string labels = 1;
+   */
+  labels: string[];
+
+  /**
+   * Why the listing is short or empty, when bazel reported an error the query survived —
+   * one unloadable package under --keep_going, say. Empty on a clean query. Never a
+   * reason to refuse the labels that did come back.
+   *
+   * @generated from field: string warning = 2;
+   */
+  warning: string;
+};
+
+/**
+ * Describes the message grpcview.v1.ListBazelTargetsResponse.
+ * Use `create(ListBazelTargetsResponseSchema)` to create a new message.
+ */
+export declare const ListBazelTargetsResponseSchema: GenMessage<ListBazelTargetsResponse>;
+
+/**
  * A collection is only ever created by an explicit act — this RPC, or `grpcview
  * init`. Nothing else may materialize one, or a stale query would scatter
  * grpcview.json among a repo's project files.
@@ -1510,6 +1556,20 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof SetWorkspaceTrustRequestSchema;
     output: typeof SetWorkspaceTrustResponseSchema;
+  },
+  /**
+   * ListBazelTargets lists the workspace's descriptor-set-producing labels, so adding a
+   * bazel source can be a pick instead of a recalled label. It runs `bazel query`, which
+   * loads BUILD files and may fetch external repos — code from this repo — so it is
+   * trust-gated exactly like a build is, and an untrusted workspace gets
+   * FailedPrecondition rather than an empty list.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.ListBazelTargets
+   */
+  listBazelTargets: {
+    methodKind: "unary";
+    input: typeof ListBazelTargetsRequestSchema;
+    output: typeof ListBazelTargetsResponseSchema;
   },
   /**
    * @generated from rpc grpcview.v1.WorkspaceService.CreateCollection

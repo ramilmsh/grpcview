@@ -153,6 +153,26 @@ func (w Workspace) SetWorkspaceTrust(_ context.Context, request *connect.Request
 	return connect.NewResponse(&grpcviewv1.SetWorkspaceTrustResponse{Trusted: trusted}), nil
 }
 
+// ListBazelTargets lists the labels a bazel source could be added from, so the add form can offer
+// them instead of asking the user to recall one. It is a READ that executes: `bazel query` loads
+// BUILD files and can fetch external repos, so it goes through bazelBuilder like every build does
+// and inherits its trust gate — an untrusted workspace gets FailedPrecondition, and the client
+// keeps its free-text field.
+//
+// A query that came back partial is a listing plus a warning, never an error: one unloadable
+// package in a monorepo must not blank a picker whose whole job is convenience.
+func (w Workspace) ListBazelTargets(ctx context.Context, _ *connect.Request[grpcviewv1.ListBazelTargetsRequest]) (*connect.Response[grpcviewv1.ListBazelTargetsResponse], error) {
+	builder, err := w.bazelBuilder()
+	if err != nil {
+		return nil, err
+	}
+	labels, warning, err := builder.QueryTargets(ctx)
+	if err != nil {
+		return nil, bazelResolveError(ctx, err)
+	}
+	return connect.NewResponse(&grpcviewv1.ListBazelTargetsResponse{Labels: labels, Warning: warning}), nil
+}
+
 // CreateCollection is the one place a collection legitimately comes into existence: every
 // other handler now requires one to already be there. An existing collection at this address
 // is AlreadyExists, not silently reused.
