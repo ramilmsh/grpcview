@@ -183,8 +183,11 @@ context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
   node's ancestor **folder** chain. Folders carry their own metadata script
   (`Folder.draft_metadata_script`, edited via the folder-row gear); `invoke.go`'s
   `foldAncestorMetadata` walks them root→parent as an iterative Go fold, gated on
-  the request's script textually mentioning `inherit(` and capped at
-  `MaxFolderMetadataDepth`. Transitivity is **userland spread**: a folder that
+  the request's script textually mentioning `inherit(` — or being **empty**, which
+  inherits the chain unconditionally, matching the UI's default
+  `{ ...gv.metadata.inherit() }` buffer so a never-saved metadata tab does not lose
+  an ancestor's authorization on the store-read paths (`gv.invoke`, the CLI) — and
+  capped at `MaxFolderMetadataDepth`. Transitivity is **userland spread**: a folder that
   writes `{ ...gv.metadata.inherit(), … }` carries ancestors forward, an empty
   folder is transparent, and a non-empty folder that omits the spread is a
   deliberate barrier. Ancestor scripts are read from the **store**, so folder edits

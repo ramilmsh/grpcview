@@ -54,6 +54,33 @@ func TestResolveInvokeMetadataInheritanceAdditive(t *testing.T) {
 	}
 }
 
+func TestResolveInvokeMetadataEmptyScriptStillInherits(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	createFolder(t, w, ctx, nil, "a", `export default () => ({ authorization: ["Bearer tkn"] })`)
+
+	fallback := structFromMetadataLists(map[string][]string{"authorization": {"explicit"}, "x-own": {"1"}})
+	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"}, "", fallback, nil)
+	if err != nil {
+		t.Fatalf("resolveInvokeMetadata: %v", err)
+	}
+	if got := mdValues(md, "authorization"); len(got) != 1 || got[0] != "explicit" {
+		t.Errorf("authorization = %v, want [explicit] (an explicit key must beat the inherited one)", got)
+	}
+	if got := mdValues(md, "x-own"); len(got) != 1 || got[0] != "1" {
+		t.Errorf("x-own = %v, want [1] (fallback key dropped)", got)
+	}
+
+	md, err = w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"}, "", nil, nil)
+	if err != nil {
+		t.Fatalf("resolveInvokeMetadata (no fallback): %v", err)
+	}
+	if got := mdValues(md, "authorization"); len(got) != 1 || got[0] != "Bearer tkn" {
+		t.Errorf("authorization = %v, want [Bearer tkn] (an unsaved request must still inherit its folder)", got)
+	}
+}
+
 func TestResolveInvokeMetadataInheritanceNestedTransitive(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

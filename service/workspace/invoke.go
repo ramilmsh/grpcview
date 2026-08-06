@@ -444,7 +444,7 @@ func (w Workspace) loadGenerators(ctx context.Context, workspaceName string) (ma
 
 func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName string, path []string, metadataScript string, fallback *structpb.Struct, params map[string]any) (*structpb.Struct, error) {
 	if strings.TrimSpace(metadataScript) == "" {
-		return fallback, nil
+		return w.inheritedMetadataOnly(ctx, workspaceName, path, fallback, params)
 	}
 	if w.engine == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -476,6 +476,31 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName stri
 		return nil, err
 	}
 	return structFromMetadataLists(lists), nil
+}
+
+// A request with no metadata script of its own inherits its folder chain: that is what the UI's
+// default `{ ...gv.metadata.inherit() }` buffer does, and a store-read path (gv.invoke, the CLI)
+// must not silently drop an ancestor's authorization header just because nothing was ever saved.
+// Explicit fallback keys still win over inherited ones.
+func (w Workspace) inheritedMetadataOnly(ctx context.Context, workspaceName string, path []string, fallback *structpb.Struct, params map[string]any) (*structpb.Struct, error) {
+	if w.engine == nil || len(path) == 0 {
+		return fallback, nil
+	}
+	allGens, err := w.loadGenerators(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+	inherited, err := w.foldAncestorMetadata(ctx, workspaceName, path, params, allGens)
+	if err != nil {
+		return nil, err
+	}
+	if len(inherited) == 0 {
+		return fallback, nil
+	}
+	for key, values := range structToStringLists(fallback) {
+		inherited[key] = values
+	}
+	return structFromMetadataLists(inherited), nil
 }
 
 var inheritCallRe = regexp.MustCompile(`\binherit\s*\(`)
