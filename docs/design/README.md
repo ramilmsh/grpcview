@@ -52,6 +52,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`daemon.md`](./planned/daemon.md) | One daemon per workspace, bazel's client/server model. Needs only vscode phase 1a. |
 | [`invoke-from-the-store.md`](./planned/invoke-from-the-store.md) | Send resolves the saved request server-side instead of shipping the editor buffer. The RPC now exists; the UI migration does not. |
 | [`descriptor-explorer-plan.md`](./planned/descriptor-explorer-plan.md) | A navigable read-only `.proto` browser — field numbers and comments the TS-shape view cannot recover. |
+| [`example-collection-fixes.md`](./planned/example-collection-fixes.md) | Five defects found by authoring the `example` collection entirely through MCP — mutation payload size, metadata's missing expression wrap, generators in middleware, one-command bring-up, streaming's late `Unimplemented`. |
 | [`roadmap.md`](./planned/roadmap.md) | **Wants, not plans** — the backlog the three shipped UI/scripting/tree docs used to carry. Each item gets its own doc when picked up. |
 
 ## Housekeeping
