@@ -115,6 +115,9 @@ func newRootCmd(
 	}
 	root.Flags().IntVar(&rootPort, "port", defaultPort, "port to serve on")
 
+	root.Version = releaseVersion()
+	root.SetVersionTemplate("{{.Version}}\n")
+
 	globals = registerGlobalFlags(root)
 
 	root.AddCommand(newInvokeCmd(s, globals, open))

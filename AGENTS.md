@@ -1065,8 +1065,11 @@ the top-level copies are the URLs users curl and, like `latest`, are uploaded
 shell.
 
 **Versions come from `tools/version.sh`**, which `tools/workspace_status.sh`
-stamps into `STABLE_VERSION_TAG` and thence into `cli.version` (what `grpcview
-version` prints). An exact `vX.Y.Z` tag on HEAD wins; otherwise it emits a Go
+stamps into `STABLE_VERSION_TAG` and thence into `cli.version` — what both
+`grpcview version` and `grpcview --version` print. The flag exists because
+setting `root.Version` is the only thing that makes cobra accept `--version` at
+all; its version template is overridden to drop cobra's `grpcview version `
+prefix so the flag and the verb emit the same single line. An exact `vX.Y.Z` tag on HEAD wins; otherwise it emits a Go
 pseudo-version — `v0.0.0-20260806152233-1a2b3c4d5e6f` with no tags in the repo,
 or `v0.1.1-0.<timestamp>-<sha>` once `v0.1.0` exists. That is the canonical
 date-based version for an untagged commit: the timestamp is the commit time in

@@ -59,6 +59,16 @@ func TestMain_outputsAndExitCodes(t *testing.T) {
 			},
 		},
 		{
+			name:     "--version prints what the version verb prints",
+			args:     []string{"--version"},
+			wantCode: 0,
+			checkOut: func(t *testing.T, s string) {
+				if s != releaseVersion()+"\n" {
+					t.Errorf("want %q, got %q", releaseVersion()+"\n", s)
+				}
+			},
+		},
+		{
 			name:     "unknown verb is exit 2 with usage on stderr and nothing on stdout",
 			args:     []string{"typoe"},
 			wantCode: 2,
