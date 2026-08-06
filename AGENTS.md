@@ -1001,6 +1001,69 @@ to hold the version string. Version directories are treated as immutable —
 uploaded with a one-year `Cache-Control` and refused if they already exist,
 unless `--force`. A modified worktree is refused unless `--allow-dirty`.
 
+**`tools/install.sh` is the public installer**, published to the same bucket:
+
+```bash
+curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/install.sh | sh
+```
+
+It resolves `latest` (or `--version vX.Y.Z`), picks `grpcview_<goos>_<goarch>`
+from `uname`, verifies the download against the published `SHA256SUMS`, and
+installs it as `grpcview` in the first writable directory of
+`$GRPCVIEW_BIN_DIR`, `/usr/local/bin`, `~/.local/bin` — `--bin-dir` overrides.
+It writes to a temporary name in that directory and renames, so upgrading a
+running binary can't hit `ETXTBSY`. `--list` resolves and prints without
+installing.
+
+When the chosen directory is not on `PATH`, the hint it prints is keyed off
+`${SHELL##*/}`, the user's **login** shell rather than the `/bin/sh` running the
+script: fish gets `fish_add_path`, csh/tcsh get `setenv`, and only unrecognized
+shells get a bare `export PATH=`. Printing POSIX syntax to a fish user is advice
+that silently does nothing.
+
+**`tools/uninstall.sh` is the counterpart.** By default it only deletes
+binaries — every `grpcview` it finds in `$GRPCVIEW_BIN_DIR`, `/usr/local/bin`,
+`~/.local/bin`, `/opt/homebrew/bin`, `~/bin`, plus whatever `command -v
+grpcview` resolves to. `--purge` also deletes the state directory:
+
+```bash
+curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/uninstall.sh | sh
+tools/uninstall.sh --purge --dry-run     # show what a purge would delete
+```
+
+The state root is `os.UserConfigDir()/grpcview`, which the script recomputes
+from `$XDG_CONFIG_HOME` / `~/Library/Application Support` rather than asking the
+binary — the binary may already be gone. **It is not a cache** (see the comment
+at `service/wsroot/wsroot.go:59`): a purge loses the workspace trust list,
+cached descriptor blobs, and run history. Collections, requests, and scripts
+live in the user's repositories, so a purge never touches them.
+
+Both scripts are POSIX `sh`, not bash, because they run under whatever `/bin/sh`
+the target machine has. Guards worth keeping:
+
+- The installer's release root is a `@BASE_URL@` placeholder that `release.sh`
+  substitutes at upload time — the bucket is only known there — so the
+  checked-in copy needs `--base-url` or `$GRPCVIEW_INSTALL_BASE_URL` to run, and
+  `release.sh` fails the upload if a placeholder survives. The installer never
+  compares `$BASE_URL` against the placeholder text: that substitution is
+  global, so a guard naming the placeholder would itself be rewritten into one
+  matching the real URL. It checks for an `http(s)://` scheme instead.
+- Deletions are confirmed from `/dev/tty`, not stdin, since stdin is the curl
+  pipe. The open is tested in a subshell first: `/dev/tty` can pass `[ -r ]` and
+  still fail to open, and a failed redirection on the main shell would kill the
+  script with a raw error. No terminal and no `--yes` means refuse, never
+  assume yes.
+- A purge target must be a nested directory literally named `grpcview` that is
+  neither `$HOME` nor `/grpcview`, and must hold a `trust.json` or a
+  `workspaces/` — otherwise it takes `--force`. Symlinked binaries are skipped
+  by default too, since a symlink is how Homebrew or Bazel owns a name in `bin`.
+
+Each release directory keeps an immutable copy of both scripts as they shipped;
+the top-level copies are the URLs users curl and, like `latest`, are uploaded
+`no-cache`. They also get `text/plain` rather than the guessed
+`application/x-sh`, so they can be read in a browser before being piped to a
+shell.
+
 **Versions come from `tools/version.sh`**, which `tools/workspace_status.sh`
 stamps into `STABLE_VERSION_TAG` and thence into `cli.version` (what `grpcview
 version` prints). An exact `vX.Y.Z` tag on HEAD wins; otherwise it emits a Go

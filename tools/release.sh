@@ -7,7 +7,11 @@
 #
 #   <bucket>/grpcview/<version>/grpcview_<goos>_<goarch>
 #   <bucket>/grpcview/<version>/SHA256SUMS
+#   <bucket>/grpcview/<version>/install.sh   (immutable copies of what shipped)
+#   <bucket>/grpcview/<version>/uninstall.sh
 #   <bucket>/grpcview/latest                 (a text file holding <version>)
+#   <bucket>/grpcview/install.sh             (the URLs users curl)
+#   <bucket>/grpcview/uninstall.sh
 #
 # <version> comes from tools/version.sh. Version directories are immutable: the
 # script refuses to overwrite one unless --force is passed.
@@ -109,12 +113,32 @@ fi
 (cd "$staging" && "${sha256[@]}" grpcview_* >SHA256SUMS)
 printf '%s\n' "$version" >"$staging/latest"
 
+# The uploaded installer has to know its own release root, and the bucket is
+# only known here. `gs://name/prefix` is public over the storage.googleapis.com
+# path form, so this is the same objects under a fetchable URL.
+base_url="https://storage.googleapis.com/${BUCKET#gs://}/$PREFIX"
+for script in install.sh uninstall.sh; do
+    sed "s|@BASE_URL@|$base_url|g" "tools/$script" >"$staging/$script"
+    chmod 0755 "$staging/$script"
+    if grep -q '@BASE_URL@' "$staging/$script"; then
+        echo "error: $script still has an unsubstituted @BASE_URL@" >&2
+        exit 1
+    fi
+done
+
 echo
 echo "version:     $version"
 echo "destination: $dest/"
 (cd "$staging" && ls -l grpcview_* | awk '{printf "  %-28s %10d bytes\n", $9, $5}')
 echo "  SHA256SUMS"
+echo "  install.sh"
+echo "  uninstall.sh"
 echo "and $BUCKET/$PREFIX/latest -> $version"
+echo "    $BUCKET/$PREFIX/install.sh"
+echo "    $BUCKET/$PREFIX/uninstall.sh"
+echo
+echo "install command:"
+echo "  curl -fsSL $base_url/install.sh | sh"
 echo
 
 if [[ "$dry_run" == true ]]; then
@@ -134,10 +158,20 @@ fi
 # the pointer clients re-read, so it must not be.
 gcloud storage cp \
     --cache-control="public, max-age=31536000, immutable" \
-    "$staging"/grpcview_* "$staging/SHA256SUMS" "$dest/"
+    "$staging"/grpcview_* "$staging/SHA256SUMS" \
+    "$staging/install.sh" "$staging/uninstall.sh" "$dest/"
 
+# `latest` and the top-level scripts are the objects clients re-read, so none of
+# them may be cached. text/plain rather than the guessed application/x-sh so the
+# scripts are also readable in a browser before anyone pipes one to sh.
 gcloud storage cp \
     --cache-control="no-cache" \
     "$staging/latest" "$BUCKET/$PREFIX/latest"
 
+gcloud storage cp \
+    --cache-control="no-cache" \
+    --content-type="text/plain; charset=utf-8" \
+    "$staging/install.sh" "$staging/uninstall.sh" "$BUCKET/$PREFIX/"
+
 echo "published $version to $dest/"
+echo "install with: curl -fsSL $base_url/install.sh | sh"
