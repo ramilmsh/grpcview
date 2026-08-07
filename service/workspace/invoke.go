@@ -356,10 +356,8 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 	}
 	out := make([]string, len(bodies))
 	for i, body := range bodies {
-		if !scripting.HasDefaultExport(body) {
-			body = "export default async () => (\n" + body + "\n)"
-		}
-		res, err := w.engine.RunRequestBody(ctx, body, transitiveGenerators(body, allGens), scripting.Grant{}, scripting.Input{Params: params})
+		gens := transitiveGenerators(body, allGens)
+		res, err := w.engine.RunRequestBody(ctx, wrapExpressionScript(body), gens, scripting.Grant{}, scripting.Input{Params: params})
 		if err != nil {
 			return nil, bodyError(i, err.Error())
 		}
@@ -369,6 +367,18 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 		out[i] = string(res.Value)
 	}
 	return out, nil
+}
+
+// The ONE rule for every script position an author writes an object at — request body, request
+// metadata, folder metadata: a module, or an expression that gets wrapped into one. Only the UI
+// stores the wrapper; MCP, the CLI and a hand-edited request.json all arrive bare.
+//
+// The wrap opens no new line, so a bundler error still names the author's line.
+func wrapExpressionScript(src string) string {
+	if scripting.HasDefaultExport(src) {
+		return src
+	}
+	return "export default async () => (" + src + "\n)"
 }
 
 func calledNames(src string) map[string]struct{} {
@@ -461,7 +471,7 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName stri
 			return nil, err
 		}
 	}
-	res, err := w.engine.RunRequestBody(ctx, metadataScript, transitiveGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{
+	res, err := w.engine.RunRequestBody(ctx, wrapExpressionScript(metadataScript), transitiveGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{
 		Params:            params,
 		InheritedMetadata: inherited,
 	})
@@ -533,7 +543,7 @@ func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName strin
 			continue
 		}
 		folderPath := path[:i+1]
-		res, rerr := w.engine.RunRequestBody(ctx, script, transitiveGenerators(script, allGens), scripting.Grant{}, scripting.Input{
+		res, rerr := w.engine.RunRequestBody(ctx, wrapExpressionScript(script), transitiveGenerators(script, allGens), scripting.Grant{}, scripting.Input{
 			Params:            params,
 			InheritedMetadata: accum,
 		})

@@ -267,3 +267,38 @@ func TestInvokeFolderMetadataInheritanceEndToEnd(t *testing.T) {
 		t.Fatalf("x-own = %q, want mine (request's own metadata missing from the sent request)", got)
 	}
 }
+
+// The MCP/CLI/hand-edited case: nothing wraps the script on its way in, so a bare object
+// literal must evaluate at both metadata seams exactly as it does in a body.
+func TestBareObjectMetadataEvaluatesAtBothSeams(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	createFolder(t, w, ctx, nil, "Echo", `{ "x-demo-suite": ["echo"] }`)
+
+	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"Echo"},
+		`{ ...gv.metadata.inherit(), "x-own": ["mine"] }`, nil, nil)
+	if err != nil {
+		t.Fatalf("resolveInvokeMetadata: %v", err)
+	}
+	if got := mdValues(md, "x-demo-suite"); len(got) != 1 || got[0] != "echo" {
+		t.Errorf("x-demo-suite = %v, want [echo] (bare folder metadata did not evaluate)", got)
+	}
+	if got := mdValues(md, "x-own"); len(got) != 1 || got[0] != "mine" {
+		t.Errorf("x-own = %v, want [mine] (bare request metadata did not evaluate)", got)
+	}
+}
+
+func TestBareMetadataSyntaxErrorReportsTheAuthorLine(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	_, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil, "{\n  \"a\": [\"1\"],\n  oops oops,\n}", nil, nil)
+	if err == nil {
+		t.Fatal("want an error for a metadata script that does not parse, got nil")
+	}
+	if !strings.Contains(err.Error(), "script.ts:3") {
+		t.Fatalf("error = %v, want it to name the author's line 3", err)
+	}
+}
