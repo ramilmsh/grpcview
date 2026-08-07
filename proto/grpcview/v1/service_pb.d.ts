@@ -329,6 +329,14 @@ export declare type CreateRequestResponse = Message<"grpcview.v1.CreateRequestRe
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
+
+  /**
+   * Non-fatal: the request was created. Says what about it will not work yet, e.g.
+   * a streaming method, which invoke rejects with Unimplemented.
+   *
+   * @generated from field: repeated string warnings = 2;
+   */
+  warnings: string[];
 };
 
 /**
@@ -1259,6 +1267,14 @@ export declare type DescribeMethodResponse = Message<"grpcview.v1.DescribeMethod
    * @generated from field: bool server_streaming = 5;
    */
   serverStreaming: boolean;
+
+  /**
+   * Why invoking this method would fail today; empty when it is invocable. Set for
+   * every streaming method, which invoke rejects with Unimplemented.
+   *
+   * @generated from field: string not_invocable_reason = 6;
+   */
+  notInvocableReason: string;
 };
 
 /**

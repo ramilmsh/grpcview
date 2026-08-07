@@ -45,12 +45,26 @@ func (w Workspace) DescribeMethod(ctx context.Context, request *connect.Request[
 	}
 
 	return connect.NewResponse(&grpcviewv1.DescribeMethodResponse{
-		ProtoText:       protoText,
-		DescriptorSet:   set,
-		SourceId:        sourceID,
-		ClientStreaming: methodDesc.IsClientStreaming(),
-		ServerStreaming: methodDesc.IsServerStreaming(),
+		ProtoText:          protoText,
+		DescriptorSet:      set,
+		SourceId:           sourceID,
+		ClientStreaming:    methodDesc.IsClientStreaming(),
+		ServerStreaming:    methodDesc.IsServerStreaming(),
+		NotInvocableReason: notInvocableReason(methodDesc),
 	}), nil
+}
+
+const streamingNotInvocable = "streaming: invoke and invoke_saved reject this method with Unimplemented; " +
+	"it can be authored and described, but not run"
+
+// Honesty at authoring time. Every surface that hands out a method — describe, ls,
+// create_request — says this before the author saves, instead of letting them find out
+// at invoke time.
+func notInvocableReason(methodDesc *desc.MethodDescriptor) string {
+	if methodDesc.IsClientStreaming() || methodDesc.IsServerStreaming() {
+		return streamingNotInvocable
+	}
+	return ""
 }
 
 func typeClosure(methodDesc *desc.MethodDescriptor) []desc.Descriptor {

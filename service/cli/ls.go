@@ -68,7 +68,7 @@ func runLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, o
 			return writeLine(s.Out, line)
 		}
 
-		return renderLs(s.Out, lsRows(root.GetFolder(), prefix))
+		return renderLs(s.Out, lsRows(root.GetFolder(), prefix, streamingNotes(ws)))
 	})
 }
 
@@ -98,23 +98,64 @@ type lsRow struct {
 	note string
 }
 
-func lsRows(folder *grpcviewv1.Folder, prefix string) []lsRow {
+func lsRows(folder *grpcviewv1.Folder, prefix string, streaming map[string]string) []lsRow {
 	var rows []lsRow
 	for _, item := range folder.GetItems() {
 		path := prefix + item.GetName()
 		switch {
 		case item.GetFolder() != nil:
 			rows = append(rows, lsRow{path: path + "/", what: "folder"})
-			rows = append(rows, lsRows(item.GetFolder(), path+"/")...)
+			rows = append(rows, lsRows(item.GetFolder(), path+"/", streaming)...)
 		case item.GetRequest() != nil:
+			what := requestMethod(item.GetRequest())
 			rows = append(rows, lsRow{
 				path: path,
-				what: requestMethod(item.GetRequest()),
-				note: middlewareNote(item.GetRequest()),
+				what: what,
+				note: joinNotes(streaming[what], middlewareNote(item.GetRequest())),
 			})
 		}
 	}
 	return rows
+}
+
+// A streaming request lists identically to a unary one otherwise, and invoke would be the
+// first thing to say it cannot be run. Say it here instead.
+func streamingNotes(ws *grpcviewv1.Collection) map[string]string {
+	out := map[string]string{}
+	for _, svc := range ws.GetServices() {
+		full := svc.GetName()
+		if pkg := svc.GetPackage(); pkg != "" {
+			full = pkg + "." + full
+		}
+		for _, m := range svc.GetMethods() {
+			if note := streamingNote(m.GetClientStreaming(), m.GetServerStreaming()); note != "" {
+				out[full+"/"+m.GetName()] = note
+			}
+		}
+	}
+	return out
+}
+
+func streamingNote(client, server bool) string {
+	switch {
+	case client && server:
+		return "[bidi-streaming: not invocable yet]"
+	case client:
+		return "[client-streaming: not invocable yet]"
+	case server:
+		return "[server-streaming: not invocable yet]"
+	}
+	return ""
+}
+
+func joinNotes(notes ...string) string {
+	var out []string
+	for _, n := range notes {
+		if n != "" {
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 func requestMethod(r *grpcviewv1.Request) string {

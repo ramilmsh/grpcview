@@ -415,7 +415,26 @@ func (w Workspace) CreateRequest(ctx context.Context, request *connect.Request[g
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{Collection: ws}), nil
+	return connect.NewResponse(&grpcviewv1.CreateRequestResponse{
+		Collection: ws,
+		Warnings:   w.createRequestWarnings(ctx, request.Msg),
+	}), nil
+}
+
+// Best-effort: an unresolvable method is not this RPC's business to reject — the request is
+// already created, and a collection whose sources are cold must still be authorable.
+func (w Workspace) createRequestWarnings(ctx context.Context, msg *grpcviewv1.CreateRequestRequest) []string {
+	if msg.GetService() == "" || msg.GetMethod() == "" {
+		return nil
+	}
+	methodDesc, _, err := w.describeMethod(ctx, msg.GetCollection(), msg.GetService(), msg.GetMethod())
+	if err != nil {
+		return nil
+	}
+	if reason := notInvocableReason(methodDesc); reason != "" {
+		return []string{fmt.Sprintf("%s/%s is %s", msg.GetService(), msg.GetMethod(), reason)}
+	}
+	return nil
 }
 
 func (w Workspace) DeleteRequest(ctx context.Context, request *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error) {

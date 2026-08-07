@@ -77,6 +77,9 @@ func runDescribe(ctx context.Context, s Streams, g *globalFlags, open clientFact
 	if id := described.GetSourceId(); id != "" {
 		fmt.Fprintf(s.Err, "%s: from %s\n", arg, id)
 	}
+	if reason := described.GetNotInvocableReason(); reason != "" {
+		fmt.Fprintf(s.Err, "%s: %s\n", arg, reason)
+	}
 
 	if output == outputJSON {
 		return describeJSON(s, arg, described.GetDescriptorSet())

@@ -114,6 +114,33 @@ func TestLs(t *testing.T) {
 			wantCode: 0,
 		},
 		{
+			name: "a streaming request says so, because invoke would be the first to",
+			args: []string{"ls"},
+			fake: func(fc *fakeClient) {
+				fc.snapshot = &grpcviewv1.Collection{
+					Name: "default",
+					Item: testFolder("",
+						testRequest("Ping", "echo.v1.EchoService", "Unary"),
+						testRequest("Feed", "echo.v1.EchoService", "ServerStream"),
+						withMiddleware(testRequest("Chat", "echo.v1.EchoService", "BidiStream"), "sign"),
+					),
+					Services: []*grpcviewv1.Service{{
+						Package: "echo.v1",
+						Name:    "EchoService",
+						Methods: []*grpcviewv1.Method{
+							{Name: "Unary"},
+							{Name: "ServerStream", ServerStreaming: true},
+							{Name: "BidiStream", ClientStreaming: true, ServerStreaming: true},
+						},
+					}},
+				}
+			},
+			wantOut: "Ping  echo.v1.EchoService/Unary\n" +
+				"Feed  echo.v1.EchoService/ServerStream  [server-streaming: not invocable yet]\n" +
+				"Chat  echo.v1.EchoService/BidiStream    [bidi-streaming: not invocable yet] [1 middleware]\n",
+			wantCode: 0,
+		},
+		{
 			name: "a request with no method picked yet still lists",
 			args: []string{"ls"},
 			fake: func(fc *fakeClient) {

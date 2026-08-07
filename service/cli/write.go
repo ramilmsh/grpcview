@@ -197,7 +197,7 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 	}
 
 	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
-		_, err := sess.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
+		created, err := sess.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
 			Collection: collection,
 			Path:       parent,
 			ItemName:   name,
@@ -206,6 +206,11 @@ func runRequestCreate(ctx context.Context, s Streams, g *globalFlags, open clien
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to create the request %q: %w", arg, err)
+		}
+		// stdout stays silent — the request was created. A warning is stderr, like describe's
+		// source line.
+		for _, warning := range created.Msg.GetWarnings() {
+			fmt.Fprintf(s.Err, "%s: %s\n", arg, warning)
 		}
 		if raw == nil {
 			return nil

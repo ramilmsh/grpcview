@@ -85,6 +85,9 @@ message CreateRequestRequest {
 
 message CreateRequestResponse {
   Collection collection = 1;
+  // Non-fatal: the request was created. Says what about it will not work yet, e.g.
+  // a streaming method, which invoke rejects with Unimplemented.
+  repeated string warnings = 2;
 }
 
 message DeleteRequestRequest {
@@ -336,6 +339,9 @@ message DescribeMethodResponse {
   string source_id         = 3;
   bool   client_streaming  = 4;
   bool   server_streaming  = 5;
+  // Why invoking this method would fail today; empty when it is invocable. Set for
+  // every streaming method, which invoke rejects with Unimplemented.
+  string not_invocable_reason = 6;
 }
 
 message CreateScriptRequest {

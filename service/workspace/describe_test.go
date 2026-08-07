@@ -144,7 +144,39 @@ func TestDescribeMethodStreamingFlags(t *testing.T) {
 				t.Errorf("%s: client_streaming=%v server_streaming=%v, want %v/%v",
 					tc.method, got.GetClientStreaming(), got.GetServerStreaming(), tc.client, tc.serverWant)
 			}
+			streaming := tc.client || tc.serverWant
+			if reason := got.GetNotInvocableReason(); (reason != "") != streaming {
+				t.Errorf("%s: not_invocable_reason = %q, want it set = %v", tc.method, reason, streaming)
+			}
 		})
+	}
+}
+
+// An agent authoring against this API would otherwise find out at invoke time, after saving.
+func TestCreateRequestWarnsOnAStreamingMethod(t *testing.T) {
+	ctx := context.Background()
+	w, _ := describeEchoWorkspace(t, ctx)
+
+	create := func(name, method string) []string {
+		t.Helper()
+		res, err := w.CreateRequest(ctx, connect.NewRequest(&grpcviewv1.CreateRequestRequest{
+			Collection: testWorkspace,
+			ItemName:   name,
+			Service:    echoService,
+			Method:     method,
+		}))
+		if err != nil {
+			t.Fatalf("CreateRequest %q: %v", name, err)
+		}
+		return res.Msg.GetWarnings()
+	}
+
+	if got := create("unary", "Unary"); len(got) != 0 {
+		t.Errorf("warnings for a unary method = %v, want none", got)
+	}
+	got := create("stream", "ServerStream")
+	if len(got) != 1 || !strings.Contains(got[0], "ServerStream") {
+		t.Errorf("warnings for a streaming method = %v, want one naming the method", got)
 	}
 }
 
