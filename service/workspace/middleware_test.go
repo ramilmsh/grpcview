@@ -195,3 +195,23 @@ func TestStreamInvokeRunsMiddleware(t *testing.T) {
 		}
 	}
 }
+
+// The natural use for a middleware — stamp a trace id, sign a request — is exactly what a
+// generator is for, so the middleware path composes them like every body/metadata path does.
+func TestInvokeMiddlewareCallsAGenerator(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	createGenerator(t, w, ctx, "traceId", `export default () => "t-42"`)
+	createMiddleware(t, w, ctx, "stamp", `export function handle(ctx){ ctx.metadata["x-trace"] = traceId(); return ctx }`)
+	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"stamp"})
+
+	port := echoTarget(t, w, ctx, startEchoServer)
+	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"hi"}`)
+	if got := resp.Msg.GetResponse().GetStatus().GetCode(); got != int32(codeOK) {
+		t.Fatalf("status = %d (%s)", got, resp.Msg.GetResponse().GetStatus().GetMessage())
+	}
+	if got := resp.Msg.GetResponse().GetRequestMetadata().GetFields()["x-trace"].GetStringValue(); got != "t-42" {
+		t.Fatalf("sent metadata x-trace = %q, want t-42 (middleware could not call the generator)", got)
+	}
+}

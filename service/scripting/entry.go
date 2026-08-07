@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -47,11 +48,36 @@ func (e *Engine) compileGenerator(source string, g Grant, args []any) (compiled,
 	return c, "", err
 }
 
-func (e *Engine) compileMiddleware(source string, g Grant) (compiled, string, error) {
+func (e *Engine) compileMiddleware(source string, g Grant, gens map[string]string) (compiled, string, error) {
+	if len(gens) > 0 {
+		return e.compileMiddlewareComposed(source, g, gens)
+	}
 	if hasHandleOrDefaultExport(source) {
 		c, err := e.bundler.compileEntry(source, g)
 		return c, middlewarePostlude, err
 	}
 	c, err := e.bundler.compile(source, g)
 	return c, "", err
+}
+
+func (e *Engine) compileMiddlewareComposed(source string, g Grant, gens map[string]string) (compiled, string, error) {
+	prelude := composeGeneratorPrelude(gens)
+	composed := prelude + source
+
+	var (
+		c        compiled
+		postlude string
+		err      error
+	)
+	if hasHandleOrDefaultExport(source) {
+		c, err = e.bundler.buildEntryBundleComposed(composed, g, gens)
+		postlude = middlewarePostlude
+	} else {
+		c, err = e.bundler.buildBundleComposed(composed, g, gens)
+	}
+	if err != nil {
+		return compiled{}, "", err
+	}
+	c.authorPreludeLines = strings.Count(prelude, "\n")
+	return c, postlude, nil
 }

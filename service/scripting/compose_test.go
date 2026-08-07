@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -89,6 +90,47 @@ func TestRunRequestBody(t *testing.T) {
 		}
 		if je.Line != 3 {
 			t.Fatalf("line = %d, want 3 (author body line through the prelude offset; stack=%q)", je.Line, je.Stack)
+		}
+	})
+}
+
+func TestRunMiddlewareComposesGenerators(t *testing.T) {
+	e := newEngine(t)
+	ctx := context.Background()
+
+	t.Run("handle() calls a saved generator", func(t *testing.T) {
+		gens := map[string]string{"traceId": `export default () => "t-1"`}
+		src := `export function handle(ctx) { ctx.metadata.trace = traceId(); return ctx; }`
+		res, err := e.RunMiddleware(ctx, src, gens, Grant{}, Input{})
+		if err != nil {
+			t.Fatalf("RunMiddleware: %v", err)
+		}
+		var out struct {
+			Metadata struct {
+				Trace string `json:"trace"`
+			} `json:"metadata"`
+		}
+		if err := json.Unmarshal(res.Value, &out); err != nil {
+			t.Fatalf("decode %s: %v", res.Value, err)
+		}
+		if out.Metadata.Trace != "t-1" {
+			t.Fatalf("trace = %q, want t-1", out.Metadata.Trace)
+		}
+	})
+
+	t.Run("a middleware runtime error maps back to the author line despite the prelude", func(t *testing.T) {
+		gens := map[string]string{"traceId": `export default () => "t-1"`}
+		src := `export function handle(ctx) {
+	traceId();
+	throw new Error("mw boom");
+}`
+		_, err := e.RunMiddleware(ctx, src, gens, Grant{}, Input{})
+		var je *JSError
+		if !errors.As(err, &je) {
+			t.Fatalf("got %v, want *JSError", err)
+		}
+		if je.Line != 3 {
+			t.Fatalf("line = %d, want 3 (author line through the prelude offset; stack=%q)", je.Line, je.Stack)
 		}
 	})
 }

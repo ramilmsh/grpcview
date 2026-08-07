@@ -81,7 +81,7 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			res, err := e.RunMiddleware(context.Background(), c.src, Grant{}, in)
+			res, err := e.RunMiddleware(context.Background(), c.src, nil, Grant{}, in)
 			if err != nil {
 				t.Fatalf("run: %v", err)
 			}
@@ -91,7 +91,7 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 		})
 	}
 
-	res, err := e.RunMiddleware(context.Background(), `({ passthrough: true })`, Grant{}, in)
+	res, err := e.RunMiddleware(context.Background(), `({ passthrough: true })`, nil, Grant{}, in)
 	if err != nil {
 		t.Fatalf("fallback run: %v", err)
 	}

@@ -29,7 +29,11 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 		}
 		res, runErr = w.engine.RunRequestBody(ctx, source, transitiveGenerators(source, allGens), scripting.Grant{}, scripting.Input{})
 	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
-		res, runErr = w.engine.RunMiddleware(ctx, source, scripting.Grant{}, scripting.Input{})
+		allGens, gerr := w.loadGenerators(ctx, request.Msg.GetCollection())
+		if gerr != nil {
+			return nil, gerr
+		}
+		res, runErr = w.engine.RunMiddleware(ctx, source, transitiveGenerators(source, allGens), scripting.Grant{}, scripting.Input{})
 	default:
 		res, runErr = w.engine.RunScenario(ctx, source, scripting.Grant{}, scripting.Input{})
 	}

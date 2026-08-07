@@ -300,7 +300,7 @@ func TestGvAssertInEveryProfile(t *testing.T) {
 	t.Run("middleware", func(t *testing.T) {
 		res, err := e.RunMiddleware(context.Background(),
 			"export function handle(ctx) { ctx.metadata.probe = JSON.stringify("+probe+"); return ctx; }",
-			Grant{}, Input{})
+			nil, Grant{}, Input{})
 		if err != nil {
 			t.Fatalf("run: %v", err)
 		}
@@ -319,7 +319,7 @@ func TestGvAssertInEveryProfile(t *testing.T) {
 
 	t.Run("middleware-assertion-fails-the-run", func(t *testing.T) {
 		_, err := e.RunMiddleware(context.Background(),
-			`export function handle(ctx) { gv.assert("mw check", false); return ctx; }`, Grant{}, Input{})
+			`export function handle(ctx) { gv.assert("mw check", false); return ctx; }`, nil, Grant{}, Input{})
 		var je *JSError
 		if !errors.As(err, &je) {
 			t.Fatalf("got %v, want *JSError", err)

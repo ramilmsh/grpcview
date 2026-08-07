@@ -107,8 +107,8 @@ func (e *Engine) RunRequestBody(ctx context.Context, body string, gens map[strin
 	return e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
 }
 
-func (e *Engine) RunMiddleware(ctx context.Context, source string, g Grant, in Input) (Result, error) {
-	c, postlude, err := e.compileMiddleware(source, g)
+func (e *Engine) RunMiddleware(ctx context.Context, source string, gens map[string]string, g Grant, in Input) (Result, error) {
+	c, postlude, err := e.compileMiddleware(source, g, gens)
 	if err != nil {
 		return Result{}, err
 	}

@@ -35,6 +35,10 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	if err != nil {
 		return nil, nil, err
 	}
+	allGens, err := w.loadGenerators(ctx, workspaceName)
+	if err != nil {
+		return nil, nil, err
+	}
 	chain := make([]middlewareScript, len(names))
 	for i, name := range names {
 		src, ok := sources[name]
@@ -42,7 +46,7 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 			return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
 				fmt.Errorf("cannot run middleware %q: no middleware script by that name in this workspace", name))
 		}
-		chain[i] = middlewareScript{name: name, source: src}
+		chain[i] = middlewareScript{name: name, source: src, gens: transitiveGenerators(src, allGens)}
 	}
 
 	targetStr := ""
@@ -63,7 +67,7 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 		}
 		cur := json.RawMessage(body)
 		for _, mw := range chain {
-			res, rerr := w.engine.RunMiddleware(ctx, mw.source, scripting.Grant{}, scripting.Input{
+			res, rerr := w.engine.RunMiddleware(ctx, mw.source, mw.gens, scripting.Grant{}, scripting.Input{
 				Request: scripting.RequestInput{Body: cur, Metadata: mdMap, Target: targetStr},
 				Params:  params,
 			})
@@ -84,6 +88,7 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 type middlewareScript struct {
 	name   string
 	source string
+	gens   map[string]string
 }
 
 func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName string, path []string, itemName string) ([]string, error) {

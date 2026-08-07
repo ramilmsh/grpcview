@@ -249,7 +249,9 @@ func TestProfilesBounded(t *testing.T) {
 		run  func(context.Context, string, Grant, Input) (Result, error)
 	}{
 		{"generator", e.runGenerator},
-		{"middleware", e.RunMiddleware},
+		{"middleware", func(ctx context.Context, src string, g Grant, in Input) (Result, error) {
+			return e.RunMiddleware(ctx, src, nil, g, in)
+		}},
 		{"scenario", e.RunScenario},
 	}
 	for _, p := range profiles {
@@ -343,13 +345,13 @@ func BenchmarkMiddleware(b *testing.B) {
 			b.Fatalf("NewEngine: %v", err)
 		}
 		defer e.Close(context.Background())
-		if _, err := e.RunMiddleware(ctx, src, Grant{}, Input{}); err != nil {
+		if _, err := e.RunMiddleware(ctx, src, nil, Grant{}, Input{}); err != nil {
 			b.Fatalf("prime: %v", err)
 		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if _, err := e.RunMiddleware(ctx, src, Grant{}, Input{}); err != nil {
+			if _, err := e.RunMiddleware(ctx, src, nil, Grant{}, Input{}); err != nil {
 				b.Fatalf("run: %v", err)
 			}
 		}
