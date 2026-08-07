@@ -57,6 +57,7 @@ func Run(ctx context.Context, opts Options) error {
 		NewMessage:      newMessage,
 		CommentProvider: comment,
 	})
+	registerStreaming(s, sd, ws, defaultCaps)
 
 	return server.Run(ctx, &mcpsdk.StdioTransport{})
 }

@@ -33,22 +33,29 @@ func TestTotality(t *testing.T) {
 		name := string(md.Name())
 		streaming := md.IsStreamingClient() || md.IsStreamingServer()
 
-		_, hasToolName := rpcs[name]
+		entry, hasToolName := rpcs[name]
+		if !hasToolName {
+			t.Errorf("method %s is missing a tool-name entry", name)
+			continue
+		}
 
 		_, dispatchErr := dispatch(context.Background(), md, nil)
 		hasDispatch := dispatchErr == nil || !strings.Contains(dispatchErr.Error(), "no handler registered")
 
+		if entry.bind != nil && entry.stream != nil {
+			t.Errorf("method %s has both a unary and a streaming bind", name)
+		}
 		if streaming {
-			if hasToolName {
-				t.Errorf("streaming method %s must not have a tool name entry", name)
+			if entry.stream == nil {
+				t.Errorf("streaming method %s is missing a streaming bind", name)
 			}
 			if hasDispatch {
-				t.Errorf("streaming method %s must not have a dispatch entry", name)
+				t.Errorf("streaming method %s must not reach the unary dispatch map", name)
 			}
 			continue
 		}
-		if !hasToolName {
-			t.Errorf("unary method %s is missing a tool-name entry", name)
+		if entry.bind == nil {
+			t.Errorf("unary method %s is missing a unary bind", name)
 		}
 		if !hasDispatch {
 			t.Errorf("unary method %s is missing a dispatch-map entry", name)
@@ -196,9 +203,6 @@ func TestCollectionPathReachesEveryCollectionField(t *testing.T) {
 
 	for i := 0; i < sd.Methods().Len(); i++ {
 		md := sd.Methods().Get(i)
-		if md.IsStreamingClient() || md.IsStreamingServer() {
-			continue
-		}
 		in := md.Input()
 		if !carriesCollection(in, collectionSearchDepth+2) {
 			continue

@@ -13,12 +13,14 @@ go_library(
         "dispatch.go",
         "mcp.go",
         "schema.go",
+        "streaming.go",
     ],
     # keep
     embedsrcs = [":descriptor_set"],
     importpath = "codeberg.org/ramilmsh/grpcview/service/mcp",
     visibility = ["//visibility:public"],
     deps = [
+        "//proto/grpcview/v1:grpcview",
         "//service/workspace",
         "//service/wsroot",
         "@com_connectrpc_connect//:connect",
@@ -26,6 +28,7 @@ go_library(
         "@com_github_redpanda_data_protoc_gen_go_mcp//pkg/gen",
         "@com_github_redpanda_data_protoc_gen_go_mcp//pkg/runtime",
         "@com_github_redpanda_data_protoc_gen_go_mcp//pkg/runtime/gosdk",
+        "@org_golang_google_protobuf//encoding/protojson",
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//reflect/protodesc",
         "@org_golang_google_protobuf//reflect/protoreflect",
@@ -39,6 +42,7 @@ go_test(
     srcs = [
         "mcp_test.go",
         "schema_test.go",
+        "streaming_test.go",
     ],
     embed = [":mcp"],
     deps = [
