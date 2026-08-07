@@ -1,7 +1,11 @@
 # MCP: streaming methods
 
-Promotes the `invoke_stream` want from [`roadmap.md`](./roadmap.md) §"The MCP server — four
-leftovers" into a plan. Today MCP is the only surface that cannot run a client-streaming,
+**Status:** **Shipped** (on `trunk` 2026-08-08). All five phases landed as planned, verified
+live against the example collection through a real stdio MCP server. Behavior is documented
+in `AGENTS.md` §"The MCP server". Two claims below were wrong — see "What was wrong".
+
+Promotes the `invoke_stream` want from [`../planned/roadmap.md`](../planned/roadmap.md)
+§"The MCP server" into a plan. Today MCP is the only surface that cannot run a client-streaming,
 server-streaming or bidi method: the UI can, the CLI can, `gv.invoke` can, and an agent gets
 `Unimplemented`.
 
@@ -154,6 +158,26 @@ Through the real MCP server:
 - One deliberate cap hit, to see `truncated` and confirm the RPC actually stops.
 
 Commit per phase on trunk, as with the other tracks.
+
+## What was wrong
+
+- **`gv.invoke` cannot run a streaming method either.** The opening paragraph lists it beside
+  the UI and the CLI as a surface that can. `scriptInvoker` rejects a streaming target
+  outright (`gvinvoke_test.go:329` pins it); what it *can* do is run from inside a streaming
+  request's body. So MCP was the third surface to gain this, not the fourth, and the example
+  collection's bidi body — which said so all along — was right.
+- **`truncated` reports what was kept, not the caps.** The sketched shape shows
+  `{"frames": 200, "bytes": 262144}`, i.e. the caps echoed back. Those are already in the tool
+  description; what an agent cannot otherwise know is how much survived, so the fields carry
+  the kept counts. When the frame cap bites the two coincide, which is why the sketch read
+  either way.
+- **The terminal frame is kept after a cap bites**, where phase 2 expected `result` to be
+  absent. Cancelling the context makes `streamInvoke` finish its switch and send the terminal
+  frame carrying the `Canceled` status, so it arrives after all — verified live: a
+  1000-message server stream capped at 200 frames returned `truncated` *and* a `result` with
+  `code: 1, "context canceled"` at 24 s instead of the full 120 s. Reporting it beats
+  dropping a frame the backend really sent. `result` is still absent when the drain ends
+  without one.
 
 ## Not in scope
 

@@ -4,7 +4,7 @@
   },
   "service":  "echo.v1.EchoService",
   "method":  "BidiStream",
-  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // Both directions stream; the call stays open until the client half-closes.\n  // gv.invoke refuses a streaming path outright, and execution is\n  // Unimplemented server-side today — this one is here for the authoring side.\n  message: \"ping\",\n  count: 1,\n}\n)",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // Both directions stream; the call stays open until the client half-closes.\n  // gv.invoke still refuses a streaming path outright, but the UI, the CLI and\n  // the invoke_saved_streaming MCP tool all run it.\n  message: \"ping\",\n  count: 1,\n}\n)",
   "middleware":  [],
   "draftMetadataScript":  "",
   "target":  {
