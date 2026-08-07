@@ -94,13 +94,14 @@ Carried from the MCP track, which shipped on 2026-08-06; the decisions behind it
   Blast radius is the store schema, `convert.go`, `invoke.go`'s two assignment sites, and
   the UI's decoders. `AddDescriptorSourceRequest.descriptor_set` and
   `Collection.descriptor_set` stay `bytes` — those really are binary.
-- **`history` dominates every collection-returning response.** `get_collection` on the
-  repo's own `example` collection is 168 KB, of which `history` is 158 KB across 15
-  requests. That lands in the calling agent's context on every mutation too, since they all
-  return a `Collection`. Stripping it in the shim is one line in the existing
-  `stripDescriptorSets` walk, but it is a **capability trade-off, not a pure win**: no other
-  tool exposes history, so stripping removes an agent's only access to it. Decide the
-  trade, don't fix it by reflex.
+- **History growth is still uncapped.** The payload half of this shipped 2026-08-07: every
+  MCP response *except* `get_collection`'s now has `history` stripped, so a mutation no
+  longer overflows the client's per-result cap while `get_collection` keeps an agent's only
+  access to history. What did not ship is the store-side half — `history` keeps the last
+  `historyLimit` entries with **no byte bound**, and one recorded response can be a
+  base64 descriptor set (160 KB of a 186 KB collection, measured). Cap it: elide a recorded
+  response over some byte cap with a marker rather than storing it verbatim. Then
+  `get_collection` is bounded too, which the strip does not make it.
 - **`invoke_stream`.** The plugin skips streaming methods, so this is the one tool that
   cannot be generated and needs a hand-written schema. Shape:
   `invoke_stream(spec, messages[]) -> {messages[], status, …, truncated}`, draining to

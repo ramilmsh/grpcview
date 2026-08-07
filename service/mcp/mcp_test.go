@@ -91,9 +91,10 @@ func TestDescriptorLoading(t *testing.T) {
 	}
 }
 
-func TestClearDescriptorSetsStripsEveryShape(t *testing.T) {
+func TestTrimHeavyFieldsStripsEveryShape(t *testing.T) {
 	// Collection.descriptor_set nests under a message field; DescribeMethodResponse's is
 	// top-level. Both must go, and nothing else may.
+	sd := mustLoadService(t)
 	handler := func(res proto.Message) gen.Handler {
 		return func(context.Context, protoreflect.MethodDescriptor, proto.Message) (proto.Message, error) {
 			return res, nil
@@ -104,9 +105,9 @@ func TestClearDescriptorSetsStripsEveryShape(t *testing.T) {
 		Name:          "scratch",
 		DescriptorSet: []byte("binary"),
 	}}
-	got, err := clearDescriptorSets(handler(nested))(context.Background(), nil, nil)
+	got, err := trimHeavyFields(handler(nested))(context.Background(), sd.Methods().ByName("Get"), nil)
 	if err != nil {
-		t.Fatalf("clearDescriptorSets (nested): %v", err)
+		t.Fatalf("trimHeavyFields (nested): %v", err)
 	}
 	coll := got.(*grpcviewv1.GetResponse).GetCollection()
 	if coll.GetDescriptorSet() != nil {
@@ -121,9 +122,9 @@ func TestClearDescriptorSetsStripsEveryShape(t *testing.T) {
 		SourceId:      "reflection:localhost:9000",
 		DescriptorSet: []byte("binary"),
 	}
-	got, err = clearDescriptorSets(handler(top))(context.Background(), nil, nil)
+	got, err = trimHeavyFields(handler(top))(context.Background(), sd.Methods().ByName("DescribeMethod"), nil)
 	if err != nil {
-		t.Fatalf("clearDescriptorSets (top level): %v", err)
+		t.Fatalf("trimHeavyFields (top level): %v", err)
 	}
 	desc := got.(*grpcviewv1.DescribeMethodResponse)
 	if desc.GetDescriptorSet() != nil {
@@ -131,6 +132,59 @@ func TestClearDescriptorSetsStripsEveryShape(t *testing.T) {
 	}
 	if desc.GetProtoText() != "message Foo {}" || desc.GetSourceId() != "reflection:localhost:9000" {
 		t.Errorf("sibling fields were altered: %+v", desc)
+	}
+}
+
+// A recorded response can carry a descriptor set of its own, so history is what actually
+// blows the per-result cap. get_collection is an agent's only access to it and keeps it;
+// every other RPC drops it.
+func TestTrimHeavyFieldsKeepsHistoryOnlyForGet(t *testing.T) {
+	sd := mustLoadService(t)
+	withHistory := func() *grpcviewv1.Collection {
+		return &grpcviewv1.Collection{
+			Name: "scratch",
+			Item: &grpcviewv1.Item{Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{
+				Items: []*grpcviewv1.Item{{
+					Name: "Unary",
+					Content: &grpcviewv1.Item_Request{Request: &grpcviewv1.Request{
+						Name: "Unary",
+						History: []*grpcviewv1.History{{
+							Response: &grpcviewv1.History_Response{Response: []byte(`{"big":"payload"}`)},
+						}},
+					}},
+				}},
+			}}},
+		}
+	}
+	handler := func(res proto.Message) gen.Handler {
+		return func(context.Context, protoreflect.MethodDescriptor, proto.Message) (proto.Message, error) {
+			return res, nil
+		}
+	}
+	historyOf := func(item *grpcviewv1.Item) []*grpcviewv1.History {
+		return item.GetFolder().GetItems()[0].GetRequest().GetHistory()
+	}
+
+	got, err := trimHeavyFields(handler(&grpcviewv1.GetResponse{Collection: withHistory()}))(
+		context.Background(), sd.Methods().ByName("Get"), nil)
+	if err != nil {
+		t.Fatalf("trimHeavyFields (Get): %v", err)
+	}
+	if n := len(historyOf(got.(*grpcviewv1.GetResponse).GetCollection().GetItem())); n != 1 {
+		t.Errorf("get_collection returned %d history entries, want 1", n)
+	}
+
+	got, err = trimHeavyFields(handler(&grpcviewv1.CreateRequestResponse{Collection: withHistory()}))(
+		context.Background(), sd.Methods().ByName("CreateRequest"), nil)
+	if err != nil {
+		t.Fatalf("trimHeavyFields (CreateRequest): %v", err)
+	}
+	mutated := got.(*grpcviewv1.CreateRequestResponse).GetCollection()
+	if n := len(historyOf(mutated.GetItem())); n != 0 {
+		t.Errorf("create_request returned %d history entries, want 0", n)
+	}
+	if mutated.GetItem().GetFolder().GetItems()[0].GetRequest().GetName() != "Unary" {
+		t.Errorf("sibling fields were altered: %+v", mutated)
 	}
 }
 

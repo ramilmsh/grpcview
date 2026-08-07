@@ -53,7 +53,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	s := &shim{MCPServer: raw, collection: opts.Collection, service: sd}
 
-	gen.RegisterService(s, sd, clearDescriptorSets(newHandler(ws)), gen.RegisterServiceOptions{
+	gen.RegisterService(s, sd, trimHeavyFields(newHandler(ws)), gen.RegisterServiceOptions{
 		NewMessage:      newMessage,
 		CommentProvider: comment,
 	})
@@ -92,29 +92,40 @@ func (s *shim) AddTool(t mcpruntime.Tool, handler mcpruntime.ToolHandler) {
 	s.MCPServer.AddTool(t, handler)
 }
 
+// The one RPC whose response is allowed to carry `history`: it is an agent's ONLY access to
+// it, so stripping it here would remove a capability rather than trim a payload.
+const historyBearingMethod = "Get"
+
 // Mutates the response, which is safe only because every RPC rebuilds its own from the
 // store: this is never a cached message.
-func clearDescriptorSets(h gen.Handler) gen.Handler {
+//
+// Both fields blow the MCP client's per-result token cap on a collection of ordinary size —
+// a recorded response holding a descriptor set is 160 KB of a 186 KB `Collection`, and every
+// write RPC returns the whole collection, so without this every mutation comes back as an
+// overflow error.
+func trimHeavyFields(h gen.Handler) gen.Handler {
 	return func(ctx context.Context, method protoreflect.MethodDescriptor, req proto.Message) (proto.Message, error) {
 		res, err := h(ctx, method, req)
 		if err != nil || res == nil {
 			return res, err
 		}
-		clearDescriptorSetFields(res.ProtoReflect())
+		clearHeavyFields(res.ProtoReflect(), string(method.Name()) != historyBearingMethod)
 		return res, nil
 	}
 }
 
-func clearDescriptorSetFields(m protoreflect.Message) {
+func clearHeavyFields(m protoreflect.Message, dropHistory bool) {
 	var clear []protoreflect.FieldDescriptor
 	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		switch {
 		case fd.Name() == "descriptor_set" && fd.Kind() == protoreflect.BytesKind && !fd.IsList():
 			clear = append(clear, fd)
+		case dropHistory && fd.Name() == "history" && fd.IsList() && fd.Kind() == protoreflect.MessageKind:
+			clear = append(clear, fd)
 		case fd.IsMap():
 			if fd.MapValue().Kind() == protoreflect.MessageKind {
 				v.Map().Range(func(_ protoreflect.MapKey, mv protoreflect.Value) bool {
-					clearDescriptorSetFields(mv.Message())
+					clearHeavyFields(mv.Message(), dropHistory)
 					return true
 				})
 			}
@@ -122,11 +133,11 @@ func clearDescriptorSetFields(m protoreflect.Message) {
 			if fd.Kind() == protoreflect.MessageKind {
 				l := v.List()
 				for i := 0; i < l.Len(); i++ {
-					clearDescriptorSetFields(l.Get(i).Message())
+					clearHeavyFields(l.Get(i).Message(), dropHistory)
 				}
 			}
 		case fd.Kind() == protoreflect.MessageKind:
-			clearDescriptorSetFields(v.Message())
+			clearHeavyFields(v.Message(), dropHistory)
 		}
 		return true
 	})
