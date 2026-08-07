@@ -1,5 +1,7 @@
 load("@rules_go//proto:compiler.bzl", "go_proto_compiler")
 
+exports_files(["example-up.sh"])
+
 go_proto_compiler(
     name = "connect_go_proto_compiler",
     options = ["package_suffix"],

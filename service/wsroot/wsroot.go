@@ -71,6 +71,24 @@ func Discover(override, cwd string) (root string, warn string, err error) {
 	return absCwd, warn, nil
 }
 
+// ConfigDirEnv redirects every durable thing grpcview owns — the per-workspace state dirs and
+// the trust list — somewhere else. It exists for throwaway runs (CI, `//example:up --isolated`),
+// which must not write into the developer's real history. Overriding HOME instead would work
+// too, and would also relocate the output base of the `bazel build` a bazel source shells out
+// to, which is not the same request at all.
+const ConfigDirEnv = "GRPCVIEW_CONFIG_DIR"
+
+func configRoot() (string, error) {
+	if dir := os.Getenv(ConfigDirEnv); dir != "" {
+		return dir, nil
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user config dir: %w", err)
+	}
+	return filepath.Join(configDir, "grpcview"), nil
+}
+
 // os.UserConfigDir, not os.UserCacheDir: run history and other local state are user data, not
 // disposable cache — a cache directory is fair game for the OS or the user to reclaim, and losing
 // history silently on the next reboot is not acceptable. Uniqueness comes from the hash suffix, not
@@ -82,16 +100,16 @@ func StateDir(root string) (string, error) {
 	}
 	absRoot = filepath.Clean(absRoot)
 
-	configDir, err := os.UserConfigDir()
+	configDir, err := configRoot()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user config dir: %w", err)
+		return "", err
 	}
 
 	sum := sha256.Sum256([]byte(absRoot))
 	hash := hex.EncodeToString(sum[:])[:12]
 	key := slugify(filepath.Base(absRoot)) + "-" + hash
 
-	return filepath.Join(configDir, "grpcview", "workspaces", key), nil
+	return filepath.Join(configDir, "workspaces", key), nil
 }
 
 func slugify(s string) string {

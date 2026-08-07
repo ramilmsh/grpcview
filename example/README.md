@@ -10,13 +10,30 @@ Everything here is real: `smoke` passes against the two servers below.
 ## Bring up the two targets first
 
 ```bash
-bazel run //service/echo/cmd     # echo.v1.EchoService on 127.0.0.1:50055
-bazel run //service/cmd/dev      # grpcview's own API on localhost:10000
+bazel run //example:up
 ```
+
+That starts both servers, waits for both ports, and holds until Ctrl-C:
+`//service/echo/cmd` serving `echo.v1.EchoService` on `127.0.0.1:50055`, and
+`//service/cmd/dev` serving grpcview's own API on `localhost:10000`.
+`--echo-port` / `--dev-port` move either one.
 
 The `Echo/` requests each carry `127.0.0.1:50055` as their target. The
 `Collections/` requests carry none, so they fall back to the collection's first
 reflection source — grpcview reflecting itself.
+
+Add `--isolated` for a throwaway run — CI, or a check you do not want in your own
+run history. It points `GRPCVIEW_CONFIG_DIR` at a temp directory, so the run
+touches neither your history nor your resolve caches, and builds the collection's
+bazel definition source into that empty state first. Export
+`GRPCVIEW_CONFIG_DIR` yourself to keep the state and address it from the same
+shell:
+
+```bash
+export GRPCVIEW_CONFIG_DIR=$(mktemp -d)
+bazel run //example:up -- --isolated &
+grpcview script run smoke --collection example   # exit 0 is 10 assertions passed
+```
 
 ## What's in it
 

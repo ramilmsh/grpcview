@@ -16,11 +16,11 @@ type trustFile struct {
 }
 
 func trustPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := configRoot()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user config dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(configDir, "grpcview", trustFileName), nil
+	return filepath.Join(configDir, trustFileName), nil
 }
 
 func trustKey(root string) (string, error) {
