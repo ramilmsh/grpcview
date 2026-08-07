@@ -12,8 +12,6 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
-
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 )
 
 var ErrWorkspaceTooLarge = errors.New(`too large to scan — pin "collections" in grpcview.work.json`)
@@ -27,17 +25,13 @@ type CollectionInfo struct {
 	Err         string
 }
 
-func (s *Store) List(ctx context.Context, refresh bool) ([]CollectionInfo, error) {
-	mtime, err := s.rootMtime()
-	if err != nil {
-		return nil, err
-	}
-	if !refresh {
-		if cached, ok := s.readIndex(mtime); ok {
-			return cached, nil
-		}
-	}
-
+// Scans on every call, deliberately: the listing was memoized to disk and keyed on the workspace ROOT
+// directory's mtime, which a collection created at any depth below it never changes — a hand-written
+// grpcview.json or a `git checkout` stayed invisible until something unrelated touched the root. There
+// is no cheap fingerprint of "the set of grpcview.json files": computing one IS this scan. A warm
+// in-memory cache invalidated by filesystem events belongs to the daemon, which can hold it across
+// calls and watch for changes; a one-shot process can do neither.
+func (s *Store) List(ctx context.Context) ([]CollectionInfo, error) {
 	ids, err := s.collectionIDs()
 	if err != nil {
 		return nil, err
@@ -47,17 +41,7 @@ func (s *Store) List(ctx context.Context, refresh bool) ([]CollectionInfo, error
 		infos = append(infos, s.summarize(ctx, id))
 	}
 	slices.SortFunc(infos, func(a, b CollectionInfo) int { return strings.Compare(a.ID, b.ID) })
-
-	s.writeIndex(mtime, infos)
 	return infos, nil
-}
-
-// Creating a collection deeper than the root does not change the ROOT's mtime the index is keyed by,
-// so the one writer that can create one has to say so explicitly.
-func (s *Store) InvalidateList() {
-	if err := os.Remove(s.indexPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
-		s.logger.Warn("drop collection index", "error", err)
-	}
 }
 
 func (s *Store) collectionIDs() ([]string, error) {
@@ -272,58 +256,3 @@ func (s *Store) relativeID(path string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-func (s *Store) indexPath() string { return filepath.Join(s.stateRoot, collectionIndexFileName) }
-
-func (s *Store) rootMtime() (int64, error) {
-	info, err := os.Stat(s.root)
-	if err != nil {
-		return 0, err
-	}
-	return info.ModTime().UnixNano(), nil
-}
-
-func (s *Store) readIndex(mtime int64) ([]CollectionInfo, bool) {
-	idx := &grpcviewstorev1.CollectionIndex{}
-	if err := readMessage(s.indexPath(), idx); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			s.logger.Debug("read collection index", "error", err)
-		}
-		return nil, false
-	}
-	if idx.GetSchemaVersion() != schemaVersion || idx.GetRootMtimeUnixNano() != mtime {
-		return nil, false
-	}
-	infos := make([]CollectionInfo, 0, len(idx.GetEntries()))
-	for _, e := range idx.GetEntries() {
-		infos = append(infos, CollectionInfo{
-			ID:          e.GetId(),
-			Name:        e.GetName(),
-			SourceCount: int(e.GetSourceCount()),
-			Err:         e.GetError(),
-		})
-	}
-	return infos, true
-}
-
-func (s *Store) writeIndex(mtime int64, infos []CollectionInfo) {
-	idx := &grpcviewstorev1.CollectionIndex{
-		SchemaVersion:     schemaVersion,
-		RootMtimeUnixNano: mtime,
-		Entries:           make([]*grpcviewstorev1.CollectionIndexEntry, 0, len(infos)),
-	}
-	for _, info := range infos {
-		idx.Entries = append(idx.Entries, &grpcviewstorev1.CollectionIndexEntry{
-			Id:          info.ID,
-			Name:        info.Name,
-			SourceCount: int32(info.SourceCount),
-			Error:       info.Err,
-		})
-	}
-	if err := os.MkdirAll(s.stateRoot, 0o755); err != nil {
-		s.logger.Warn("cache collection index", "error", err)
-		return
-	}
-	if err := writeMessage(s.indexPath(), idx); err != nil {
-		s.logger.Warn("cache collection index", "error", err)
-	}
-}

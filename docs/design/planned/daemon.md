@@ -27,6 +27,20 @@ between CLI invocations. Today every in-process `grpcview invoke` re-links descr
 disk *and* recompiles the QuickJS engine in `workspace.New`. Warm, an invoke is a map
 lookup plus a dial.
 
+Third payoff, and the one with a correctness bug already paid for it: **the collection
+listing**. `store.List` rescans the workspace on every call (~130ms on a 5k-directory
+monorepo) because it has no way to know the tree is unchanged. It used to memoize to
+`collections.json` keyed on the workspace root's own mtime — which a collection created
+*below* the root never changes, so a hand-written `grpcview.json` or one arriving on a `git
+checkout` was invisible until something unrelated touched the root. That cache was removed
+rather than patched: no cheap fingerprint of "the set of `grpcview.json` files" exists,
+since computing one is the scan itself, and an explicit `InvalidateList()` cannot cover a
+writer that is not grpcview. A daemon can do what a one-shot process cannot — **hold the
+listing in memory and invalidate it from filesystem events** (fsevents on macOS, inotify on
+Linux), watching the same tree the scan walks with the same prune rules. That is both
+faster than the memo ever was and correct for writers grpcview never sees. The same watcher
+is what `grpcview.json` edits made outside the app want anyway.
+
 ## The rendezvous
 
 One server per workspace means several at once, and a fixed `10000`
@@ -301,6 +315,10 @@ unconditionally; a name is not.
   instead of failing.
 - **Two invokes against a warm daemon do no store I/O on the second** — the payoff of the
   in-memory descriptor cache surviving between calls (phase 1, Decision 9).
+- **A collection created by another process is listed by the daemon without a restart** —
+  `mkdir` + a hand-written `grpcview.json` deep in the tree, then `grpcview collections ls`.
+  This is the exact bug the mtime-keyed memo shipped with, so a watcher that reintroduces it
+  is worse than no cache: assert on a hand-made collection, never one grpcview created.
 - `bazel run //ui:dev` against `//service/cmd/dev --port 10000` still works — the one flow
   that needs a fixed port, now getting it from the flag rather than from a default.
 

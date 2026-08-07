@@ -116,7 +116,7 @@ func renderSourceTrust(ctx context.Context, w io.Writer, sess session, sources [
 		return nil
 	}
 
-	listing, err := listCollections(ctx, sess, false)
+	listing, err := listCollections(ctx, sess)
 	if err != nil {
 		return err
 	}

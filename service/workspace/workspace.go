@@ -84,7 +84,7 @@ func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.
 }
 
 func (w Workspace) ListCollections(ctx context.Context, request *connect.Request[grpcviewv1.ListCollectionsRequest]) (*connect.Response[grpcviewv1.ListCollectionsResponse], error) {
-	infos, err := w.store.List(ctx, request.Msg.GetRefresh())
+	infos, err := w.store.List(ctx)
 	if err != nil {
 		return nil, toConnectError(err)
 	}
@@ -148,7 +148,6 @@ func (w Workspace) CreateCollection(ctx context.Context, request *connect.Reques
 	if err := coll.Create(ctx, request.Msg.GetName()); err != nil {
 		return nil, toConnectError(err)
 	}
-	w.store.InvalidateList()
 	ws, err := w.loadCollection(ctx, coll)
 	if err != nil {
 		return nil, err
@@ -165,8 +164,6 @@ func (w Workspace) UpdateCollection(ctx context.Context, request *connect.Reques
 		if err := coll.SetName(ctx, request.Msg.GetName()); err != nil {
 			return nil, toConnectError(err)
 		}
-		// The cached listing carries the display name.
-		w.store.InvalidateList()
 	}
 
 	if request.Msg.NewCollection != nil && request.Msg.GetNewCollection() != request.Msg.GetCollection() {

@@ -37,9 +37,9 @@ func writeWorkspaceManifest(t *testing.T, root string, collections ...string) {
 	}
 }
 
-func mustList(t *testing.T, s *Store, refresh bool) []CollectionInfo {
+func mustList(t *testing.T, s *Store) []CollectionInfo {
 	t.Helper()
-	infos, err := s.List(context.Background(), refresh)
+	infos, err := s.List(context.Background())
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestListScansAtEveryDepth(t *testing.T) {
 	writeCollectionAt(t, s.Root(), "services/payments/requests", "Payments", "localhost:1", "localhost:2")
 	writeCollectionAt(t, s.Root(), "tools/loadgen", "")
 
-	infos := mustList(t, s, false)
+	infos := mustList(t, s)
 	assertIDs(t, infos, "services/payments/requests", "tools/loadgen")
 
 	if infos[0].Name != "Payments" || infos[0].SourceCount != 2 {
@@ -93,7 +93,7 @@ func TestListPrunesAtACollection(t *testing.T) {
 	writeCollectionAt(t, s.Root(), "requests", "Outer")
 	writeCollectionAt(t, s.Root(), "requests/tree/nested", "Inner")
 
-	assertIDs(t, mustList(t, s, false), "requests")
+	assertIDs(t, mustList(t, s), "requests")
 }
 
 func TestListPrunesUninterestingDirectories(t *testing.T) {
@@ -112,7 +112,7 @@ func TestListPrunesUninterestingDirectories(t *testing.T) {
 		writeCollectionAt(t, s.Root(), rel, "Bogus")
 	}
 
-	assertIDs(t, mustList(t, s, false), "requests")
+	assertIDs(t, mustList(t, s), "requests")
 }
 
 func TestListHonorsNestedGitignore(t *testing.T) {
@@ -127,7 +127,7 @@ func TestListHonorsNestedGitignore(t *testing.T) {
 	writeCollectionAt(t, s.Root(), "app/target/requests", "Copied")
 	writeCollectionAt(t, s.Root(), "target/requests", "Elsewhere")
 
-	assertIDs(t, mustList(t, s, false), "app/requests", "target/requests")
+	assertIDs(t, mustList(t, s), "app/requests", "target/requests")
 }
 
 func TestListCollectionAtWorkspaceRoot(t *testing.T) {
@@ -135,7 +135,7 @@ func TestListCollectionAtWorkspaceRoot(t *testing.T) {
 	writeCollectionAt(t, s.Root(), ".", "Root Collection")
 	writeCollectionAt(t, s.Root(), "tree/nested", "Nested")
 
-	infos := mustList(t, s, false)
+	infos := mustList(t, s)
 	assertIDs(t, infos, ".")
 	if infos[0].Name != "Root Collection" {
 		t.Fatalf("name = %q, want %q", infos[0].Name, "Root Collection")
@@ -153,7 +153,7 @@ func TestListDeclaredWinsOverScanning(t *testing.T) {
 		"tools/loadgen/requests",
 	)
 
-	infos := mustList(t, s, false)
+	infos := mustList(t, s)
 	assertIDs(t, infos, "services/ledger/requests", "services/payments/requests", "tools/loadgen/requests")
 	for _, info := range infos[:2] {
 		if info.Err != "" {
@@ -169,40 +169,49 @@ func TestListDeclaredRejectsEscapingEntry(t *testing.T) {
 	s := newTestStore(t)
 	writeWorkspaceManifest(t, s.Root(), "../outside")
 
-	infos := mustList(t, s, false)
+	infos := mustList(t, s)
 	assertIDs(t, infos, "../outside")
 	if infos[0].Err == "" {
 		t.Fatal("an entry naming a path outside the root reported no error")
 	}
 }
 
-func TestListServesTheCachedIndexUntilRefresh(t *testing.T) {
+// The listing used to be memoized against the workspace root's mtime, which a collection created
+// BELOW the root never changes: one written by hand or arriving on a `git checkout` stayed invisible
+// until something unrelated touched the root. The nesting and the mtime assertion are the point.
+func TestListSeesACollectionCreatedBelowTheRoot(t *testing.T) {
 	s := newTestStore(t)
-	writeCollectionAt(t, s.Root(), "requests", "Real")
-
-	assertIDs(t, mustList(t, s, false), "requests")
-
-	if err := os.Remove(filepath.Join(s.Root(), "requests", CollectionFileName)); err != nil {
-		t.Fatalf("remove manifest: %v", err)
+	if err := os.MkdirAll(filepath.Join(s.Root(), "kestrel", "ledger"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
 	}
-	assertIDs(t, mustList(t, s, false), "requests")
+	assertIDs(t, mustList(t, s))
 
-	assertIDs(t, mustList(t, s, true))
-	assertIDs(t, mustList(t, s, false))
+	before, err := os.Stat(s.Root())
+	if err != nil {
+		t.Fatalf("stat root: %v", err)
+	}
+	writeCollectionAt(t, s.Root(), "kestrel/ledger/requests", "Requests")
+	after, err := os.Stat(s.Root())
+	if err != nil {
+		t.Fatalf("stat root: %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("the root's mtime changed (%s to %s); the test no longer covers what it was written for",
+			before.ModTime(), after.ModTime())
+	}
+
+	assertIDs(t, mustList(t, s), "kestrel/ledger/requests")
 }
 
-func TestInvalidateListDropsTheIndex(t *testing.T) {
+func TestListSeesACollectionRemovedBelowTheRoot(t *testing.T) {
 	s := newTestStore(t)
 	writeCollectionAt(t, s.Root(), "requests", "Real")
-	assertIDs(t, mustList(t, s, false), "requests")
+	assertIDs(t, mustList(t, s), "requests")
 
 	if err := os.Remove(filepath.Join(s.Root(), "requests", CollectionFileName)); err != nil {
 		t.Fatalf("remove manifest: %v", err)
 	}
-	s.InvalidateList()
-	assertIDs(t, mustList(t, s, false))
-
-	s.InvalidateList()
+	assertIDs(t, mustList(t, s))
 }
 
 func TestListRejectsAWorkspaceTooLargeToScan(t *testing.T) {
@@ -214,7 +223,7 @@ func TestListRejectsAWorkspaceTooLargeToScan(t *testing.T) {
 	t.Cleanup(func() { maxScanDirs = restore })
 	maxScanDirs = 2
 
-	if _, err := s.List(context.Background(), false); !errors.Is(err, ErrWorkspaceTooLarge) {
+	if _, err := s.List(context.Background()); !errors.Is(err, ErrWorkspaceTooLarge) {
 		t.Fatalf("List error = %v, want ErrWorkspaceTooLarge", err)
 	}
 }

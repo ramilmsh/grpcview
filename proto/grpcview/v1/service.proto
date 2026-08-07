@@ -159,8 +159,9 @@ message GetResponse {
 }
 
 message ListCollectionsRequest {
-  // Bypass the cached index and rescan.
-  bool refresh = 1;
+  // Was `refresh`: the listing is never memoized, so every call already rescans.
+  reserved 1;
+  reserved "refresh";
 }
 
 message CollectionSummary {

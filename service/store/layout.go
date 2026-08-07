@@ -29,9 +29,8 @@ const (
 
 	descriptorIndexFileName = "descriptors.json"
 
-	collectionIndexFileName = "collections.json"
-	blobsDir                = "blobs"
-	blobFileExt             = ".binpb"
+	blobsDir    = "blobs"
+	blobFileExt = ".binpb"
 
 	collectionsStateSubdir = "collections"
 

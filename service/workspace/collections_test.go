@@ -22,18 +22,18 @@ func newWorkspaceAt(t *testing.T, root string) Workspace {
 	}
 }
 
-func listCollections(t *testing.T, w Workspace, ctx context.Context, refresh bool) *grpcviewv1.ListCollectionsResponse {
+func listCollections(t *testing.T, w Workspace, ctx context.Context) *grpcviewv1.ListCollectionsResponse {
 	t.Helper()
-	resp, err := w.ListCollections(ctx, connect.NewRequest(&grpcviewv1.ListCollectionsRequest{Refresh: refresh}))
+	resp, err := w.ListCollections(ctx, connect.NewRequest(&grpcviewv1.ListCollectionsRequest{}))
 	if err != nil {
-		t.Fatalf("ListCollections(refresh=%v): %v", refresh, err)
+		t.Fatalf("ListCollections: %v", err)
 	}
 	return resp.Msg
 }
 
 func TestListCollectionsEmptyWorkspace(t *testing.T) {
 	root := t.TempDir()
-	msg := listCollections(t, newWorkspaceAt(t, root), context.Background(), false)
+	msg := listCollections(t, newWorkspaceAt(t, root), context.Background())
 
 	if len(msg.GetCollections()) != 0 {
 		t.Errorf("collections = %v, want none", msg.GetCollections())
@@ -54,7 +54,7 @@ func TestListCollectionsAfterCreate(t *testing.T) {
 		t.Fatalf("CreateCollection: %v", err)
 	}
 
-	got := listCollections(t, w, ctx, false).GetCollections()
+	got := listCollections(t, w, ctx).GetCollections()
 	if len(got) != 1 {
 		t.Fatalf("collections = %v, want exactly one", got)
 	}
@@ -95,7 +95,7 @@ func TestUpdateCollectionRenamesTheDisplayNameOnly(t *testing.T) {
 		t.Errorf("response id = %q, want the unchanged id %q", got, "requests")
 	}
 
-	got := listCollections(t, w, ctx, false).GetCollections()
+	got := listCollections(t, w, ctx).GetCollections()
 	if len(got) != 1 {
 		t.Fatalf("collections = %v, want exactly one", got)
 	}
@@ -138,13 +138,13 @@ func TestUpdateCollectionMovesTheCollection(t *testing.T) {
 		t.Errorf("Get of the vacated id = %v, want NotFound", err)
 	}
 
-	got := listCollections(t, w, ctx, false).GetCollections()
+	got := listCollections(t, w, ctx).GetCollections()
 	if len(got) != 1 || got[0].GetId() != newID {
 		t.Errorf("collections after the move = %v, want only %q", got, newID)
 	}
 }
 
-func TestListCollectionsSeesCreateWithoutRefresh(t *testing.T) {
+func TestListCollectionsSeesCreate(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "services", "payments"), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -152,7 +152,7 @@ func TestListCollectionsSeesCreateWithoutRefresh(t *testing.T) {
 	w := newWorkspaceAt(t, root)
 	ctx := context.Background()
 
-	if got := listCollections(t, w, ctx, false).GetCollections(); len(got) != 0 {
+	if got := listCollections(t, w, ctx).GetCollections(); len(got) != 0 {
 		t.Fatalf("collections before create = %v, want none", got)
 	}
 
@@ -162,8 +162,8 @@ func TestListCollectionsSeesCreateWithoutRefresh(t *testing.T) {
 		t.Fatalf("CreateCollection: %v", err)
 	}
 
-	got := listCollections(t, w, ctx, false).GetCollections()
+	got := listCollections(t, w, ctx).GetCollections()
 	if len(got) != 1 || got[0].GetId() != "services/payments/requests" {
-		t.Fatalf("collections after create = %v, want the new collection without an explicit refresh", got)
+		t.Fatalf("collections after create = %v, want the new collection", got)
 	}
 }

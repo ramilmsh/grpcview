@@ -37,23 +37,6 @@ message Defaults {
   repeated string sources = 1;
 }
 
-// Cached workspace scan. LOCAL STATE, not committed content.
-message CollectionIndex {
-  int32 schema_version = 1;
-  // Workspace root's mtime when the scan ran; a different one invalidates the index.
-  int64 root_mtime_unix_nano = 2;
-  repeated CollectionIndexEntry entries = 3;
-}
-
-// One collection as a listing sees it: never enough to require reading a tree.
-message CollectionIndexEntry {
-  string id = 1;
-  string name = 2;
-  int32 source_count = 3;
-  // Why this collection could not be summarized; a broken one is a visible row.
-  string error = 4;
-}
-
 // grpcview.json at the collection root; doubles as the root folder's config.
 message Collection {
   int32 schema_version = 1;

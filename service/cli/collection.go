@@ -24,7 +24,7 @@ func resolveCollection(ctx context.Context, sess session, g *globalFlags) (strin
 		return g.resolved, nil
 	}
 
-	listing, err := listCollections(ctx, sess, false)
+	listing, err := listCollections(ctx, sess)
 	if err != nil {
 		return "", err
 	}
@@ -36,8 +36,8 @@ func resolveCollection(ctx context.Context, sess session, g *globalFlags) (strin
 	return id, nil
 }
 
-func listCollections(ctx context.Context, sess session, refresh bool) (*grpcviewv1.ListCollectionsResponse, error) {
-	resp, err := sess.ListCollections(ctx, connect.NewRequest(&grpcviewv1.ListCollectionsRequest{Refresh: refresh}))
+func listCollections(ctx context.Context, sess session) (*grpcviewv1.ListCollectionsResponse, error) {
+	resp, err := sess.ListCollections(ctx, connect.NewRequest(&grpcviewv1.ListCollectionsRequest{}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list the workspace's collections: %w", err)
 	}
@@ -132,10 +132,7 @@ func newCollectionsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Com
 }
 
 func newCollectionsLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
-	var (
-		output  string
-		refresh bool
-	)
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "ls",
@@ -148,23 +145,22 @@ func newCollectionsLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.C
 			"--collection at all. Nothing is marked when the answer is ambiguous, which is\n" +
 			"exactly when those verbs would refuse to guess.\n\n" +
 			"A collection whose manifest cannot be read is still listed, carrying the reason:\n" +
-			"one broken grpcview.json must not hide the rest of the repository. The listing is\n" +
-			"cached against the root's mtime; --refresh rescans the tree.",
+			"one broken grpcview.json must not hide the rest of the repository. Every call\n" +
+			"rescans the tree, so a collection someone just added is listed immediately.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCollectionsLs(cmd.Context(), s, g, open, output, refresh)
+			return runCollectionsLs(cmd.Context(), s, g, open, output)
 		},
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", outputText, "output shape: text|json")
-	cmd.Flags().BoolVar(&refresh, "refresh", false, "rescan the workspace instead of answering from the cached index")
 
 	return cmd
 }
 
-func runCollectionsLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, output string, refresh bool) error {
+func runCollectionsLs(ctx context.Context, s Streams, g *globalFlags, open clientFactory, output string) error {
 	switch output {
 	case outputText, outputJSON:
 	default:
@@ -172,7 +168,7 @@ func runCollectionsLs(ctx context.Context, s Streams, g *globalFlags, open clien
 	}
 
 	return withSession(ctx, g, open, func(ctx context.Context, sess session) error {
-		listing, err := listCollections(ctx, sess, refresh)
+		listing, err := listCollections(ctx, sess)
 		if err != nil {
 			return err
 		}

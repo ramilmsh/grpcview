@@ -160,7 +160,6 @@ func (s *Store) Rename(ctx context.Context, id, newID string) (*Collection, erro
 	delete(s.colls, newKey)
 	s.mu.Unlock()
 
-	s.InvalidateList()
 	return s.Open(ctx, newCleaned)
 }
 

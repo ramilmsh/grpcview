@@ -231,7 +231,7 @@ func TestCollectionsLsSaysNothingAboutTrust(t *testing.T) {
 	}
 }
 
-func TestCollectionsLsJSONAndRefresh(t *testing.T) {
+func TestCollectionsLsJSON(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 
@@ -239,7 +239,7 @@ func TestCollectionsLsJSONAndRefresh(t *testing.T) {
 	fc.listRoot = root
 	fc.listing = summaries("requests")
 
-	out, errOut, code := runCLI(fc, "", "collections", "ls", "-o", "json", "--refresh")
+	out, errOut, code := runCLI(fc, "", "collections", "ls", "-o", "json")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, out, errOut)
 	}
@@ -249,8 +249,8 @@ func TestCollectionsLsJSONAndRefresh(t *testing.T) {
 	if !strings.Contains(out, `"root":`) || !strings.Contains(out, `"requests"`) {
 		t.Errorf("stdout = %q, want the whole ListCollectionsResponse as protojson", out)
 	}
-	if len(fc.gotList) != 1 || !fc.gotList[0].GetRefresh() {
-		t.Errorf("gotList = %+v, want one listing with refresh set", fc.gotList)
+	if len(fc.gotList) != 1 {
+		t.Errorf("gotList = %+v, want exactly one listing", fc.gotList)
 	}
 }
 

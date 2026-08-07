@@ -628,12 +628,6 @@ export declare const GetResponseSchema: GenMessage<GetResponse>;
  * @generated from message grpcview.v1.ListCollectionsRequest
  */
 export declare type ListCollectionsRequest = Message<"grpcview.v1.ListCollectionsRequest"> & {
-  /**
-   * Bypass the cached index and rescan.
-   *
-   * @generated from field: bool refresh = 1;
-   */
-  refresh: boolean;
 };
 
 /**
