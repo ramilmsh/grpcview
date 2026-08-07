@@ -19,6 +19,10 @@ longer exists to be read safely.
   shape as `.proto` text from one fixed-size tool.
 - **Streaming RPCs get no tool.** MCP tool calls are request/response; the plugin's
   `RegisterService` skips streaming methods anyway. `invoke` rejects them legibly.
+  *Amended 2026-08-08 by [`mcp-streaming.md`](./mcp-streaming.md): it held until an agent was
+  actually blocked by that `Unimplemented`. `RegisterService` still skips them, but
+  `gen.ToolForMethod` does not, so `invoke_streaming` and `invoke_saved_streaming` are
+  hand-registered with the plugin's own schema and drain the stream under three caps.*
 - **stdio only, in-process, no auth.** The transport is a pipe to a child process the user
   launched. No HTTP endpoint, no port, no CORS, no bearer tokens.
 - **The shim is the one seam for payload rules,** and the rename map's totality is a test

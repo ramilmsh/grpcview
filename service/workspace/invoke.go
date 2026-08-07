@@ -77,7 +77,10 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 	defer cleanup()
 
 	if methodDesc.IsClientStreaming() || methodDesc.IsServerStreaming() {
-		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("streaming methods are not supported yet: %s", methodDesc.GetFullyQualifiedName()))
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf(
+			"%s is a streaming method: run it with invoke_streaming / invoke_saved_streaming (MCP), "+
+				"InvokeStreaming / InvokeSavedStreaming (RPC), or the grpcview invoke verb",
+			methodDesc.GetFullyQualifiedName()))
 	}
 
 	body := strings.TrimSpace(spec.body)

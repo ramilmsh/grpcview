@@ -931,11 +931,30 @@ long-lived and the global 30s default would kill it mid-conversation.
   registration against a live descriptor sidesteps codegen entirely, and also buys
   the `CommentProvider` and `NewMessage` seams the static path has no equivalent
   for.
-- **Streaming RPCs get no tool** — the plugin's `RegisterService` skips any method
-  where `IsStreamingClient() || IsStreamingServer()` returns true, and an MCP tool
-  call is inherently request/response. `invoke` rejects a streaming method with a
-  legible `Unimplemented` rather than silently registering a tool that could never
-  be called.
+- **Streaming RPCs get two hand-registered tools**, `invoke_streaming` and
+  `invoke_saved_streaming` (`service/mcp/streaming.go`). The plugin's
+  `RegisterService` skips any method where `IsStreamingClient() ||
+  IsStreamingServer()` returns true, but `gen.ToolForMethod` never asks whether a
+  method streams — so the schema is still the plugin's and only the registration
+  and the handler are hand-written. Both go through `shim.AddTool` under the
+  generated name, so the rename map, `annotateSchema` and `defaultCollection` apply
+  as they do to a unary tool, and `service/mcp` stays the one seam.
+  - **Two tools, not auto-routing inside `invoke`.** `InvokeRequest` carries one
+    `body string` and `InvokeStreamRequest` carries `repeated string messages`; one
+    tool covering both would need a hand-merged schema and would let an agent send a
+    body shape the method cannot accept.
+  - **A tool call is request/response, so the handler drains the stream** and returns
+    `{messages, result, truncated}` whole — under a frame cap, a byte cap and a
+    deadline (200 / 256 KB / 60 s), all three stated in the tool description.
+    Unbounded, a server stream is a context bomb with no Ctrl-C: an agent cannot
+    interrupt a tool call. Whichever cap bites cancels the call's context so the RPC
+    actually stops, and everything collected so far is still returned.
+  - **Message frames are raw JSON, not base64**, unlike unary `invoke`'s `response`.
+    `InvokeStreamingResponse.message` is `bytes` holding UTF-8 JSON, so `protojson`
+    would base64 it; the streaming result is assembled by hand and does not inherit
+    that. The inconsistency is deliberate until the `bytes` → `string` roadmap item.
+  - The invoked call's gRPC status lives in `result`, never in the tool's error
+    channel — the same rule as the CLI's exit codes.
 - **A streaming method is flagged at authoring time, not at invoke time.**
   `notInvocableReason` (`service/workspace/describe.go`) is the one string, and three
   surfaces carry it: `describe_method` returns it as `not_invocable_reason`,
@@ -1004,9 +1023,10 @@ round-trips cost multiples of what a verb (or a tool call) costs, and that overh
 lands on every iteration.
 
 The CLI remains the right tool for what MCP doesn't cover: shell/exit-code checks
-(`invoke`'s 0/1/2 contract, piping, `-o` variants), streaming RPCs (MCP exposes no
-tool for them), and verifying the CLI's own argv/flag surface — none of which an
-MCP tool call exercises.
+(`invoke`'s 0/1/2 contract, piping, `-o` variants), incremental streaming output
+(MCP's streaming tools drain the whole stream before returning, and cap it), and
+verifying the CLI's own argv/flag surface — none of which an MCP tool call
+exercises.
 
 The browser is the last resort, reserved for what only it can exercise: rendering,
 Monaco behavior, the tree's keyboard/mouse/DnD semantics, focus and layout,

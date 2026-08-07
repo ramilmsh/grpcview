@@ -81,7 +81,7 @@ Carried from `ui-redesign-plan.md` §4, minus everything that has since shipped.
   `go-git`)", and [`research/go-git.md`](../research/go-git.md) is the closed research for
   it. No RPC and no UI exist. Monaco's bundled `DiffEditor` is the intended diff surface.
 
-## The MCP server — four leftovers
+## The MCP server — three leftovers
 
 Carried from the MCP track, which shipped on 2026-08-06; the decisions behind it are in
 [`shipped/mcp.md`](../shipped/mcp.md), and the behaviour is `AGENTS.md` §"The MCP server".
@@ -102,13 +102,6 @@ Carried from the MCP track, which shipped on 2026-08-06; the decisions behind it
   base64 descriptor set (160 KB of a 186 KB collection, measured). Cap it: elide a recorded
   response over some byte cap with a marker rather than storing it verbatim. Then
   `get_collection` is bounded too, which the strip does not make it.
-- **`invoke_stream`.** The plugin skips streaming methods, so this is the one tool that
-  cannot be generated and needs a hand-written schema. Shape:
-  `invoke_stream(spec, messages[]) -> {messages[], status, …, truncated}`, draining to
-  completion under an explicit frame cap, byte cap and timeout, all three named in the
-  description. "Run to completion, return everything" is the only faithful collapse of a
-  stream into a request/response tool call. Do it when a real session is blocked by
-  `invoke`'s `Unimplemented`, not before.
 - **`find_method(query)`.** Substring search over the collection's services, returning
   matches instead of the whole list. A four-surface RPC (UI quick-open, CLI `--grep`, VS
   Code palette), not an MCP-layer concern. `services` is only 4% of a response today, so

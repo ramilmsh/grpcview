@@ -54,8 +54,8 @@ func (w Workspace) DescribeMethod(ctx context.Context, request *connect.Request[
 	}), nil
 }
 
-const streamingNotInvocable = "streaming: invoke and invoke_saved reject this method with Unimplemented; " +
-	"it can be authored and described, but not run"
+const streamingNotInvocable = "streaming: run it with the invoke_streaming or invoke_saved_streaming MCP tool, " +
+	"the grpcview invoke CLI verb, or the UI; the unary invoke and invoke_saved reject it with Unimplemented"
 
 // Honesty at authoring time. Every surface that hands out a method — describe, ls,
 // create_request — says this before the author saves, instead of letting them find out
