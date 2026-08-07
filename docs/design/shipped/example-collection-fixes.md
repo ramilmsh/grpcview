@@ -7,6 +7,14 @@ the UI, was the author. Nothing here is built.
 
 Ordered by how much it hurts the agent surfaces.
 
+**Status (2026-08-07): all five are fixed**, plus the one-line doc the non-fix asked for. Where
+this doc offered a choice, what shipped was: #1 option 2 (clear `history` on every response but
+`get_collection`'s — history growth is still uncapped, so option 3 remains open); #3 compose,
+not document. #4 needed one thing this doc did not anticipate — an isolated run has *no* resolve
+cache, so `--isolated` builds the bazel source first, and it moves `GRPCVIEW_CONFIG_DIR` rather
+than `HOME`, because moving `HOME` also moves the output base of that build. The behaviour now
+lives in `AGENTS.md`; what is kept below is the measurement and the reasoning.
+
 ---
 
 ## 1. A mutation returns the whole collection, including every request's history

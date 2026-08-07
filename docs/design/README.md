@@ -37,6 +37,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`tree-rewrite-plan.md`](./shipped/tree-rewrite-plan.md) | The VS-Code-alike collection tree (2026-08-01). Kept for four rejected libraries and the calls each milestone forced. |
 | [`vscode/phase-1-workspace.md`](./shipped/vscode/phase-1-workspace.md) | The workspace is the repo, collections are what's in it — 1a–1e (2026-08-06). One shipped phase of the [VS Code track](./active/vscode/README.md), whose phases 2–6 are still in `active/`. |
 | [`mcp.md`](./shipped/mcp.md) | `grpcview mcp` — the `WorkspaceService` as MCP tools over stdio (2026-08-06). Kept for the three things the four-phase plan got wrong; the plan itself is deleted. |
+| [`example-collection-fixes.md`](./shipped/example-collection-fixes.md) | Five defects an agent-only author hit building the `example` collection — all five fixed (2026-08-07). Kept for the measurements and for why the obvious fix to each was wrong. |
 
 ## active/
 
@@ -52,7 +53,6 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`daemon.md`](./planned/daemon.md) | One daemon per workspace, bazel's client/server model. Needs only vscode phase 1a. |
 | [`invoke-from-the-store.md`](./planned/invoke-from-the-store.md) | Send resolves the saved request server-side instead of shipping the editor buffer. The RPC now exists; the UI migration does not. |
 | [`descriptor-explorer-plan.md`](./planned/descriptor-explorer-plan.md) | A navigable read-only `.proto` browser — field numbers and comments the TS-shape view cannot recover. |
-| [`example-collection-fixes.md`](./planned/example-collection-fixes.md) | Five defects found by authoring the `example` collection entirely through MCP — mutation payload size, metadata's missing expression wrap, generators in middleware, one-command bring-up, streaming's late `Unimplemented`. |
 | [`roadmap.md`](./planned/roadmap.md) | **Wants, not plans** — the backlog the three shipped UI/scripting/tree docs used to carry. Each item gets its own doc when picked up. |
 
 ## Housekeeping

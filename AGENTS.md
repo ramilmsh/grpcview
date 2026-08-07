@@ -140,11 +140,21 @@ protojson body that could not call a generator would be `{{ }}` all over again.
   (has `export default`) or an **expression** (anything else, wrapped in
   `export default async () => ( … )` and run on the same path). The Monaco
   hidden-wrapper form above is what the browser authors; it is not what the backend
-  requires. `resolveInvokeBody` (`service/workspace/invoke.go`) is the single seam that
-  applies the wrap, so every surface — UI, VS Code, CLI, MCP — inherits one behavior.
+  requires. `wrapExpressionScript` (`service/workspace/invoke.go`) is the single seam
+  that applies the wrap, and **all three object positions go through it** — request
+  body, request metadata, folder metadata — so every surface (UI, VS Code, CLI, MCP,
+  a hand-edited `request.json`) inherits one behavior. The wrap opens no new line, so
+  a bundler error still names the author's line.
   Full contract: [`docs/design/request-body-contract.md`](docs/design/request-body-contract.md).
 - **Scripts** (generators / middleware / scenarios) are authored in the Scripts
   view, bundled with esbuild, and run in the same sandbox under a grant.
+- **Generators compose into every user-script position**, middleware included: the
+  caller passes `transitiveGenerators(source, all)` — the closure of names the source
+  textually calls — and the bundler resolves each as a `grpcview:gen/<name>` module
+  hung on `globalThis`. So `requestId()` means the same thing in a body, in a metadata
+  script and in a middleware. A middleware that calls no generator takes the cached,
+  uncomposed compile path, because a composed bundle folds the generator sources in and
+  cannot be keyed by `(source, grant)` alone.
 
 ### The `gv` global
 
@@ -715,6 +725,13 @@ is shipped.
   — there is still exactly one) plus `OpenTab.collection` and `activeCollection`; the old
   id's `Get` entry is then dropped, *after* the remap, or a live observer still pointed at it
   refetches and gets `NotFound`.
+- **Inside a collection the same split repeats: the directory slug is identity, the
+  display name is data.** A rename writes `meta.Name` and leaves the directory alone —
+  for requests (`store/fs.go`), folders (`store/fs.go`) and scripts
+  (`store/scripts.go`) alike. So renaming the script `test-goals` to `smoke` leaves
+  `scripts/test-goals/script.json` holding `"name": "smoke"`, and that drift is
+  **intended**: the slug is what UI state, `Item.slug` and every on-disk reference are
+  keyed by, and re-slugging would churn git history on every rename. Do not "fix" it.
 - **The TopBar picker is where a collection is switched**, and switching is pure UI
   state (`activeCollection`) because every query key is built from the active id —
   no reload, no refetch of anything but the collection now addressed. A row is
@@ -722,10 +739,14 @@ is shipped.
   name, since a collection is addressed by its path and named separately.
 - **Local state lives outside the collection directory** — one durable
   per-workspace state root under `os.UserConfigDir()` keyed by a hash of the
-  root's absolute path (`wsroot.StateDir`), holding the resolve caches, run
-  history and the collection index. Not `os.UserCacheDir()`: history is user data.
+  root's absolute path (`wsroot.StateDir`), holding the resolve caches and run
+  history. Not `os.UserCacheDir()`: history is user data.
   A collection directory is therefore 100% committed content, and there is nothing
-  left to `.gitignore`.
+  left to `.gitignore`. **`GRPCVIEW_CONFIG_DIR` moves that root**, and the trust
+  list with it (`wsroot.configRoot`) — that is what a throwaway run uses
+  (`//example:up --isolated`, CI). Overriding `HOME` would do the same to grpcview
+  and *also* relocate the output base of the `bazel build` a bazel source shells
+  out to, which is a different request entirely.
 - **Discovery is declared-or-scanned** (`store.List`). A `grpcview.work.json` with
   a non-empty `collections` list wins (globs allowed; a glob matching nothing is
   fine, a missing *literal* is reported as a row carrying an error). Otherwise the
@@ -736,11 +757,16 @@ is shipped.
   unambiguous key later. Past 20k directories it fails with
   `ErrWorkspaceTooLarge` rather than hanging on a `$HOME` that happens to be a
   repo.
-- **The scan result is cached** as `collections.json` in the state root, keyed by
-  the workspace root directory's own mtime, plus `collections ls --refresh` and an
-  explicit `Store.InvalidateList()` from `CreateCollection` — creating
-  `services/payments/requests` never touches the root's mtime, so the writer has
-  to say so.
+- **The scan is not cached, deliberately.** It was memoized to `collections.json`
+  in the state root keyed by the workspace root directory's *own* mtime, which a
+  collection created at any depth below the root never changes — a hand-written
+  `grpcview.json` or one arriving on a `git checkout` stayed invisible until
+  something unrelated touched the root, and no `InvalidateList()` call can cover a
+  writer that is not grpcview. There is no cheap fingerprint of "the set of
+  `grpcview.json` files": computing one *is* the scan, which costs ~130ms on a
+  5k-directory monorepo. A warm in-memory listing invalidated by filesystem events
+  is [the daemon's](docs/design/planned/daemon.md) to hold; a one-shot CLI process
+  can neither keep it nor watch for changes.
 - **go-git supplies only the ignore matcher.** `gitignore.ParsePattern` +
   `NewMatcher`, accumulated per directory as the scan enters it. Its
   `ReadPatterns` helper is deliberately unused: it does its own recursive
@@ -910,6 +936,14 @@ long-lived and the global 30s default would kill it mid-conversation.
   call is inherently request/response. `invoke` rejects a streaming method with a
   legible `Unimplemented` rather than silently registering a tool that could never
   be called.
+- **A streaming method is flagged at authoring time, not at invoke time.**
+  `notInvocableReason` (`service/workspace/describe.go`) is the one string, and three
+  surfaces carry it: `describe_method` returns it as `not_invocable_reason`,
+  `create_request` returns it in `warnings` (non-fatal — the request *is* created),
+  and `grpcview ls` tags the row. Without that, `ls` listed a streaming request
+  identically to a unary one and an agent found out only after saving. `create_request`
+  resolves the method best-effort: a collection whose sources are cold must still be
+  authorable, so an unresolvable method warns about nothing rather than failing.
 - **`service/mcp` is the one seam for every payload rule**: it renames the
   plugin's generated tool names to short ones (a generated tool with no entry in
   the rename map panics on startup, and a totality test makes adding an RPC without
@@ -921,6 +955,14 @@ long-lived and the global 30s default would kill it mid-conversation.
   The strip walks the whole response rather than one known key, because two
   unrelated shapes carry one: `Collection.descriptor_set` and, at the top level,
   `DescribeMethodResponse.descriptor_set`.
+- **`history` is stripped from every response except `get_collection`'s.** It is
+  the *other* payload bomb, and the bigger one: every write RPC returns the whole
+  `Collection`, a recorded response can itself hold a base64 descriptor set, and one
+  9-request collection measured 160 KB of history in a 186 KB response — over the
+  MCP client's per-result cap, so every mutation came back as an overflow error.
+  `get_collection` is an agent's only access to history and keeps it whole
+  (`historyBearingMethod`); nothing else needs it. Symmetry between the two strips
+  is deliberate: one walk, one interceptor, one place to add the next heavy field.
 - **Descriptions and field docs come from an embedded descriptor set that retains
   `source_code_info`.** Generated Go protobuf strips that section, so
   `protoregistry.GlobalFiles` carries no comments at all — this is *why* proto
@@ -1103,7 +1145,10 @@ from `$XDG_CONFIG_HOME` / `~/Library/Application Support` rather than asking the
 binary — the binary may already be gone. **It is not a cache** (see the comment
 at `service/wsroot/wsroot.go:59`): a purge loses the workspace trust list,
 cached descriptor blobs, and run history. Collections, requests, and scripts
-live in the user's repositories, so a purge never touches them.
+live in the user's repositories, so a purge never touches them. A state root
+moved with `GRPCVIEW_CONFIG_DIR` is deliberately **not** purged: the guard here
+demands a path ending in `/grpcview`, and the override exists for throwaway
+directories that clean themselves up.
 
 Both scripts are POSIX `sh`, not bash, because they run under whatever `/bin/sh`
 the target machine has. Guards worth keeping:
