@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
-	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 	"codeberg.org/ramilmsh/grpcview/service/store"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 func resolveCollection(ctx context.Context, sess session, g *globalFlags) (string, error) {

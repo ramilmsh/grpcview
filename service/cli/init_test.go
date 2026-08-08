@@ -18,7 +18,7 @@ func TestInitEndToEnd(t *testing.T) {
 	run := func(args ...string) (out, errOut string, code int) {
 		var o, e bytes.Buffer
 		s := Streams{In: strings.NewReader(""), Out: &o, Err: &e}
-		code = Main(context.Background(), append([]string{"--workspace", root}, args...), s, noopServe)
+		code = Main(context.Background(), append([]string{"--workspace", root, "--in-process"}, args...), s, noopServe)
 		return o.String(), e.String(), code
 	}
 
@@ -47,7 +47,7 @@ func TestInitHonorsAnExplicitName(t *testing.T) {
 
 	var o, e bytes.Buffer
 	s := Streams{In: strings.NewReader(""), Out: &o, Err: &e}
-	code := Main(context.Background(), []string{"--workspace", root, "init", "svc", "--name", "My Collection"}, s, noopServe)
+	code := Main(context.Background(), []string{"--workspace", root, "--in-process", "init", "svc", "--name", "My Collection"}, s, noopServe)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stdout=%q stderr=%q)", code, o.String(), e.String())
 	}

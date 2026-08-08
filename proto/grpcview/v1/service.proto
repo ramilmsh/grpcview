@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package grpcview.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "proto/grpcview/v1/workspace.proto";
 
@@ -478,4 +479,41 @@ service WorkspaceService {
   // Requests still listing it as middleware keep the dangling reference and fail when
   // invoked, so clear it from them first.
   rpc DeleteScript(DeleteScriptRequest) returns (DeleteScriptResponse);
+}
+
+// Identity of the binary a server is running, so a client can tell a daemon serving
+// last hour's code from one serving this build. A version STRING cannot: an unstamped
+// build links "dev" for every rebuild.
+message ServerExecutable {
+  string path           = 1;
+  int64  modified_unix  = 2;
+  int64  size           = 3;
+}
+
+message ServerInfoRequest {}
+
+message ServerInfoResponse {
+  // Absolute, and the field the whole registration design turns on: a client verifies
+  // it matches the root it resolved before trusting anything else the server says.
+  string           workspace_root = 1;
+  int32            pid            = 2;
+  int32            port           = 3;
+  string           version        = 4;
+  ServerExecutable executable     = 5;
+  // Zero when the server never idles out, which is every hand-run one.
+  google.protobuf.Duration idle_timeout = 6;
+}
+
+message ShutdownRequest {}
+
+message ShutdownResponse {}
+
+// Server lifecycle, deliberately NOT part of WorkspaceService: it is a property of the
+// process, it is meaningless in-process, and Shutdown has no business being an MCP tool.
+service ServerService {
+  // Never fails. Answering it at all is what proves a listener is this workspace's.
+  rpc ServerInfo(ServerInfoRequest) returns (ServerInfoResponse);
+  // Returns first, then stops accepting, drains in flight requests and unlinks the
+  // registration. Asking over the wire is why the design never has to signal a pid.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
 }

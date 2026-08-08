@@ -2,82 +2,49 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net/http"
+	"io"
+	"os"
+	"time"
 
 	"connectrpc.com/connect"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/daemon"
+	"codeberg.org/ramilmsh/grpcview/service/wire"
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
-type Client interface {
-	Get(context.Context, *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error)
-	ListCollections(context.Context, *connect.Request[grpcviewv1.ListCollectionsRequest]) (*connect.Response[grpcviewv1.ListCollectionsResponse], error)
-	SetWorkspaceTrust(context.Context, *connect.Request[grpcviewv1.SetWorkspaceTrustRequest]) (*connect.Response[grpcviewv1.SetWorkspaceTrustResponse], error)
-	Invoke(context.Context, *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error)
-	InvokeSaved(context.Context, *connect.Request[grpcviewv1.InvokeSavedRequest]) (*connect.Response[grpcviewv1.InvokeSavedResponse], error)
-
-	InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error
-	InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error
-
-	DescribeMethod(context.Context, *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error)
-
-	AddDescriptorSource(context.Context, *connect.Request[grpcviewv1.AddDescriptorSourceRequest]) (*connect.Response[grpcviewv1.AddDescriptorSourceResponse], error)
-	RefreshDescriptorSource(context.Context, *connect.Request[grpcviewv1.RefreshDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RefreshDescriptorSourceResponse], error)
-	RemoveDescriptorSource(context.Context, *connect.Request[grpcviewv1.RemoveDescriptorSourceRequest]) (*connect.Response[grpcviewv1.RemoveDescriptorSourceResponse], error)
-	ReorderDescriptorSources(context.Context, *connect.Request[grpcviewv1.ReorderDescriptorSourcesRequest]) (*connect.Response[grpcviewv1.ReorderDescriptorSourcesResponse], error)
-	SetDescriptorSourceCommit(context.Context, *connect.Request[grpcviewv1.SetDescriptorSourceCommitRequest]) (*connect.Response[grpcviewv1.SetDescriptorSourceCommitResponse], error)
-
-	CreateCollection(context.Context, *connect.Request[grpcviewv1.CreateCollectionRequest]) (*connect.Response[grpcviewv1.CreateCollectionResponse], error)
-	CreateFolder(context.Context, *connect.Request[grpcviewv1.CreateFolderRequest]) (*connect.Response[grpcviewv1.CreateFolderResponse], error)
-	CreateRequest(context.Context, *connect.Request[grpcviewv1.CreateRequestRequest]) (*connect.Response[grpcviewv1.CreateRequestResponse], error)
-	UpdateRequest(context.Context, *connect.Request[grpcviewv1.UpdateRequestRequest]) (*connect.Response[grpcviewv1.UpdateRequestResponse], error)
-	DeleteRequest(context.Context, *connect.Request[grpcviewv1.DeleteRequestRequest]) (*connect.Response[grpcviewv1.DeleteRequestResponse], error)
-	MoveItem(context.Context, *connect.Request[grpcviewv1.MoveItemRequest]) (*connect.Response[grpcviewv1.MoveItemResponse], error)
-
-	RunScript(context.Context, *connect.Request[grpcviewv1.RunScriptRequest]) (*connect.Response[grpcviewv1.RunScriptResponse], error)
-}
+type Client = wire.Client
 
 type inProcess struct {
 	workspace.Workspace
+	root string
 }
 
-type remote struct {
-	grpcviewv1.WorkspaceServiceClient
+func (p inProcess) ServerInfo(
+	_ context.Context,
+	_ *connect.Request[grpcviewv1.ServerInfoRequest],
+) (*connect.Response[grpcviewv1.ServerInfoResponse], error) {
+	return connect.NewResponse(&grpcviewv1.ServerInfoResponse{
+		WorkspaceRoot: p.root,
+		Pid:           int32(os.Getpid()),
+		Version:       releaseVersion(),
+		Executable:    daemon.SelfExecutable().Proto(),
+	}), nil
 }
 
-func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
-	stream, err := r.WorkspaceServiceClient.InvokeStreaming(ctx, connect.NewRequest(msg))
-	if err != nil {
-		return err
-	}
-	return drain(stream, send)
+func (inProcess) Shutdown(
+	_ context.Context,
+	_ *connect.Request[grpcviewv1.ShutdownRequest],
+) (*connect.Response[grpcviewv1.ShutdownResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented,
+		errors.New("--in-process runs no server, so there is nothing to shut down"))
 }
 
-func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
-	stream, err := r.WorkspaceServiceClient.InvokeSavedStreaming(ctx, connect.NewRequest(msg))
-	if err != nil {
-		return err
-	}
-	return drain(stream, send)
-}
-
-func drain(stream *connect.ServerStreamForClient[grpcviewv1.InvokeStreamingResponse], send func(*grpcviewv1.InvokeStreamingResponse) error) error {
-	defer stream.Close()
-	for stream.Receive() {
-		if err := send(stream.Msg()); err != nil {
-			return err
-		}
-	}
-	return stream.Err()
-}
-
-var (
-	_ Client = inProcess{}
-	_ Client = remote{}
-)
+var _ Client = inProcess{}
 
 type session struct {
 	Client
@@ -86,33 +53,96 @@ type session struct {
 
 type clientFactory func(ctx context.Context, g *globalFlags) (session, error)
 
-func openClient(ctx context.Context, g *globalFlags, s Streams) (session, error) {
-	if g != nil && g.Server != "" {
-		return session{
-			Client: remote{grpcviewv1.NewWorkspaceServiceClient(http.DefaultClient, g.Server)},
-			close:  func(context.Context) error { return nil },
-		}, nil
-	}
+func noClose(context.Context) error { return nil }
 
+// resolveRoot answers the one question every binding starts from: which workspace is this.
+func resolveRoot(g *globalFlags, s Streams) (string, error) {
 	var override string
 	if g != nil {
 		override = g.Workspace
 	}
 	cwd, err := wsroot.InvocationDir()
 	if err != nil {
-		return session{}, fmt.Errorf("failed to resolve the current directory: %w", err)
+		return "", fmt.Errorf("failed to resolve the current directory: %w", err)
 	}
 	root, warn, err := wsroot.Discover(override, cwd)
 	if err != nil {
-		return session{}, err
+		return "", err
 	}
 	if warn != "" {
 		fmt.Fprintln(s.Err, warn)
 	}
+	return root, nil
+}
 
-	ws, err := workspace.New(ctx, root)
-	if err != nil {
-		return session{}, fmt.Errorf("failed to open workspace: %w", err)
+// The binding rule, in order: an explicitly pinned server, then the explicit in-process escape
+// hatch, then this workspace's daemon — connected to if one is running and started if not.
+//
+// "Dial whatever happens to be listening" is still rejected; this is not that. A registration
+// keyed by workspace root and re-verified over the wire means the answer is never ambient, and
+// starting one when none exists removes the conditional the old rule objected to.
+func openClient(ctx context.Context, g *globalFlags, s Streams) (session, error) {
+	if g != nil && g.Server != "" {
+		client := wire.Remote(g.Server)
+		warnRootMismatch(ctx, client, g, s)
+		return session{Client: client, close: noClose}, nil
 	}
-	return session{Client: inProcess{ws}, close: ws.Close}, nil
+
+	root, err := resolveRoot(g, s)
+	if err != nil {
+		return session{}, err
+	}
+
+	if g != nil && g.InProcess {
+		ws, err := workspace.New(ctx, root)
+		if err != nil {
+			return session{}, fmt.Errorf("failed to open workspace: %w", err)
+		}
+		return session{Client: inProcess{Workspace: ws, root: root}, close: ws.Close}, nil
+	}
+
+	reg, err := connectDaemon(ctx, root, s.Err, false)
+	if err != nil {
+		return session{}, err
+	}
+	// Reconnecting, not pinned: the daemon idles out and a rebuild restarts it, and an MCP
+	// session outlives both. A dial failure re-runs connect-or-spawn once.
+	return session{Client: wire.Reconnecting(reg.URL(), dialer{root: root, notes: s.Err}.redial), close: noClose}, nil
+}
+
+// A struct rather than a closure: the redial outlives an MCP session, and capturing Streams
+// would hold the CLI's stdio open for its whole lifetime.
+type dialer struct {
+	root  string
+	notes io.Writer
+}
+
+func (d dialer) redial(ctx context.Context) (string, error) {
+	reg, err := connectDaemon(ctx, d.root, d.notes, false)
+	if err != nil {
+		return "", err
+	}
+	return reg.URL(), nil
+}
+
+// A pinned server is the caller's decision, so a different root is a warning rather than a
+// refusal — but it is never silent: a collection id resolved here would otherwise be
+// interpreted against a tree the caller never named.
+//
+// Bounded on its own: `mcp` opens its client with no deadline, and a pinned server that does
+// not answer must not hold the session's startup on a warning nobody asked for.
+func warnRootMismatch(ctx context.Context, client Client, g *globalFlags, s Streams) {
+	root, err := resolveRoot(g, s)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	res, err := client.ServerInfo(ctx, connect.NewRequest(&grpcviewv1.ServerInfoRequest{}))
+	if err != nil {
+		return
+	}
+	if got := res.Msg.GetWorkspaceRoot(); got != "" && got != root {
+		fmt.Fprintf(s.Err, "grpcview: %s serves workspace %s, not %s\n", g.Server, got, root)
+	}
 }

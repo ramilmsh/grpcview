@@ -28,7 +28,12 @@ type Streams struct {
 
 type ServeOptions struct {
 	Port int
-	Root string
+	// --port was passed, so a busy port is an error rather than a reason to take another one.
+	PortPinned  bool
+	Root        string
+	IdleTimeout time.Duration
+	OpenBrowser bool
+	Version     string
 }
 
 type statusError struct {
@@ -60,6 +65,7 @@ type globalFlags struct {
 	Workspace  string
 	Collection string
 	Server     string
+	InProcess  bool
 	Timeout    time.Duration
 
 	resolved string
@@ -70,7 +76,8 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	f := cmd.PersistentFlags()
 	f.StringVar(&g.Workspace, "workspace", "", "workspace root; empty takes $BUILD_WORKSPACE_DIRECTORY, else walks up from the current directory to the nearest .git")
 	f.StringVar(&g.Collection, "collection", "", "collection to operate on; empty resolves from the current directory")
-	f.StringVar(&g.Server, "server", "", "base URL of a running grpcview server; empty does the work in-process")
+	f.StringVar(&g.Server, "server", "", "base URL of a specific grpcview server; empty uses this workspace's, starting one if none is running")
+	f.BoolVar(&g.InProcess, "in-process", false, "do the work in this process and start no server; the escape hatch for CI, a read-only checkout and debugging")
 	f.DurationVar(&g.Timeout, "timeout", defaultTimeout,
 		"per-request timeout; a verb that may run a build — `sources refresh`, or `sources add` of a bazel label — defaults to "+buildTimeout.String()+" instead")
 	return g
@@ -90,12 +97,41 @@ func releaseVersion() string {
 	return version
 }
 
+// The flags every way of starting a server shares. `grpcview` and `grpcview serve` are the
+// same command with a different spelling, and a divergence between them is a bug.
+type serveFlags struct {
+	port        int
+	idleTimeout time.Duration
+	noOpen      bool
+}
+
+func registerServeFlags(cmd *cobra.Command) *serveFlags {
+	f := &serveFlags{}
+	cmd.Flags().IntVar(&f.port, "port", defaultPort,
+		"port to serve on; a busy default falls back to an ephemeral port, a busy --port is an error")
+	cmd.Flags().DurationVar(&f.idleTimeout, "idle-timeout", 0,
+		"exit after this long with nothing in flight; zero never exits, which is what a hand-run server wants")
+	cmd.Flags().BoolVar(&f.noOpen, "no-open", false, "do not open a browser on launch")
+	return f
+}
+
+func (f *serveFlags) options(cmd *cobra.Command, g *globalFlags) ServeOptions {
+	return ServeOptions{
+		Port:        f.port,
+		PortPinned:  cmd.Flags().Changed("port"),
+		Root:        g.Workspace,
+		IdleTimeout: f.idleTimeout,
+		OpenBrowser: !f.noOpen,
+		Version:     releaseVersion(),
+	}
+}
+
 func newRootCmd(
 	s Streams,
 	serve func(context.Context, ServeOptions) error,
 	open clientFactory,
 ) *cobra.Command {
-	var rootPort int
+	var rootServe *serveFlags
 	var globals *globalFlags
 
 	root := &cobra.Command{
@@ -110,10 +146,10 @@ func newRootCmd(
 			if len(args) > 0 {
 				return unknownCommand(cmd, args[0])
 			}
-			return serve(cmd.Context(), ServeOptions{Port: rootPort, Root: globals.Workspace})
+			return serve(cmd.Context(), rootServe.options(cmd, globals))
 		},
 	}
-	root.Flags().IntVar(&rootPort, "port", defaultPort, "port to serve on")
+	rootServe = registerServeFlags(root)
 
 	root.Version = releaseVersion()
 	root.SetVersionTemplate("{{.Version}}\n")
@@ -132,7 +168,10 @@ func newRootCmd(
 	root.AddCommand(newCollectionsCmd(s, globals, open))
 	root.AddCommand(newTrustCmd(globals, open))
 	root.AddCommand(newServeCmd(serve, globals))
-	root.AddCommand(newMcpCmd(globals))
+	root.AddCommand(newUrlCmd(s, globals))
+	root.AddCommand(newOpenCmd(s, globals))
+	root.AddCommand(newShutdownCmd(s, globals))
+	root.AddCommand(newMcpCmd(globals, open))
 	root.AddCommand(newVersionCmd())
 
 	root.SetIn(s.In)
@@ -151,16 +190,16 @@ func unknownCommand(cmd *cobra.Command, arg string) error {
 }
 
 func newServeCmd(serve func(context.Context, ServeOptions) error, g *globalFlags) *cobra.Command {
-	var port int
+	var flags *serveFlags
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Serve the UI and API",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return serve(cmd.Context(), ServeOptions{Port: port, Root: g.Workspace})
+			return serve(cmd.Context(), flags.options(cmd, g))
 		},
 	}
-	cmd.Flags().IntVar(&port, "port", defaultPort, "port to serve on")
+	flags = registerServeFlags(cmd)
 	return cmd
 }
 

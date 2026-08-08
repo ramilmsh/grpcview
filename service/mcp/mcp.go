@@ -13,36 +13,21 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"codeberg.org/ramilmsh/grpcview/service/workspace"
-	"codeberg.org/ramilmsh/grpcview/service/wsroot"
+	"codeberg.org/ramilmsh/grpcview/service/wire"
 )
 
 type Options struct {
-	Root       string
 	Collection string
 	Version    string
 }
 
-func Run(ctx context.Context, opts Options) error {
+// Run takes its backend rather than opening one, because which process owns the collection is
+// the CLI's decision and it is the same decision for every verb: normally the workspace daemon,
+// so an agent's writes and the UI's go through one process and one Collection.mu. The MCP
+// server itself is never discovered — its client launches it over stdio — so it publishes
+// nothing and only ever acts as a client.
+func Run(ctx context.Context, opts Options, ws wire.Workspace) error {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
-
-	cwd, err := wsroot.InvocationDir()
-	if err != nil {
-		return fmt.Errorf("mcp: resolve the invocation directory: %w", err)
-	}
-	root, warn, err := wsroot.Discover(opts.Root, cwd)
-	if err != nil {
-		return fmt.Errorf("mcp: discover workspace root: %w", err)
-	}
-	if warn != "" {
-		fmt.Fprintln(os.Stderr, warn)
-	}
-
-	ws, err := workspace.New(ctx, root)
-	if err != nil {
-		return fmt.Errorf("mcp: open workspace: %w", err)
-	}
-	defer ws.Close(ctx)
 
 	sd, err := loadWorkspaceService()
 	if err != nil {

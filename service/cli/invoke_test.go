@@ -48,6 +48,14 @@ type fakeClient struct {
 	closed         int
 }
 
+func (f *fakeClient) ServerInfo(_ context.Context, _ *connect.Request[grpcviewv1.ServerInfoRequest]) (*connect.Response[grpcviewv1.ServerInfoResponse], error) {
+	return connect.NewResponse(&grpcviewv1.ServerInfoResponse{WorkspaceRoot: f.listRoot}), nil
+}
+
+func (f *fakeClient) Shutdown(_ context.Context, _ *connect.Request[grpcviewv1.ShutdownRequest]) (*connect.Response[grpcviewv1.ShutdownResponse], error) {
+	return connect.NewResponse(&grpcviewv1.ShutdownResponse{}), nil
+}
+
 func (f *fakeClient) Get(_ context.Context, r *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error) {
 	f.gotGet = append(f.gotGet, r.Msg)
 	if f.getErr != nil {
@@ -806,4 +814,31 @@ func mustStruct(t *testing.T, m map[string]any) *structpb.Struct {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// The RPCs no verb calls. Stubbed rather than implemented so a verb that starts calling one
+// fails loudly here instead of silently passing against an empty response.
+
+func (f *fakeClient) UpdateCollection(context.Context, *connect.Request[grpcviewv1.UpdateCollectionRequest]) (*connect.Response[grpcviewv1.UpdateCollectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("fakeClient: UpdateCollection is not exercised by any verb"))
+}
+
+func (f *fakeClient) ListBazelTargets(context.Context, *connect.Request[grpcviewv1.ListBazelTargetsRequest]) (*connect.Response[grpcviewv1.ListBazelTargetsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("fakeClient: ListBazelTargets is not exercised by any verb"))
+}
+
+func (f *fakeClient) UpdateFolder(context.Context, *connect.Request[grpcviewv1.UpdateFolderRequest]) (*connect.Response[grpcviewv1.UpdateFolderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("fakeClient: UpdateFolder is not exercised by any verb"))
+}
+
+func (f *fakeClient) CreateScript(context.Context, *connect.Request[grpcviewv1.CreateScriptRequest]) (*connect.Response[grpcviewv1.CreateScriptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("fakeClient: CreateScript is not exercised by any verb"))
+}
+
+func (f *fakeClient) UpdateScript(context.Context, *connect.Request[grpcviewv1.UpdateScriptRequest]) (*connect.Response[grpcviewv1.UpdateScriptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("fakeClient: UpdateScript is not exercised by any verb"))
+}
+
+func (f *fakeClient) DeleteScript(context.Context, *connect.Request[grpcviewv1.DeleteScriptRequest]) (*connect.Response[grpcviewv1.DeleteScriptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("fakeClient: DeleteScript is not exercised by any verb"))
 }

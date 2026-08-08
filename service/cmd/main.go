@@ -20,7 +20,15 @@ func serve(ctx context.Context, opts cli.ServeOptions) error {
 	}
 	defer indexPageFile.Close()
 
-	if err := service.Run(ctx, indexPageFile, service.Options{Port: opts.Port, Root: opts.Root}); err != nil {
+	if err := service.Run(ctx, indexPageFile, service.Options{
+		Port:        opts.Port,
+		PortPinned:  opts.PortPinned,
+		Root:        opts.Root,
+		IdleTimeout: opts.IdleTimeout,
+		OpenBrowser: opts.OpenBrowser,
+		Version:     opts.Version,
+		Register:    true,
+	}); err != nil {
 		return fmt.Errorf("failed to run server: %w", err)
 	}
 

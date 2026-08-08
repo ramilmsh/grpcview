@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "daemon",
+    srcs = [
+        "browser.go",
+        "connect.go",
+        "lock.go",
+        "registration.go",
+    ],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/daemon",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "//service/wsroot",
+        "@com_connectrpc_connect//:connect",
+    ],
+)
+
+go_test(
+    name = "daemon_test",
+    srcs = [
+        "connect_test.go",
+        "registration_test.go",
+    ],
+    embed = [":daemon"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "@com_connectrpc_connect//:connect",
+    ],
+)

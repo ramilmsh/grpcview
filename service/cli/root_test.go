@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -36,16 +37,41 @@ func TestMain_outputsAndExitCodes(t *testing.T) {
 		checkErr   func(t *testing.T, s string)
 	}{
 		{
-			name:       "no args serves on the default port",
+			name:       "no args serves on the default port and opens a browser",
 			args:       nil,
 			wantCode:   0,
-			wantServed: []ServeOptions{{Port: defaultPort}},
+			wantServed: []ServeOptions{{Port: defaultPort, OpenBrowser: true, Version: releaseVersion()}},
 		},
 		{
+			// A named port is pinned: a busy one is an error rather than a reason to take
+			// another, which is what the dev flow depends on.
 			name:       "serve honors its own port flag",
 			args:       []string{"serve", "--port", "1"},
 			wantCode:   0,
-			wantServed: []ServeOptions{{Port: 1}},
+			wantServed: []ServeOptions{{Port: 1, PortPinned: true, OpenBrowser: true, Version: releaseVersion()}},
+		},
+		{
+			name:       "--no-open opts out of the browser",
+			args:       []string{"serve", "--no-open"},
+			wantCode:   0,
+			wantServed: []ServeOptions{{Port: defaultPort, Version: releaseVersion()}},
+		},
+		{
+			// What an auto-spawned server is handed, and what a hand-run one never is.
+			name:     "serve takes an idle timeout",
+			args:     []string{"serve", "--idle-timeout", "3h", "--no-open"},
+			wantCode: 0,
+			wantServed: []ServeOptions{
+				{Port: defaultPort, IdleTimeout: 3 * time.Hour, Version: releaseVersion()},
+			},
+		},
+		{
+			name:     "the bare command and serve take the same flags",
+			args:     []string{"--port", "2", "--idle-timeout", "1m", "--no-open"},
+			wantCode: 0,
+			wantServed: []ServeOptions{
+				{Port: 2, PortPinned: true, IdleTimeout: time.Minute, Version: releaseVersion()},
+			},
 		},
 		{
 			name:     "version prints exactly one line to stdout",

@@ -21,8 +21,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//proto/grpcview/v1:grpcview",
-        "//service/workspace",
-        "//service/wsroot",
+        "//service/wire",
         "@com_connectrpc_connect//:connect",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
         "@com_github_redpanda_data_protoc_gen_go_mcp//pkg/gen",

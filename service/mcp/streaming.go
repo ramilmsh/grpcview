@@ -15,11 +15,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/wire"
 )
 
-// An alias, not a defined type: workspace.Workspace's methods spell the parameter out, and a
-// defined type would stop them satisfying streamer.
-type sendFunc = func(*grpcviewv1.InvokeStreamingResponse) error
+type sendFunc = wire.SendFunc
 
 // The send-func form of the two streaming RPCs, which is what an in-process caller wants:
 // connect cannot build a *connect.ServerStream outside a served request. Satisfied by

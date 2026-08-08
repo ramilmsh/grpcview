@@ -5,6 +5,7 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 import type { Bazel, Collection, Request_Response, ScriptKind, Server } from "./workspace_pb";
+import type { Duration } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file proto/grpcview/v1/service.proto.
@@ -1515,6 +1516,118 @@ export declare type RunScriptResponse = Message<"grpcview.v1.RunScriptResponse">
 export declare const RunScriptResponseSchema: GenMessage<RunScriptResponse>;
 
 /**
+ * Identity of the binary a server is running, so a client can tell a daemon serving
+ * last hour's code from one serving this build. A version STRING cannot: an unstamped
+ * build links "dev" for every rebuild.
+ *
+ * @generated from message grpcview.v1.ServerExecutable
+ */
+export declare type ServerExecutable = Message<"grpcview.v1.ServerExecutable"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: int64 modified_unix = 2;
+   */
+  modifiedUnix: bigint;
+
+  /**
+   * @generated from field: int64 size = 3;
+   */
+  size: bigint;
+};
+
+/**
+ * Describes the message grpcview.v1.ServerExecutable.
+ * Use `create(ServerExecutableSchema)` to create a new message.
+ */
+export declare const ServerExecutableSchema: GenMessage<ServerExecutable>;
+
+/**
+ * @generated from message grpcview.v1.ServerInfoRequest
+ */
+export declare type ServerInfoRequest = Message<"grpcview.v1.ServerInfoRequest"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.ServerInfoRequest.
+ * Use `create(ServerInfoRequestSchema)` to create a new message.
+ */
+export declare const ServerInfoRequestSchema: GenMessage<ServerInfoRequest>;
+
+/**
+ * @generated from message grpcview.v1.ServerInfoResponse
+ */
+export declare type ServerInfoResponse = Message<"grpcview.v1.ServerInfoResponse"> & {
+  /**
+   * Absolute, and the field the whole registration design turns on: a client verifies
+   * it matches the root it resolved before trusting anything else the server says.
+   *
+   * @generated from field: string workspace_root = 1;
+   */
+  workspaceRoot: string;
+
+  /**
+   * @generated from field: int32 pid = 2;
+   */
+  pid: number;
+
+  /**
+   * @generated from field: int32 port = 3;
+   */
+  port: number;
+
+  /**
+   * @generated from field: string version = 4;
+   */
+  version: string;
+
+  /**
+   * @generated from field: grpcview.v1.ServerExecutable executable = 5;
+   */
+  executable?: ServerExecutable | undefined;
+
+  /**
+   * Zero when the server never idles out, which is every hand-run one.
+   *
+   * @generated from field: google.protobuf.Duration idle_timeout = 6;
+   */
+  idleTimeout?: Duration | undefined;
+};
+
+/**
+ * Describes the message grpcview.v1.ServerInfoResponse.
+ * Use `create(ServerInfoResponseSchema)` to create a new message.
+ */
+export declare const ServerInfoResponseSchema: GenMessage<ServerInfoResponse>;
+
+/**
+ * @generated from message grpcview.v1.ShutdownRequest
+ */
+export declare type ShutdownRequest = Message<"grpcview.v1.ShutdownRequest"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.ShutdownRequest.
+ * Use `create(ShutdownRequestSchema)` to create a new message.
+ */
+export declare const ShutdownRequestSchema: GenMessage<ShutdownRequest>;
+
+/**
+ * @generated from message grpcview.v1.ShutdownResponse
+ */
+export declare type ShutdownResponse = Message<"grpcview.v1.ShutdownResponse"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.ShutdownResponse.
+ * Use `create(ShutdownResponseSchema)` to create a new message.
+ */
+export declare const ShutdownResponseSchema: GenMessage<ShutdownResponse>;
+
+/**
  * @generated from service grpcview.v1.WorkspaceService
  */
 export declare const WorkspaceService: GenService<{
@@ -1799,6 +1912,36 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof DeleteScriptRequestSchema;
     output: typeof DeleteScriptResponseSchema;
+  },
+}>;
+
+/**
+ * Server lifecycle, deliberately NOT part of WorkspaceService: it is a property of the
+ * process, it is meaningless in-process, and Shutdown has no business being an MCP tool.
+ *
+ * @generated from service grpcview.v1.ServerService
+ */
+export declare const ServerService: GenService<{
+  /**
+   * Never fails. Answering it at all is what proves a listener is this workspace's.
+   *
+   * @generated from rpc grpcview.v1.ServerService.ServerInfo
+   */
+  serverInfo: {
+    methodKind: "unary";
+    input: typeof ServerInfoRequestSchema;
+    output: typeof ServerInfoResponseSchema;
+  },
+  /**
+   * Returns first, then stops accepting, drains in flight requests and unlinks the
+   * registration. Asking over the wire is why the design never has to signal a pid.
+   *
+   * @generated from rpc grpcview.v1.ServerService.Shutdown
+   */
+  shutdown: {
+    methodKind: "unary";
+    input: typeof ShutdownRequestSchema;
+    output: typeof ShutdownResponseSchema;
   },
 }>;
 

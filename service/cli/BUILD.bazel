@@ -6,6 +6,7 @@ go_library(
         "body.go",
         "client.go",
         "collection.go",
+        "daemon.go",
         "describe.go",
         "get.go",
         "init.go",
@@ -22,8 +23,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//proto/grpcview/v1:grpcview",
+        "//service/daemon",
         "//service/mcp",
         "//service/store",
+        "//service/wire",
         "//service/workspace",
         "//service/wsroot",
         "@com_connectrpc_connect//:connect",

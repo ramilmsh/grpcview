@@ -22,7 +22,15 @@ func run(ctx context.Context) error {
 
 	devOrigins := []string{"http://localhost:5173", "http://127.0.0.1:5173"}
 
-	if err := service.Run(ctx, io.NopCloser(&b), service.Options{Port: port, Root: workspace, DevOrigins: devOrigins}); err != nil {
+	// Register is false and the port is pinned on purpose: the dev server serves a dummy index
+	// page and is a different binary from the one the CLI would restart it as, so it stays out
+	// of the registration path entirely, and `ui/src/lib/client.ts` hardcodes this port.
+	if err := service.Run(ctx, io.NopCloser(&b), service.Options{
+		Port:       port,
+		PortPinned: true,
+		Root:       workspace,
+		DevOrigins: devOrigins,
+	}); err != nil {
 		return fmt.Errorf("failed to run server: %w", err)
 	}
 

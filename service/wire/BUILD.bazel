@@ -1,0 +1,31 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "wire",
+    srcs = [
+        "keepalive.go",
+        "reconnect.go",
+        "wire.go",
+    ],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/wire",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "//service/workspace",
+        "@com_connectrpc_connect//:connect",
+    ],
+)
+
+go_test(
+    name = "wire_test",
+    srcs = [
+        "keepalive_test.go",
+        "wire_test.go",
+    ],
+    embed = [":wire"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "@com_connectrpc_connect//:connect",
+        "@org_golang_google_protobuf//types/known/durationpb",
+    ],
+)

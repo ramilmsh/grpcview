@@ -168,15 +168,18 @@ const CODE_NAMES: Record<number, string> = {
 export const codeName = (code: number): string =>
   CODE_NAMES[code] ?? `CODE_${code}`;
 
+export const durationMs = (d?: Duration | Timestamp): number =>
+  d ? Number(d.seconds) * 1000 + d.nanos / 1e6 : 0;
+
 export const latencyLabel = (d?: Duration): string => {
   if (!d) return "";
-  const ms = Number(d.seconds) * 1000 + d.nanos / 1e6;
+  const ms = durationMs(d);
   return ms < 1000 ? `${ms.toFixed(1)} ms` : `${(ms / 1000).toFixed(3)} s`;
 };
 
 export const timestampLabel = (t?: Timestamp): string => {
   if (!t) return "";
-  return new Date(Number(t.seconds) * 1000 + t.nanos / 1e6).toLocaleTimeString();
+  return new Date(durationMs(t)).toLocaleTimeString();
 };
 
 // Shortens from the MIDDLE, because both ends of an id carry meaning a head or tail

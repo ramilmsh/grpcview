@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
+	"syscall"
 	"time"
 
 	"connectrpc.com/connect"
@@ -16,9 +18,11 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	_ "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"connectrpc.com/grpcreflect"
 
+	"codeberg.org/ramilmsh/grpcview/service/daemon"
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 
@@ -28,10 +32,26 @@ import (
 )
 
 type Options struct {
-	Port       int
+	Port int
+	// The port was named on the command line, so a busy one is an error rather than a reason
+	// to take another. Unpinned, a second workspace's server falls back to an ephemeral port
+	// instead of refusing to start.
+	PortPinned bool
 	Root       string
 	DevOrigins []string
+	// Zero never idles out, which is every hand-run server. Only a client that spawned one
+	// passes this.
+	IdleTimeout time.Duration
+	// Publish a registration file so clients of this workspace find this process. False for
+	// the dev server, which serves a dummy index page and must stay out of the registry.
+	Register    bool
+	OpenBrowser bool
+	Version     string
+	// Where "serving at …" and browser notes go. Defaults to stderr.
+	Notes io.Writer
 }
+
+const drainTimeout = 30 * time.Second
 
 func Run(
 	ctx context.Context,
@@ -39,6 +59,11 @@ func Run(
 	opts Options,
 ) error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+
+	notes := opts.Notes
+	if notes == nil {
+		notes = os.Stderr
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -60,7 +85,10 @@ func Run(
 
 	mux := http.NewServeMux()
 
-	reflector := grpcreflect.NewStaticReflector("grpcview.v1.WorkspaceService")
+	reflector := grpcreflect.NewStaticReflector(
+		"grpcview.v1.WorkspaceService",
+		"grpcview.v1.ServerService",
+	)
 
 	mux.Handle(grpcreflect.NewHandlerV1(reflector))
 	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
@@ -72,6 +100,12 @@ func Run(
 		),
 	))
 
+	stop := make(chan struct{})
+	var once sync.Once
+	stopOnce := func() { once.Do(func() { close(stop) }) }
+	// Also releases the idle watcher, which blocks on stop for as long as Run has not returned.
+	defer stopOnce()
+
 	indexHtml, err := io.ReadAll(indexPage)
 	if err != nil {
 		return err
@@ -81,8 +115,6 @@ func Run(
 		w.WriteHeader(http.StatusOK)
 		w.Write(indexHtml)
 	}))
-
-	server := http2.Server{}
 
 	var handler http.Handler = mux
 	if len(opts.DevOrigins) > 0 {
@@ -95,14 +127,133 @@ func Run(
 		}).Handler(mux)
 	}
 
-	address := net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: opts.Port}
-	logger.InfoContext(ctx, "starting server", "address", address.String())
-	err = http.ListenAndServe(
-		address.String(),
-		h2c.NewHandler(handler, &server),
-	)
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	var idle *idleTimer
+	if opts.IdleTimeout > 0 {
+		idle = newIdleTimer(opts.IdleTimeout)
+		handler = idle.wrap(handler)
+	}
+
+	// Bind first, publish second: the port a client reads has to be the one that is listening.
+	listener, err := listen(opts)
+	if err != nil {
+		return err
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	lifecycle := &serverService{
+		root:        root,
+		version:     opts.Version,
+		idleTimeout: opts.IdleTimeout,
+		port:        port,
+		pid:         os.Getpid(),
+		executable:  daemon.SelfExecutable(),
+		stop:        stopOnce,
+	}
+	mux.Handle(grpcviewv1.NewServerServiceHandler(lifecycle))
+
+	url := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	if opts.Register {
+		reg := daemon.Registration{
+			Port:        port,
+			Pid:         lifecycle.pid,
+			Root:        root,
+			Executable:  lifecycle.executable,
+			Version:     opts.Version,
+			IdleTimeout: int64(opts.IdleTimeout),
+			StartedUnix: time.Now().Unix(),
+		}
+		if err := daemon.Write(reg); err != nil {
+			listener.Close()
+			return fmt.Errorf("failed to publish the server registration: %w", err)
+		}
+		defer daemon.Remove(root)
+	}
+
+	server := &http.Server{Handler: h2c.NewHandler(handler, &http2.Server{})}
+
+	logger.InfoContext(ctx, "starting server", "address", listener.Addr().String(), "workspace", root)
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(listener) }()
+
+	if opts.OpenBrowser {
+		daemon.Open(notes, url)
+	}
+
+	go idle.watch(stop, func() {
+		logger.InfoContext(ctx, "idle timeout reached", "after", opts.IdleTimeout.String())
+		stopOnce()
+	})
+
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+	case <-stop:
+	}
+
+	drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer cancel()
+	if err := server.Shutdown(drainCtx); err != nil {
+		return err
+	}
+	if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
+}
+
+func listen(opts Options) (net.Listener, error) {
+	address := net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: opts.Port}
+	listener, err := net.Listen("tcp", address.String())
+	if err == nil {
+		return listener, nil
+	}
+	if opts.PortPinned || !errors.Is(err, syscall.EADDRINUSE) {
+		return nil, err
+	}
+	// A sibling workspace's server already holds the default port. The registration carries
+	// the real one, so nothing downstream has to guess.
+	return net.Listen("tcp", (&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}).String())
+}
+
+// serverService answers the two lifecycle RPCs. Deliberately not on workspace.Workspace: the
+// answers are properties of this process, and in-process there is no process to describe.
+type serverService struct {
+	grpcviewv1.UnimplementedServerServiceHandler
+
+	root        string
+	version     string
+	idleTimeout time.Duration
+	port        int
+	pid         int
+	executable  daemon.Executable
+	stop        func()
+}
+
+func (s *serverService) ServerInfo(
+	_ context.Context,
+	_ *connect.Request[grpcviewv1.ServerInfoRequest],
+) (*connect.Response[grpcviewv1.ServerInfoResponse], error) {
+	return connect.NewResponse(&grpcviewv1.ServerInfoResponse{
+		WorkspaceRoot: s.root,
+		Pid:           int32(s.pid),
+		Port:          int32(s.port),
+		Version:       s.version,
+		Executable:    s.executable.Proto(),
+		IdleTimeout:   durationpb.New(s.idleTimeout),
+	}), nil
+}
+
+// Returns before it stops: the caller's own connection has to drain, and Shutdown waits for it.
+func (s *serverService) Shutdown(
+	_ context.Context,
+	_ *connect.Request[grpcviewv1.ShutdownRequest],
+) (*connect.Response[grpcviewv1.ShutdownResponse], error) {
+	go s.stop()
+	return connect.NewResponse(&grpcviewv1.ShutdownResponse{}), nil
 }
