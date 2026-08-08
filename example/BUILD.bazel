@@ -1,17 +1,16 @@
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
-# `bazel run //example:up` — the two targets every request in this collection points at.
+# `bazel run //example:up` — the echo server the `Echo/` requests point at. The `Collections/`
+# requests point at grpcview itself, whose own server this starts on demand rather than doubling.
 sh_binary(
     name = "up",
     srcs = ["//tools:example-up.sh"],
     args = [
         "$(rootpath //service/echo/cmd)",
-        "$(rootpath //service/cmd/dev)",
         "$(rootpath //service/cmd:grpcview)",
     ],
     data = [
         "//service/cmd:grpcview",
-        "//service/cmd/dev",
         "//service/echo/cmd",
     ],
 )

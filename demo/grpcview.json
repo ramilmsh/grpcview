@@ -6,9 +6,16 @@
   ],
   "sources":  [
     {
-      "id":  "reflection:127.0.0.1:10111",
+      "id":  "bazel://proto/grpcview/v1:grpcviewv1_proto",
+      "bazel":  {
+        "label":  "//proto/grpcview/v1:grpcviewv1_proto"
+      },
+      "commitDescriptors":  false
+    },
+    {
+      "id":  "reflection:localhost:10000",
       "reflection":  {
-        "address":  "127.0.0.1:10111",
+        "address":  "localhost:10000",
         "tls":  false
       },
       "commitDescriptors":  false

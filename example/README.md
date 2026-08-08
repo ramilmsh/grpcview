@@ -5,18 +5,24 @@ source, TypeScript bodies and metadata, generators with an npm dependency,
 folder-metadata inheritance, middleware, `gv.invoke` chaining, and a `gv.assert`
 scenario that checks all of it.
 
-Everything here is real: `smoke` passes against the two servers below.
+Everything here is real: `smoke` passes against the servers below.
 
-## Bring up the two targets first
+## Bring up the echo server first
 
 ```bash
 bazel run //example:up
 ```
 
-That starts both servers, waits for both ports, and holds until Ctrl-C:
-`//service/echo/cmd` serving `echo.v1.EchoService` on `127.0.0.1:50055`, and
-`//service/cmd/dev` serving grpcview's own API on `localhost:10000`.
-`--echo-port` / `--dev-port` move either one.
+That starts `//service/echo/cmd` serving `echo.v1.EchoService` on
+`127.0.0.1:50055` — moved by `--echo-port` — waits for the port, and holds until
+Ctrl-C.
+
+The other half needs nothing started. The `Collections/` requests point at
+grpcview itself, and grpcview's own workspace server is what serves that: any
+`grpcview` command starts one on demand, on `localhost:10000`, reflecting its own
+`grpcview.v1.WorkspaceService`. `example:up` asks for it (`grpcview url`) so it is
+already warm, and says so if it landed on a fallen-back port, which the
+collection's pinned `reflection:localhost:10000` source would not reach.
 
 The `Echo/` requests each carry `127.0.0.1:50055` as their target. The
 `Collections/` requests carry none, so they fall back to the collection's first
@@ -35,6 +41,12 @@ bazel run //example:up -- --isolated &
 grpcview script run smoke --collection example   # exit 0 is 10 assertions passed
 ```
 
+That `grpcview` shares the one server keyed under the same `GRPCVIEW_CONFIG_DIR`;
+`--isolated` stops it on the way out, since it deletes that state directory when the
+run ends. `grpcview shutdown` stops it by hand, and `--in-process` does a command's
+work without a server at all — which is what `--isolated` uses for its own setup
+calls, before trust has been granted.
+
 ## What's in it
 
 ```
@@ -44,7 +56,7 @@ Echo/                    folder metadata: two headers everything below inherits
   Unary (params)         gv.request.params, with a default per field
   Unary (middleware)     trace-headers rewrites the message and stamps two headers
   Streaming/             folder metadata that spreads its parent's, then adds one
-    ServerStream         authoring only — executing a stream is Unimplemented
+    ServerStream         gv.request.params.count responses, one per tick
     ClientStream
     BidiStream
 Collections/             folder metadata: grpcview talking to itself
@@ -99,12 +111,13 @@ grpcview script run smoke --collection example
 ```
 
 The same requests are addressable from the MCP server (`grpcview mcp` →
-`invoke_saved`, `run_script`, `describe_method`) and from the UI, which is the
-point: one saved request, four surfaces.
+`invoke_saved`, `invoke_saved_streaming`, `describe_method`) and from the UI, which
+is the point: one saved request, four surfaces. `run_script` there evaluates source
+you pass inline — it cannot run a saved script by name, so `smoke` runs from the CLI
+or the UI.
 
 ## Known gap
 
-Executing a streaming call is still `Unimplemented` server-side, so the three
-requests under `Echo/Streaming/` are there for the authoring side — method-kind
-tags, message composition, folder metadata — and return that status if invoked.
-`gv.invoke` rejects a streaming path outright.
+The three requests under `Echo/Streaming/` run from the UI, the CLI and the
+`invoke_saved_streaming` MCP tool, but `gv.invoke` still rejects a streaming path
+outright, so a scenario cannot drive one.
