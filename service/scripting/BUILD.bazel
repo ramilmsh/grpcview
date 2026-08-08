@@ -14,7 +14,6 @@ go_library(
     name = "scripting",
     srcs = [
         "bundler.go",
-        "compose.go",
         "engine.go",
         "entry.go",
         "invoke.go",
@@ -43,7 +42,6 @@ go_test(
     srcs = [
         "bundler_test.go",
         "capabilities_test.go",
-        "compose_test.go",
         "engine_core_test.go",
         "entry_test.go",
         "gv_test.go",

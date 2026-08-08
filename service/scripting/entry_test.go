@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -81,7 +82,7 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			res, err := e.RunMiddleware(context.Background(), c.src, nil, Grant{}, in)
+			res, err := e.RunMiddleware(context.Background(), c.src, Grant{}, in)
 			if err != nil {
 				t.Fatalf("run: %v", err)
 			}
@@ -91,7 +92,7 @@ func TestMiddlewareEntryPoint(t *testing.T) {
 		})
 	}
 
-	res, err := e.RunMiddleware(context.Background(), `({ passthrough: true })`, nil, Grant{}, in)
+	res, err := e.RunMiddleware(context.Background(), `({ passthrough: true })`, Grant{}, in)
 	if err != nil {
 		t.Fatalf("fallback run: %v", err)
 	}
@@ -105,6 +106,7 @@ func TestEntryExportDetection(t *testing.T) {
 		`export default () => 1`,
 		`  export default function () {}`,
 		"const f = 1;\nexport default f",
+		"// mentions export default in a comment above the real one\nexport default () => 1",
 	}
 	for _, s := range defaults {
 		if !hasDefaultExport(s) {
@@ -125,5 +127,65 @@ func TestEntryExportDetection(t *testing.T) {
 		if hasDefaultExport(s) || hasHandleOrDefaultExport(s) {
 			t.Errorf("plain expression %q wrongly detected as an entry point", s)
 		}
+	}
+}
+
+// Regression for the example/ folder-metadata script: `export default` mentioned inside a comment,
+// a block comment, or a string literal must not make an expression look like a module.
+func TestEntryExportDetectionIgnoresCommentsAndStrings(t *testing.T) {
+	notModule := []string{
+		"// export default foo\n({ ok: true })",
+		"/* export default */\n({ ok: true })",
+		`const s = "export default x"; ({ ok: true })`,
+	}
+	for _, s := range notModule {
+		if hasDefaultExport(s) {
+			t.Errorf("hasDefaultExport(%q) = true, want false (text is in a comment or string)", s)
+		}
+	}
+
+	notHandle := []string{
+		"// export function handle(ctx) {}\n({ ok: true })",
+		"/* export const handle = 1 */\n({ ok: true })",
+		`const s = "export function handle() {}"; ({ ok: true })`,
+	}
+	for _, s := range notHandle {
+		if hasHandleOrDefaultExport(s) {
+			t.Errorf("hasHandleOrDefaultExport(%q) = true, want false (text is in a comment or string)", s)
+		}
+	}
+
+	realModule := "// export default is used below\nexport default { ok: true }"
+	if !hasDefaultExport(realModule) {
+		t.Errorf("hasDefaultExport(%q) = false, want true (real export default follows a comment mentioning it)", realModule)
+	}
+
+	realHandle := "// this script exports a handle\nexport function handle(ctx) { return ctx; }"
+	if !hasHandleOrDefaultExport(realHandle) {
+		t.Errorf("hasHandleOrDefaultExport(%q) = false, want true (real handle export follows a comment mentioning it)", realHandle)
+	}
+}
+
+// The exact example/ folder-metadata script, reproduced verbatim: a comment mentioning
+// `export default` must not stop the bare object literal from being wrapped and run.
+func TestFolderMetadataCommentMentioningExportDefaultNotRejected(t *testing.T) {
+	e := newEngine(t)
+	src := "{\n" +
+		"  // Expression form: there is no `export default` here, so this object IS the\n" +
+		"  // whole script. An `import` statement cannot stand in expression position, so\n" +
+		"  // the module comes in through `require(...)` instead — same resolver, other\n" +
+		"  // grammar. Specifiers must be string literals either way.\n" +
+		"  ...require(\"grpcview:metadata\").inherit(),\n" +
+		"  \"x-demo-folder\": [\"streaming\"],\n" +
+		"}"
+	if hasDefaultExport(src) {
+		t.Fatalf("hasDefaultExport wrongly true for a comment mentioning export default")
+	}
+	res, err := e.RunRequestBody(context.Background(), WrapExpression(src), Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("comment mentioning export default wrongly rejected: %v", err)
+	}
+	if !strings.Contains(string(res.Value), "x-demo-folder") {
+		t.Fatalf("value = %s, want it to contain x-demo-folder", res.Value)
 	}
 }

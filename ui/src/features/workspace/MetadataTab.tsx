@@ -1,19 +1,16 @@
 import { useState } from "react";
 import { CheckCircle, Warning } from "@/components/ui/icons";
 import { MetadataEditor } from "./MetadataEditor";
-import type { GeneratorDef } from "./generator-libs";
 
 // MetadataTab is the request-metadata editor plus a footer reporting Monaco's TS marker count.
 export function MetadataTab({
   metadata,
   onChange,
   currentKey,
-  generators,
 }: {
   metadata: string;
   onChange: (value: string) => void;
   currentKey: string;
-  generators: GeneratorDef[];
 }) {
   const [errors, setErrors] = useState(0);
 
@@ -24,7 +21,6 @@ export function MetadataTab({
           data={metadata}
           onChange={onChange}
           currentKey={currentKey}
-          generators={generators}
           onErrorsChange={setErrors}
         />
       </div>

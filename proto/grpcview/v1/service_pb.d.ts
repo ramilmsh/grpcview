@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Bazel, Collection, Request_Response, ScriptKind, Server } from "./workspace_pb";
+import type { Bazel, Collection, Request_Response, Server } from "./workspace_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -783,6 +783,60 @@ export declare type ListBazelTargetsResponse = Message<"grpcview.v1.ListBazelTar
 export declare const ListBazelTargetsResponseSchema: GenMessage<ListBazelTargetsResponse>;
 
 /**
+ * An importable TypeScript module in the workspace, as the editors need it:
+ * contents, not declarations — the inferred types are the point.
+ *
+ * @generated from message grpcview.v1.WorkspaceModule
+ */
+export declare type WorkspaceModule = Message<"grpcview.v1.WorkspaceModule"> & {
+  /**
+   * Workspace-relative, slash-separated: "example/scripts/uuid.ts".
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: string content = 2;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message grpcview.v1.WorkspaceModule.
+ * Use `create(WorkspaceModuleSchema)` to create a new message.
+ */
+export declare const WorkspaceModuleSchema: GenMessage<WorkspaceModule>;
+
+/**
+ * @generated from message grpcview.v1.ListWorkspaceModulesRequest
+ */
+export declare type ListWorkspaceModulesRequest = Message<"grpcview.v1.ListWorkspaceModulesRequest"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.ListWorkspaceModulesRequest.
+ * Use `create(ListWorkspaceModulesRequestSchema)` to create a new message.
+ */
+export declare const ListWorkspaceModulesRequestSchema: GenMessage<ListWorkspaceModulesRequest>;
+
+/**
+ * @generated from message grpcview.v1.ListWorkspaceModulesResponse
+ */
+export declare type ListWorkspaceModulesResponse = Message<"grpcview.v1.ListWorkspaceModulesResponse"> & {
+  /**
+   * @generated from field: repeated grpcview.v1.WorkspaceModule modules = 1;
+   */
+  modules: WorkspaceModule[];
+};
+
+/**
+ * Describes the message grpcview.v1.ListWorkspaceModulesResponse.
+ * Use `create(ListWorkspaceModulesResponseSchema)` to create a new message.
+ */
+export declare const ListWorkspaceModulesResponseSchema: GenMessage<ListWorkspaceModulesResponse>;
+
+/**
  * A collection is only ever created by an explicit act — this RPC, or
  * `grpcview init` — or a stale query would scatter grpcview.json around a repo.
  *
@@ -1288,14 +1342,9 @@ export declare type CreateScriptRequest = Message<"grpcview.v1.CreateScriptReque
   collection: string;
 
   /**
-   * @generated from field: string name = 2;
+   * @generated from field: string path = 2;
    */
-  name: string;
-
-  /**
-   * @generated from field: grpcview.v1.ScriptKind kind = 3;
-   */
-  kind: ScriptKind;
+  path: string;
 };
 
 /**
@@ -1321,7 +1370,7 @@ export declare type CreateScriptResponse = Message<"grpcview.v1.CreateScriptResp
 export declare const CreateScriptResponseSchema: GenMessage<CreateScriptResponse>;
 
 /**
- * Partial update: `name` addresses the script, `new_name` renames it.
+ * Partial update: `path` addresses the script, `new_path` renames it (a rename is a file move).
  *
  * @generated from message grpcview.v1.UpdateScriptRequest
  */
@@ -1332,9 +1381,9 @@ export declare type UpdateScriptRequest = Message<"grpcview.v1.UpdateScriptReque
   collection: string;
 
   /**
-   * @generated from field: string name = 2;
+   * @generated from field: string path = 2;
    */
-  name: string;
+  path: string;
 
   /**
    * @generated from field: optional string source = 3;
@@ -1342,9 +1391,9 @@ export declare type UpdateScriptRequest = Message<"grpcview.v1.UpdateScriptReque
   source?: string | undefined;
 
   /**
-   * @generated from field: optional string new_name = 4;
+   * @generated from field: optional string new_path = 4;
    */
-  newName?: string | undefined;
+  newPath?: string | undefined;
 };
 
 /**
@@ -1379,9 +1428,9 @@ export declare type DeleteScriptRequest = Message<"grpcview.v1.DeleteScriptReque
   collection: string;
 
   /**
-   * @generated from field: string name = 2;
+   * @generated from field: string path = 2;
    */
-  name: string;
+  path: string;
 };
 
 /**
@@ -1416,20 +1465,16 @@ export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> &
   collection: string;
 
   /**
+   * A source with `export default` is compiled as an entry and its default export is
+   * called; anything else is evaluated as a scratchpad and its last expression is the
+   * value. Ignored when `script` names a saved script, which follows the same rule.
+   *
    * @generated from field: string source = 2;
    */
   source: string;
 
   /**
-   * Unset evaluates `source` as a scratchpad, yielding its last-expression value.
-   * Ignored when `script` names a saved script, which carries its own kind.
-   *
-   * @generated from field: optional grpcview.v1.ScriptKind kind = 3;
-   */
-  kind?: ScriptKind | undefined;
-
-  /**
-   * Name of a saved script to run instead of `source`. Exactly one of the two.
+   * Path of a saved script to run instead of `source`. Exactly one of the two.
    *
    * @generated from field: optional string script = 4;
    */
@@ -1741,6 +1786,18 @@ export declare const WorkspaceService: GenService<{
     output: typeof ListBazelTargetsResponseSchema;
   },
   /**
+   * Every importable `.ts` under the workspace root, so the editor's module resolution
+   * (Monaco `compilerOptions.paths`) can mirror what the bundler's `@/` / `~/` plugin
+   * actually resolves at compile time.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.ListWorkspaceModules
+   */
+  listWorkspaceModules: {
+    methodKind: "unary";
+    input: typeof ListWorkspaceModulesRequestSchema;
+    output: typeof ListWorkspaceModulesResponseSchema;
+  },
+  /**
    * Creates the collection's directory in the workspace. An existing collection at
    * that path is AlreadyExists, never adopted.
    *
@@ -1889,8 +1946,7 @@ export declare const WorkspaceService: GenService<{
     output: typeof RunScriptResponseSchema;
   },
   /**
-   * Creates it empty; use UpdateScript to fill in the source. GENERATOR is a helper a
-   * request body calls, MIDDLEWARE rewrites a request just before it is sent.
+   * Creates it empty; use UpdateScript to fill in the source.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
    */
@@ -1901,7 +1957,7 @@ export declare const WorkspaceService: GenService<{
   },
   /**
    * Partial update: an omitted field is left unchanged. Renaming onto an existing
-   * script's name fails.
+   * script's path fails.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
    */

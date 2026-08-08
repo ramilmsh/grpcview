@@ -70,6 +70,14 @@ export const setWorkspaceTrust: typeof WorkspaceService["method"]["setWorkspaceT
  */
 export const listBazelTargets: typeof WorkspaceService["method"]["listBazelTargets"];
 /**
+ * Every importable `.ts` under the workspace root, so the editor's module resolution
+ * (Monaco `compilerOptions.paths`) can mirror what the bundler's `@/` / `~/` plugin
+ * actually resolves at compile time.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.ListWorkspaceModules
+ */
+export const listWorkspaceModules: typeof WorkspaceService["method"]["listWorkspaceModules"];
+/**
  * Creates the collection's directory in the workspace. An existing collection at
  * that path is AlreadyExists, never adopted.
  *
@@ -150,15 +158,14 @@ export const describeMethod: typeof WorkspaceService["method"]["describeMethod"]
  */
 export const runScript: typeof WorkspaceService["method"]["runScript"];
 /**
- * Creates it empty; use UpdateScript to fill in the source. GENERATOR is a helper a
- * request body calls, MIDDLEWARE rewrites a request just before it is sent.
+ * Creates it empty; use UpdateScript to fill in the source.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
  */
 export const createScript: typeof WorkspaceService["method"]["createScript"];
 /**
  * Partial update: an omitted field is left unchanged. Renaming onto an existing
- * script's name fails.
+ * script's path fails.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
  */

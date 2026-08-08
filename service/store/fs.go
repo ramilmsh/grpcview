@@ -35,7 +35,7 @@ func (c *Collection) load(_ context.Context) (*grpcviewv1.Collection, error) {
 	if err != nil {
 		return nil, err
 	}
-	scripts, err := c.loadScripts(col.GetScripts())
+	scripts, err := c.readScripts()
 	if err != nil {
 		return nil, err
 	}
@@ -90,14 +90,10 @@ func (c *Collection) Sources(_ context.Context) ([]*grpcviewv1.DescriptorSource,
 func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	col, err := c.readCollection()
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
+	if err := c.ensureExists(); err != nil {
 		return nil, err
 	}
-	return c.loadScripts(col.GetScripts())
+	return c.readScripts()
 }
 
 func (c *Collection) Create(_ context.Context, name string) error {

@@ -38,8 +38,8 @@ type RequestPatch struct {
 }
 
 type ScriptPatch struct {
-	Name   *string
-	Source *string
+	NewPath *string
+	Source  *string
 }
 
 type FolderPatch struct {

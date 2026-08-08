@@ -24,6 +24,7 @@ type Workspace struct {
 	store  *store.Store
 	engine *scripting.Engine
 	defs   *definitionsCache
+	root   string
 }
 
 func New(ctx context.Context, root string) (Workspace, error) {
@@ -31,7 +32,9 @@ func New(ctx context.Context, root string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, fmt.Errorf("failed to resolve workspace state dir: %w", err)
 	}
-	engine, err := scripting.NewEngine(ctx, scriptingMaxPages)
+	// The workspace root is what `@/` resolves against (decisions.md §2); fixed at engine
+	// construction, unlike the collection root, which rides each compile call.
+	engine, err := scripting.NewEngine(ctx, scriptingMaxPages, scripting.WithWorkspaceRoot(root))
 	if err != nil {
 		return Workspace{}, fmt.Errorf("failed to initialize scripting engine: %w", err)
 	}
@@ -39,6 +42,7 @@ func New(ctx context.Context, root string) (Workspace, error) {
 		store:  store.New(root, stateRoot, slog.Default()),
 		engine: engine,
 		defs:   newDefinitionsCache(),
+		root:   root,
 	}, nil
 }
 
@@ -493,7 +497,7 @@ func (w Workspace) MoveItem(ctx context.Context, request *connect.Request[grpcvi
 
 func (w Workspace) CreateScript(ctx context.Context, request *connect.Request[grpcviewv1.CreateScriptRequest]) (*connect.Response[grpcviewv1.CreateScriptResponse], error) {
 	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
-		return coll.CreateScript(ctx, request.Msg.GetName(), request.Msg.GetKind())
+		return coll.CreateScript(ctx, request.Msg.GetPath())
 	})
 	if err != nil {
 		return nil, err
@@ -503,11 +507,11 @@ func (w Workspace) CreateScript(ctx context.Context, request *connect.Request[gr
 
 func (w Workspace) UpdateScript(ctx context.Context, request *connect.Request[grpcviewv1.UpdateScriptRequest]) (*connect.Response[grpcviewv1.UpdateScriptResponse], error) {
 	patch := store.ScriptPatch{
-		Name:   request.Msg.NewName,
-		Source: request.Msg.Source,
+		NewPath: request.Msg.NewPath,
+		Source:  request.Msg.Source,
 	}
 	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
-		return coll.UpdateScript(ctx, request.Msg.GetName(), patch)
+		return coll.UpdateScript(ctx, request.Msg.GetPath(), patch)
 	})
 	if err != nil {
 		return nil, err
@@ -517,7 +521,7 @@ func (w Workspace) UpdateScript(ctx context.Context, request *connect.Request[gr
 
 func (w Workspace) DeleteScript(ctx context.Context, request *connect.Request[grpcviewv1.DeleteScriptRequest]) (*connect.Response[grpcviewv1.DeleteScriptResponse], error) {
 	ws, err := w.mutate(ctx, request.Msg.GetCollection(), func(coll *store.Collection) error {
-		return coll.DeleteScript(ctx, request.Msg.GetName())
+		return coll.DeleteScript(ctx, request.Msg.GetPath())
 	})
 	if err != nil {
 		return nil, err

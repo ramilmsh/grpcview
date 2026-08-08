@@ -17,40 +17,6 @@ func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Req
 	}
 }
 
-func diskToWireScript(name string, ds *grpcviewstorev1.Script) *grpcviewv1.Script {
-	return &grpcviewv1.Script{
-		Name:   name,
-		Kind:   diskToWireScriptKind(ds.GetKind()),
-		Source: ds.GetSource(),
-	}
-}
-
-func diskToWireScriptKind(k grpcviewstorev1.ScriptKind) grpcviewv1.ScriptKind {
-	switch k {
-	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_GENERATOR:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR
-	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE
-	case grpcviewstorev1.ScriptKind_SCRIPT_KIND_SCENARIO:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO
-	default:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_UNSPECIFIED
-	}
-}
-
-func wireToDiskScriptKind(k grpcviewv1.ScriptKind) grpcviewstorev1.ScriptKind {
-	switch k {
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
-		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_GENERATOR
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
-		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_MIDDLEWARE
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO:
-		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_SCENARIO
-	default:
-		return grpcviewstorev1.ScriptKind_SCRIPT_KIND_UNSPECIFIED
-	}
-}
-
 func diskToWireSources(
 	in []*grpcviewstorev1.DescriptorSource,
 	defs map[string]*grpcviewstorev1.DescriptorSource,

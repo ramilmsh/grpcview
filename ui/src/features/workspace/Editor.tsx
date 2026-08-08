@@ -6,8 +6,12 @@ import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
 import "@/features/scripts/monaco-scripts";
 // Side-effect import: virtual `@bufbuild/protobuf` d.ts the generated `_pb.ts` files need.
 import "./vendor/bufbuild-stubs";
-import { PREFIX_LINES, SUFFIX_LINES, isCanonical } from "./body-wrapper";
-import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
+import {
+  PREFIX_LINES,
+  isCanonical,
+  bodyBounds as boundsOf,
+  hiddenLineRanges,
+} from "./body-wrapper";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
@@ -18,19 +22,19 @@ type HasHiddenAreas = { setHiddenAreas?(ranges: Monaco.IRange[], source?: unknow
 // monaco merges hidden areas across sources; a private tag lets us replace only ours.
 const HIDDEN_SOURCE = "grpcview-body-wrapper";
 
+// Both derive from the live model text (via body-wrapper.ts's isCanonical), so a module — never
+// wrapped, per the two-forms rule — naturally gets `first: 1` and no hidden ranges at all.
 function bodyBounds(model: Monaco.editor.ITextModel) {
-  const total = model.getLineCount();
-  const first = PREFIX_LINES + 1;
-  const last = Math.max(first, total - SUFFIX_LINES);
-  return { first, last, total };
+  return boundsOf(model.getValue());
 }
 
 function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
-  const { last, total } = bodyBounds(model);
-  return [
-    { startLineNumber: 1, startColumn: 1, endLineNumber: PREFIX_LINES, endColumn: 1 },
-    { startLineNumber: last + 1, startColumn: 1, endLineNumber: total, endColumn: 1 },
-  ];
+  return hiddenLineRanges(model.getValue()).map((r) => ({
+    startLineNumber: r.startLine,
+    startColumn: 1,
+    endLineNumber: r.endLine,
+    endColumn: 1,
+  }));
 }
 
 // force: an identical re-set is skipped by monaco's cache, even after setValue reset the view.
@@ -41,8 +45,10 @@ function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor, force = false)
   if (force) ha.setHiddenAreas([], HIDDEN_SOURCE);
   ha.setHiddenAreas(hiddenRanges(model), HIDDEN_SOURCE);
   const pos = editor.getPosition();
-  if (pos && pos.lineNumber <= PREFIX_LINES) {
-    editor.setPosition({ lineNumber: PREFIX_LINES + 1, column: 1 });
+  const { first } = bodyBounds(model);
+  // A module's `first` is 1, so this never fires — there is no hidden prefix to clamp out of.
+  if (pos && pos.lineNumber < first) {
+    editor.setPosition({ lineNumber: first, column: 1 });
   }
 }
 
@@ -54,7 +60,6 @@ interface EditorProps {
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
-  generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
 
@@ -66,13 +71,16 @@ export function Editor({
   inputPackage,
   inputName,
   inputFile,
-  generators = [],
   onErrorsChange,
 }: EditorProps) {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   // @monaco-editor/react only suppresses onChange for its own controlled `value` prop.
   const suppressChange = useRef(false);
   const lastGood = useRef<string>("");
+  // Fixed for the lifetime of the loaded buffer (re-derived only when currentKey reloads it): a
+  // module has no wrapper, so the corruption-guard below must never fight an edit that merely
+  // keeps the buffer non-canonical, the way it would for a wrapped body's broken wrapper.
+  const wrappedRef = useRef(true);
   const monaco = useMonaco();
 
   useEffect(() => {
@@ -84,6 +92,7 @@ export function Editor({
       suppressChange.current = false;
       lastGood.current = data;
     }
+    wrappedRef.current = isCanonical(data);
     // Forced: a remount has no hidden areas yet, and setValue may not change the geometry.
     applyHidden(ed, /* force */ true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,19 +149,6 @@ export function Editor({
     };
   }, [monaco, descriptorSet, inputPackage, inputName, inputFile]);
 
-  // Same dispose-before-add rule; scope="body" namespaces the URIs away from metadata.
-  const genLibs = useRef<Monaco.IDisposable[]>([]);
-  useEffect(() => {
-    if (!monaco) return;
-    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-    genLibs.current.forEach((d) => d.dispose());
-    genLibs.current = registerGeneratorLibs(tsDefaults, generators, "body");
-    return () => {
-      genLibs.current.forEach((d) => d.dispose());
-      genLibs.current = [];
-    };
-  }, [monaco, generators]);
-
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
     registerEditorForDebug(TS_MODEL_URI, editor);
@@ -180,6 +176,7 @@ export function Editor({
     });
 
     lastGood.current = editor.getValue();
+    wrappedRef.current = isCanonical(editor.getValue());
     applyHidden(editor);
 
     // Hidden areas live on the editor's viewModel: the first real layout drops them.
@@ -222,13 +219,14 @@ export function Editor({
       },
     });
 
-    // Fail-safe: undo an exotic edit (IME, drag-drop, replace-all) that broke the wrapper.
+    // Fail-safe: undo an exotic edit (IME, drag-drop, replace-all) that broke the wrapper. A
+    // module was never wrapped, so there is nothing for it to break — every edit is accepted.
     editor.onDidChangeModelContent(() => {
       if (suppressChange.current) return;
       const model = editor.getModel();
       if (!model) return;
       const v = model.getValue();
-      if (isCanonical(v)) {
+      if (!wrappedRef.current || isCanonical(v)) {
         lastGood.current = v;
         applyHidden(editor);
         return;
@@ -259,7 +257,8 @@ export function Editor({
         formatOnType: false,
         formatOnPaste: false,
         folding: false,
-        lineNumbers: (n: number) => (n <= PREFIX_LINES ? "" : String(n - PREFIX_LINES)),
+        lineNumbers: (n: number) =>
+          !wrappedRef.current ? String(n) : n <= PREFIX_LINES ? "" : String(n - PREFIX_LINES),
         // monaco defaults quickSuggestions.strings=false (microsoft/monaco-editor#2883).
         quickSuggestions: { other: true, comments: false, strings: true },
         automaticLayout: true,

@@ -5,20 +5,18 @@ import { useWorkspaceMutations } from "@/lib/workspace-query";
 import { itemKey, type ItemWithPath } from "@/lib/format";
 import { MetadataEditor } from "./MetadataEditor";
 import { defaultMetadataModule } from "./metadata-wrapper";
-import type { GeneratorDef } from "./generator-libs";
 
-// Authors a folder's metadata script, which descendants pick up via gv.metadata.inherit().
-// CollectionPanel must render this KEYED by the folder so a fresh instance re-seeds `draft` on
-// mount — MetadataEditor reloads its buffer in the same render, so a later reseed is too late.
+// Authors a folder's metadata script, which descendants pick up via
+// require("grpcview:metadata").inherit(). CollectionPanel must render this KEYED by the
+// folder so a fresh instance re-seeds `draft` on mount — MetadataEditor reloads its buffer
+// in the same render, so a later reseed is too late.
 export function FolderMetadataDialog({
   folder,
   onClose,
-  generators = [],
 }: {
   // The folder row being edited, or null when the dialog is closed.
   folder: ItemWithPath | null;
   onClose: () => void;
-  generators?: GeneratorDef[];
 }) {
   const { updateFolder } = useWorkspaceMutations();
   const key = folder ? itemKey(folder) : "none";
@@ -51,9 +49,9 @@ export function FolderMetadataDialog({
     >
       <p className="dialog-body" style={{ marginBottom: 4 }}>
         Inherited by every request and subfolder beneath this one via{" "}
-        <code className="font-mono">gv.metadata.inherit()</code>. Ancestor scripts are read from
-        the saved workspace, not the live buffer here — edits take effect after you Save, not
-        before.
+        <code className="font-mono">require("grpcview:metadata").inherit()</code>. Ancestor
+        scripts are read from the saved workspace, not the live buffer here — edits take
+        effect after you Save, not before.
       </p>
       <div
         style={{
@@ -63,7 +61,7 @@ export function FolderMetadataDialog({
           overflow: "hidden",
         }}
       >
-        <MetadataEditor data={draft} onChange={setDraft} currentKey={key} generators={generators} />
+        <MetadataEditor data={draft} onChange={setDraft} currentKey={key} />
       </div>
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>

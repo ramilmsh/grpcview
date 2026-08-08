@@ -14,6 +14,7 @@ import (
 func TestResolveInvokeMetadata(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
 
 	t.Run("evaluates a metadata module to a multi-valued Struct", func(t *testing.T) {
 		md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil,
@@ -64,10 +65,11 @@ func TestResolveInvokeMetadataComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createGenerator(t, w, ctx, "apiToken", `export default () => "tok-42"`)
+	writeScript(t, w, ctx, "scripts/apiToken.ts", `export default () => "tok-42"`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil,
-		`export default () => ({ authorization: ["Bearer " + apiToken()] })`, nil, nil)
+		"import apiToken from \"~/scripts/apiToken.ts\";\n"+
+			`export default () => ({ authorization: ["Bearer " + apiToken()] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}
@@ -80,16 +82,17 @@ func TestInvokeMetadataScript(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createGenerator(t, w, ctx, "bearer", `export default () => "Bearer tok"`)
+	writeScript(t, w, ctx, "scripts/bearer.ts", `export default () => "Bearer tok"`)
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
 		Spec: &grpcviewv1.InvokeSpec{
-			Collection:     testWorkspace,
-			Service:        echoService,
-			Method:         "Unary",
-			MetadataScript: `export default () => ({ authorization: [bearer()], "x-scope": ["read", "write"] })`,
-			Target:         &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
+			Collection: testWorkspace,
+			Service:    echoService,
+			Method:     "Unary",
+			MetadataScript: "import bearer from \"~/scripts/bearer.ts\";\n" +
+				`export default () => ({ authorization: [bearer()], "x-scope": ["read", "write"] })`,
+			Target: &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 		Body: `export default () => ({ message: "hi" })`,
 	}))

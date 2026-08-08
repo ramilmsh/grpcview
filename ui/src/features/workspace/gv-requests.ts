@@ -2,10 +2,11 @@ import type { Service } from "@grpcview/v1/workspace_pb";
 import { resolveMethod, type ItemWithPath } from "@/lib/format";
 import type { InvokeTarget } from "./proto-types";
 
-// collectInvokeTargets walks the collection tree and lists every saved request `gv.invoke()`
-// can actually reach, paired with its response message. The result feeds `gvRequestMapDts`.
+// collectInvokeTargets walks the collection tree and lists every saved request `invoke()`
+// (from "grpcview:invoke") can actually reach, paired with its response message. The result
+// feeds `gvRequestMapDts`.
 //
-// `gv.invoke` resolves within ONE collection (scriptInvoker closes over the collection id), so
+// `invoke()` resolves within ONE collection (scriptInvoker closes over the collection id), so
 // the caller passes that collection's root items and its services.
 export function collectInvokeTargets(
   items: ItemWithPath[],
@@ -23,7 +24,7 @@ export function collectInvokeTargets(
       const request = entry.item.content.value;
 
       const method = resolveMethod(services, request.service, request.method);
-      // Streaming targets are out: gv.invoke rejects them, so there is no single response
+      // Streaming targets are out: invoke() rejects them, so there is no single response
       // message to name.
       if (!method || method.clientStreaming || method.serverStreaming) continue;
       const output = method.output;

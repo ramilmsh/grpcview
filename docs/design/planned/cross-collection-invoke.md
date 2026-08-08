@@ -7,7 +7,7 @@ script belongs to, and there is no spelling that reaches another collection. In 
 workspace where `services/identity/requests` owns the login call and every other
 collection needs a token, that means duplicating the login request into each one.
 
-**The sibling tracks.** [`script-imports.md`](./script-imports.md) fixes the other half of
+**The sibling tracks.** [`script-imports/`](../shipped/script-imports) fixes the other half of
 the same complaint (shared *code*), and [`workspace-diagnostics.md`](./workspace-diagnostics.md)
 is where everything all three tracks can get wrong is reported. Separate docs on purpose:
 imports rebuild the bundler's module graph and delete the whole generator prelude; this is a
@@ -17,7 +17,7 @@ most of this gets used anyway.
 
 Note that this doc addresses **logical items** (`//slug:Path/To/Request`) while imports
 address **files** (`@/path/from/root`). Two sigils, two grammars, deliberately — the
-reasoning is in `script-imports.md` under "Why `@/` and not `#alias` or `//`".
+reasoning is in `script-imports/` under "Why `@/` and not `#alias` or `//`".
 
 **One prerequisite:** removing the workspace-root collection. The daemon is **not** one —
 it shipped 2026-08-08 ([`shipped/daemon.md`](../shipped/daemon.md)) — but reading what it

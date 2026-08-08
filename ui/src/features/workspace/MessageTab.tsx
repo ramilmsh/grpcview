@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { CheckCircle, Warning } from "@/components/ui/icons";
 import { Editor } from "./Editor";
-import type { GeneratorDef } from "./generator-libs";
 
 // MessageTab is the request body editor plus a footer reporting Monaco's TS marker count.
 export function MessageTab({
@@ -12,7 +11,6 @@ export function MessageTab({
   descriptorSet,
   inputPackage,
   inputFile,
-  generators,
 }: {
   body: string;
   onChange: (value: string) => void;
@@ -21,7 +19,6 @@ export function MessageTab({
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
-  generators: GeneratorDef[];
 }) {
   const [errors, setErrors] = useState(0);
 
@@ -36,7 +33,6 @@ export function MessageTab({
           inputPackage={inputPackage}
           inputName={inputTypeName}
           inputFile={inputFile}
-          generators={generators}
           onErrorsChange={setErrors}
         />
       </div>

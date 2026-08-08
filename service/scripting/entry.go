@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"strings"
 )
 
 var (
@@ -12,7 +11,17 @@ var (
 	exportHandleRe  = regexp.MustCompile(`\bexport\s+((async\s+)?function\s+handle\b|(const|let|var)\s+handle\b)|\bexport\s*\{[^}]*\bhandle\b`)
 )
 
-func hasDefaultExport(source string) bool { return exportDefaultRe.MatchString(source) }
+// A false positive here (comment or string text that merely mentions the syntax) makes
+// WrapExpression's caller skip wrapping, so a plain expression parses as a block statement and
+// fails with an error that names no useful line — see the bundle-failure example rejectComputedImports
+// documents for the same masking approach. A false negative just wraps a real module, which fails
+// loudly and immediately. So: bias toward not claiming `export default`. maskLiterals only ever
+// removes characters (blanks comment/string interiors), never adds them, so a masked match implies
+// a raw match; the raw regex is therefore a safe, cheap pre-filter that skips masking entirely for
+// the common case of source with no mention of the syntax at all.
+func hasDefaultExport(source string) bool {
+	return exportDefaultRe.MatchString(source) && exportDefaultRe.MatchString(maskLiterals(source))
+}
 
 func HasDefaultExport(source string) bool { return hasDefaultExport(source) }
 
@@ -24,7 +33,11 @@ func WrapExpression(source string) string {
 }
 
 func hasHandleOrDefaultExport(source string) bool {
-	return hasDefaultExport(source) || exportHandleRe.MatchString(source)
+	if !exportDefaultRe.MatchString(source) && !exportHandleRe.MatchString(source) {
+		return false
+	}
+	masked := maskLiterals(source)
+	return exportDefaultRe.MatchString(masked) || exportHandleRe.MatchString(masked)
 }
 
 func generatorPostlude(args []any) string {
@@ -39,52 +52,27 @@ func generatorPostlude(args []any) string {
 }
 
 var middlewarePostlude = fmt.Sprintf(`await (async () => {
-  const __ctx = { body: JSON.parse(JSON.stringify(globalThis.request.body ?? null)), metadata: Object.assign({}, globalThis.request.metadata), target: globalThis.request.target };
+  const __ctx = { body: JSON.parse(JSON.stringify(globalThis.__grpcview_request.body ?? null)), metadata: Object.assign({}, globalThis.__grpcview_request.metadata), target: globalThis.__grpcview_request.target };
   const __fn = %[1]s.handle || %[1]s.default;
   if (typeof __fn !== "function") { throw new TypeError("middleware must export a handle() function or a default export"); }
   const __out = await __fn(__ctx);
   return (__out === undefined || __out === null) ? __ctx : __out;
 })()`, entryGlobalName)
 
-func (e *Engine) compileGenerator(source string, g Grant, args []any) (compiled, string, error) {
+func (e *Engine) compileGenerator(source string, g Grant, args []any, collRoot string) (compiled, string, error) {
 	if hasDefaultExport(source) {
-		c, err := e.bundler.compileEntry(source, g)
+		c, err := e.bundler.compileEntry(source, g, collRoot)
 		return c, generatorPostlude(args), err
 	}
-	c, err := e.bundler.compile(source, g)
+	c, err := e.bundler.compile(source, g, collRoot)
 	return c, "", err
 }
 
-func (e *Engine) compileMiddleware(source string, g Grant, gens map[string]string) (compiled, string, error) {
-	if len(gens) > 0 {
-		return e.compileMiddlewareComposed(source, g, gens)
-	}
+func (e *Engine) compileMiddleware(source string, g Grant, collRoot string) (compiled, string, error) {
 	if hasHandleOrDefaultExport(source) {
-		c, err := e.bundler.compileEntry(source, g)
+		c, err := e.bundler.compileEntry(source, g, collRoot)
 		return c, middlewarePostlude, err
 	}
-	c, err := e.bundler.compile(source, g)
+	c, err := e.bundler.compile(source, g, collRoot)
 	return c, "", err
-}
-
-func (e *Engine) compileMiddlewareComposed(source string, g Grant, gens map[string]string) (compiled, string, error) {
-	prelude := composeGeneratorPrelude(gens)
-	composed := prelude + source
-
-	var (
-		c        compiled
-		postlude string
-		err      error
-	)
-	if hasHandleOrDefaultExport(source) {
-		c, err = e.bundler.buildEntryBundleComposed(composed, g, gens)
-		postlude = middlewarePostlude
-	} else {
-		c, err = e.bundler.buildBundleComposed(composed, g, gens)
-	}
-	if err != nil {
-		return compiled{}, "", err
-	}
-	c.authorPreludeLines = strings.Count(prelude, "\n")
-	return c, postlude, nil
 }

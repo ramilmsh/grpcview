@@ -263,7 +263,7 @@ func (i *Instance) runCompiled(ctx context.Context, c compiled, g Grant, in Inpu
 	val, derr := decodeResult(tag, payload)
 	var je *JSError
 	if errors.As(derr, &je) {
-		remapJSError(je, c.sourceMap, preludeLines, c.authorPreludeLines)
+		remapJSError(je, c.sourceMap, preludeLines)
 	}
 	return Result{Value: val, Logs: sink.lines}, derr
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -20,33 +22,30 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	if itemName == "" {
 		return bodies, md, nil
 	}
-	names, err := w.loadAttachedMiddleware(ctx, workspaceName, path, itemName)
+	specifiers, err := w.loadAttachedMiddleware(ctx, workspaceName, path, itemName)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(names) == 0 {
+	if len(specifiers) == 0 {
 		return bodies, md, nil
 	}
 	if w.engine == nil {
 		return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("middleware requires the scripting engine, which is not available"))
 	}
-	sources, err := w.loadMiddlewareSources(ctx, workspaceName)
+	coll, err := w.store.Open(ctx, workspaceName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, toConnectError(err)
 	}
-	allGens, err := w.loadGenerators(ctx, workspaceName)
-	if err != nil {
-		return nil, nil, err
-	}
-	chain := make([]middlewareScript, len(names))
-	for i, name := range names {
-		src, ok := sources[name]
-		if !ok {
-			return nil, nil, connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("cannot run middleware %q: no middleware script by that name in this workspace", name))
+	collRoot := coll.Root()
+
+	chain := make([]middlewareScript, len(specifiers))
+	for i, specifier := range specifiers {
+		src, rerr := loadMiddlewareSource(specifier, w.store.Root(), collRoot)
+		if rerr != nil {
+			return nil, nil, rerr
 		}
-		chain[i] = middlewareScript{name: name, source: src, gens: transitiveGenerators(src, allGens)}
+		chain[i] = middlewareScript{name: specifier, source: src}
 	}
 
 	targetStr := ""
@@ -67,9 +66,10 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 		}
 		cur := json.RawMessage(body)
 		for _, mw := range chain {
-			res, rerr := w.engine.RunMiddleware(ctx, mw.source, mw.gens, scripting.Grant{}, scripting.Input{
-				Request: scripting.RequestInput{Body: cur, Metadata: mdMap, Target: targetStr},
-				Params:  params,
+			res, rerr := w.engine.RunMiddleware(ctx, mw.source, scripting.Grant{}, scripting.Input{
+				Request:        scripting.RequestInput{Body: cur, Metadata: mdMap, Target: targetStr},
+				Params:         params,
+				CollectionRoot: collRoot,
 			})
 			if rerr != nil {
 				return nil, nil, middlewareError(mw.name, rerr.Error())
@@ -85,10 +85,11 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	return out, stringMapToStruct(mdMap), nil
 }
 
+// name is the specifier as the author wrote it (`~/...` or `@/...`), which is what
+// middlewareError reports — a better error subject than a display name ever was.
 type middlewareScript struct {
 	name   string
 	source string
-	gens   map[string]string
 }
 
 func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName string, path []string, itemName string) ([]string, error) {
@@ -96,35 +97,64 @@ func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName str
 	if err != nil {
 		return nil, err
 	}
-	names, err := coll.RequestMiddleware(ctx, path, itemName)
+	specifiers, err := coll.RequestMiddleware(ctx, path, itemName)
 	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrItemNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, toConnectError(err)
 	}
-	return names, nil
+	return specifiers, nil
 }
 
-func (w Workspace) loadMiddlewareSources(ctx context.Context, workspaceName string) (map[string]string, error) {
-	coll, err := w.store.Open(ctx, workspaceName)
-	if err != nil {
-		return nil, err
-	}
-	scripts, err := coll.Scripts(ctx)
-	if errors.Is(err, store.ErrNotFound) {
-		return map[string]string{}, nil
-	}
-	if err != nil {
-		return nil, toConnectError(err)
-	}
-	mws := make(map[string]string, len(scripts))
-	for _, s := range scripts {
-		if s.GetKind() == grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE {
-			mws[s.GetName()] = s.GetSource()
+// resolveMiddlewareSpecifier mirrors decisions.md §2's two sigils: `@/` resolves against the
+// workspace root, `~/` against the collection root, each guarded against escaping its root.
+func resolveMiddlewareSpecifier(specifier, workspaceRoot, collectionRoot string) (string, error) {
+	switch {
+	case strings.HasPrefix(specifier, "@/"):
+		if workspaceRoot == "" {
+			return "", specifierError(specifier, "the workspace root is not configured")
 		}
+		abs := filepath.Join(workspaceRoot, filepath.FromSlash(strings.TrimPrefix(specifier, "@/")))
+		if !withinMiddlewareRoot(workspaceRoot, abs) {
+			return "", specifierError(specifier, "resolves outside the workspace")
+		}
+		return abs, nil
+	case strings.HasPrefix(specifier, "~/"):
+		abs := filepath.Join(collectionRoot, filepath.FromSlash(strings.TrimPrefix(specifier, "~/")))
+		if !withinMiddlewareRoot(collectionRoot, abs) {
+			return "", specifierError(specifier, "resolves outside the collection")
+		}
+		return abs, nil
+	default:
+		return "", specifierError(specifier, `must start with "@/" or "~/"`)
 	}
-	return mws, nil
+}
+
+// withinMiddlewareRoot mirrors service/scripting/bundler.go's containment guard.
+func withinMiddlewareRoot(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func loadMiddlewareSource(specifier, workspaceRoot, collectionRoot string) (string, error) {
+	abs, err := resolveMiddlewareSpecifier(specifier, workspaceRoot, collectionRoot)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", specifierError(specifier, "no such file")
+	}
+	return string(data), nil
+}
+
+func specifierError(specifier, detail string) error {
+	return connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Errorf("cannot resolve middleware %q: %s", specifier, detail))
 }
 
 func parseMiddlewareResult(name string, value json.RawMessage) (json.RawMessage, map[string]string, string, error) {

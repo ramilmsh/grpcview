@@ -10,12 +10,11 @@ import (
 
 type Input struct {
 	Request           RequestInput
-	Vars              map[string]any
-	Secrets           map[string]any
-	Env               map[string]any
 	Args              []any
 	Params            map[string]any
 	InheritedMetadata map[string][]string
+	// Absolute path of the compiling script's collection; empty disables `~/` imports.
+	CollectionRoot string
 }
 
 type RequestInput struct {
@@ -80,14 +79,12 @@ func buildInputPrelude(in Input) string {
 	if req.Metadata == nil {
 		req.Metadata = map[string]string{}
 	}
-	writeGlobal(&b, "request", req)
-	writeGlobal(&b, "vars", orEmptyMap(in.Vars))
-	writeGlobal(&b, "secrets", orEmptyMap(in.Secrets))
-	writeGlobal(&b, "env", orEmptyMap(in.Env))
-	b.WriteString(buildGvPrelude(in))
+	writeDataGlobal(&b, "__grpcview_request", req)
+	writeDataGlobal(&b, "__grpcview_params", orEmptyMap(in.Params))
+	writeDataGlobal(&b, "__grpcview_inherited", orEmptyMetadata(in.InheritedMetadata))
 	// The prelude and the author's code are ONE program, so the program's completion value falls
 	// back to the prelude's last expression when the author's code contributes none. Ending on a
-	// statement with no useful value keeps `gv` from being reported as a scratchpad's answer.
+	// statement with no useful value keeps the prelude from being reported as a scratchpad's answer.
 	b.WriteString("void 0;\n")
 	return b.String()
 }
@@ -103,7 +100,7 @@ func jsonLit(v any) string {
 	return string(lit)
 }
 
-func writeGlobal(b *strings.Builder, name string, v any) {
+func writeDataGlobal(b *strings.Builder, name string, v any) {
 	fmt.Fprintf(b, "globalThis.%s = __ff(JSON.parse(%s));\n", name, jsonLit(v))
 }
 
@@ -119,78 +116,6 @@ func orEmptyMetadata(m map[string][]string) map[string][]string {
 		return map[string][]string{}
 	}
 	return m
-}
-
-const gvInvokeShim = `function (path, params) {
-  try {
-    var req = JSON.stringify({ path: String(path), params: (params == null ? {} : params) });
-    return Promise.resolve(JSON.parse(globalThis.__grpcview_invoke(req)));
-  } catch (e) {
-    return Promise.reject(e);
-  }
-}`
-
-// The sync path must throw synchronously and return undefined: a rejected promise nobody awaits is
-// dropped by the top-level settle in evalRaw, so a wrapped failure would read as a pass. Only a
-// thenable condition yields a promise, which the caller must await.
-// Both frames are NAMED so they can be dropped from the stack below: the throw happens inside the
-// prelude, and remapJSError reads the first frame's line, so an unfiltered stack reports a prelude
-// line instead of the failing assertion's.
-const gvAssertShim = `function gvAssert(description, condition) {
-  if (typeof description !== "string" || description === "") {
-    throw new TypeError("gv.assert: description must be a non-empty string");
-  }
-  var fail = function gvAssertFail(reason) {
-    var msg = "assertion failed: " + description;
-    if (reason) { msg = msg + ": " + reason; }
-    var e = new Error(msg);
-    e.name = "AssertionError";
-    try {
-      if (typeof e.stack === "string") {
-        e.stack = e.stack.split("\n").filter(function (line) {
-          return line.indexOf("gvAssert") === -1;
-        }).join("\n");
-      }
-    } catch (ignored) {}
-    throw e;
-  };
-  var reasonOf = function (e) {
-    return String((e && e.message) ? e.message : e);
-  };
-  var c = condition;
-  if (typeof c === "function") {
-    try {
-      c = c();
-    } catch (e) {
-      fail(reasonOf(e));
-    }
-  }
-  if (c && typeof c.then === "function") {
-    return Promise.resolve(c).then(
-      function (v) { if (!v) { fail(); } },
-      function (e) { fail(reasonOf(e)); }
-    );
-  }
-  if (!c) { fail(); }
-}`
-
-// `gv` must be assembled and frozen in ONE statement: the freeze blocks later member addition, and a
-// second assignment would clobber it. The inherited map needs its own __ff because it hangs off the
-// inherit() closure, not gv's property graph. invoke/assert survive the freeze only because __ff
-// recurses on `typeof o === "object"` and so never touches a function.
-func buildGvPrelude(in Input) string {
-	data := map[string]any{
-		"request": map[string]any{"params": orEmptyMap(in.Params)},
-	}
-	return fmt.Sprintf(`globalThis.gv = __ff((function () {
-  var d = JSON.parse(%s);
-  var m = __ff(JSON.parse(%s));
-  d.metadata = { inherit: function () { return m; } };
-  d.invoke = %s;
-  d.assert = %s;
-  return d;
-})());
-`, jsonLit(data), jsonLit(orEmptyMetadata(in.InheritedMetadata)), gvInvokeShim, gvAssertShim)
 }
 
 func decodeResult(tag uint8, payload []byte) (json.RawMessage, error) {

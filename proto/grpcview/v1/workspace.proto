@@ -159,17 +159,11 @@ message Item {
   }
 }
 
-enum ScriptKind {
-  SCRIPT_KIND_UNSPECIFIED = 0;
-  SCRIPT_KIND_GENERATOR = 1;
-  SCRIPT_KIND_MIDDLEWARE = 2;
-  SCRIPT_KIND_SCENARIO = 3;
-}
-
+// A .ts file under the collection's scripts/ directory.
 message Script {
-  string     name   = 1;
-  ScriptKind kind   = 2;
-  string     source = 3;
+  // Collection-relative, slash-separated, with the extension: "scripts/uuid.ts".
+  string path   = 1;
+  string source = 2;
 }
 
 message Collection {

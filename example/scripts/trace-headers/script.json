@@ -1,7 +1,0 @@
-{
-  "meta":  {
-    "name":  "trace-headers"
-  },
-  "kind":  "SCRIPT_KIND_MIDDLEWARE",
-  "source":  "// MIDDLEWARE — attached per request (\"RunScript (middleware)\"), and run AFTER the\n// body and metadata have been evaluated, on the outgoing message. It receives the\n// ctx and returns the ctx to send; returning nothing keeps the ctx unchanged.\n// Chained middleware runs in the order it is attached.\n//\n// Unlike a request body, a middleware cannot call this collection's generators —\n// only the body/metadata path composes them in, so the trace id is built here by\n// hand.\n\ntype Ctx = {\n  body: Record<string, unknown>;\n  metadata: Record<string, string>;\n  target: string;\n};\n\nexport function handle(ctx: Ctx): Ctx {\n  return {\n    ...ctx,\n    metadata: {\n      ...ctx.metadata,\n      \"x-trace-id\": Math.random().toString(36).slice(2, 10),\n      \"x-body-bytes\": String(JSON.stringify(ctx.body).length),\n    },\n    // The request being sent is a RunScript, so its `source` field is itself a\n    // TypeScript expression. Wrapping it here changes what the workspace server\n    // ends up evaluating, and the response comes back prefixed.\n    body: { ...ctx.body, source: `\"[traced] \" + (${ctx.body.source})` },\n  };\n}\n"
-}

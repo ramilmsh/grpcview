@@ -568,21 +568,20 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
 export declare const ItemSchema: GenMessage<Item>;
 
 /**
+ * A .ts file under the collection's scripts/ directory.
+ *
  * @generated from message grpcview.v1.Script
  */
 export declare type Script = Message$1<"grpcview.v1.Script"> & {
   /**
-   * @generated from field: string name = 1;
+   * Collection-relative, slash-separated, with the extension: "scripts/uuid.ts".
+   *
+   * @generated from field: string path = 1;
    */
-  name: string;
+  path: string;
 
   /**
-   * @generated from field: grpcview.v1.ScriptKind kind = 2;
-   */
-  kind: ScriptKind;
-
-  /**
-   * @generated from field: string source = 3;
+   * @generated from field: string source = 2;
    */
   source: string;
 };
@@ -673,34 +672,4 @@ export enum SourceOrigin {
  * Describes the enum grpcview.v1.SourceOrigin.
  */
 export declare const SourceOriginSchema: GenEnum<SourceOrigin>;
-
-/**
- * @generated from enum grpcview.v1.ScriptKind
- */
-export enum ScriptKind {
-  /**
-   * @generated from enum value: SCRIPT_KIND_UNSPECIFIED = 0;
-   */
-  UNSPECIFIED = 0,
-
-  /**
-   * @generated from enum value: SCRIPT_KIND_GENERATOR = 1;
-   */
-  GENERATOR = 1,
-
-  /**
-   * @generated from enum value: SCRIPT_KIND_MIDDLEWARE = 2;
-   */
-  MIDDLEWARE = 2,
-
-  /**
-   * @generated from enum value: SCRIPT_KIND_SCENARIO = 3;
-   */
-  SCENARIO = 3,
-}
-
-/**
- * Describes the enum grpcview.v1.ScriptKind.
- */
-export declare const ScriptKindSchema: GenEnum<ScriptKind>;
 

@@ -17,7 +17,6 @@ const (
 	CollectionFileName = "grpcview.json"
 	folderFileName     = "folder.json"
 	requestFileName    = "request.json"
-	scriptFileName     = "script.json"
 	historyFileName    = "history.json"
 
 	treeDir    = "tree"
@@ -37,8 +36,10 @@ const (
 	gitignoreFileName = ".gitignore"
 	gitExcludeRelPath = ".git/info/exclude"
 
-	nodeModulesDirName = "node_modules"
-	bazelSymlinkPrefix = "bazel-"
+	// NodeModulesDirName and BazelSymlinkPrefix are exported for service/workspace's
+	// ListWorkspaceModules walk, which skips the same directories this scan does.
+	NodeModulesDirName = "node_modules"
+	BazelSymlinkPrefix = "bazel-"
 )
 
 type itemKind int

@@ -28,6 +28,7 @@ type Engine struct {
 	resolveDir  string
 	nodePaths   []string
 	npmDir      string
+	wsRoot      string
 }
 
 type EngineOption func(*Engine)
@@ -37,6 +38,10 @@ func WithLongLivedMiddleware() EngineOption { return func(e *Engine) { e.longLiv
 func WithResolveDir(dir string) EngineOption { return func(e *Engine) { e.resolveDir = dir } }
 
 func WithNodePaths(paths ...string) EngineOption { return func(e *Engine) { e.nodePaths = paths } }
+
+// The workspace root `@/` resolves against, fixed for the engine's lifetime — unlike the
+// collection root, which rides each compile call.
+func WithWorkspaceRoot(dir string) EngineOption { return func(e *Engine) { e.wsRoot = dir } }
 
 func NewEngine(ctx context.Context, maxPages uint32, opts ...EngineOption) (*Engine, error) {
 	rt, err := New(ctx, maxPages)
@@ -56,7 +61,7 @@ func NewEngine(ctx context.Context, maxPages uint32, opts ...EngineOption) (*Eng
 }
 
 func (e *Engine) initBundlerAndPool() {
-	e.bundler = newBundler(e.resolveDir, e.nodePaths, e.npmDir)
+	e.bundler = newBundler(e.resolveDir, e.nodePaths, e.npmDir, e.wsRoot)
 	popts := []PoolOption{WithMaxIdle(e.poolMaxIdle), WithBundler(e.bundler)}
 	if e.longLived {
 		popts = append(popts, WithLongLivedContext())
@@ -86,7 +91,7 @@ func withProfileDeadline(ctx context.Context, p Profile) (context.Context, conte
 }
 
 func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in Input) (Result, error) {
-	c, postlude, err := e.compileGenerator(source, g, in.Args)
+	c, postlude, err := e.compileGenerator(source, g, in.Args, in.CollectionRoot)
 	if err != nil {
 		return Result{}, err
 	}
@@ -95,21 +100,12 @@ func (e *Engine) runGenerator(ctx context.Context, source string, g Grant, in In
 	return e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
 }
 
-func (e *Engine) RunRequestBody(ctx context.Context, body string, gens map[string]string, g Grant, in Input) (Result, error) {
-	if len(gens) == 0 {
-		return e.runGenerator(ctx, body, g, in)
-	}
-	c, postlude, err := e.compileRequestBody(body, g, in.Args, gens)
-	if err != nil {
-		return Result{}, err
-	}
-	rctx, cancel := withProfileDeadline(ctx, Generator)
-	defer cancel()
-	return e.runFresh(rctx, c, g, in, Generator.MemLimit, postlude)
+func (e *Engine) RunRequestBody(ctx context.Context, body string, g Grant, in Input) (Result, error) {
+	return e.runGenerator(ctx, body, g, in)
 }
 
-func (e *Engine) RunMiddleware(ctx context.Context, source string, gens map[string]string, g Grant, in Input) (Result, error) {
-	c, postlude, err := e.compileMiddleware(source, g, gens)
+func (e *Engine) RunMiddleware(ctx context.Context, source string, g Grant, in Input) (Result, error) {
+	c, postlude, err := e.compileMiddleware(source, g, in.CollectionRoot)
 	if err != nil {
 		return Result{}, err
 	}
@@ -122,11 +118,11 @@ func (e *Engine) RunScenario(ctx context.Context, source string, g Grant, in Inp
 	rctx, cancel := withProfileDeadline(ctx, Scenario)
 	defer cancel()
 
-	if c, postlude, ok := e.compileScratchpadExpression(source, g); ok {
+	if c, postlude, ok := e.compileScratchpadExpression(source, g, in.CollectionRoot); ok {
 		return e.runFresh(rctx, c, g, in, Scenario.MemLimit, postlude)
 	}
 
-	c, err := e.bundler.compile(source, g)
+	c, err := e.bundler.compile(source, g, in.CollectionRoot)
 	if err != nil {
 		return Result{}, err
 	}
@@ -139,11 +135,11 @@ func (e *Engine) RunScenario(ctx context.Context, source string, g Grant, in Inp
 // expression sidesteps the printer entirely. Anything that is not a single expression fails to
 // parse here and falls back to the statement path, which reports the real error if the source is
 // genuinely broken.
-func (e *Engine) compileScratchpadExpression(source string, g Grant) (compiled, string, bool) {
+func (e *Engine) compileScratchpadExpression(source string, g Grant, collRoot string) (compiled, string, bool) {
 	if strings.TrimSpace(source) == "" || hasDefaultExport(source) {
 		return compiled{}, "", false
 	}
-	c, err := e.bundler.compileEntry(WrapExpression(source), g)
+	c, err := e.bundler.compileEntry(WrapExpression(source), g, collRoot)
 	if err != nil {
 		return compiled{}, "", false
 	}

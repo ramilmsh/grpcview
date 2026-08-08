@@ -24,9 +24,9 @@ export default async () => ({ users: await pageAll() });
 { userId: require("@/services/identity/requests/scripts/uuid").default() }
 ```
 
-**The sibling tracks.** [`cross-collection-invoke.md`](./cross-collection-invoke.md) shares
+**The sibling tracks.** [`cross-collection-invoke.md`](../../planned/cross-collection-invoke.md) shares
 the diagnosis (everything resolves inside one collection) and nothing else — it addresses
-*requests*, this addresses *files*. [`workspace-diagnostics.md`](./workspace-diagnostics.md)
+*requests*, this addresses *files*. [`workspace-diagnostics.md`](../../planned/workspace-diagnostics.md)
 is the load-bearing dependency: this design deliberately lets a move break references, and
 that doc is what makes the break visible.
 
@@ -41,7 +41,7 @@ prevent. A workspace is a static unit; moving things inside it is refactoring, a
 refactoring breaks references in every language with a module system.
 
 So the rule is: **references may break, and the tool must say so loudly.** That is the
-whole reason [`workspace-diagnostics.md`](./workspace-diagnostics.md) exists, and it is
+whole reason [`workspace-diagnostics.md`](../../planned/workspace-diagnostics.md) exists, and it is
 why the two docs should be built together.
 
 This retires the earlier draft's central argument — that hoisting shared code above a
@@ -247,7 +247,7 @@ though plugin order still has to put ours first, per above.
 
 **Two sigils, deliberately.** `@/` addresses **files** (TypeScript convention); `//`
 addresses **logical items** in the `gv.invoke` label
-([`cross-collection-invoke.md`](./cross-collection-invoke.md)). They are different kinds of
+([`cross-collection-invoke.md`](../../planned/cross-collection-invoke.md)). They are different kinds of
 thing and they get different grammars. Recorded here as a choice so it is not later
 discovered as an inconsistency.
 
@@ -429,7 +429,7 @@ authoring lives in the VS Code track, and the web view should stop growing.
 
 ## Convergence with VS Code phase 2
 
-[`phase-2-body-files.md`](../active/vscode/phase-2-body-files.md) moves `draft_body` and
+[`phase-2-body-files.md`](../vscode/phase-2-body-files.md) moves `draft_body` and
 `draft_metadata_script` out of `request.json` into sibling files. That is **this same move
 applied to bodies**, and the two should be one track rather than two that meet awkwardly.
 

@@ -39,6 +39,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`mcp.md`](./shipped/mcp.md) | `grpcview mcp` — the `WorkspaceService` as MCP tools over stdio (2026-08-06). Kept for the three things the four-phase plan got wrong; the plan itself is deleted. |
 | [`example-collection-fixes.md`](./shipped/example-collection-fixes.md) | Five defects an agent-only author hit building the `example` collection — all five fixed (2026-08-07). Kept for the measurements and for why the obvious fix to each was wrong. |
 | [`daemon.md`](./shipped/daemon.md) | One daemon per workspace — registration file, connect-or-spawn, idle exit (2026-08-08). Kept for the naming/token/unix-socket calls it closes and the two deferrals it names. |
+| [`script-imports/`](./shipped/script-imports) | A script is a `.ts` file imported as `@/path` or `~/path`; `script.json`, `ScriptKind`, the generator prelude and the `gv` global are gone (2026-08-08). Kept for the rejected alternatives, the esbuild measurements, and the two defects only the browser pass found. |
 
 ## active/
 
@@ -53,7 +54,6 @@ of trunk. For what the code does now, read `AGENTS.md`.
 |---|---|
 | [`invoke-from-the-store.md`](./planned/invoke-from-the-store.md) | Send resolves the saved request server-side instead of shipping the editor buffer. The RPC now exists; the UI migration does not. |
 | [`descriptor-explorer-plan.md`](./planned/descriptor-explorer-plan.md) | A navigable read-only `.proto` browser — field numbers and comments the TS-shape view cannot recover. |
-| [`script-imports.md`](./planned/script-imports.md) | A script is a `.ts` file imported as `@/path/from/root`. Deletes `script.json`, `ScriptKind`, the generator prelude, and `gv` as a global. |
 | [`cross-collection-invoke.md`](./planned/cross-collection-invoke.md) | `gv.invoke("//identity:Auth/Login")` — Bazel-style labels over per-collection slugs, never paths. Sibling of `script-imports.md`. |
 | [`workspace-diagnostics.md`](./planned/workspace-diagnostics.md) | `grpcview check` — one pass reporting broken imports, invoke paths, slugs and sources. The precondition for letting the other two tracks break references. |
 | [`roadmap.md`](./planned/roadmap.md) | **Wants, not plans** — the backlog the three shipped UI/scripting/tree docs used to carry. Each item gets its own doc when picked up. |

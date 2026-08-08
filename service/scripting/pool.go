@@ -39,7 +39,7 @@ func NewPool(rt *Runtime, memLimit uint64, opts ...PoolOption) *Pool {
 		o(p)
 	}
 	if p.bundler == nil {
-		p.bundler = newBundler("", nil, "")
+		p.bundler = newBundler("", nil, "", "")
 	}
 	return p
 }
@@ -95,7 +95,7 @@ func (p *Pool) Close(ctx context.Context) {
 }
 
 func (p *Pool) Run(ctx context.Context, source string, g Grant, in Input) (Result, error) {
-	c, err := p.bundler.compile(source, g)
+	c, err := p.bundler.compile(source, g, in.CollectionRoot)
 	if err != nil {
 		return Result{}, err
 	}

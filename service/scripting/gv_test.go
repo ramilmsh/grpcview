@@ -8,51 +8,10 @@ import (
 	"testing"
 )
 
-func TestGvFrozenEmpty(t *testing.T) {
+func TestGrpcviewInvokeModuleForm(t *testing.T) {
 	e := newEngine(t)
-	src := `({
-  gvFrozen: Object.isFrozen(gv),
-  requestFrozen: Object.isFrozen(gv.request),
-  paramsFrozen: Object.isFrozen(gv.request.params),
-  params: gv.request.params,
-  metadataFrozen: Object.isFrozen(gv.metadata),
-  inherited: gv.metadata.inherit(),
-  inheritedFrozen: Object.isFrozen(gv.metadata.inherit()),
-})`
-	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	want := `{"gvFrozen":true,"requestFrozen":true,"paramsFrozen":true,"params":{},` +
-		`"metadataFrozen":true,"inherited":{},"inheritedFrozen":true}`
-	if string(res.Value) != want {
-		t.Fatalf("value = %s, want %s", res.Value, want)
-	}
-}
-
-func TestGvFreezeBlocksMemberAddition(t *testing.T) {
-	e := newEngine(t)
-	src := `gv.newMember = "should not stick";
-gv.invoke = null;
-gv.metadata.inherit = null;
-({
-  hasNewMember: Object.prototype.hasOwnProperty.call(gv, "newMember"),
-  invokeStillFunction: typeof gv.invoke === "function",
-  inheritStillFunction: typeof gv.metadata.inherit === "function",
-})`
-	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	want := `{"hasNewMember":false,"invokeStillFunction":true,"inheritStillFunction":true}`
-	if string(res.Value) != want {
-		t.Fatalf("value = %s, want %s", res.Value, want)
-	}
-}
-
-func TestGvInvokeNoInvokerRejects(t *testing.T) {
-	e := newEngine(t)
-	src := `await gv.invoke('a/b', {x:1})
+	src := `import { invoke } from "grpcview:invoke";
+await invoke('a/b', {x:1})
   .then(() => "resolved")
   .catch(e => "caught:" + String(e && e.message || e))`
 	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
@@ -65,30 +24,22 @@ func TestGvInvokeNoInvokerRejects(t *testing.T) {
 	}
 }
 
-func TestGvRequestParamsAndInheritedMetadata(t *testing.T) {
+func TestGrpcviewInvokeExpressionForm(t *testing.T) {
 	e := newEngine(t)
-	in := Input{
-		Params:            map[string]any{"id": float64(7), "name": "bob"},
-		InheritedMetadata: map[string][]string{"authorization": {"Bearer tkn"}},
-	}
-	src := `({
-  params: gv.request.params,
-  paramsFrozen: Object.isFrozen(gv.request.params),
-  inherited: gv.metadata.inherit(),
-  inheritedFrozen: Object.isFrozen(gv.metadata.inherit()),
-})`
-	res, err := e.RunScenario(context.Background(), src, Grant{}, in)
+	body := WrapExpression(`require("grpcview:invoke").invoke('a/b', {x:1})
+  .then(() => "resolved")
+  .catch(e => "caught:" + String(e && e.message || e))`)
+	res, err := e.RunRequestBody(context.Background(), body, Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	want := `{"params":{"id":7,"name":"bob"},"paramsFrozen":true,` +
-		`"inherited":{"authorization":["Bearer tkn"]},"inheritedFrozen":true}`
+	want := `"caught:invoke is not available in this context"`
 	if string(res.Value) != want {
 		t.Fatalf("value = %s, want %s", res.Value, want)
 	}
 }
 
-func TestGvInvokeStubRoundTrip(t *testing.T) {
+func TestGrpcviewInvokeStubRoundTrip(t *testing.T) {
 	e := newEngine(t)
 
 	var gotReq []byte
@@ -99,7 +50,8 @@ func TestGvInvokeStubRoundTrip(t *testing.T) {
 	})
 	ctx := WithInvoker(context.Background(), stub)
 
-	res, err := e.RunScenario(ctx, `await gv.invoke('a/b', {x:1})`, Grant{}, Input{})
+	src := `import { invoke } from "grpcview:invoke"; await invoke('a/b', {x:1})`
+	res, err := e.RunScenario(ctx, src, Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -129,7 +81,7 @@ func TestGvInvokeStubRoundTrip(t *testing.T) {
 	}
 }
 
-func TestGvInvokeStubDefaultsParams(t *testing.T) {
+func TestGrpcviewInvokeStubDefaultsParams(t *testing.T) {
 	e := newEngine(t)
 	var gotReq []byte
 	stub := Invoker(func(_ context.Context, req []byte) ([]byte, error) {
@@ -138,7 +90,7 @@ func TestGvInvokeStubDefaultsParams(t *testing.T) {
 	})
 	ctx := WithInvoker(context.Background(), stub)
 
-	_, err := e.RunScenario(ctx, `await gv.invoke('solo')`, Grant{}, Input{})
+	_, err := e.RunScenario(ctx, `import { invoke } from "grpcview:invoke"; await invoke('solo')`, Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -154,12 +106,32 @@ func TestGvInvokeStubDefaultsParams(t *testing.T) {
 	}
 }
 
-func TestGvAssertPasses(t *testing.T) {
+func TestGrpcviewInvokeStubRejects(t *testing.T) {
 	e := newEngine(t)
-	src := `gv.assert("a bool", true);
-gv.assert("a sync fn", function () { return 1 < 2; });
-gv.assert("truthiness, not === true", "non-empty");
-const r = gv.assert("returns undefined", true);
+	stub := Invoker(func(_ context.Context, _ []byte) ([]byte, error) {
+		return nil, errors.New("boom: no such request")
+	})
+	ctx := WithInvoker(context.Background(), stub)
+
+	src := `import { invoke } from "grpcview:invoke";
+await invoke('missing/thing').then(() => "resolved").catch(e => "caught:" + String(e && e.message || e))`
+	res, err := e.RunScenario(ctx, src, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := `"caught:boom: no such request"`
+	if string(res.Value) != want {
+		t.Fatalf("value = %s, want %s", res.Value, want)
+	}
+}
+
+func TestGrpcviewAssertModuleFormPasses(t *testing.T) {
+	e := newEngine(t)
+	src := `import { assert } from "grpcview:assert";
+assert("a bool", true);
+assert("a sync fn", function () { return 1 < 2; });
+assert("truthiness, not === true", "non-empty");
+const r = assert("returns undefined", true);
 ({ ok: true, returned: r === undefined })`
 	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
 	if err != nil {
@@ -174,11 +146,26 @@ const r = gv.assert("returns undefined", true);
 	}
 }
 
-func TestGvAssertFailsSync(t *testing.T) {
+func TestGrpcviewAssertExpressionFormPasses(t *testing.T) {
+	e := newEngine(t)
+	body := WrapExpression(`(require("grpcview:assert").assert("d", true), "passed")`)
+	res, err := e.RunRequestBody(context.Background(), body, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if string(res.Value) != `"passed"` {
+		t.Fatalf("value = %s, want \"passed\"", res.Value)
+	}
+}
+
+func TestGrpcviewAssertFailsSync(t *testing.T) {
 	for _, tc := range []struct{ name, src, want string }{
-		{"falsy-bool", `gv.assert("bool is false", false)`, "assertion failed: bool is false"},
-		{"falsy-fn", `gv.assert("fn is false", function () { return false; })`, "assertion failed: fn is false"},
-		{"throwing-fn", `gv.assert("fn blew up", function () { throw new Error("inner boom"); })`,
+		{"falsy-bool", `import { assert } from "grpcview:assert"; assert("bool is false", false)`,
+			"assertion failed: bool is false"},
+		{"falsy-fn", `import { assert } from "grpcview:assert"; assert("fn is false", function () { return false; })`,
+			"assertion failed: fn is false"},
+		{"throwing-fn", `import { assert } from "grpcview:assert";
+assert("fn blew up", function () { throw new Error("inner boom"); })`,
 			"assertion failed: fn blew up: inner boom"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -198,24 +185,48 @@ func TestGvAssertFailsSync(t *testing.T) {
 	}
 }
 
-func TestGvAssertReportsTheCallersLine(t *testing.T) {
+func TestGrpcviewAssertReportsTheCallersLineModuleForm(t *testing.T) {
 	e := newEngine(t)
-	src := "const a = 1;\nconst b = 2;\ngv.assert(\"a equals b\", a === b);\n"
+	src := "import { assert } from \"grpcview:assert\";\n" +
+		"const a = 1;\nconst b = 2;\nassert(\"a equals b\", a === b);\n"
 	_, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
 	var je *JSError
 	if !errors.As(err, &je) {
 		t.Fatalf("got %v, want *JSError", err)
 	}
-	// The throw happens inside the prelude shim, so an unfiltered stack would report a prelude line.
-	if je.Line != 3 {
-		t.Fatalf("line = %d, want 3 (the failing assertion's own line)", je.Line)
+	// Line 1 is the import, so the failing call is on line 4. The throw happens inside the
+	// bundled grpcview:assert module, so an unfiltered stack would report a line inside that
+	// module instead of the caller's own line.
+	if je.Line != 4 {
+		t.Fatalf("line = %d, want 4 (the failing assertion's own line, stack=%q)", je.Line, je.Stack)
 	}
 }
 
-func TestGvAssertSyncFailureIsNotAPromise(t *testing.T) {
+func TestGrpcviewAssertReportsTheCallersLineExpressionForm(t *testing.T) {
 	e := newEngine(t)
-	src := `let threwSynchronously = false;
-try { gv.assert("sync throw", false); } catch (e) { threwSynchronously = e.name === "AssertionError"; }
+	src := "(() => {\n" +
+		"  const a = 1;\n" +
+		"  const b = 2;\n" +
+		"  require(\"grpcview:assert\").assert(\"a equals b\", a === b);\n" +
+		"})()"
+	body := WrapExpression(src)
+	_, err := e.RunRequestBody(context.Background(), body, Grant{}, Input{})
+	var je *JSError
+	if !errors.As(err, &je) {
+		t.Fatalf("got %v, want *JSError", err)
+	}
+	// WrapExpression opens no new line, so the IIFE's own first line stays line 1 of the
+	// wrapped source; the failing call sits on line 4.
+	if je.Line != 4 {
+		t.Fatalf("line = %d, want 4 (the failing assertion's own line, stack=%q)", je.Line, je.Stack)
+	}
+}
+
+func TestGrpcviewAssertSyncFailureIsNotAPromise(t *testing.T) {
+	e := newEngine(t)
+	src := `import { assert } from "grpcview:assert";
+let threwSynchronously = false;
+try { assert("sync throw", false); } catch (e) { threwSynchronously = e.name === "AssertionError"; }
 ({ threwSynchronously })`
 	res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
 	if err != nil {
@@ -226,10 +237,11 @@ try { gv.assert("sync throw", false); } catch (e) { threwSynchronously = e.name 
 	}
 }
 
-func TestGvAssertAsync(t *testing.T) {
+func TestGrpcviewAssertAsync(t *testing.T) {
 	e := newEngine(t)
 	res, err := e.RunScenario(context.Background(),
-		`await gv.assert("async true", async () => true); "done"`, Grant{}, Input{})
+		`import { assert } from "grpcview:assert";
+await assert("async true", async () => true); "done"`, Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("async true run: %v", err)
 	}
@@ -238,11 +250,13 @@ func TestGvAssertAsync(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ name, src, want string }{
-		{"async-false", `await gv.assert("async is false", async () => false)`,
+		{"async-false", `import { assert } from "grpcview:assert"; await assert("async is false", async () => false)`,
 			"assertion failed: async is false"},
-		{"bare-promise-false", `await gv.assert("promise is false", Promise.resolve(false))`,
+		{"bare-promise-false", `import { assert } from "grpcview:assert";
+await assert("promise is false", Promise.resolve(false))`,
 			"assertion failed: promise is false"},
-		{"async-rejects", `await gv.assert("async blew up", async () => { throw new Error("async boom"); })`,
+		{"async-rejects", `import { assert } from "grpcview:assert";
+await assert("async blew up", async () => { throw new Error("async boom"); })`,
 			"assertion failed: async blew up: async boom"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -259,11 +273,11 @@ func TestGvAssertAsync(t *testing.T) {
 	}
 }
 
-func TestGvAssertBadDescription(t *testing.T) {
+func TestGrpcviewAssertBadDescription(t *testing.T) {
 	for _, tc := range []struct{ name, src string }{
-		{"missing", `gv.assert()`},
-		{"non-string", `gv.assert(42, true)`},
-		{"empty", `gv.assert("", true)`},
+		{"missing", `import { assert } from "grpcview:assert"; assert()`},
+		{"non-string", `import { assert } from "grpcview:assert"; assert(42, true)`},
+		{"empty", `import { assert } from "grpcview:assert"; assert("", true)`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEngine(t)
@@ -280,71 +294,132 @@ func TestGvAssertBadDescription(t *testing.T) {
 	}
 }
 
-// gv.assert rides buildGvPrelude, which every profile's runCompiled calls — not a body-only path.
-func TestGvAssertInEveryProfile(t *testing.T) {
+func TestGrpcviewAssertWorksInMiddleware(t *testing.T) {
 	e := newEngine(t)
-	probe := `({ present: typeof gv.assert === "function", frozenOut: (gv.assert = null, typeof gv.assert === "function") })`
-	want := `{"present":true,"frozenOut":true}`
+	_, err := e.RunMiddleware(context.Background(),
+		`export function handle(ctx) { require("grpcview:assert").assert("mw check", false); return ctx; }`,
+		Grant{}, Input{})
+	var je *JSError
+	if !errors.As(err, &je) {
+		t.Fatalf("got %v, want *JSError", err)
+	}
+	if !strings.Contains(je.Message, "assertion failed: mw check") {
+		t.Fatalf("message = %q, want it to contain the assertion failure", je.Message)
+	}
+}
 
-	t.Run("generator", func(t *testing.T) {
-		res, err := e.RunRequestBody(context.Background(),
-			"export default function () { return "+probe+"; }", nil, Grant{}, Input{})
+func TestGrpcviewMetadataInherit(t *testing.T) {
+	e := newEngine(t)
+	src := `import { inherit } from "grpcview:metadata";
+({ inherited: inherit(), frozen: Object.isFrozen(inherit()) })`
+
+	t.Run("no inheritance context", func(t *testing.T) {
+		res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
 		if err != nil {
 			t.Fatalf("run: %v", err)
 		}
+		want := `{"inherited":{},"frozen":true}`
 		if string(res.Value) != want {
 			t.Fatalf("value = %s, want %s", res.Value, want)
 		}
 	})
 
-	t.Run("middleware", func(t *testing.T) {
-		res, err := e.RunMiddleware(context.Background(),
-			"export function handle(ctx) { ctx.metadata.probe = JSON.stringify("+probe+"); return ctx; }",
-			nil, Grant{}, Input{})
+	t.Run("with inherited metadata", func(t *testing.T) {
+		in := Input{InheritedMetadata: map[string][]string{"authorization": {"Bearer tkn"}}}
+		res, err := e.RunScenario(context.Background(), src, Grant{}, in)
 		if err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		var out struct {
-			Metadata struct {
-				Probe string `json:"probe"`
-			} `json:"metadata"`
-		}
-		if err := json.Unmarshal(res.Value, &out); err != nil {
-			t.Fatalf("decode %s: %v", res.Value, err)
-		}
-		if out.Metadata.Probe != want {
-			t.Fatalf("probe = %s, want %s", out.Metadata.Probe, want)
-		}
-	})
-
-	t.Run("middleware-assertion-fails-the-run", func(t *testing.T) {
-		_, err := e.RunMiddleware(context.Background(),
-			`export function handle(ctx) { gv.assert("mw check", false); return ctx; }`, nil, Grant{}, Input{})
-		var je *JSError
-		if !errors.As(err, &je) {
-			t.Fatalf("got %v, want *JSError", err)
-		}
-		if !strings.Contains(je.Message, "assertion failed: mw check") {
-			t.Fatalf("message = %q, want it to contain the assertion failure", je.Message)
+		want := `{"inherited":{"authorization":["Bearer tkn"]},"frozen":true}`
+		if string(res.Value) != want {
+			t.Fatalf("value = %s, want %s", res.Value, want)
 		}
 	})
 }
 
-func TestGvInvokeStubRejects(t *testing.T) {
+func TestGrpcviewMetadataInheritExpressionForm(t *testing.T) {
 	e := newEngine(t)
-	stub := Invoker(func(_ context.Context, _ []byte) ([]byte, error) {
-		return nil, errors.New("boom: no such request")
-	})
-	ctx := WithInvoker(context.Background(), stub)
+	body := WrapExpression(`require("grpcview:metadata").inherit()`)
 
-	res, err := e.RunScenario(ctx,
-		`await gv.invoke('missing/thing').then(() => "resolved").catch(e => "caught:" + String(e && e.message || e))`,
-		Grant{}, Input{})
+	res, err := e.RunRequestBody(context.Background(), body, Grant{}, Input{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	want := `"caught:boom: no such request"`
+	if string(res.Value) != `{}` {
+		t.Fatalf("value = %s, want {}", res.Value)
+	}
+
+	in := Input{InheritedMetadata: map[string][]string{"authorization": {"Bearer tkn"}}}
+	res, err = e.RunRequestBody(context.Background(), body, Grant{}, in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := `{"authorization":["Bearer tkn"]}`
 	if string(res.Value) != want {
 		t.Fatalf("value = %s, want %s", res.Value, want)
+	}
+}
+
+func TestGrpcviewRequestParams(t *testing.T) {
+	e := newEngine(t)
+	src := `import { params } from "grpcview:request";
+({ params, frozen: Object.isFrozen(params) })`
+
+	t.Run("plain run", func(t *testing.T) {
+		res, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		want := `{"params":{},"frozen":true}`
+		if string(res.Value) != want {
+			t.Fatalf("value = %s, want %s", res.Value, want)
+		}
+	})
+
+	t.Run("with params", func(t *testing.T) {
+		in := Input{Params: map[string]any{"id": float64(7), "name": "bob"}}
+		res, err := e.RunScenario(context.Background(), src, Grant{}, in)
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		want := `{"params":{"id":7,"name":"bob"},"frozen":true}`
+		if string(res.Value) != want {
+			t.Fatalf("value = %s, want %s", res.Value, want)
+		}
+	})
+}
+
+func TestGrpcviewRequestParamsExpressionForm(t *testing.T) {
+	e := newEngine(t)
+	body := WrapExpression(`require("grpcview:request").params`)
+
+	res, err := e.RunRequestBody(context.Background(), body, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if string(res.Value) != `{}` {
+		t.Fatalf("value = %s, want {}", res.Value)
+	}
+
+	in := Input{Params: map[string]any{"id": float64(7), "name": "bob"}}
+	res, err = e.RunRequestBody(context.Background(), body, Grant{}, in)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := `{"id":7,"name":"bob"}`
+	if string(res.Value) != want {
+		t.Fatalf("value = %s, want %s", res.Value, want)
+	}
+}
+
+func TestGrpcviewUnknownModuleIsResolveError(t *testing.T) {
+	e := newEngine(t)
+	_, err := e.RunScenario(context.Background(),
+		`import x from "grpcview:whatever"; x`, Grant{}, Input{})
+	if err == nil {
+		t.Fatal("importing an unknown grpcview: module: got nil error, want a resolve error")
+	}
+	if !strings.Contains(err.Error(), "grpcview:whatever") {
+		t.Fatalf("error = %q, want it to name the unresolved specifier", err.Error())
 	}
 }

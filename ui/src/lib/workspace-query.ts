@@ -35,6 +35,7 @@ import {
   setDescriptorSourceCommit,
   setWorkspaceTrust,
   listBazelTargets,
+  listWorkspaceModules,
   invoke,
   runScript,
   createScript,
@@ -42,7 +43,7 @@ import {
   deleteScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
-import type { CollectionSummary } from "@grpcview/v1/service_pb";
+import type { CollectionSummary, WorkspaceModule } from "@grpcview/v1/service_pb";
 import type { Collection, Server } from "@grpcview/v1/workspace_pb";
 import { rootItemsOf, type ItemWithPath } from "./format";
 import { resolveActiveCollection } from "./active-collection";
@@ -124,6 +125,17 @@ export function useCollections(): {
     trusted: query.data?.trusted ?? true,
     isPending: query.isPending,
     error: query.error,
+  };
+}
+
+// Every importable `.ts` in the workspace, as the editor's module resolution needs it (Monaco
+// registration is useWorkspaceModuleTypes, in features/workspace/gv-types.ts). Workspace-wide
+// like useCollections, so it takes no collection argument either.
+export function useWorkspaceModules(): { modules: WorkspaceModule[]; isPending: boolean } {
+  const query = useQuery(listWorkspaceModules, {});
+  return {
+    modules: query.data?.modules ?? [],
+    isPending: query.isPending,
   };
 }
 

@@ -6,7 +6,6 @@ import { MessageTab } from "./MessageTab";
 import { MessagesTab } from "./MessagesTab";
 import { MetadataTab } from "./MetadataTab";
 import { MiddlewareTab } from "./MiddlewareTab";
-import type { GeneratorDef } from "./generator-libs";
 
 export function RequestPane({
   kind,
@@ -23,7 +22,6 @@ export function RequestPane({
   descriptorSet,
   inputPackage,
   inputFile,
-  generators,
 }: {
   kind: MethodKind;
   body: string;
@@ -39,7 +37,6 @@ export function RequestPane({
   descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
-  generators: GeneratorDef[];
 }) {
   const subtab = useUIStore((s) => s.requestSubtab);
   const setSubtab = useUIStore((s) => s.setRequestSubtab);
@@ -99,16 +96,10 @@ export function RequestPane({
             descriptorSet={descriptorSet}
             inputPackage={inputPackage}
             inputFile={inputFile}
-            generators={generators}
           />
         )
       ) : subtab === "metadata" ? (
-        <MetadataTab
-          metadata={metadata}
-          onChange={onMetadataChange}
-          currentKey={currentKey}
-          generators={generators}
-        />
+        <MetadataTab metadata={metadata} onChange={onMetadataChange} currentKey={currentKey} />
       ) : (
         <MiddlewareTab middleware={middleware} onChange={onMiddlewareChange} />
       )}

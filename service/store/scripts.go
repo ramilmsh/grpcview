@@ -5,206 +5,189 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-type scriptEntry struct {
-	slug   string
-	name   string
-	script *grpcviewstorev1.Script
-}
-
-func (s scriptEntry) orderSlug() string { return s.slug }
-func (s scriptEntry) orderName() string { return s.name }
-
-func (c *Collection) CreateScript(_ context.Context, name string, kind grpcviewv1.ScriptKind) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureExists(); err != nil {
-		return err
-	}
-	present, err := c.readScripts()
-	if err != nil {
-		return err
-	}
-	if _, ok := findScript(present, name); ok {
-		return fmt.Errorf("%w: %q", ErrAlreadyExists, name)
+func (c *Collection) readScripts() ([]*grpcviewv1.Script, error) {
+	root := c.scriptsRoot()
+	if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
 	}
 
-	slug := uniqueSlug(name, scriptSlugSet(present))
-	base, err := c.reconciledScriptSlugs(present)
-	if err != nil {
-		return err
-	}
-	scriptDir := filepath.Join(c.scriptsRoot(), slug)
-	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
-		return err
-	}
-	if err := writeMessage(filepath.Join(scriptDir, scriptFileName), &grpcviewstorev1.Script{
-		Meta: &grpcviewstorev1.ItemMeta{Name: name},
-		Kind: wireToDiskScriptKind(kind),
-	}); err != nil {
-		return err
-	}
-	return c.writeScriptOrder(append(base, slug))
-}
-
-func (c *Collection) UpdateScript(_ context.Context, name string, patch ScriptPatch) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureExists(); err != nil {
-		return err
-	}
-	present, err := c.readScripts()
-	if err != nil {
-		return err
-	}
-	se, ok := findScript(present, name)
-	if !ok {
-		return fmt.Errorf("%w: %q", ErrItemNotFound, name)
-	}
-	if patch.Name == nil && patch.Source == nil {
-		return nil
-	}
-
-	sf := se.script
-	if patch.Name != nil && *patch.Name != name {
-		if _, exists := findScript(present, *patch.Name); exists {
-			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
+	var scripts []*grpcviewv1.Script
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		if sf.Meta == nil {
-			sf.Meta = &grpcviewstorev1.ItemMeta{}
+		if d.IsDir() {
+			if p != root && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		sf.Meta.Name = *patch.Name
-	}
-	if patch.Source != nil {
-		sf.Source = *patch.Source
-	}
-	return writeMessage(filepath.Join(c.scriptsRoot(), se.slug, scriptFileName), sf)
-}
-
-func (c *Collection) DeleteScript(_ context.Context, name string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureExists(); err != nil {
-		return err
-	}
-	present, err := c.readScripts()
-	if err != nil {
-		return err
-	}
-	se, ok := findScript(present, name)
-	if !ok {
+		if strings.HasPrefix(d.Name(), ".") || filepath.Ext(d.Name()) != ".ts" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		scripts = append(scripts, &grpcviewv1.Script{
+			Path:   "scripts/" + filepath.ToSlash(rel),
+			Source: string(data),
+		})
 		return nil
-	}
-	base, err := c.reconciledScriptSlugs(present)
-	if err != nil {
-		return err
-	}
-	if err := os.RemoveAll(filepath.Join(c.scriptsRoot(), se.slug)); err != nil {
-		return err
-	}
-	return c.writeScriptOrder(slices.DeleteFunc(base, func(s string) bool { return s == se.slug }))
-}
-
-func (c *Collection) loadScripts(listed []string) ([]*grpcviewv1.Script, error) {
-	present, err := c.readScripts()
+	})
 	if err != nil {
 		return nil, err
 	}
-	if len(present) == 0 {
-		return nil, nil
-	}
-	ordered := c.reconcileScripts(listed, present)
-	out := make([]*grpcviewv1.Script, 0, len(ordered))
-	for _, se := range ordered {
-		out = append(out, diskToWireScript(se.name, se.script))
-	}
-	return out, nil
-}
-
-func (c *Collection) readScripts() ([]scriptEntry, error) {
-	entries, err := os.ReadDir(c.scriptsRoot())
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var scripts []scriptEntry
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		slug := e.Name()
-		if strings.HasPrefix(slug, ".") {
-			continue
-		}
-		p := filepath.Join(c.scriptsRoot(), slug, scriptFileName)
-		if !fileExists(p) {
-			continue
-		}
-		sf := &grpcviewstorev1.Script{}
-		if err := readMessage(p, sf); err != nil {
-			return nil, err
-		}
-		scripts = append(scripts, scriptEntry{slug: slug, name: cmp.Or(sf.GetMeta().GetName(), slug), script: sf})
-	}
+	slices.SortFunc(scripts, func(a, b *grpcviewv1.Script) int {
+		return cmp.Compare(a.GetPath(), b.GetPath())
+	})
 	return scripts, nil
 }
 
-func (c *Collection) reconcileScripts(listed []string, present []scriptEntry) []scriptEntry {
-	ordered, dropped := reconcileOrder(listed, present)
-	for _, slug := range dropped {
-		c.logger.Warn("dropping ordered script missing on disk", "slug", slug)
+func (c *Collection) CreateScript(_ context.Context, scriptPath string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return err
 	}
-	return ordered
-}
-
-func (c *Collection) reconciledScriptSlugs(present []scriptEntry) ([]string, error) {
-	col, err := c.readCollection()
-	if err != nil {
-		return nil, err
-	}
-	ordered := c.reconcileScripts(col.GetScripts(), present)
-	slugs := make([]string, len(ordered))
-	for i, se := range ordered {
-		slugs[i] = se.slug
-	}
-	return slugs, nil
-}
-
-func (c *Collection) writeScriptOrder(slugs []string) error {
-	if slugs == nil {
-		slugs = []string{}
-	}
-	col, err := c.readCollection()
+	abs, err := c.resolveScriptPath(scriptPath)
 	if err != nil {
 		return err
 	}
-	col.Scripts = slugs
-	return c.writeCollection(col)
+	if fileExists(abs) {
+		return fmt.Errorf("%w: %q", ErrAlreadyExists, scriptPath)
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(abs, nil, 0o644)
 }
 
-func findScript(present []scriptEntry, name string) (scriptEntry, bool) {
-	for _, se := range present {
-		if se.name == name {
-			return se, true
+func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch ScriptPatch) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return err
+	}
+	abs, err := c.resolveScriptPath(scriptPath)
+	if err != nil {
+		return err
+	}
+	if !fileExists(abs) {
+		return fmt.Errorf("%w: %q", ErrItemNotFound, scriptPath)
+	}
+	if patch.Source == nil && patch.NewPath == nil {
+		return nil
+	}
+
+	if patch.Source != nil {
+		if err := os.WriteFile(abs, []byte(*patch.Source), 0o644); err != nil {
+			return err
 		}
 	}
-	return scriptEntry{}, false
+	if patch.NewPath != nil {
+		newAbs, err := c.resolveScriptPath(*patch.NewPath)
+		if err != nil {
+			return err
+		}
+		if fileExists(newAbs) {
+			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.NewPath)
+		}
+		if err := os.MkdirAll(filepath.Dir(newAbs), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(abs, newAbs); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func scriptSlugSet(present []scriptEntry) map[string]bool {
-	set := make(map[string]bool, len(present))
-	for _, se := range present {
-		set[strings.ToLower(se.slug)] = true
+func (c *Collection) DeleteScript(_ context.Context, scriptPath string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureExists(); err != nil {
+		return err
 	}
-	return set
+	abs, err := c.resolveScriptPath(scriptPath)
+	if err != nil {
+		return err
+	}
+	if !fileExists(abs) {
+		return nil
+	}
+	if err := os.Remove(abs); err != nil {
+		return err
+	}
+	return c.pruneEmptyScriptDirs(filepath.Dir(abs))
+}
+
+func (c *Collection) pruneEmptyScriptDirs(dir string) error {
+	root := c.scriptsRoot()
+	for dir != root {
+		entries, err := os.ReadDir(dir)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if len(entries) > 0 {
+			return nil
+		}
+		if err := os.Remove(dir); err != nil {
+			return err
+		}
+		dir = filepath.Dir(dir)
+	}
+	return nil
+}
+
+// resolveScriptPath validates a collection-relative script path and returns its absolute
+// location. Used by CreateScript, UpdateScript (both path and new_path) and DeleteScript.
+func (c *Collection) resolveScriptPath(p string) (string, error) {
+	invalid := fmt.Errorf("script path must be under scripts/ and end in .ts, got %q", p)
+	if p == "" || filepath.IsAbs(p) || !strings.HasSuffix(p, ".ts") {
+		return "", invalid
+	}
+	slash := filepath.ToSlash(p)
+	for _, seg := range strings.Split(slash, "/") {
+		if seg == ".." {
+			return "", invalid
+		}
+	}
+	clean := path.Clean(slash)
+	if segments := strings.Split(clean, "/"); segments[0] != "scripts" {
+		return "", invalid
+	}
+	abs := filepath.Join(c.root, filepath.FromSlash(clean))
+	if !withinDir(c.scriptsRoot(), abs) {
+		return "", invalid
+	}
+	return abs, nil
+}
+
+// withinDir mirrors service/scripting/bundler.go's containment guard.
+func withinDir(dir, p string) bool {
+	rel, err := filepath.Rel(dir, p)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

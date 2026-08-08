@@ -47,12 +47,12 @@ func (w Workspace) scriptInvoker(collectionID string) scripting.Invoker {
 	return func(ctx context.Context, req []byte) ([]byte, error) {
 		var env invokeEnvelope
 		if err := json.Unmarshal(req, &env); err != nil {
-			return nil, fmt.Errorf("gv.invoke: malformed request envelope: %w", err)
+			return nil, fmt.Errorf("invoke(): malformed request envelope: %w", err)
 		}
 
 		depth := gvInvokeDepthFromContext(ctx)
 		if depth >= maxInvokeDepth {
-			return nil, fmt.Errorf("gv.invoke(%q): nesting depth %d exceeds the max of %d", env.Path, depth, maxInvokeDepth)
+			return nil, fmt.Errorf("invoke(%q): nesting depth %d exceeds the max of %d", env.Path, depth, maxInvokeDepth)
 		}
 
 		parent, name, err := splitInvokePath(env.Path)
@@ -68,7 +68,7 @@ func (w Workspace) scriptInvoker(collectionID string) scripting.Invoker {
 			recordHistory: false,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("gv.invoke(%q): %w", env.Path, err)
+			return nil, fmt.Errorf("invoke(%q): %w", env.Path, err)
 		}
 
 		childCtx := withGvInvokeDepth(ctx, depth+1)
@@ -88,7 +88,7 @@ func splitInvokePath(path string) (parent []string, name string, err error) {
 	segments := strings.Split(path, "/")
 	name = segments[len(segments)-1]
 	if name == "" {
-		return nil, "", fmt.Errorf("gv.invoke: empty path %q", path)
+		return nil, "", fmt.Errorf("invoke(): empty path %q", path)
 	}
 	return segments[:len(segments)-1], name, nil
 }

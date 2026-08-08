@@ -157,7 +157,7 @@ func (s *Store) scan() ([]string, error) {
 		segments := relSegments(base, path)
 		if len(segments) > 0 {
 			name := d.Name()
-			if strings.HasPrefix(name, ".") || name == nodeModulesDirName || strings.HasPrefix(name, bazelSymlinkPrefix) {
+			if strings.HasPrefix(name, ".") || name == NodeModulesDirName || strings.HasPrefix(name, BazelSymlinkPrefix) {
 				return fs.SkipDir
 			}
 			if scope := parentScope(path); scope.matcher != nil && scope.matcher.Match(segments, true) {

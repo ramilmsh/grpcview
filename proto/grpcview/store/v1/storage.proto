@@ -43,22 +43,6 @@ message Collection {
   string name = 2;
   repeated string items = 3;              // ordered root-level slugs
   repeated DescriptorSource sources = 4;  // highest priority first
-  repeated string scripts = 5;            // ordered script slugs (scripts/<slug>/)
-}
-
-// Mirrors grpcview.v1.ScriptKind (same ordinals).
-enum ScriptKind {
-  SCRIPT_KIND_UNSPECIFIED = 0;
-  SCRIPT_KIND_GENERATOR = 1;
-  SCRIPT_KIND_MIDDLEWARE = 2;
-  SCRIPT_KIND_SCENARIO = 3;
-}
-
-// script.json inside scripts/<slug>/. source is inline UTF-8, not a blob.
-message Script {
-  ItemMeta meta = 1;
-  ScriptKind kind = 2;
-  string source = 3;
 }
 
 // folder.json inside a (non-root) folder directory.

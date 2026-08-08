@@ -123,7 +123,7 @@ browser code, hit the last-expression path, and misparsed.
 
 The sniff now lives in **`resolveInvokeBody` (`service/workspace/invoke.go`)**, the one
 choke point all three call sites funnel through — unary `Invoke`, `InvokeStreaming`, and
-`gv.invoke`'s re-entry. The whole implementation is:
+`invoke()`'s re-entry. The whole implementation is:
 
 ```go
 if !scripting.HasDefaultExport(body) {
@@ -131,10 +131,10 @@ if !scripting.HasDefaultExport(body) {
 }
 ```
 
-It runs *before* `transitiveGenerators` scans the source, and both see the same wrapped
-string — otherwise an expression body's generator call sites go undetected and composition
-silently stops working for form 2. `scripting.HasDefaultExport` is exported precisely so
-this decision uses the same regex the entry-point convention does.
+`scripting.HasDefaultExport` is exported precisely so this decision uses the same regex the
+entry-point convention does. (This paragraph used to also explain an ordering constraint
+against `transitiveGenerators`, the textual generator-name scan. That scan is gone: scripts
+are reached by import now, so nothing scans the source for call sites.)
 
 One branch, one evaluation path, and every surface inherits it including ones not yet
 designed. The UI keeps `wrap` / `isCanonical` / the hidden-wrapper machinery, but
@@ -204,20 +204,25 @@ Both are contract-level cleanups for whichever track next touches the proto.
   does not weaken them. See [the enforcement layers](./active/vscode/body-contract.md), whose
   own conclusion — layers 1–3 are authoring UX and layer 4 is the only actual
   enforcement — is what makes accepting a bare expression safe.
-- **Generators and `gv` stay reachable from both forms**, since both end up on the entry
-  path. This is not a detail — it is the no-mode-switch property above. A body that is
-  currently pure JSON has nothing to call, but it never *loses the ability* to call.
+- **Imports stay reachable from both forms**, since both end up on the entry path. This is
+  not a detail — it is the no-mode-switch property above. A body that is currently pure JSON
+  has nothing to call, but it never *loses the ability* to call. The one difference between
+  the forms is grammatical: form 1 uses `import` statements, form 2 uses `require("…")`,
+  because an `import` statement cannot stand in expression position.
 - **`{{ }}` does not come back, in any surface.** If a future CLI, MCP or VS Code feature
   seems to want string interpolation into a body, that is a signal the body should be an
   expression calling something — which it already can be. The parameter channel for
-  external values is `gv.request.params` (`--param k=v` on the CLI), not text
-  substitution.
+  external values is `params` from `"grpcview:request"` (`--param k=v` on the CLI), not
+  text substitution.
 
 ## Risks
 
-- The form-1 sniff is a regex, so `export default` inside a string literal
-  false-positives. That hazard exists today and this contract does not add to it; fixing
-  it means a real parse, which is not worth it yet.
+- The form-1 sniff is a regex, so `export default` inside a comment or a string literal
+  used to false-positive — a real script hit this in the wild via a comment, not a string
+  (`example/tree/workspace/streaming/folder.json`'s draft metadata script). Fixed without
+  a real parse: the sniff now runs over `maskLiterals(source)` (`bundler.go`), which
+  blanks comment and string interiors before the regex runs, gated behind a cheap raw-text
+  pre-check so the common case (no mention of the syntax at all) pays nothing extra.
 - Wrapping shifts line numbers by one, so evaluation errors must be remapped to author
   coordinates or they point at the wrong line. `sourcemap.go`'s
   `authorPreludeLines` offset already exists for exactly this and must cover the wrap.

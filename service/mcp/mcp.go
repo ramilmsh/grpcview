@@ -56,6 +56,9 @@ type shim struct {
 
 func (s *shim) AddTool(t mcpruntime.Tool, handler mcpruntime.ToolHandler) {
 	bare := bareName(t.Name)
+	if _, skip := notTools[bare]; skip {
+		return
+	}
 	md := s.service.Methods().ByName(protoreflect.Name(bare))
 	if md == nil {
 		panic(fmt.Sprintf("mcp: no method descriptor for generated tool name %q", t.Name))

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { ScriptKind } from "@grpcview/v1/workspace_pb";
 import type { History, Server } from "@grpcview/v1/workspace_pb";
 import {
   useActiveWorkspace,
@@ -21,7 +20,6 @@ import { ResponsePane } from "./ResponsePane";
 import { TypesModal } from "./TypesModal";
 import { migrateBodyToTs } from "./body-wrapper";
 import { defaultMetadataModule, migrateMetadataToTs } from "./metadata-wrapper";
-import type { GeneratorDef } from "./generator-libs";
 
 const DEBOUNCE_MS = 400;
 
@@ -85,14 +83,6 @@ export function RequestWorkspace() {
     [services, request]
   );
   const kind = methodKind(activeMethod);
-
-  const generators = useMemo<GeneratorDef[]>(
-    () =>
-      workspace?.scripts
-        .filter((s) => s.kind === ScriptKind.GENERATOR)
-        .map((s) => ({ name: s.name, source: s.source })) ?? [],
-    [workspace?.scripts]
-  );
 
   // Keyed by `${requestKey}:${slot}` so a pending save is never cancelled by a save
   // scheduled for a different request or field.
@@ -318,7 +308,6 @@ export function RequestWorkspace() {
           descriptorSet={workspace?.descriptorSet}
           inputPackage={activeMethod?.input?.package}
           inputFile={activeMethod?.input?.file}
-          generators={generators}
         />
         <ResponsePane
           invoke={invokeState}

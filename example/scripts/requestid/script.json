@@ -1,7 +1,0 @@
-{
-  "meta":  {
-    "name":  "requestId"
-  },
-  "kind":  "SCRIPT_KIND_GENERATOR",
-  "source":  "// GENERATOR — callable by name from any request body or metadata script in this\n// collection. The default export is the function; the script's name is the\n// global it is bound to, so a body just writes:\n//\n//   { id: requestId(), scoped: requestId(\"order\") }\n//\n// Every sandbox instance starts from the same seed, so Math.random() here is\n// reproducible across runs rather than unique — fine for a demo id, not a\n// substitute for a real uuid.\n\nconst hex = (n: number): string =>\n  Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join(\"\");\n\nexport default (prefix = \"req\"): string => `${prefix}_${hex(8)}${hex(4)}`;\n"
-}

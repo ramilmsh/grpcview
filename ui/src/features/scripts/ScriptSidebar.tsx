@@ -1,32 +1,54 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { MagnifyingGlass, Plus, Shield } from "@/components/ui/icons";
+import { Code, Folder, MagnifyingGlass, Plus, Shield } from "@/components/ui/icons";
 import { IconButton } from "@/components/ui/Button";
 import type { Script } from "@grpcview/v1/workspace_pb";
-import { kindMeta, SIDEBAR_ORDER } from "./script-kinds";
+
+// path is collection-relative and always under scripts/ (decisions.md §5): "scripts/uuid.ts"
+// or "scripts/mw/trace-headers.ts". Strips the implied "scripts/" prefix and splits what's
+// left into the group (everything before the last segment) and the label (the filename).
+function splitScriptPath(path: string): { group: string; label: string } {
+  const segments = path.split("/");
+  if (segments[0] === "scripts") segments.shift();
+  const label = segments.pop() ?? path;
+  return { group: segments.join("/"), label };
+}
+
+interface ScriptGroup {
+  group: string;
+  rows: Script[];
+}
+
+// One pass over the path-sorted list: a new group starts whenever the directory changes,
+// so groups come out in path order rather than a separate alphabetical pass over directories.
+function groupScripts(scripts: Script[]): ScriptGroup[] {
+  const sorted = [...scripts].sort((a, b) => a.path.localeCompare(b.path));
+  const groups: ScriptGroup[] = [];
+  for (const s of sorted) {
+    const { group } = splitScriptPath(s.path);
+    const last = groups[groups.length - 1];
+    if (last && last.group === group) last.rows.push(s);
+    else groups.push({ group, rows: [s] });
+  }
+  return groups;
+}
 
 export function ScriptSidebar({
   scripts,
-  selectedName,
+  selectedPath,
   onSelect,
   onNew,
 }: {
   scripts: Script[];
-  selectedName: string | null;
-  onSelect: (name: string) => void;
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
   onNew: () => void;
 }) {
   const [filter, setFilter] = useState("");
   const q = filter.trim().toLowerCase();
-  const visible = q
-    ? scripts.filter((s) => s.name.toLowerCase().includes(q))
-    : scripts;
+  const visible = q ? scripts.filter((s) => s.path.toLowerCase().includes(q)) : scripts;
 
-  const sections = SIDEBAR_ORDER.map((kind) => ({
-    kind,
-    meta: kindMeta(kind),
-    rows: visible.filter((s) => s.kind === kind),
-  })).filter((sec) => sec.rows.length > 0);
+  const groups = useMemo(() => groupScripts(visible), [visible]);
 
   return (
     <div
@@ -56,9 +78,9 @@ export function ScriptSidebar({
             className="text-muted"
             style={{ fontSize: 12, padding: "16px 6px", lineHeight: 1.6 }}
           >
-            No scripts yet. Use + to create a generator, middleware, or scenario.
+            No scripts yet. Use + to create one.
           </div>
-        ) : sections.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div
             className="text-muted"
             style={{ fontSize: 12, padding: "16px 6px", lineHeight: 1.6 }}
@@ -66,43 +88,47 @@ export function ScriptSidebar({
             No scripts match “{filter.trim()}”.
           </div>
         ) : (
-          sections.map(({ kind, meta, rows }, i) => {
-            const SectionIcon = meta.Icon;
-            return (
-              <div key={kind}>
+          groups.map(({ group, rows }, i) => (
+            <div key={group || "\0root"}>
+              {group && (
                 <div
                   className="flex items-center gap-[6px]"
                   style={{ padding: `${i === 0 ? 2 : 14}px 6px 6px` }}
                 >
-                  <SectionIcon size={14} style={{ color: meta.color }} />
+                  <Folder size={14} style={{ color: "var(--color-neutral-500)" }} />
                   <span
+                    className="font-mono"
                     style={{
                       fontSize: 10,
-                      letterSpacing: ".1em",
-                      textTransform: "uppercase",
+                      letterSpacing: ".04em",
                       color: "var(--color-neutral-500)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {meta.section}
+                    {group}
                   </span>
                 </div>
-                {rows.map((s) => (
-                  <div
-                    key={s.name}
-                    className={clsx("scriptrow", s.name === selectedName && "on")}
-                    onClick={() => onSelect(s.name)}
+              )}
+              {rows.map((s) => (
+                <div
+                  key={s.path}
+                  className={clsx("scriptrow", s.path === selectedPath && "on")}
+                  onClick={() => onSelect(s.path)}
+                  title={s.path}
+                >
+                  <Code size={16} style={{ color: "var(--color-accent-300)", flex: "none" }} />
+                  <span
+                    className="font-mono"
+                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                   >
-                    <SectionIcon size={16} style={{ color: meta.color, flex: "none" }} />
-                    <span
-                      style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    >
-                      {s.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            );
-          })
+                    {splitScriptPath(s.path).label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))
         )}
       </div>
 

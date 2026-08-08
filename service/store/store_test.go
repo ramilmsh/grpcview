@@ -1213,8 +1213,8 @@ func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
 		t.Fatalf("CreateFolder a/b: %v", err)
 	}
 
-	scriptA := "export default () => ({ ...gv.metadata.inherit(), fromA: ['1'] })"
-	scriptB := "export default () => ({ ...gv.metadata.inherit(), fromB: ['2'] })"
+	scriptA := "export default () => ({ ...inherit(), fromA: ['1'] })"
+	scriptB := "export default () => ({ ...inherit(), fromB: ['2'] })"
 	if err := coll.UpdateFolder(ctx, nil, "a", FolderPatch{DraftMetadataScript: &scriptA}); err != nil {
 		t.Fatalf("UpdateFolder a: %v", err)
 	}

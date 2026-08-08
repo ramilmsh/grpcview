@@ -865,16 +865,16 @@ func strptr(s string) *string { return &s }
 func scriptsWorkspace() *grpcviewv1.Collection {
 	ws := testWorkspace()
 	ws.Scripts = []*grpcviewv1.Script{
-		{Name: "seed", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR, Source: "export default () => ({})\n"},
-		{Name: "auth-header", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE, Source: "export const handle = (ctx) => ctx.next()\n"},
-		{Name: "scratch", Kind: grpcviewv1.ScriptKind_SCRIPT_KIND_UNSPECIFIED, Source: "1 + 1\n"},
+		{Path: "scripts/seed.ts", Source: "export default () => ({})\n"},
+		{Path: "scripts/auth-header.ts", Source: "export default (ctx) => ctx.next()\n"},
+		{Path: "scripts/scratch.ts", Source: "1 + 1\n"},
 	}
 	return ws
 }
 
-const scriptsGolden = `seed         generator
-auth-header  middleware
-scratch      unspecified
+const scriptsGolden = `scripts/seed.ts
+scripts/auth-header.ts
+scripts/scratch.ts
 `
 
 func TestScriptLs(t *testing.T) {
@@ -912,7 +912,6 @@ func TestScriptRun(t *testing.T) {
 		stdin      string
 		fake       func(*fakeClient)
 		wantSource string
-		wantKind   string
 		wantRuns   int
 		wantOut    string
 		wantErr    string
@@ -920,53 +919,35 @@ func TestScriptRun(t *testing.T) {
 		wantCode   int
 	}{
 		{
-			name: "a saved name sends that script's SOURCE and its own kind",
-			args: []string{"script", "run", "seed"},
+			name: "a saved path sends that script's SOURCE",
+			args: []string{"script", "run", "scripts/seed.ts"},
 			fake: func(fc *fakeClient) {
 				fc.writes.script = &grpcviewv1.RunScriptResponse{Value: strptr(`{"id":"u_1"}`)}
 			},
 			wantSource: "export default () => ({})\n",
-			wantKind:   "generator",
 			wantRuns:   1,
 			wantOut:    "{\"id\":\"u_1\"}\n",
 		},
 		{
-			name:       "an unknown name is exit 2 and runs NOTHING",
-			args:       []string{"script", "run", "nope"},
+			name:       "an unknown path is exit 2 and runs NOTHING",
+			args:       []string{"script", "run", "scripts/nope.ts"},
 			wantRuns:   0,
-			wantErrHas: `unknown script "nope"`,
+			wantErrHas: `unknown script "scripts/nope.ts"`,
 			wantCode:   2,
 		},
 		{
-			name:       "- reads the source from stdin, and --kind selects the profile",
-			args:       []string{"script", "run", "-", "--kind", "middleware"},
-			stdin:      "export const handle = (ctx) => ctx.next()",
-			wantSource: "export const handle = (ctx) => ctx.next()",
-			wantKind:   "middleware",
+			name:       "- reads the source from stdin",
+			args:       []string{"script", "run", "-"},
+			stdin:      "export default (ctx) => ctx.next()",
+			wantSource: "export default (ctx) => ctx.next()",
 			wantRuns:   1,
 		},
 		{
-			name:       "- with no --kind leaves the kind unset: the scratchpad profile",
+			name:       "- runs a scratchpad expression the same way",
 			args:       []string{"script", "run", "-"},
 			stdin:      "1 + 1",
 			wantSource: "1 + 1",
-			wantKind:   "<unset>",
 			wantRuns:   1,
-		},
-		{
-			name:       "--kind on a saved script is refused, and runs nothing",
-			args:       []string{"script", "run", "seed", "--kind", "scenario"},
-			wantRuns:   0,
-			wantErrHas: "--kind does not apply to the saved script",
-			wantCode:   2,
-		},
-		{
-			name:       "an unknown --kind is refused before anything is read",
-			args:       []string{"script", "run", "-", "--kind", "bogus"},
-			stdin:      "1 + 1",
-			wantRuns:   0,
-			wantErrHas: `invalid --kind "bogus"`,
-			wantCode:   2,
 		},
 		{
 			name:       "empty stdin is a failure, not an empty script",
@@ -978,7 +959,7 @@ func TestScriptRun(t *testing.T) {
 		},
 		{
 			name: "a thrown exception is exit 1 with an EMPTY stdout",
-			args: []string{"script", "run", "seed"},
+			args: []string{"script", "run", "scripts/seed.ts"},
 			fake: func(fc *fakeClient) {
 				fc.writes.script = &grpcviewv1.RunScriptResponse{Error: &grpcviewv1.ScriptError{
 					Message: "TypeError: x is not a function",
@@ -988,12 +969,12 @@ func TestScriptRun(t *testing.T) {
 			},
 			wantRuns: 1,
 			wantOut:  "",
-			wantErr:  "grpcview: the script \"seed\" threw: TypeError: x is not a function (line 7)\n",
+			wantErr:  "grpcview: the script \"scripts/seed.ts\" threw: TypeError: x is not a function (line 7)\n",
 			wantCode: 1,
 		},
 		{
 			name: "logs go to stderr with their level; the value still goes to stdout",
-			args: []string{"script", "run", "seed"},
+			args: []string{"script", "run", "scripts/seed.ts"},
 			fake: func(fc *fakeClient) {
 				fc.writes.script = &grpcviewv1.RunScriptResponse{
 					Value: strptr("42"),
@@ -1009,17 +990,17 @@ func TestScriptRun(t *testing.T) {
 		},
 		{
 			name:     "a script that returned undefined prints nothing at all",
-			args:     []string{"script", "run", "seed"},
+			args:     []string{"script", "run", "scripts/seed.ts"},
 			fake:     func(fc *fakeClient) { fc.writes.script = &grpcviewv1.RunScriptResponse{} },
 			wantRuns: 1,
 			wantOut:  "",
 		},
 		{
 			name:       "a Connect error is exit 2 — the run never happened",
-			args:       []string{"script", "run", "seed"},
+			args:       []string{"script", "run", "scripts/seed.ts"},
 			fake:       func(fc *fakeClient) { fc.writes.err = connect.NewError(connect.CodeInternal, errNoTarget) },
 			wantRuns:   1,
-			wantErrHas: `failed to run the script "seed"`,
+			wantErrHas: `failed to run the script "scripts/seed.ts"`,
 			wantCode:   2,
 		},
 	} {
@@ -1058,18 +1039,8 @@ func TestScriptRun(t *testing.T) {
 			if tc.wantSource != "" && got.GetSource() != tc.wantSource {
 				t.Errorf("source = %q, want %q", got.GetSource(), tc.wantSource)
 			}
-			if tc.wantKind != "" && kindOf(got) != tc.wantKind {
-				t.Errorf("kind = %s, want %s", kindOf(got), tc.wantKind)
-			}
 		})
 	}
-}
-
-func kindOf(msg *grpcviewv1.RunScriptRequest) string {
-	if msg.Kind == nil {
-		return "<unset>"
-	}
-	return scriptKindName(msg.GetKind())
 }
 
 func TestWriteParents(t *testing.T) {

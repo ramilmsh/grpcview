@@ -72,7 +72,8 @@ func TestScratchpadValue(t *testing.T) {
 		{"binding then reference", `const x = "a" + "b"; x`, `"ab"`},
 		{"binding then foldable concat", `const x = 1; "a" + "b"`, ""},
 		{"multi-statement ending in an expression", "const a = 1;\nconst b = 2;\na + b", "3"},
-		{"multi-statement ending in an assertion", `const n = 2;` + "\n" + `gv.assert("n is 2", n === 2)`, ""},
+		{"multi-statement ending in an assertion", `const n = 2;` + "\n" +
+			`require("grpcview:assert").assert("n is 2", n === 2)`, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			res, err := e.RunScenario(context.Background(), c.src, Grant{}, Input{})
@@ -171,22 +172,17 @@ func TestSettledResultSurvivesFireAndForget(t *testing.T) {
 func TestInputInjection(t *testing.T) {
 	e := newEngine(t)
 	in := Input{
-		Request: RequestInput{
-			Body:     map[string]any{"name": "world"},
-			Metadata: map[string]string{"authorization": "Bearer t"},
-			Target:   "localhost:10000",
-		},
-		Vars:    map[string]any{"greeting": "hi"},
-		Secrets: map[string]any{"token": "s3cr3t"},
-		Env:     map[string]any{"stage": "test"},
+		Params:            map[string]any{"greeting": "hi"},
+		InheritedMetadata: map[string][]string{"authorization": {"Bearer t"}},
 	}
-	src := `[vars.greeting, request.body.name, request.target,
-request.metadata.authorization, secrets.token, env.stage].join("|")`
+	src := `const { params } = require("grpcview:request");
+const { inherit } = require("grpcview:metadata");
+[params.greeting, inherit().authorization[0]].join("|")`
 	res, err := e.RunScenario(context.Background(), src, Grant{}, in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	want := `"hi|world|localhost:10000|Bearer t|s3cr3t|test"`
+	want := `"hi|Bearer t"`
 	if string(res.Value) != want {
 		t.Fatalf("value = %s, want %s", res.Value, want)
 	}
@@ -194,13 +190,15 @@ request.metadata.authorization, secrets.token, env.stage].join("|")`
 
 func TestInputsAreFrozen(t *testing.T) {
 	e := newEngine(t)
-	in := Input{Vars: map[string]any{"a": float64(1)}}
-	res, err := e.RunScenario(context.Background(), `vars.a = 999; vars.b = 2; vars`, Grant{}, in)
+	in := Input{Params: map[string]any{"a": float64(1)}}
+	src := `const { params } = require("grpcview:request");
+params.a = 999; params.b = 2; params`
+	res, err := e.RunScenario(context.Background(), src, Grant{}, in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if string(res.Value) != `{"a":1}` {
-		t.Fatalf("frozen vars mutated: %s, want {\"a\":1}", res.Value)
+		t.Fatalf("frozen params mutated: %s, want {\"a\":1}", res.Value)
 	}
 }
 
@@ -286,7 +284,7 @@ func TestProfilesBounded(t *testing.T) {
 	}{
 		{"generator", e.runGenerator},
 		{"middleware", func(ctx context.Context, src string, g Grant, in Input) (Result, error) {
-			return e.RunMiddleware(ctx, src, nil, g, in)
+			return e.RunMiddleware(ctx, src, g, in)
 		}},
 		{"scenario", e.RunScenario},
 	}
@@ -353,8 +351,10 @@ func TestCapabilityGrantStructured(t *testing.T) {
 	writeFile(t, file, "grpc-token")
 
 	grant := Grant{FS: &FSGrant{AllowedPaths: []string{dir}}}
-	src := `import fs from "node:fs"; ({token: fs.readFileSync(request.body.path)})`
-	in := Input{Request: RequestInput{Body: map[string]any{"path": file}}}
+	src := `import fs from "node:fs";
+import { params } from "grpcview:request";
+({token: fs.readFileSync(params.path)})`
+	in := Input{Params: map[string]any{"path": file}}
 
 	res, err := e.RunScenario(context.Background(), src, grant, in)
 	if err != nil {
@@ -381,13 +381,13 @@ func BenchmarkMiddleware(b *testing.B) {
 			b.Fatalf("NewEngine: %v", err)
 		}
 		defer e.Close(context.Background())
-		if _, err := e.RunMiddleware(ctx, src, nil, Grant{}, Input{}); err != nil {
+		if _, err := e.RunMiddleware(ctx, src, Grant{}, Input{}); err != nil {
 			b.Fatalf("prime: %v", err)
 		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if _, err := e.RunMiddleware(ctx, src, nil, Grant{}, Input{}); err != nil {
+			if _, err := e.RunMiddleware(ctx, src, Grant{}, Input{}); err != nil {
 				b.Fatalf("run: %v", err)
 			}
 		}

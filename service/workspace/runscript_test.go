@@ -8,36 +8,18 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
-	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-func createScript(t *testing.T, w Workspace, ctx context.Context, name string, kind grpcviewv1.ScriptKind, source string) {
-	t.Helper()
-	coll, err := w.store.Open(ctx, testWorkspace)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if err := coll.CreateScript(ctx, name, kind); err != nil {
-		t.Fatalf("CreateScript %q: %v", name, err)
-	}
-	if err := coll.UpdateScript(ctx, name, store.ScriptPatch{Source: &source}); err != nil {
-		t.Fatalf("UpdateScript %q: %v", name, err)
-	}
-}
-
-func TestRunScriptRunsASavedScriptWithItsOwnKind(t *testing.T) {
+func TestRunScriptRunsASavedScriptByPath(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	// A generator run as a scratchpad would answer with nothing: the kind has to come from the
-	// saved script, not from the request.
-	createScript(t, w, ctx, "answer", grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR,
-		`export default () => 42`)
+	writeScript(t, w, ctx, "scripts/answer.ts", `export default () => 42`)
 
 	resp, err := w.RunScript(ctx, connect.NewRequest(&grpcviewv1.RunScriptRequest{
 		Collection: testWorkspace,
-		Script:     proto.String("answer"),
+		Script:     proto.String("scripts/answer.ts"),
 	}))
 	if err != nil {
 		t.Fatalf("RunScript: %v", err)
@@ -55,12 +37,13 @@ func TestRunScriptSavedScenario(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	createScript(t, w, ctx, "smoke", grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO,
-		`gv.assert("one is one", 1 === 1);`+"\n"+`"ok"`)
+	writeScript(t, w, ctx, "scripts/smoke.ts",
+		"import { assert } from \"grpcview:assert\";\n"+
+			`assert("one is one", 1 === 1);`+"\n"+`"ok"`)
 
 	resp, err := w.RunScript(ctx, connect.NewRequest(&grpcviewv1.RunScriptRequest{
 		Collection: testWorkspace,
-		Script:     proto.String("smoke"),
+		Script:     proto.String("scripts/smoke.ts"),
 	}))
 	if err != nil {
 		t.Fatalf("RunScript: %v", err)
@@ -78,7 +61,7 @@ func TestRunScriptRejectsAnAmbiguousOrEmptyRequest(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	createScript(t, w, ctx, "saved", grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO, `1`)
+	writeScript(t, w, ctx, "scripts/saved.ts", `1`)
 
 	for _, tc := range []struct {
 		name string
@@ -87,7 +70,7 @@ func TestRunScriptRejectsAnAmbiguousOrEmptyRequest(t *testing.T) {
 	}{
 		{
 			name: "both source and script",
-			msg:  &grpcviewv1.RunScriptRequest{Collection: testWorkspace, Source: `1`, Script: proto.String("saved")},
+			msg:  &grpcviewv1.RunScriptRequest{Collection: testWorkspace, Source: `1`, Script: proto.String("scripts/saved.ts")},
 			want: connect.CodeInvalidArgument,
 		},
 		{
@@ -97,7 +80,7 @@ func TestRunScriptRejectsAnAmbiguousOrEmptyRequest(t *testing.T) {
 		},
 		{
 			name: "unknown script",
-			msg:  &grpcviewv1.RunScriptRequest{Collection: testWorkspace, Script: proto.String("nope")},
+			msg:  &grpcviewv1.RunScriptRequest{Collection: testWorkspace, Script: proto.String("scripts/nope.ts")},
 			want: connect.CodeNotFound,
 		},
 	} {

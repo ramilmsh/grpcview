@@ -74,7 +74,7 @@ export {};
   return { symbol, importPath, dts };
 }
 
-// A saved request `gv.invoke()` can reach: its display-name path and its RESPONSE message.
+// A saved request `invoke()` can reach: its display-name path and its RESPONSE message.
 export interface InvokeTarget {
   path: string;
   pkg: string;
@@ -83,7 +83,7 @@ export interface InvokeTarget {
 }
 
 // gvRequestMapDts builds the ambient d.ts that populates `GvRequestMap` — the path → response
-// table `gv.invoke()`'s generic signature reads (see gv.d.ts in monaco-scripts.ts). Null when
+// table `invoke()`'s generic signature reads (see gv.d.ts in monaco-scripts.ts). Null when
 // nothing resolves, so the caller registers nothing and `invoke` stays at its `any` fallback.
 //
 // Every import is aliased positionally: two proto files may each export a `FooJson`, and the map

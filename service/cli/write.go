@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -351,12 +350,15 @@ func newScriptCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command 
 func newScriptLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls",
-		Short: "List the saved scripts, one per line: name and kind",
-		Long: "List every saved script, one per line: its display name and its kind.\n\n" +
+		Short: "List the saved scripts, one path per line",
+		Long: "List every saved script, one path per line: collection-relative, with the\n" +
+			"extension, e.g. `scripts/uuid.ts`.\n\n" +
 			"The source is deliberately not listed — a listing that printed whole modules\n" +
 			"could not be one line per script, and `grpcview get | jq .collection.scripts`\n" +
 			"is the form that carries everything.\n\n" +
-			"Scripts appear in the collection's own order; ls does not sort.",
+			"A script has no display name to sort by: its identity is its path, and the\n" +
+			"listing order is the store's, a sorted walk of the collection's scripts/\n" +
+			"directory, not a hand-maintained collection order.",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -373,94 +375,48 @@ func newScriptLsCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Comman
 }
 
 func renderScripts(w io.Writer, scripts []*grpcviewv1.Script) error {
-	var nameWidth int
 	for _, script := range scripts {
-		nameWidth = max(nameWidth, len(script.GetName()))
-	}
-	for _, script := range scripts {
-		line := fmt.Sprintf("%-*s  %s", nameWidth, script.GetName(), scriptKindName(script.GetKind()))
-		if err := writeLine(w, []byte(strings.TrimRight(line, " "))); err != nil {
+		if err := writeLine(w, []byte(script.GetPath())); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-const (
-	kindGenerator  = "generator"
-	kindMiddleware = "middleware"
-	kindScenario   = "scenario"
-)
-
-func scriptKindName(kind grpcviewv1.ScriptKind) string {
-	switch kind {
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
-		return kindGenerator
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
-		return kindMiddleware
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO:
-		return kindScenario
-	default:
-		return "unspecified"
-	}
-}
-
-func parseScriptKind(flag string) (*grpcviewv1.ScriptKind, error) {
-	switch flag {
-	case "":
-		return nil, nil
-	case kindGenerator:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR.Enum(), nil
-	case kindMiddleware:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE.Enum(), nil
-	case kindScenario:
-		return grpcviewv1.ScriptKind_SCRIPT_KIND_SCENARIO.Enum(), nil
-	default:
-		return nil, fmt.Errorf("invalid --kind %q: want one of %s, %s, %s",
-			flag, kindGenerator, kindMiddleware, kindScenario)
-	}
-}
-
 func newScriptRunCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {
-	var kind string
-
 	cmd := &cobra.Command{
-		Use:   "run <name>|-",
+		Use:   "run <path>|-",
 		Short: "Run a saved script, or a script read from stdin",
 		Long: "Evaluate a script through the scripting engine — a fresh isolated instance\n" +
 			"with no capabilities granted and no collection state touched.\n\n" +
-			"The engine runs a SOURCE, not a name: it knows nothing about the collection.\n" +
-			"So a <name> argument is resolved here, against the collection snapshot — that\n" +
-			"script's source and its own kind are what get sent — and an unknown name fails\n" +
-			"before anything is evaluated. `-` reads the source from stdin instead, and\n" +
-			"--kind selects the profile it runs under; unset evaluates the buffer as a\n" +
-			"scratchpad and reports its last expression.\n\n" +
+			"The engine runs a SOURCE, not a path: it knows nothing about the collection.\n" +
+			"So a <path> argument is resolved here, against the collection snapshot — by\n" +
+			"path, not by any display name, since a script has no other identity — and an\n" +
+			"unknown path fails before anything is evaluated. `-` reads the source from\n" +
+			"stdin instead.\n\n" +
+			"There is no profile to choose any more: a source with `export default` is\n" +
+			"compiled as an entry and its default export is called, and anything else is\n" +
+			"evaluated as a scratchpad whose value is its last expression. That rule reads\n" +
+			"the source itself, so it applies the same way to a saved script and to stdin.\n\n" +
 			"Unlike every other write verb this one produces data, so it prints: the script's\n" +
 			"return value goes to stdout as one line of JSON (nothing at all when it returned\n" +
 			"undefined), and its console.* output goes to stderr, prefixed with the level.\n\n" +
 			"A script that throws exits 1 — it ran, and its outcome failed. Exit 2 means the\n" +
-			"run never happened: an unknown name, or an engine that would not start.",
+			"run never happened: an unknown path, or an engine that would not start.",
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runScriptRun(cmd.Context(), s, g, open, args[0], kind)
+			return runScriptRun(cmd.Context(), s, g, open, args[0])
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "",
-		"execution profile for a script read from stdin: generator|middleware|scenario; unset is the scratchpad")
 
 	return cmd
 }
 
 const stdinScript = "-"
 
-func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFactory, arg, kindFlag string) error {
-	kind, err := parseScriptKind(kindFlag)
-	if err != nil {
-		return err
-	}
-
+func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFactory, arg string) error {
 	var stdinSource string
 	if arg == stdinScript {
 		raw, err := readBody(s, stdinScript)
@@ -471,35 +427,29 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 			return errors.New("no script on stdin: `script run -` evaluates the source it reads there, and it read nothing")
 		}
 		stdinSource = string(raw)
-	} else if kind != nil {
-		return fmt.Errorf(
-			"--kind does not apply to the saved script %q: it carries its own kind, and the flag selects the profile for a script read from stdin",
-			arg)
 	}
 
 	return withCollection(ctx, g, open, func(ctx context.Context, sess session, collection string) error {
-		source, runKind, label := stdinSource, kind, "the script on stdin"
+		source, label := stdinSource, "the script on stdin"
 
 		if arg != stdinScript {
 			ws, err := workspaceSnapshot(ctx, sess, collection)
 			if err != nil {
 				return err
 			}
-			script := scriptNamed(ws.GetScripts(), arg)
+			script := scriptAtPath(ws.GetScripts(), arg)
 			if script == nil {
 				return fmt.Errorf(
-					"unknown script %q: collection %q has %d saved script(s), and `grpcview script ls` lists them",
+					"unknown script %q: collection %q has %d saved script(s), and `grpcview script ls` lists their paths",
 					arg, collection, len(ws.GetScripts()))
 			}
 			source = script.GetSource()
-			runKind = script.GetKind().Enum()
 			label = fmt.Sprintf("the script %q", arg)
 		}
 
 		resp, err := sess.RunScript(ctx, connect.NewRequest(&grpcviewv1.RunScriptRequest{
 			Collection: collection,
 			Source:     source,
-			Kind:       runKind,
 		}))
 		if err != nil {
 			return fmt.Errorf("failed to run %s: %w", label, err)
@@ -508,9 +458,9 @@ func runScriptRun(ctx context.Context, s Streams, g *globalFlags, open clientFac
 	})
 }
 
-func scriptNamed(scripts []*grpcviewv1.Script, name string) *grpcviewv1.Script {
+func scriptAtPath(scripts []*grpcviewv1.Script, path string) *grpcviewv1.Script {
 	for _, script := range scripts {
-		if script.GetName() == name {
+		if script.GetPath() == path {
 			return script
 		}
 	}

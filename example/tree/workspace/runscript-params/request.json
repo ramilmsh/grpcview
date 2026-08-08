@@ -4,7 +4,7 @@
   },
   "service":  "grpcview.v1.WorkspaceService",
   "method":  "RunScript",
-  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  collection: \"example\",\n  // gv.request.params holds whatever the caller passed for THIS run: the CLI's\n  // --param, the MCP tool's `params`, or the second argument of gv.invoke().\n  // It is empty on a plain run, so every param needs a default.\n  //\n  // RunScript with no `kind` evaluates `source` as a scratchpad and returns its\n  // last-expression value, so the response echoes the arithmetic back.\n  source: String(gv.request.params.expression ?? \"1 + 1\"),\n}\n)",
+  "draftBody":  "import { params } from \"grpcview:request\";\n\nexport default async (): Promise<RequestMessage> => (\n{\n  collection: \"example\",\n  // `params` holds whatever the caller passed for THIS run: the CLI's --param,\n  // the MCP tool's `params`, or the second argument of invoke(). It is empty on\n  // a plain run, so every param needs a default.\n  //\n  // RunScript has one rule: a source with `export default` is compiled as an\n  // entry and its default export is called; anything else is evaluated as a\n  // scratchpad and its last expression is the value. `source` here is an\n  // expression, so the response echoes the arithmetic back.\n  source: String(params.expression ?? \"1 + 1\"),\n}\n)",
   "middleware":  [],
   "draftMetadataScript":  ""
 }

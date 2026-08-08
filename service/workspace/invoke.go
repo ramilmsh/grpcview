@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -145,7 +144,7 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 	return out, nil
 }
 
-// The ONE seam every invoke path shares, so the gv.invoke Invoker is installed here and nowhere else:
+// The ONE seam every invoke path shares, so the invoke() Invoker is installed here and nowhere else:
 // hanging it off a single caller left it missing from the streaming and dry-run paths.
 func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies []string) ([]string, *structpb.Struct, error) {
 	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))
@@ -353,14 +352,16 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("a TypeScript request body requires the scripting engine, which is not available"))
 	}
-	allGens, err := w.loadGenerators(ctx, workspaceName)
+	coll, err := w.store.Open(ctx, workspaceName)
 	if err != nil {
-		return nil, err
+		return nil, toConnectError(err)
 	}
 	out := make([]string, len(bodies))
 	for i, body := range bodies {
-		gens := transitiveGenerators(body, allGens)
-		res, err := w.engine.RunRequestBody(ctx, wrapExpressionScript(body), gens, scripting.Grant{}, scripting.Input{Params: params})
+		res, err := w.engine.RunRequestBody(ctx, wrapExpressionScript(body), scripting.Grant{}, scripting.Input{
+			Params:         params,
+			CollectionRoot: coll.Root(),
+		})
 		if err != nil {
 			return nil, bodyError(i, err.Error())
 		}
@@ -381,46 +382,6 @@ func wrapExpressionScript(src string) string {
 	return scripting.WrapExpression(src)
 }
 
-func calledNames(src string) map[string]struct{} {
-	called := make(map[string]struct{})
-	for _, loc := range genCallRe.FindAllStringSubmatchIndex(src, -1) {
-		start, end := loc[2], loc[3]
-		if start > 0 && src[start-1] == '.' {
-			continue
-		}
-		called[src[start:end]] = struct{}{}
-	}
-	return called
-}
-
-func transitiveGenerators(source string, all map[string]string) map[string]string {
-	out := make(map[string]string)
-	var worklist []string
-	for name := range calledNames(source) {
-		worklist = append(worklist, name)
-	}
-	for len(worklist) > 0 {
-		name := worklist[len(worklist)-1]
-		worklist = worklist[:len(worklist)-1]
-		if _, done := out[name]; done {
-			continue
-		}
-		src, ok := all[name]
-		if !ok {
-			continue
-		}
-		out[name] = src
-		for dep := range calledNames(src) {
-			if _, done := out[dep]; !done {
-				worklist = append(worklist, dep)
-			}
-		}
-	}
-	return out
-}
-
-var genCallRe = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\s*\(`)
-
 func isJSONObject(raw []byte) bool {
 	raw = bytes.TrimSpace(raw)
 	return len(raw) > 0 && raw[0] == '{'
@@ -431,27 +392,6 @@ func bodyError(index int, detail string) error {
 		fmt.Errorf("cannot evaluate TypeScript request body [%d]: %s", index, detail))
 }
 
-func (w Workspace) loadGenerators(ctx context.Context, workspaceName string) (map[string]string, error) {
-	coll, err := w.store.Open(ctx, workspaceName)
-	if err != nil {
-		return nil, err
-	}
-	scripts, err := coll.Scripts(ctx)
-	if errors.Is(err, store.ErrNotFound) {
-		return map[string]string{}, nil
-	}
-	if err != nil {
-		return nil, toConnectError(err)
-	}
-	gens := make(map[string]string, len(scripts))
-	for _, s := range scripts {
-		if s.GetKind() == grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR {
-			gens[s.GetName()] = s.GetSource()
-		}
-	}
-	return gens, nil
-}
-
 func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName string, path []string, metadataScript string, fallback *structpb.Struct, params map[string]any) (*structpb.Struct, error) {
 	if strings.TrimSpace(metadataScript) == "" {
 		return w.inheritedMetadataOnly(ctx, workspaceName, path, fallback, params)
@@ -460,20 +400,18 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName stri
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("a TypeScript metadata script requires the scripting engine, which is not available"))
 	}
-	allGens, err := w.loadGenerators(ctx, workspaceName)
+	coll, err := w.store.Open(ctx, workspaceName)
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+	inherited, err := w.foldAncestorMetadata(ctx, workspaceName, path, params)
 	if err != nil {
 		return nil, err
 	}
-	var inherited map[string][]string
-	if mentionsInherit(metadataScript) {
-		inherited, err = w.foldAncestorMetadata(ctx, workspaceName, path, params, allGens)
-		if err != nil {
-			return nil, err
-		}
-	}
-	res, err := w.engine.RunRequestBody(ctx, wrapExpressionScript(metadataScript), transitiveGenerators(metadataScript, allGens), scripting.Grant{}, scripting.Input{
+	res, err := w.engine.RunRequestBody(ctx, wrapExpressionScript(metadataScript), scripting.Grant{}, scripting.Input{
 		Params:            params,
 		InheritedMetadata: inherited,
+		CollectionRoot:    coll.Root(),
 	})
 	if err != nil {
 		return nil, metadataError(connect.CodeFailedPrecondition, err.Error())
@@ -489,18 +427,14 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName stri
 }
 
 // A request with no metadata script of its own inherits its folder chain: that is what the UI's
-// default `{ ...gv.metadata.inherit() }` buffer does, and a store-read path (gv.invoke, the CLI)
-// must not silently drop an ancestor's authorization header just because nothing was ever saved.
-// Explicit fallback keys still win over inherited ones.
+// default `{ ...require("grpcview:metadata").inherit() }` buffer does, and a store-read path
+// (grpcview:invoke, the CLI) must not silently drop an ancestor's authorization header just
+// because nothing was ever saved. Explicit fallback keys still win over inherited ones.
 func (w Workspace) inheritedMetadataOnly(ctx context.Context, workspaceName string, path []string, fallback *structpb.Struct, params map[string]any) (*structpb.Struct, error) {
 	if w.engine == nil || len(path) == 0 {
 		return fallback, nil
 	}
-	allGens, err := w.loadGenerators(ctx, workspaceName)
-	if err != nil {
-		return nil, err
-	}
-	inherited, err := w.foldAncestorMetadata(ctx, workspaceName, path, params, allGens)
+	inherited, err := w.foldAncestorMetadata(ctx, workspaceName, path, params)
 	if err != nil {
 		return nil, err
 	}
@@ -513,13 +447,10 @@ func (w Workspace) inheritedMetadataOnly(ctx context.Context, workspaceName stri
 	return structFromMetadataLists(inherited), nil
 }
 
-var inheritCallRe = regexp.MustCompile(`\binherit\s*\(`)
-
-func mentionsInherit(src string) bool {
-	return inheritCallRe.MatchString(src)
-}
-
-func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName string, path []string, params map[string]any, allGens map[string]string) (map[string][]string, error) {
+// Folding is unconditional — no textual gate on whether the script mentions inherit(): a gate over
+// source text is only ever a guess, and a sound check would need a build. foldAncestorMetadata
+// already skips folders whose script is empty, so this is simpler and strictly more correct.
+func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName string, path []string, params map[string]any) (map[string][]string, error) {
 	if len(path) > MaxFolderMetadataDepth {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("folder metadata chain depth %d exceeds the max of %d", len(path), MaxFolderMetadataDepth))
@@ -543,9 +474,10 @@ func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName strin
 			continue
 		}
 		folderPath := path[:i+1]
-		res, rerr := w.engine.RunRequestBody(ctx, wrapExpressionScript(script), transitiveGenerators(script, allGens), scripting.Grant{}, scripting.Input{
+		res, rerr := w.engine.RunRequestBody(ctx, wrapExpressionScript(script), scripting.Grant{}, scripting.Input{
 			Params:            params,
 			InheritedMetadata: accum,
+			CollectionRoot:    coll.Root(),
 		})
 		if rerr != nil {
 			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, rerr.Error()))

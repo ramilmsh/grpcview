@@ -157,7 +157,7 @@ interface UIState {
   treeSelection: readonly string[];
   treeFocused: string | null;
 
-  // Keyed by bare script name, so NOT yet collection-scoped — a later slice fixes that.
+  // Keyed by bare script path, so NOT yet collection-scoped — a later slice fixes that.
   selectedScript: string | null;
   scriptDrafts: Record<string, string | undefined>;
   scriptSubtab: ScriptSubtab;

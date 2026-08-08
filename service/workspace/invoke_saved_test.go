@@ -197,9 +197,10 @@ func TestInvokeSavedParamsReachTheBody(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	port := echoTarget(t, w, ctx, startEchoServer)
 
-	createGenerator(t, w, ctx, "prefix", `export default () => "p:"`)
+	writeScript(t, w, ctx, "scripts/prefix.ts", `export default () => "p:"`)
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
-		`export default () => ({ message: prefix() + gv.request.params.who })`, loopback(port))
+		"import prefix from \"~/scripts/prefix.ts\";\n"+requestParamsImport+
+			`export default () => ({ message: prefix() + params.who })`, loopback(port))
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
@@ -371,12 +372,12 @@ func TestInvokeSavedDryRun(t *testing.T) {
 	dead := loopback(deadPort(t))
 
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
-		`export default () => ({ message: "dry-" + gv.request.params.n })`, dead)
+		requestParamsImport+`export default () => ({ message: "dry-" + params.n })`, dead)
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	mdScript := `export default () => ({ "x-token": ["t-" + gv.request.params.n] })`
+	mdScript := requestParamsImport + `export default () => ({ "x-token": ["t-" + params.n] })`
 	if err := coll.UpdateRequest(ctx, nil, "Echo", store.RequestPatch{DraftMetadataScript: &mdScript}); err != nil {
 		t.Fatalf("UpdateRequest: %v", err)
 	}
@@ -462,7 +463,7 @@ func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 	port := echoTarget(t, w, ctx, startEchoServer)
 
 	saveRequest(t, w, ctx, nil, "Stream", "ServerStream",
-		`export default () => ({ message: "s-" + gv.request.params.n, count: 2 })`, loopback(port))
+		requestParamsImport+`export default () => ({ message: "s-" + params.n, count: 2 })`, loopback(port))
 
 	var frames []*grpcviewv1.InvokeStreamingResponse
 	send := func(resp *grpcviewv1.InvokeStreamingResponse) error {

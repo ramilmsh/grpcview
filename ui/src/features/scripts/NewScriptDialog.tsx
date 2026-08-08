@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input, Field } from "@/components/ui/Input";
-import { ScriptKind } from "@grpcview/v1/workspace_pb";
-import { kindMeta, NEW_KIND_ORDER } from "./script-kinds";
+import { DEFAULT_SCRIPT_PATH, validateScriptPath } from "./script-path";
 
 export function NewScriptDialog({
   open,
@@ -12,68 +10,52 @@ export function NewScriptDialog({
   onCreate,
   pending,
   error,
-  existingNames,
+  existingPaths,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string, kind: ScriptKind) => void;
+  onCreate: (path: string) => void;
   pending: boolean;
   error: Error | null;
-  existingNames: string[];
+  existingPaths: string[];
 }) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<ScriptKind>(ScriptKind.GENERATOR);
+  const [path, setPath] = useState(DEFAULT_SCRIPT_PATH);
 
   useEffect(() => {
-    if (open) {
-      setName("");
-      setKind(ScriptKind.GENERATOR);
-    }
+    if (open) setPath(DEFAULT_SCRIPT_PATH);
   }, [open]);
 
-  const trimmed = name.trim();
-  const collision = existingNames.includes(trimmed);
-  const canCreate = !!trimmed && !collision && !pending;
+  const trimmed = path.trim();
+  const ruleError = trimmed ? validateScriptPath(trimmed) : null;
+  const collision = !ruleError && existingPaths.includes(trimmed);
+  const canCreate = !!trimmed && !ruleError && !collision && !pending;
   const submit = () => {
-    if (canCreate) onCreate(trimmed, kind);
+    if (canCreate) onCreate(trimmed);
   };
 
   return (
     <Dialog open={open} onClose={onClose} title="New script" width={420}>
-      <div className="kindseg">
-        {NEW_KIND_ORDER.map((k) => {
-          const m = kindMeta(k);
-          const OptIcon = m.Icon;
-          return (
-            <button
-              key={k}
-              type="button"
-              className={clsx("kindopt", k === kind && "on")}
-              onClick={() => setKind(k)}
-            >
-              <OptIcon size={14} />
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
-      <Field label="Name">
+      <Field label="Path">
         <Input
           autoFocus
-          placeholder="e.g. uuid, sign-request"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          className="font-mono"
+          placeholder="scripts/uuid.ts"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") submit();
           }}
         />
       </Field>
+      {ruleError && (
+        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>{ruleError}</p>
+      )}
       {collision && (
         <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>
-          A script named “{trimmed}” already exists.
+          A script at “{trimmed}” already exists.
         </p>
       )}
-      {error && !collision && (
+      {error && !ruleError && !collision && (
         <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>{error.message}</p>
       )}
       <div className="dialog-actions">

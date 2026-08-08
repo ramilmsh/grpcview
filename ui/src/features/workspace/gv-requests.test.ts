@@ -99,7 +99,7 @@ describe("collectInvokeTargets", () => {
     ]);
   });
 
-  it("skips streaming requests — gv.invoke rejects them", () => {
+  it("skips streaming requests — invoke() rejects them", () => {
     const roots = [
       request("Server", [], SERVICE, "ListHellos"),
       request("Client", [], SERVICE, "SendHellos"),

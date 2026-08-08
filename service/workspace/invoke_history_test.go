@@ -17,7 +17,7 @@ import (
 
 func workspaceAt(t *testing.T, root, state string) Workspace {
 	t.Helper()
-	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
+	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages, scripting.WithWorkspaceRoot(root))
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -25,6 +25,7 @@ func workspaceAt(t *testing.T, root, state string) Workspace {
 	return Workspace{
 		store:  store.New(root, state, slog.New(slog.NewTextHandler(io.Discard, nil))),
 		engine: eng,
+		root:   root,
 	}
 }
 

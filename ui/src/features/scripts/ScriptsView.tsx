@@ -3,7 +3,6 @@ import { BracketsCurly, Plus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { useActiveWorkspace, useCreateScript } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import type { ScriptKind } from "@grpcview/v1/workspace_pb";
 import { ScriptSidebar } from "./ScriptSidebar";
 import { ScriptDetail } from "./ScriptDetail";
 import { NewScriptDialog } from "./NewScriptDialog";
@@ -14,21 +13,21 @@ export function ScriptsView() {
   const { collection, workspace } = useActiveWorkspace();
   const scripts = workspace?.scripts ?? [];
 
-  const selectedName = useUIStore((s) => s.selectedScript);
+  const selectedPath = useUIStore((s) => s.selectedScript);
   const selectScript = useUIStore((s) => s.selectScript);
   const setScriptSubtab = useUIStore((s) => s.setScriptSubtab);
 
   const createScript = useCreateScript();
   const [newOpen, setNewOpen] = useState(false);
 
-  const selected = scripts.find((s) => s.name === selectedName) ?? null;
+  const selected = scripts.find((s) => s.path === selectedPath) ?? null;
 
-  const onCreate = (name: string, kind: ScriptKind) => {
+  const onCreate = (path: string) => {
     createScript.mutate(
-      { collection: collection ?? "", name, kind },
+      { collection: collection ?? "", path },
       {
         onSuccess: () => {
-          selectScript(name);
+          selectScript(path);
           setScriptSubtab("code");
           setNewOpen(false);
         },
@@ -40,12 +39,12 @@ export function ScriptsView() {
     <div className="flex" style={{ flex: 1, minHeight: 0 }}>
       <ScriptSidebar
         scripts={scripts}
-        selectedName={selectedName}
+        selectedPath={selectedPath}
         onSelect={selectScript}
         onNew={() => setNewOpen(true)}
       />
       {selected ? (
-        <ScriptDetail key={selected.name} script={selected} />
+        <ScriptDetail key={selected.path} script={selected} />
       ) : (
         <ScriptsEmptyState onNew={() => setNewOpen(true)} />
       )}
@@ -55,7 +54,7 @@ export function ScriptsView() {
         onCreate={onCreate}
         pending={createScript.isPending}
         error={createScript.isError ? createScript.error : null}
-        existingNames={scripts.map((s) => s.name)}
+        existingPaths={scripts.map((s) => s.path)}
       />
     </div>
   );
@@ -82,9 +81,8 @@ function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
       </div>
       <div style={{ fontSize: 15, color: "var(--color-neutral-200)" }}>No script selected</div>
       <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0, maxWidth: 420 }}>
-        Pick a script from the sidebar, or create a generator, middleware, or scenario
-        to author and test-run it. See a script's Capabilities tab for what the runtime
-        enforces.
+        Pick a script from the sidebar, or create one to author and test-run it. See a
+        script's Capabilities tab for what the runtime enforces.
       </p>
       <Button variant="primary" onClick={onNew} style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}>
         <Plus size={14} />

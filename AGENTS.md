@@ -98,8 +98,8 @@ happened**, in two specific ways:
   (`grpcview.store.v1`) is deliberately decoupled from the wire schema
   (`grpcview.v1`) and bridged by `convert.go`.
 - **Scripting** (`service/scripting/`): a QuickJS-WASM engine (wazero) that runs
-  user JS/TS — request-body/metadata evaluation, generators, middleware, and
-  scenarios. **Network is on for every script**: a browser-style global `fetch`
+  user JS/TS — request-body/metadata evaluation, imported scripts, middleware,
+  and scenarios. **Network is on for every script**: a browser-style global `fetch`
   (a deliberate subset of WHATWG fetch — see `net.go`) is available with no grant
   and no capability manager. The **filesystem** capability is still deny-by-default
   behind a `Grant` (`node:fs`). Sources are bundled with **esbuild** before execution.
@@ -119,12 +119,17 @@ rules, no autocomplete, no type-checking, and no composition. grpcview's bodies 
 and dynamic cases are therefore one gradient, not two modes: `{"userId":"u_1"}` becomes
 `{"userId": uuid()}` by editing it, with no conversion step. Preserving that is why
 plain protojson must run the *same* evaluation path rather than a separate one — a
-protojson body that could not call a generator would be `{{ }}` all over again.
+protojson body that could not import a script would be `{{ }}` all over again.
 
 - A request **body** is authored as a bare TypeScript object literal in a Monaco
   editor. What the user edits is wrapped in a hidden canonical module —
   `export default (): RequestMessage => ( <body> )` — whose prefix/suffix lines
-  the editor hides (`body-wrapper.ts`). The `RequestMessage` type is generated
+  the editor hides (`body-wrapper.ts`). A body that carries its own `export default`
+  is a module already, so the editor shows it whole and hides nothing; `module-sniff.ts`
+  is what tells the two apart, over comment- and string-masked source for the same
+  reason `maskLiterals` exists on the backend. Hiding the wrapper above a module would
+  also put auto-import's insertion point inside a region the author cannot see.
+  The `RequestMessage` type is generated
   **in the browser** by `@bufbuild/protoc-gen-es` from the workspace's reflected
   `FileDescriptorSet` (`proto-types.ts`), giving full IntelliSense and
   type-checking against the selected method's input message.
@@ -132,8 +137,8 @@ protojson body that could not call a generator would be `{{ }}` all over again.
   `{ [key: string]: string[] }` under a hidden `=> ( … )` wrapper
   (`metadata-wrapper.ts`, `MetadataEditor.tsx`).
 - Both body and metadata strings are **evaluated on the backend in QuickJS** at
-  invoke time (same machinery as scripts), so they can call generator helpers
-  (e.g. `uuid()`) and reference user scripts.
+  invoke time (same machinery as scripts), so they can import the collection's own
+  scripts and npm packages.
 - **Plain protojson is equally valid** for both, because **valid JSON is valid
   TypeScript** — a JSON object is a TS object literal in expression position, so it is
   not a second case and gets no second code path. There are two forms: a **module**
@@ -146,72 +151,70 @@ protojson body that could not call a generator would be `{{ }}` all over again.
   a hand-edited `request.json`) inherits one behavior. The wrap opens no new line, so
   a bundler error still names the author's line.
   Full contract: [`docs/design/request-body-contract.md`](docs/design/request-body-contract.md).
-- **Scripts** (generators / middleware / scenarios) are authored in the Scripts
-  view, bundled with esbuild, and run in the same sandbox under a grant.
-- **Generators compose into every user-script position**, middleware included: the
-  caller passes `transitiveGenerators(source, all)` — the closure of names the source
-  textually calls — and the bundler resolves each as a `grpcview:gen/<name>` module
-  hung on `globalThis`. So `requestId()` means the same thing in a body, in a metadata
-  script and in a middleware. A middleware that calls no generator takes the cached,
-  uncomposed compile path, because a composed bundle folds the generator sources in and
-  cannot be keyed by `(source, grant)` alone.
+- **Scripts** are `.ts` files under a collection's `scripts/`, authored in the Scripts
+  view, bundled with esbuild, and run in the same sandbox under a grant. A script has
+  no name and no kind — see "Imports and the two sigils" below.
 
-### The `gv` global
+### The `grpcview:` modules
 
-Every script run — body, request metadata, folder metadata, middleware, scenario,
-generators — sees one deep-frozen `gv` global, declared for the editors by a single
-ambient `gv.d.ts` registered once at `file:///grpcview/gv.d.ts`
-(`monaco-scripts.ts`) and assembled backend-side by `buildGvPrelude`
-(`service/scripting/marshal.go`):
+**No grpcview-specific identifier is global.** Not "nothing is global": `console`,
+`fetch` and the internal `__grpcview_*` host bridges all are. The rule is narrower and
+deliberate — the long-term goal is emulating enough of the Node/browser environment to
+run third-party libraries unmodified, and a library that calls `console.log` must not
+need a grpcview import. Everything grpcview *adds* is an import instead:
 
 ```ts
-declare const gv: {
-  metadata: { inherit(): { [key: string]: string[] } };
-  request:  { params: Readonly<Record<string, any>> };
-  invoke(path: string, params?: Record<string, unknown>): Promise<InvokeResult>;
-  assert(description: string, condition: boolean | (() => boolean)): void;
-  assert(description: string, condition: (() => PromiseLike<boolean>) | PromiseLike<boolean>): Promise<void>;
-};
+import { invoke } from "grpcview:invoke";     // (path, params?) => Promise<InvokeResult>
+import { assert } from "grpcview:assert";     // (description, condition) => void | Promise<void>
+import { inherit } from "grpcview:metadata";  // () => { [k: string]: string[] }
+import { params } from "grpcview:request";    // Readonly<Record<string, any>>
 ```
 
-`gv.request.params` values and `InvokeResult.body` are typed `any`, not `unknown`,
-on purpose: both hold data whose real shape the ambient `.d.ts` cannot name, and
-both are meant to be drilled into or assigned straight into a typed request field —
-`(await gv.invoke("Collections/ListCollections")).body.collections[0].id`,
-`refresh: gv.request.params.refresh ?? true`. Under `unknown` each of those is a
-checker error in the body editor for code that runs correctly.
+Each is a static shim resolved by `grpcviewModulesPlugin` (`bundler.go`) into a synthetic
+namespace, so the module **text** is constant and stays cacheable. Per-run *data* rides the
+prelude under internal names the shims read — `__grpcview_params`, `__grpcview_inherited`,
+`__grpcview_request` (`writeDataGlobal` in `marshal.go`). **Data in the prelude, code in the
+module.** The editors see the same four modules as `declare module` blocks in the ambient
+`gv.d.ts` registered once at `file:///grpcview/gv.d.ts` (`monaco-scripts.ts`).
 
-`gv` is assembled and frozen **exactly once** (`Object.freeze` blocks later member
-addition, and a second `globalThis.gv =` would clobber the first). The two
-callables are hung off the containers before the single `__ff` freeze pass, which
-recurses only on `typeof === "object"` and so leaves them callable. Members degrade
-gracefully rather than being absent: `inherit()` is `{}` with no inheritance
-context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
+`params` values and `InvokeResult.body` are typed `any`, not `unknown`, on purpose: both
+hold data whose real shape the ambient `.d.ts` cannot name, and both are meant to be
+drilled into or assigned straight into a typed request field —
+`(await invoke("Collections/ListCollections")).body.collections[0].id`,
+`refresh: params.refresh ?? true`. Under `unknown` each of those is a checker error in the
+body editor for code that runs correctly.
+
+Members degrade gracefully rather than being absent: `inherit()` is `{}` with no
+inheritance context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
 `Invoker` rides the ctx.
 
-- **`gv.metadata.inherit()`** returns the already-evaluated, merged metadata of the
+- **`inherit()`** returns the already-evaluated, merged metadata of the
   node's ancestor **folder** chain. Folders carry their own metadata script
   (`Folder.draft_metadata_script`, edited via the folder-row gear); `invoke.go`'s
-  `foldAncestorMetadata` walks them root→parent as an iterative Go fold, gated on
-  the request's script textually mentioning `inherit(` — or being **empty**, which
-  inherits the chain unconditionally, matching the UI's default
-  `{ ...gv.metadata.inherit() }` buffer so a never-saved metadata tab does not lose
-  an ancestor's authorization on the store-read paths (`gv.invoke`, the CLI) — and
-  capped at `MaxFolderMetadataDepth`. Transitivity is **userland spread**: a folder that
-  writes `{ ...gv.metadata.inherit(), … }` carries ancestors forward, an empty
+  `foldAncestorMetadata` walks them root→parent as an iterative Go fold, capped at
+  `MaxFolderMetadataDepth`. The fold is **unconditional**: it used to be gated on the
+  leaf's script textually mentioning `inherit(`, and that gate died with the import
+  rewrite, because a leaf can now reach `inherit` through an imported file and no text
+  scan can see it. The chain is computed and the leaf decides — an empty script inherits
+  it, a script that spreads `inherit()` inherits it, a script that does neither gets
+  nothing. One consequence to know: the fold opens the collection even for a request with
+  no folder path, so a test that skips workspace setup now fails with
+  `not_found: collection not found` where it used to pass. Transitivity is **userland
+  spread**: a folder that writes `{ ...inherit(), … }` carries ancestors forward, an empty
   folder is transparent, and a non-empty folder that omits the spread is a
   deliberate barrier. Ancestor scripts are read from the **store**, so folder edits
   only take effect after saving.
-- **`gv.invoke(path, params)`** runs another saved request through the same
+- **`invoke(path, params)`** runs another saved request through the same
   pipeline and resolves an `InvokeResult` (`{ok, status, body, metadata,
-  requestMetadata, latencyMs}`); the target reads `params` as `gv.request.params`.
+  requestMetadata, latencyMs}`); the target reads them as `params` from
+  `grpcview:request`.
   `path` splits on `/` into display-name segments. A gRPC-status failure **resolves**
   with `ok:false` (fetch-style); it rejects only for unknown path, a streaming
   target, un-evaluable body/metadata, or the depth cap. Nested invokes do **not**
   record history. Bounded by a ctx depth counter (`gvinvoke.go`) — a depth cap only,
   with no cycle set, so self-recursive pagination still works.
-- **`gv.assert(description, condition)`** is the whole test-harness primitive, and it is
-  pure prelude JS (`gvAssertShim` in `marshal.go`) — no host call, no wire field, no UI. It
+- **`assert(description, condition)`** is the whole test-harness primitive, and it is
+  pure JS in the `grpcview:assert` shim (`bundler.go`) — no host call, no wire field, no UI. It
   **throws** on failure: an `AssertionError` reading `assertion failed: <description>`, with
   the underlying text appended when the predicate throws or its promise rejects. Truthiness
   decides, not `=== true`. Three things about it are load bearing:
@@ -222,37 +225,96 @@ context, `params` is `{}` on a top-level invoke, and `invoke` rejects when no
     editor: the sync form types as `void`, so nobody is nudged into `await`ing it.
   - **Its own frames are named (`gvAssert`, `gvAssertFail`) and filtered out of the stack**
     before the throw. `remapJSError` reads the *first* frame's line and the throw happens
-    inside the prelude, so an unfiltered stack blames a prelude line instead of the failing
-    assertion's.
+    inside the shim, so an unfiltered stack blames the shim instead of the failing
+    assertion's line. The filtering has to survive **bundling** now that the shim is a
+    module folded into the bundle rather than prelude text.
   - **Nothing is logged on success**, and a failure aborts the run — silence is a pass, and
     one script is one assertion budget rather than a report over many.
 
-### Typed `gv.invoke` paths
+### Imports and the two sigils
 
-`gv.invoke` is generic over its path, so a literal path completes inside the quotes
+A script is a `.ts` file and **its path is its identity** — no name, no kind, no
+`script.json`. `Script` on the wire is `{ path, source }`, where `path` is
+collection-relative *with* the extension (`scripts/uuid.ts`), and it is what
+`UpdateScript` / `DeleteScript` / `RunScript.script` address. Renaming is a path change,
+i.e. a file move. The store lists scripts by walking `<collection>/scripts/**/*.ts`
+(sorted); the filesystem is the listing, so there is no ordered slug array to reconcile.
+
+Two sigils, both resolving to real files:
+
+| specifier | resolves against |
+| --- | --- |
+| `@/…` | the **workspace root** — anything, including another collection's scripts |
+| `~/…` | the **collection root** of the script being compiled |
+
+Facts that are load bearing:
+
+- **One plugin, `pathResolverPlugin` (`bundler.go`), filter `^[@~]/`, and its position in
+  the plugin list is a contract**: it must claim these before `registryResolverPlugin`'s
+  `^[^./]` filter, which would otherwise take them for npm packages. `grpcviewModulesPlugin`
+  sits ahead of both for the same reason.
+- **Both roots are canonicalized with `filepath.EvalSymlinks` up front.** esbuild returns
+  symlink-resolved paths, and macOS puts `/tmp` and `/var` behind symlinks, so an
+  un-canonicalized root fails its own containment guard for a file genuinely inside it. This
+  is the single most likely thing to break a test on this path.
+- **The workspace root is per-engine** (`scripting.WithWorkspaceRoot`), **the collection root
+  is per-compile** (`Input.CollectionRoot`) — a run can have one, both or neither, and a
+  missing one reports `no <which> root for this run` rather than resolving to something else.
+  Escaping a root is `resolves outside the <which>`.
+- **`import` is a statement, so it cannot stand in expression position.** A body or metadata
+  written as a bare object literal must use `require("…")`; a module (anything with
+  `export default`) uses `import`. The rule is grammatical, not a preference. The
+  `Expected "(" but found …` parse error is caught and replaced with a message that says so.
+- **Computed specifiers are rejected before the build** (`rejectComputedImports`). esbuild
+  reports neither an error nor a warning for `require(p)`, and emits code that fails at run
+  time. A conservative regex is correct here: we are forbidding, not resolving.
+- **`Request.middleware` holds specifiers, not names** — `~/scripts/trace-headers.ts` or
+  `@/lib/mw/auth.ts`, stored exactly as written, with no canonicalization. The source is read
+  from **disk** at the resolved path (`resolveMiddlewareSpecifier` in
+  `service/workspace/middleware.go`, which mirrors the plugin's two sigils and containment
+  guard), so a middleware is an ordinary module that imports whatever it needs. There is no
+  composition step left anywhere.
+- **Import suggestions in Monaco are ours, not TypeScript's.** Monaco's bundled worker calls
+  `getCompletionsAtPosition` with no options and drops the import-inserting `codeActions`, so
+  `includeCompletionsForModuleExports` can't be reached and TS-native auto-import is
+  unavailable at any configuration. `module-auto-import.ts` registers a completion provider
+  that offers each workspace module's exports (parsed in `auto-import.ts`) with an
+  `additionalTextEdits` that writes the `import`, skipping names already in scope so it never
+  duplicates the built-in provider. It computes the specifier itself, so the inserted form is
+  always `~/` or `@/` and never relative.
+- **The bundle cache is keyed over the whole graph.** `Metafile: true` on every build,
+  `cacheKey` covers `(cacheSalt, variant, grant, collectionRoot, source)`, and the resolved
+  input list is stored *with* the compiled output and re-hashed on every hit — a hit whose
+  inputs changed is discarded. Keying on the entry source alone would serve a stale bundle
+  after an imported file is edited.
+
+### Typed `invoke` paths
+
+`invoke` is generic over its path, so a literal path completes inside the quotes
 and types `body` as the target method's response message:
 
 ```ts
-(await gv.invoke("Collections/ListCollections")).body.collections[0].id  // string
+import { invoke } from "grpcview:invoke";
+(await invoke("Collections/ListCollections")).body.collections[0].id  // string
 ```
 
 The mechanism is an ambient interface merged into from a generated file:
 
 - `gv.d.ts` (`monaco-scripts.ts`) declares `interface GvRequestMap {}` empty, plus
-  `invoke<P extends GvPath | (string & {})>(…): Promise<InvokeResult<GvBody<P>>>`.
+  `grpcview:invoke`'s `invoke<P extends GvPath | (string & {})>(…): Promise<InvokeResult<GvBody<P>>>`.
   `(string & {})` is load-bearing: a computed path still compiles and just gets
   `body: any`, while literals keep their completions.
 - `collectInvokeTargets` (`gv-requests.ts`) walks the collection tree and pairs each
   **unary** saved request's display-name path with its **output** message. Streaming
-  requests are skipped (`gv.invoke` rejects them), as is any name containing `/`,
+  requests are skipped (`invoke` rejects them), as is any name containing `/`,
   which `splitInvokePath` would resolve elsewhere.
 - `gvRequestMapDts` (`proto-types.ts`) turns that list into
   `gv-requests.d.ts`, importing each `<Message>Json` from the generated `./gen/**_pb`
   modules under a positional alias (two files may export the same symbol).
 
 **The registration is app-level, not per-editor** (`gv-types.ts`'s `useGvInvokeTypes`,
-called once from `App.tsx`'s `CurrentView` *above* its early returns). `gv.invoke` is
-callable from every script surface, so the two **collection-scoped** libs — the generated
+called once from `App.tsx`'s `CurrentView` *above* its early returns). `invoke` is
+importable from every script surface, so the two **collection-scoped** libs — the generated
 `file:///grpcview/request/gen/**` modules and `gv-requests.d.ts` — cannot belong to the body
 editor: owned there, they existed only while a request tab was open with a method selected,
 and the Scripts view (which mounts no body editor) got `keyof GvRequestMap === never` and
@@ -727,11 +789,14 @@ is shipped.
   refetches and gets `NotFound`.
 - **Inside a collection the same split repeats: the directory slug is identity, the
   display name is data.** A rename writes `meta.Name` and leaves the directory alone —
-  for requests (`store/fs.go`), folders (`store/fs.go`) and scripts
-  (`store/scripts.go`) alike. So renaming the script `test-goals` to `smoke` leaves
-  `scripts/test-goals/script.json` holding `"name": "smoke"`, and that drift is
-  **intended**: the slug is what UI state, `Item.slug` and every on-disk reference are
-  keyed by, and re-slugging would churn git history on every rename. Do not "fix" it.
+  for requests (`store/fs.go`) and folders (`store/fs.go`) alike. So renaming a request
+  from `test-goals` to `smoke` leaves `tree/…/test-goals/request.json` holding
+  `"name": "smoke"`, and that drift is **intended**: the slug is what UI state,
+  `Item.slug` and every on-disk reference are keyed by, and re-slugging would churn git
+  history on every rename. Do not "fix" it.
+  **Scripts are the deliberate exception**: a script has no display name at all, its path
+  *is* its identity, and renaming one moves the file (`store/scripts.go`). That is what
+  makes it importable — an import specifier has to name something stable on disk.
 - **The TopBar picker is where a collection is switched**, and switching is pure UI
   state (`activeCollection`) because every query key is built from the active id —
   no reload, no refetch of anything but the collection now addressed. A row is
@@ -872,13 +937,13 @@ user is standing in* (which collection does it address); it is not the root.
   path and a `service/method` — off a single `Get` snapshot. One that matches both
   is exit 2, never a guess: catching `NotFound` from `InvokeSaved` cannot work,
   because a miss on one interpretation says nothing about the other. Paths split
-  through `workspace.SplitInvokePath`, the same parser `gv.invoke` uses.
+  through `workspace.SplitInvokePath`, the same parser `invoke()` uses.
 - **`InvokeSaved`/`InvokeSavedStreaming`** are the addressed counterparts to
   `Invoke`: they resolve the *saved* body, metadata script, middleware and target
-  server-side, take `params` (reaching scripts as `gv.request.params`), record
+  server-side, take `params` (reaching scripts as `params` from `grpcview:request`), record
   history by default, and support `dry_run`, which stops after the shared pre-send
   steps and reports the **evaluated** request without dialing. `resolveSavedRun` is
-  the one place a saved request becomes an `invokeSpec`, shared with `gv.invoke`.
+  the one place a saved request becomes an `invokeSpec`, shared with `invoke()`.
 - **`describe` never dials.** It answers from the workspace's cached merged
   descriptor set, so it works from a box with no route to the target, and it
   reports which source it read: doc comments survive only if that source carried
@@ -1148,9 +1213,11 @@ long-lived and the global 30s default would kill it mid-conversation.
 - **`run_script` now runs in the daemon**, not in the MCP child. Same exposure
   (arbitrary JS with `fetch`), different process, and it outlives the session.
 - **`run_script` takes `source` *or* `script`**, never both and never neither.
-  `script` names one of the collection's saved scripts and runs it with that
-  script's own kind, so a saved scenario no longer has to be pasted in to run from
-  MCP. `kind` is ignored when `script` is set.
+  `script` is a saved script's collection-relative **path** (`scripts/smoke.ts`), so a
+  saved scenario no longer has to be pasted in to run from MCP. There is no kind: a
+  source with `export default` is compiled as an entry and its default export is
+  **called**; anything else is evaluated as a scratchpad whose value is its last
+  expression.
 
 ## Views (no router)
 
@@ -1163,8 +1230,8 @@ between three feature views:
 - **Sources** (`features/sources/`) — the priority-ordered definition-source list
   (see above): add / refresh / reorder / remove, with each source's contribution
   shown so a shadowed one is visible as such.
-- **Scripts** (`features/scripts/`) — authoring the generator/middleware/scenario
-  scripts.
+- **Scripts** (`features/scripts/`) — authoring a collection's `.ts` files, listed and
+  addressed by path.
 
 Server state is fetched via `@connectrpc/connect-query` on top of
 `@tanstack/react-query`; local/view state lives in `zustand`.

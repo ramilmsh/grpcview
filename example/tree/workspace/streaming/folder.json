@@ -5,5 +5,5 @@
   "items":  [
     "invokestreaming"
   ],
-  "draftMetadataScript":  "export default async (): Promise<Metadata> => (\n{\n  // A nested folder carries its ancestors forward only if it spreads them.\n  // Drop the spread and this folder becomes a deliberate barrier.\n  ...gv.metadata.inherit(),\n  \"x-demo-folder\": [\"streaming\"],\n}\n)"
+  "draftMetadataScript":  "{\n  // A nested folder carries its ancestors forward only if it spreads them.\n  // Drop the spread and this folder becomes a deliberate barrier.\n  //\n  // Expression form: there is no `export default` here, so this object IS the\n  // whole script. An `import` statement cannot stand in expression position, so\n  // the module comes in through `require(...)` instead — same resolver, other\n  // grammar. Specifiers must be string literals either way.\n  ...require(\"grpcview:metadata\").inherit(),\n  \"x-demo-folder\": [\"streaming\"],\n}"
 }

@@ -23,6 +23,14 @@ type rpcEntry struct {
 	stream func(streamer) streamFunc
 }
 
+// RPCs that exist for an editor, not an agent, and are deliberately not exposed as tools. Every
+// name here is one an agent would pay schema tokens for and never usefully call. TestTotality
+// requires each RPC to appear in exactly one of this map and `rpcs`, so an added RPC still has to
+// be a decision rather than an omission.
+var notTools = map[string]string{
+	"ListWorkspaceModules": "feeds Monaco's TypeScript resolution the workspace's .ts sources; an agent reads files directly",
+}
+
 // One entry per RPC; a missing one fails TestTotality. Tool names are curated, not derived,
 // because an agent picks a tool by its name.
 var rpcs = map[string]rpcEntry{

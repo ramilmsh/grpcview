@@ -23,42 +23,58 @@ const entryGlobalName = "__grpcview_entry"
 const esbuildTarget = api.ES2022
 
 type compiled struct {
-	code               string
-	sourceMap          []byte
-	authorPreludeLines int
+	code      string
+	sourceMap []byte
+}
+
+// A resolved import that fed a bundle but is invisible to the plain (cacheSalt, grant, source)
+// key: it lives on disk, outside the cached blob, and can change without the author's source
+// changing. Recorded from the build's metafile so a cache hit can be revalidated against disk.
+type cacheInput struct {
+	path   string
+	digest string
+}
+
+type cacheEntry struct {
+	c      compiled
+	inputs []cacheInput
 }
 
 type bundler struct {
 	resolveDir  string
 	nodePaths   []string
 	registryDir string
+	wsRoot      string
 	cacheSalt   string
 	cache       sync.Map
 }
 
-func newBundler(resolveDir string, nodePaths []string, registryDir string) *bundler {
+func newBundler(resolveDir string, nodePaths []string, registryDir string, wsRoot string) *bundler {
 	return &bundler{
 		resolveDir:  resolveDir,
 		nodePaths:   nodePaths,
 		registryDir: registryDir,
-		cacheSalt:   resolveDir + "\x00" + strings.Join(nodePaths, "\x00") + "\x00" + registryDir,
+		wsRoot:      wsRoot,
+		cacheSalt: resolveDir + "\x00" + strings.Join(nodePaths, "\x00") + "\x00" + registryDir +
+			"\x00" + wsRoot,
 	}
 }
 
-func (b *bundler) compile(source string, g Grant) (compiled, error) {
-	key, keyable := b.cacheKey(source, g, "expr")
+func (b *bundler) compile(source string, g Grant, collRoot string) (compiled, error) {
+	key, keyable := b.cacheKey(source, g, collRoot, "expr")
 	if keyable {
-		if v, ok := b.cache.Load(key); ok {
-			return v.(compiled), nil
+		if c, ok := b.cacheLoad(key); ok {
+			return c, nil
 		}
 	}
 
 	var (
-		c   compiled
-		err error
+		c      compiled
+		inputs []cacheInput
+		err    error
 	)
 	if needsBundling(source) {
-		c, err = b.buildBundle(source, g)
+		c, inputs, err = b.buildBundle(source, g, collRoot)
 	} else {
 		c, err = transformScript(source)
 	}
@@ -66,12 +82,12 @@ func (b *bundler) compile(source string, g Grant) (compiled, error) {
 		return compiled{}, err
 	}
 	if keyable {
-		b.cache.Store(key, c)
+		b.cacheStore(key, c, inputs)
 	}
 	return c, nil
 }
 
-func (b *bundler) cacheKey(source string, g Grant, variant string) (string, bool) {
+func (b *bundler) cacheKey(source string, g Grant, collRoot string, variant string) (string, bool) {
 	gj, err := json.Marshal(g)
 	if err != nil {
 		return "", false
@@ -83,28 +99,60 @@ func (b *bundler) cacheKey(source string, g Grant, variant string) (string, bool
 	h.Write([]byte{0})
 	h.Write(gj)
 	h.Write([]byte{0})
+	io.WriteString(h, collRoot)
+	h.Write([]byte{0})
 	io.WriteString(h, source)
 	return hex.EncodeToString(h.Sum(nil)), true
 }
 
-func (b *bundler) compileEntry(source string, g Grant) (compiled, error) {
-	key, keyable := b.cacheKey(source, g, "entry")
-	if keyable {
-		if v, ok := b.cache.Load(key); ok {
-			return v.(compiled), nil
+// A cache hit is only trustworthy if every input the metafile recorded still reads back to the
+// digest it had at build time; a stale entry is dropped rather than served.
+func (b *bundler) cacheLoad(key string) (compiled, bool) {
+	v, ok := b.cache.Load(key)
+	if !ok {
+		return compiled{}, false
+	}
+	entry := v.(cacheEntry)
+	for _, in := range entry.inputs {
+		data, err := os.ReadFile(in.path)
+		if err != nil || sha256Hex(data) != in.digest {
+			b.cache.Delete(key)
+			return compiled{}, false
 		}
 	}
-	c, err := b.buildEntryBundle(source, g)
+	return entry.c, true
+}
+
+func (b *bundler) cacheStore(key string, c compiled, inputs []cacheInput) {
+	b.cache.Store(key, cacheEntry{c: c, inputs: inputs})
+}
+
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func (b *bundler) compileEntry(source string, g Grant, collRoot string) (compiled, error) {
+	key, keyable := b.cacheKey(source, g, collRoot, "entry")
+	if keyable {
+		if c, ok := b.cacheLoad(key); ok {
+			return c, nil
+		}
+	}
+	c, inputs, err := b.buildEntryBundle(source, g, collRoot)
 	if err != nil {
 		return compiled{}, err
 	}
 	if keyable {
-		b.cache.Store(key, c)
+		b.cacheStore(key, c, inputs)
 	}
 	return c, nil
 }
 
-func (b *bundler) esbuildBundle(source string, g Grant, format api.Format, globalName string, extra ...api.Plugin) (compiled, error) {
+func (b *bundler) esbuildBundle(source string, g Grant, collRoot string, format api.Format, globalName string) (compiled, []cacheInput, error) {
+	if err := rejectComputedImports(source); err != nil {
+		return compiled{}, nil, err
+	}
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   source,
@@ -124,33 +172,49 @@ func (b *bundler) esbuildBundle(source string, g Grant, format api.Format, globa
 		Charset:       api.CharsetUTF8,
 		LegalComments: api.LegalCommentsNone,
 		LogLevel:      api.LogLevelSilent,
+		Metafile:      true,
 		NodePaths:     b.nodePaths,
-		Plugins:       b.plugins(g, extra...),
+		Plugins:       b.plugins(g, collRoot),
 	})
 	if len(result.Errors) > 0 {
-		return compiled{}, bundleErrors(result.Errors)
+		return compiled{}, nil, bundleErrors(result.Errors)
 	}
-	return outputToCompiled(result.OutputFiles), nil
+	return outputToCompiled(result.OutputFiles), collectCacheInputs(result.Metafile), nil
 }
 
-func (b *bundler) buildBundle(source string, g Grant) (compiled, error) {
-	return b.esbuildBundle(source, g, api.FormatESModule, "")
+func (b *bundler) buildBundle(source string, g Grant, collRoot string) (compiled, []cacheInput, error) {
+	return b.esbuildBundle(source, g, collRoot, api.FormatESModule, "")
 }
 
 // Captures the entry module's exports onto entryGlobalName. IIFE output cannot contain top-level await
 // (esbuild rejects it).
-func (b *bundler) buildEntryBundle(source string, g Grant) (compiled, error) {
-	return b.esbuildBundle(source, g, api.FormatIIFE, entryGlobalName)
+func (b *bundler) buildEntryBundle(source string, g Grant, collRoot string) (compiled, []cacheInput, error) {
+	return b.esbuildBundle(source, g, collRoot, api.FormatIIFE, entryGlobalName)
 }
 
-// Bypasses the compile cache: gens folds into the blob, so a key over (source, grant) alone would be
-// unsound.
-func (b *bundler) buildBundleComposed(source string, g Grant, gens map[string]string) (compiled, error) {
-	return b.esbuildBundle(source, g, api.FormatESModule, "", generatorResolverPlugin(gens))
-}
-
-func (b *bundler) buildEntryBundleComposed(source string, g Grant, gens map[string]string) (compiled, error) {
-	return b.esbuildBundle(source, g, api.FormatIIFE, entryGlobalName, generatorResolverPlugin(gens))
+// The metafile is esbuild's own account of what fed the bundle, so the key built from it cannot
+// drift from what actually ran. Synthetic entries (stdin, plugin-namespaced virtual modules) never
+// stat as a real file and drop out here.
+func collectCacheInputs(metafile string) []cacheInput {
+	var mf struct {
+		Inputs map[string]json.RawMessage `json:"inputs"`
+	}
+	if err := json.Unmarshal([]byte(metafile), &mf); err != nil {
+		return nil
+	}
+	inputs := make([]cacheInput, 0, len(mf.Inputs))
+	for p := range mf.Inputs {
+		info, err := os.Stat(p)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		inputs = append(inputs, cacheInput{path: p, digest: sha256Hex(data)})
+	}
+	return inputs
 }
 
 func transformScript(source string) (compiled, error) {
@@ -201,6 +265,78 @@ var (
 	dynamicImportRe = regexp.MustCompile(`\b(import|require)\s*\(`)
 )
 
+// esbuild reports neither an error nor a warning for a computed require(p)/import(p) specifier: it
+// emits code that throws at runtime, or for import(p), a live dynamic import into QuickJS. The scan
+// runs over maskLiterals(source) rather than the raw text: a false positive here rejects correct
+// code with an error that names no line and so cannot be found, whereas a false negative only lets
+// the pre-existing runtime failure through. Every ambiguous case below is resolved toward not
+// rejecting.
+func rejectComputedImports(source string) error {
+	masked := maskLiterals(source)
+	for _, loc := range dynamicImportRe.FindAllStringIndex(masked, -1) {
+		i := loc[1]
+		for i < len(masked) && (masked[i] == ' ' || masked[i] == '\t' || masked[i] == '\n' || masked[i] == '\r') {
+			i++
+		}
+		if i >= len(masked) || (masked[i] != '"' && masked[i] != '\'' && masked[i] != '`') {
+			return fmt.Errorf("scripting: computed import specifier: require(...) and import(...) need a string literal")
+		}
+	}
+	return nil
+}
+
+// maskLiterals returns source with the interior of //, /* */ comments and "…"/'…'/`…` literals
+// replaced by spaces, byte for byte, so a text scan for import syntax does not fire on an occurrence
+// that is merely quoted or commented out. Newlines are left in place. Regex literals are not
+// recognized (deliberately: getting one wrong can only produce a false negative, see
+// rejectComputedImports), and an unterminated comment or string is masked to end of input rather
+// than rejected.
+func maskLiterals(source string) string {
+	b := []byte(source)
+	n := len(b)
+	blank := func(i int) {
+		if b[i] != '\n' {
+			b[i] = ' '
+		}
+	}
+	for i := 0; i < n; {
+		switch {
+		case b[i] == '/' && i+1 < n && b[i+1] == '/':
+			i += 2
+			for i < n && b[i] != '\n' {
+				blank(i)
+				i++
+			}
+		case b[i] == '/' && i+1 < n && b[i+1] == '*':
+			i += 2
+			for i < n && !(b[i] == '*' && i+1 < n && b[i+1] == '/') {
+				blank(i)
+				i++
+			}
+			if i < n {
+				i += 2
+			}
+		case b[i] == '"' || b[i] == '\'' || b[i] == '`':
+			q := b[i]
+			i++
+			for i < n && b[i] != q {
+				if b[i] == '\\' && i+1 < n {
+					blank(i)
+					i++
+				}
+				blank(i)
+				i++
+			}
+			if i < n {
+				i++
+			}
+		default:
+			i++
+		}
+	}
+	return string(b)
+}
+
 const capNamespace = "grpcview-cap"
 
 var capFilter = `^(node:)?(fs|path)$`
@@ -227,14 +363,58 @@ var capModules = map[string]capModule{
 }
 
 // esbuild takes the first plugin whose OnResolve returns a path, so the order is a CONTRACT:
-// grpcview:gen/* must be claimed before the registry plugin's `^[^./]` filter matches it.
-func (b *bundler) plugins(g Grant, extra ...api.Plugin) []api.Plugin {
-	ps := []api.Plugin{capabilityPlugin(g)}
-	ps = append(ps, extra...)
+// pathResolverPlugin and grpcviewModulesPlugin must be claimed before the registry plugin's
+// `^[^./]` filter, which also matches `@/`/`~/`/`grpcview:*`.
+func (b *bundler) plugins(g Grant, collRoot string) []api.Plugin {
+	ps := []api.Plugin{capabilityPlugin(g), grpcviewModulesPlugin(), pathResolverPlugin(b.wsRoot, collRoot)}
 	if b.registryDir != "" {
 		ps = append(ps, registryResolverPlugin(b.registryDir))
 	}
 	return ps
+}
+
+// The workspace root is fixed at engine construction; the collection root rides each compile call
+// and is empty whenever a run has none, which `~/` then reports as unresolvable.
+//
+// Both roots are canonicalized once here, up front: esbuild resolves through symlinks (macOS puts
+// both /tmp and /var behind one), so an un-resolved root would never satisfy withinDir against its
+// own, symlink-resolved r.Path even for a file that is genuinely inside it.
+func pathResolverPlugin(wsRoot, collRoot string) api.Plugin {
+	wsRoot = canonicalDir(wsRoot)
+	collRoot = canonicalDir(collRoot)
+	return api.Plugin{
+		Name: "grpcview-path-sigils",
+		Setup: func(build api.PluginBuild) {
+			build.OnResolve(api.OnResolveOptions{Filter: `^[@~]/`},
+				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					root, which := wsRoot, "workspace"
+					if args.Path[0] == '~' {
+						root, which = collRoot, "collection"
+					}
+					if root == "" {
+						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: no %s root for this run", args.Path, which)
+					}
+					r := build.Resolve("./"+args.Path[2:], api.ResolveOptions{ResolveDir: root, Kind: args.Kind})
+					if len(r.Errors) > 0 {
+						return api.OnResolveResult{Errors: r.Errors}, nil
+					}
+					if !withinDir(root, r.Path) {
+						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: resolves outside the %s", args.Path, which)
+					}
+					return api.OnResolveResult{Path: r.Path}, nil
+				})
+		},
+	}
+}
+
+func canonicalDir(dir string) string {
+	if dir == "" {
+		return dir
+	}
+	if canon, err := filepath.EvalSymlinks(dir); err == nil {
+		return canon
+	}
+	return dir
 }
 
 func registryResolverPlugin(registryDir string) api.Plugin {
@@ -289,27 +469,92 @@ func withinDir(dir, path string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-const (
-	generatorSpecPrefix = "grpcview:gen/"
-	generatorNamespace  = "grpcview-generator"
-)
+const grpcviewNamespace = "grpcview-modules"
 
-func generatorResolverPlugin(gens map[string]string) api.Plugin {
+var grpcviewModuleFilter = `^grpcview:(invoke|assert|metadata|request)$`
+
+// Per-run data (params, inherited metadata, the invoke/net bridges) never appears in this text — it
+// stays in the prelude under `__grpcview_*` globals the shims read. That keeps the module text
+// constant, which is the point: it is what makes the bundle cacheable across runs.
+var grpcviewModuleShims = map[string]string{
+	"invoke": `export function invoke(path, params) {
+  try {
+    var req = JSON.stringify({ path: String(path), params: (params == null ? {} : params) });
+    return Promise.resolve(JSON.parse(globalThis.__grpcview_invoke(req)));
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}`,
+
+	// The sync path must throw synchronously and return undefined: a rejected promise nobody awaits
+	// is dropped by the top-level settle in evalRaw, so a wrapped failure would read as a pass. Only
+	// a thenable condition yields a promise, which the caller must await.
+	// Both frames are NAMED so they can be dropped from the stack below: remapJSError reads the
+	// first frame's line, so an unfiltered stack would report a frame inside this shim instead of
+	// the failing assertion's own line. A bundler-appended disambiguating suffix (`gvAssert2`) still
+	// matches the substring filter, so it survives being bundled alongside the author's code.
+	"assert": `function gvAssert(description, condition) {
+  if (typeof description !== "string" || description === "") {
+    throw new TypeError("assert: description must be a non-empty string");
+  }
+  var fail = function gvAssertFail(reason) {
+    var msg = "assertion failed: " + description;
+    if (reason) { msg = msg + ": " + reason; }
+    var e = new Error(msg);
+    e.name = "AssertionError";
+    try {
+      if (typeof e.stack === "string") {
+        e.stack = e.stack.split("\n").filter(function (line) {
+          return line.indexOf("gvAssert") === -1;
+        }).join("\n");
+      }
+    } catch (ignored) {}
+    throw e;
+  };
+  var reasonOf = function (e) {
+    return String((e && e.message) ? e.message : e);
+  };
+  var c = condition;
+  if (typeof c === "function") {
+    try {
+      c = c();
+    } catch (e) {
+      fail(reasonOf(e));
+    }
+  }
+  if (c && typeof c.then === "function") {
+    return Promise.resolve(c).then(
+      function (v) { if (!v) { fail(); } },
+      function (e) { fail(reasonOf(e)); }
+    );
+  }
+  if (!c) { fail(); }
+}
+export { gvAssert as assert };`,
+
+	"metadata": `export function inherit() {
+  return globalThis.__grpcview_inherited || {};
+}`,
+
+	"request": `export const params = globalThis.__grpcview_params || {};`,
+}
+
+func grpcviewModulesPlugin() api.Plugin {
 	return api.Plugin{
-		Name: "grpcview-generators",
+		Name: "grpcview-modules",
 		Setup: func(build api.PluginBuild) {
-			build.OnResolve(api.OnResolveOptions{Filter: `^grpcview:gen/`},
+			build.OnResolve(api.OnResolveOptions{Filter: grpcviewModuleFilter},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-					name := strings.TrimPrefix(args.Path, generatorSpecPrefix)
-					if _, ok := gens[name]; !ok {
-						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: no generator named %q", args.Path, name)
+					name := strings.TrimPrefix(args.Path, "grpcview:")
+					if _, ok := grpcviewModuleShims[name]; !ok {
+						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: unknown module", args.Path)
 					}
-					return api.OnResolveResult{Path: name, Namespace: generatorNamespace}, nil
+					return api.OnResolveResult{Path: name, Namespace: grpcviewNamespace}, nil
 				})
-			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: generatorNamespace},
+			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: grpcviewNamespace},
 				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-					contents := gens[args.Path]
-					loader := api.LoaderTS
+					contents := grpcviewModuleShims[args.Path]
+					loader := api.LoaderJS
 					return api.OnLoadResult{Contents: &contents, Loader: loader}, nil
 				})
 		},

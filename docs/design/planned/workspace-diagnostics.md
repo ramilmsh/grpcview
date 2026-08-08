@@ -3,7 +3,7 @@
 **Status:** Planning only (this doc). **Not started.**
 
 **Why this exists.** Two sibling tracks deliberately allow references to break:
-[`script-imports.md`](./script-imports.md) makes a script import a path from the workspace
+[`script-imports/`](../shipped/script-imports) makes a script import a path from the workspace
 root, so moving a file breaks its importers; [`cross-collection-invoke.md`](./cross-collection-invoke.md)
 lets a script address a request in another collection by slug, so a slug change or a
 duplicate breaks the label. Both are the right trade — a workspace is a static unit and
@@ -42,7 +42,7 @@ were not statically resolvable" — in the summary, not the findings list.
 
 - **`meta.name` drifting from the directory slug for requests and folders.** AGENTS.md
   documents this as intended: the slug is what UI state and on-disk references key by, and
-  re-slugging would churn git history on every rename. [`script-imports.md`](./script-imports.md)
+  re-slugging would churn git history on every rename. [`script-imports/`](../shipped/script-imports)
   narrows the rule for *scripts* only, by making the filename the identifier. Requests and
   folders keep the split, and flagging it would be flagging the design.
 - **A collection with no slug.** Per the invoke doc, that collection is simply not
@@ -82,7 +82,7 @@ one is a hard error rather than a coin flip); this doc owns the *reporting*.
 
 Build with `Metafile: true, Write: false` and read `inputs[*].imports`, which carries the
 resolved `path`, the `kind` (`import-statement` / `require-call` / `dynamic-import`) and
-`original` — the author's specifier verbatim. [`script-imports.md`](./script-imports.md)
+`original` — the author's specifier verbatim. [`script-imports/`](../shipped/script-imports)
 has the measured output and the reasoning for why tree-sitter is not the tool.
 
 The point for this doc: **the graph the analysis reads is the graph the bundle used**, so a

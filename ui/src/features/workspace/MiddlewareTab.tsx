@@ -1,5 +1,4 @@
 import { useState } from "react";
-import clsx from "clsx";
 import {
   ArrowsSplit,
   CaretDown,
@@ -10,92 +9,19 @@ import {
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { useActiveWorkspace } from "@/lib/workspace-query";
-import { ScriptKind, type Script } from "@grpcview/v1/workspace_pb";
+import type { Script } from "@grpcview/v1/workspace_pb";
 
-// Middleware is attached by display name, so a renamed script leaves a "missing" row
-// that can still be detached.
-export function MiddlewareTab({
-  middleware,
-  onChange,
-}: {
-  middleware: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const { workspace } = useActiveWorkspace();
-  const [pickerOpen, setPickerOpen] = useState(false);
+// `Request.middleware` holds specifiers (script-imports/decisions.md §6), not display names:
+// `~/scripts/x.ts` resolves against this request's own collection, `@/lib/mw/y.ts` against the
+// workspace root. Only `~/` specifiers are checkable here — `workspace.scripts` is scoped to
+// the active collection; a `@/` one may point anywhere else in the workspace, which there is no
+// listing for yet (that RPC is the next frontend phase), so it is trusted rather than flagged.
+const SPECIFIER_RE = /^[@~]\/.+\.ts$/;
 
-  const middlewareScripts = (workspace?.scripts ?? []).filter(
-    (s) => s.kind === ScriptKind.MIDDLEWARE
-  );
-  const byName = new Map(middlewareScripts.map((s) => [s.name, s]));
-  const attachedSet = new Set(middleware);
-  const candidates = middlewareScripts.filter((s) => !attachedSet.has(s.name));
-
-  const move = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= middleware.length) return;
-    const next = middleware.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
-  };
-  const detach = (i: number) => onChange(middleware.filter((_, k) => k !== i));
-  const attach = (name: string) => {
-    if (attachedSet.has(name)) return;
-    onChange([...middleware, name]);
-    setPickerOpen(false);
-  };
-
-  return (
-    <div style={{ flex: 1, overflow: "auto", padding: "14px" }}>
-      <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
-        Middleware runs in order before invoke — each can rewrite body &amp; metadata.
-      </p>
-
-      <div className="flex flex-col" style={{ gap: 8 }}>
-        {middleware.map((name, i) => (
-          <MiddlewareRow
-            // eslint-disable-next-line react/no-array-index-key
-            key={`${name}:${i}`}
-            order={i + 1}
-            name={name}
-            script={byName.get(name)}
-            first={i === 0}
-            last={i === middleware.length - 1}
-            onUp={() => move(i, -1)}
-            onDown={() => move(i, 1)}
-            onDetach={() => detach(i)}
-          />
-        ))}
-
-        <Button
-          variant="secondary"
-          onClick={() => setPickerOpen(true)}
-          disabled={middlewareScripts.length === 0}
-          style={{ justifyContent: "center", fontSize: 13, gap: 6, borderStyle: "dashed" }}
-        >
-          <Plus size={14} /> Attach middleware
-        </Button>
-
-        {middlewareScripts.length === 0 && (
-          <p className="text-muted" style={{ fontSize: 12, margin: "2px 2px 0", lineHeight: 1.6 }}>
-            No middleware scripts in this collection. Author one in the{" "}
-            <span style={{ color: "var(--color-accent-300)" }}>Scripts</span> view (a{" "}
-            <span className="font-mono">MIDDLEWARE</span>-kind script), then attach it here.
-          </p>
-        )}
-      </div>
-
-      <AttachMiddlewareDialog
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        candidates={candidates}
-        onPick={attach}
-      />
-    </div>
-  );
-}
+const ownSpecifier = (script: Script): string => `~/${script.path}`;
 
 function describe(script: Script): string {
   const firstLine = script.source
@@ -109,9 +35,91 @@ function describe(script: Script): string {
   return "middleware";
 }
 
+export function MiddlewareTab({
+  middleware,
+  onChange,
+}: {
+  middleware: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const { workspace } = useActiveWorkspace();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const scripts = workspace?.scripts ?? [];
+  const byOwnSpecifier = new Map(scripts.map((s) => [ownSpecifier(s), s]));
+  const attachedSet = new Set(middleware);
+  const candidates = scripts.filter((s) => !attachedSet.has(ownSpecifier(s)));
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= middleware.length) return;
+    const next = middleware.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const detach = (i: number) => onChange(middleware.filter((_, k) => k !== i));
+  const attach = (specifier: string) => {
+    if (attachedSet.has(specifier)) return;
+    onChange([...middleware, specifier]);
+    setPickerOpen(false);
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "14px" }}>
+      <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+        Middleware runs in order before invoke — each can rewrite body &amp; metadata.
+        Attached by specifier: <span className="font-mono">~/…</span> for a script in this
+        collection, <span className="font-mono">@/…</span> for one anywhere in the workspace.
+      </p>
+
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        {middleware.map((specifier, i) => (
+          <MiddlewareRow
+            // eslint-disable-next-line react/no-array-index-key
+            key={`${specifier}:${i}`}
+            order={i + 1}
+            specifier={specifier}
+            script={byOwnSpecifier.get(specifier)}
+            first={i === 0}
+            last={i === middleware.length - 1}
+            onUp={() => move(i, -1)}
+            onDown={() => move(i, 1)}
+            onDetach={() => detach(i)}
+          />
+        ))}
+
+        <Button
+          variant="secondary"
+          onClick={() => setPickerOpen(true)}
+          style={{ justifyContent: "center", fontSize: 13, gap: 6, borderStyle: "dashed" }}
+        >
+          <Plus size={14} /> Attach middleware
+        </Button>
+
+        {scripts.length === 0 && (
+          <p className="text-muted" style={{ fontSize: 12, margin: "2px 2px 0", lineHeight: 1.6 }}>
+            No scripts in this collection yet. Author one in the{" "}
+            <span style={{ color: "var(--color-accent-300)" }}>Scripts</span> view, then attach
+            it here — or type an <span className="font-mono">@/…</span> specifier for one
+            elsewhere in the workspace.
+          </p>
+        )}
+      </div>
+
+      <AttachMiddlewareDialog
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        candidates={candidates}
+        onPick={(s) => attach(ownSpecifier(s))}
+        onPickCustom={attach}
+      />
+    </div>
+  );
+}
+
 function MiddlewareRow({
   order,
-  name,
+  specifier,
   script,
   first,
   last,
@@ -120,7 +128,7 @@ function MiddlewareRow({
   onDetach,
 }: {
   order: number;
-  name: string;
+  specifier: string;
   script?: Script;
   first: boolean;
   last: boolean;
@@ -128,7 +136,10 @@ function MiddlewareRow({
   onDown: () => void;
   onDetach: () => void;
 }) {
-  const missing = !script;
+  // `@/` specifiers are never resolvable here (no cross-collection listing yet), so only a
+  // `~/` one absent from this collection's own script list counts as missing.
+  const external = specifier.startsWith("@/");
+  const missing = !external && !script;
   return (
     <div
       className="flex items-center"
@@ -145,7 +156,7 @@ function MiddlewareRow({
       </Tag>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
-          className="flex items-center gap-[6px]"
+          className="flex items-center gap-[6px] font-mono"
           style={{
             fontSize: 13,
             color: missing ? "var(--err-fg)" : "var(--color-text)",
@@ -153,10 +164,9 @@ function MiddlewareRow({
         >
           {missing && <Warning weight="fill" size={13} style={{ flex: "none" }} />}
           <span
-            className={clsx(missing && "font-mono")}
             style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
-            {name}
+            {specifier}
           </span>
         </div>
         <div
@@ -169,7 +179,13 @@ function MiddlewareRow({
             whiteSpace: "nowrap",
           }}
         >
-          {missing ? "missing — no middleware script by this name" : describe(script)}
+          {missing ? (
+            "missing — no script at this path in the collection"
+          ) : external ? (
+            "elsewhere in the workspace"
+          ) : script ? (
+            describe(script)
+          ) : null}
         </div>
       </div>
       <div className="flex items-center" style={{ gap: 1, flex: "none" }}>
@@ -206,23 +222,43 @@ function AttachMiddlewareDialog({
   onClose,
   candidates,
   onPick,
+  onPickCustom,
 }: {
   open: boolean;
   onClose: () => void;
   candidates: Script[];
-  onPick: (name: string) => void;
+  onPick: (script: Script) => void;
+  onPickCustom: (specifier: string) => void;
 }) {
+  const [custom, setCustom] = useState("");
+  const trimmed = custom.trim();
+  const customError = trimmed && !SPECIFIER_RE.test(trimmed);
+  const submitCustom = () => {
+    if (trimmed && !customError) {
+      onPickCustom(trimmed);
+      setCustom("");
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} title="Attach middleware" width={420}>
+    <Dialog
+      open={open}
+      onClose={() => {
+        setCustom("");
+        onClose();
+      }}
+      title="Attach middleware"
+      width={420}
+    >
       {candidates.length === 0 ? (
         <p className="text-muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-          All middleware scripts in this collection are already attached.
+          Every script in this collection is already attached.
         </p>
       ) : (
-        <div className="flex flex-col" style={{ gap: 4, maxHeight: 320, overflow: "auto" }}>
+        <div className="flex flex-col" style={{ gap: 4, maxHeight: 280, overflow: "auto" }}>
           {candidates.map((s) => (
             <button
-              key={s.name}
+              key={s.path}
               type="button"
               className="scriptrow"
               style={{
@@ -232,11 +268,13 @@ function AttachMiddlewareDialog({
                 width: "100%",
                 fontFamily: "inherit",
               }}
-              onClick={() => onPick(s.name)}
+              onClick={() => onPick(s)}
             >
               <ArrowsSplit size={16} style={{ color: "var(--color-accent)", flex: "none" }} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: "var(--color-text)" }}>{s.name}</div>
+                <div className="font-mono" style={{ fontSize: 13, color: "var(--color-text)" }}>
+                  {ownSpecifier(s)}
+                </div>
                 <div
                   className="font-mono"
                   style={{
@@ -254,6 +292,38 @@ function AttachMiddlewareDialog({
           ))}
         </div>
       )}
+
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+        <p className="text-muted" style={{ margin: "0 0 8px", fontSize: 12 }}>
+          Or attach by specifier — a <span className="font-mono">@/…</span> path reaches a
+          script anywhere else in the workspace.
+        </p>
+        <div className="flex items-center gap-[8px]">
+          <Input
+            className="font-mono"
+            placeholder="@/lib/mw/auth.ts"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitCustom();
+            }}
+          />
+          <Button
+            variant="secondary"
+            onClick={submitCustom}
+            disabled={!trimmed || !!customError}
+          >
+            Attach
+          </Button>
+        </div>
+        {customError && (
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--err-fg)" }}>
+            Must start with <span className="font-mono">@/</span> or{" "}
+            <span className="font-mono">~/</span> and end in{" "}
+            <span className="font-mono">.ts</span>.
+          </p>
+        )}
+      </div>
     </Dialog>
   );
 }

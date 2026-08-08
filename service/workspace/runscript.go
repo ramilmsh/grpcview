@@ -18,31 +18,27 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("scripting engine not available"))
 	}
 
-	source, kind, err := w.resolveScriptToRun(ctx, request.Msg)
+	source, err := w.resolveScriptToRun(ctx, request.Msg)
 	if err != nil {
 		return nil, err
 	}
 
+	coll, err := w.store.Open(ctx, request.Msg.GetCollection())
+	if err != nil {
+		return nil, toConnectError(err)
+	}
+
 	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(request.Msg.GetCollection()))
+	in := scripting.Input{CollectionRoot: coll.Root()}
+
 	var (
 		res    scripting.Result
 		runErr error
 	)
-	switch kind {
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR:
-		allGens, gerr := w.loadGenerators(ctx, request.Msg.GetCollection())
-		if gerr != nil {
-			return nil, gerr
-		}
-		res, runErr = w.engine.RunRequestBody(ctx, source, transitiveGenerators(source, allGens), scripting.Grant{}, scripting.Input{})
-	case grpcviewv1.ScriptKind_SCRIPT_KIND_MIDDLEWARE:
-		allGens, gerr := w.loadGenerators(ctx, request.Msg.GetCollection())
-		if gerr != nil {
-			return nil, gerr
-		}
-		res, runErr = w.engine.RunMiddleware(ctx, source, transitiveGenerators(source, allGens), scripting.Grant{}, scripting.Input{})
-	default:
-		res, runErr = w.engine.RunScenario(ctx, source, scripting.Grant{}, scripting.Input{})
+	if scripting.HasDefaultExport(source) {
+		res, runErr = w.engine.RunRequestBody(ctx, source, scripting.Grant{}, in)
+	} else {
+		res, runErr = w.engine.RunScenario(ctx, source, scripting.Grant{}, in)
 	}
 
 	out := &grpcviewv1.RunScriptResponse{}
@@ -62,39 +58,39 @@ func (w Workspace) RunScript(ctx context.Context, request *connect.Request[grpcv
 	return connect.NewResponse(out), nil
 }
 
-// A saved script is addressable by name from the CLI and the UI; MCP only ever had inline source,
-// so running one from there meant pasting it in.
-func (w Workspace) resolveScriptToRun(ctx context.Context, msg *grpcviewv1.RunScriptRequest) (string, grpcviewv1.ScriptKind, error) {
-	name := strings.TrimSpace(msg.GetScript())
+// A saved script is addressed by its collection-relative path, e.g. "scripts/uuid.ts"; MCP only
+// ever had inline source, so running one from there meant pasting it in.
+func (w Workspace) resolveScriptToRun(ctx context.Context, msg *grpcviewv1.RunScriptRequest) (string, error) {
+	path := strings.TrimSpace(msg.GetScript())
 	hasSource := strings.TrimSpace(msg.GetSource()) != ""
 
-	if name == "" {
+	if path == "" {
 		if !hasSource {
-			return "", 0, connect.NewError(connect.CodeInvalidArgument,
+			return "", connect.NewError(connect.CodeInvalidArgument,
 				errors.New("nothing to run: set `source` to evaluate inline, or `script` to name a saved script"))
 		}
-		return msg.GetSource(), msg.GetKind(), nil
+		return msg.GetSource(), nil
 	}
 	if hasSource {
-		return "", 0, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("set `source` or `script`, not both: `script` names a saved script and carries its own kind"))
+		return "", connect.NewError(connect.CodeInvalidArgument,
+			errors.New("set `source` or `script`, not both: `script` names a saved script by its path"))
 	}
 
 	coll, err := w.store.Open(ctx, msg.GetCollection())
 	if err != nil {
-		return "", 0, toConnectError(err)
+		return "", toConnectError(err)
 	}
 	scripts, err := coll.Scripts(ctx)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		return "", 0, toConnectError(err)
+		return "", toConnectError(err)
 	}
 	for _, s := range scripts {
-		if s.GetName() == name {
-			return s.GetSource(), s.GetKind(), nil
+		if s.GetPath() == path {
+			return s.GetSource(), nil
 		}
 	}
-	return "", 0, connect.NewError(connect.CodeNotFound,
-		fmt.Errorf("collection %q has no script named %q", msg.GetCollection(), name))
+	return "", connect.NewError(connect.CodeNotFound,
+		fmt.Errorf("collection %q has no script at %q (`grpcview script ls` lists the paths)", msg.GetCollection(), path))
 }
 
 func scriptErrorProto(err error) *grpcviewv1.ScriptError {

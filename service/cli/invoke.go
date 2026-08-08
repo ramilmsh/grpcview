@@ -63,7 +63,7 @@ func newInvokeCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command 
 
 	flags := cmd.Flags()
 	flags.StringVarP(&f.file, "file", "f", "", "read the request body from this file; - reads stdin. Without it, stdin is read when piped")
-	flags.StringArrayVar(&f.params, "param", nil, "k=v for this run's gv.request.params; v is parsed as JSON, else taken literally (repeatable, saved requests only)")
+	flags.StringArrayVar(&f.params, "param", nil, "k=v for this run's params, as imported from \"grpcview:request\"; v is parsed as JSON, else taken literally (repeatable, saved requests only)")
 	flags.StringVar(&f.paramsFile, "params-file", "", "merge a JSON object of params; an explicit --param wins (saved requests only)")
 	flags.StringVar(&f.target, "target", "", "host:port to send this run to, overriding the saved target")
 	flags.BoolVar(&f.tls, "tls", false, "dial the --target over TLS")
@@ -127,7 +127,7 @@ func checkFormFlags(target invokeTarget, f *invokeFlags) error {
 	}
 	if len(f.params) > 0 || f.paramsFile != "" {
 		return fmt.Errorf(
-			"--param does not apply to the ad-hoc method %s: params reach a body as gv.request.params, and an ad-hoc call sends the body you hand it verbatim",
+			"--param does not apply to the ad-hoc method %s: params reach a body as `params` from \"grpcview:request\", and an ad-hoc call sends the body you hand it verbatim",
 			target.arg)
 	}
 	if f.dryRun {

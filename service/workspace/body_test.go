@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
 func TestResolveInvokeBody(t *testing.T) {
@@ -95,11 +96,13 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createGenerator(t, w, ctx, "mkid", `export default () => "id-42"`)
+	writeScript(t, w, ctx, "scripts/mkid.ts", `export default () => "id-42"`)
 
-	t.Run("typescript body composes a saved generator", func(t *testing.T) {
-		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid(), n: 7 })`}, nil)
+	t.Run("typescript body imports and calls a saved script", func(t *testing.T) {
+		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
+			"import mkid from \"~/scripts/mkid.ts\";\n" +
+				`export default () => ({ id: mkid(), n: 7 })`,
+		}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -108,9 +111,9 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		}
 	})
 
-	t.Run("an expression body composes a saved generator", func(t *testing.T) {
+	t.Run("an expression body composes a saved script via require", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`{ "id": mkid() }`}, nil)
+			[]string{`{ "id": require("~/scripts/mkid.ts").default() }`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -119,28 +122,17 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		}
 	})
 
-	t.Run("an unreferenced broken generator does not break the body", func(t *testing.T) {
-		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
-		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid() })`}, nil)
+	t.Run("an unreferenced broken script does not break the body", func(t *testing.T) {
+		writeScript(t, w, ctx, "scripts/broken.ts", `export default () => "unterminated`)
+		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
+			"import mkid from \"~/scripts/mkid.ts\";\n" +
+				`export default () => ({ id: mkid() })`,
+		}, nil)
 		if err != nil {
-			t.Fatalf("resolveInvokeBody (unreferenced broken generator): %v", err)
+			t.Fatalf("resolveInvokeBody (unreferenced broken script): %v", err)
 		}
 		if len(out) != 1 || out[0] != `{"id":"id-42"}` {
 			t.Fatalf("got %q, want [{\"id\":\"id-42\"}]", out)
-		}
-	})
-
-	t.Run("a broken generator whose name collides with a key or method does not break the body", func(t *testing.T) {
-		createGenerator(t, w, ctx, "id", `export default () => "unterminated`)
-		createGenerator(t, w, ctx, "toString", `export default () => "also broken`)
-		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ id: mkid(), label: (7).toString() })`}, nil)
-		if err != nil {
-			t.Fatalf("resolveInvokeBody (name-collision isolation): %v", err)
-		}
-		if len(out) != 1 || out[0] != `{"id":"id-42","label":"7"}` {
-			t.Fatalf("got %q, want [{\"id\":\"id-42\",\"label\":\"7\"}]", out)
 		}
 	})
 }
@@ -149,12 +141,15 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createGenerator(t, w, ctx, "inner", `export default () => "in"`)
-	createGenerator(t, w, ctx, "outer", `export default () => inner()`)
+	writeScript(t, w, ctx, "scripts/inner.ts", `export default () => "in"`)
+	writeScript(t, w, ctx, "scripts/outer.ts",
+		"import inner from \"~/scripts/inner.ts\";\n"+`export default () => inner()`)
 
-	t.Run("body calling only outer folds in inner transitively", func(t *testing.T) {
-		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ v: outer() })`}, nil)
+	t.Run("body importing outer resolves the transitive import chain", func(t *testing.T) {
+		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
+			"import outer from \"~/scripts/outer.ts\";\n" +
+				`export default () => ({ v: outer() })`,
+		}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -163,17 +158,51 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 		}
 	})
 
-	t.Run("an unrelated broken generator not reachable does not break the body", func(t *testing.T) {
-		createGenerator(t, w, ctx, "broken", `export default () => "unterminated`)
-		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ v: outer() })`}, nil)
+	t.Run("an unrelated broken script not reachable does not break the body", func(t *testing.T) {
+		writeScript(t, w, ctx, "scripts/broken.ts", `export default () => "unterminated`)
+		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
+			"import outer from \"~/scripts/outer.ts\";\n" +
+				`export default () => ({ v: outer() })`,
+		}, nil)
 		if err != nil {
-			t.Fatalf("resolveInvokeBody (unreachable broken generator): %v", err)
+			t.Fatalf("resolveInvokeBody (unreachable broken script): %v", err)
 		}
 		if len(out) != 1 || out[0] != `{"v":"in"}` {
 			t.Fatalf("got %q, want [{\"v\":\"in\"}]", out)
 		}
 	})
+}
+
+func TestResolveInvokeBodyImportsAcrossCollections(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	other, err := w.store.Open(ctx, "other")
+	if err != nil {
+		t.Fatalf("Open other: %v", err)
+	}
+	if err := other.Create(ctx, ""); err != nil {
+		t.Fatalf("Create other: %v", err)
+	}
+	if err := other.CreateScript(ctx, "scripts/shared.ts"); err != nil {
+		t.Fatalf("CreateScript: %v", err)
+	}
+	src := `export default () => "shared-42"`
+	if err := other.UpdateScript(ctx, "scripts/shared.ts", store.ScriptPatch{Source: &src}); err != nil {
+		t.Fatalf("UpdateScript: %v", err)
+	}
+
+	out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
+		"import shared from \"@/other/scripts/shared.ts\";\n" +
+			`export default () => ({ id: shared() })`,
+	}, nil)
+	if err != nil {
+		t.Fatalf("resolveInvokeBody (cross-collection @/ import): %v", err)
+	}
+	if len(out) != 1 || out[0] != `{"id":"shared-42"}` {
+		t.Fatalf("got %q, want [{\"id\":\"shared-42\"}]", out)
+	}
 }
 
 func TestInvokeTypeScriptBody(t *testing.T) {

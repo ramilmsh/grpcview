@@ -1,9 +1,9 @@
 # The `example` collection
 
 A collection that exercises most of grpcview end to end: two kinds of descriptor
-source, TypeScript bodies and metadata, generators with an npm dependency,
-folder-metadata inheritance, middleware, `gv.request.params`, `gv.invoke`
-chaining, a streaming request, and a `gv.assert` scenario that checks all of it.
+source, TypeScript bodies and metadata, scripts imported by path, an npm
+dependency, folder-metadata inheritance, middleware, per-run `params`, `invoke`
+chaining, a streaming request, and an `assert` scenario that checks all of it.
 
 It dogfoods grpcview against itself. Every request calls
 `grpcview.v1.WorkspaceService` on grpcview's own workspace server, so there is
@@ -31,8 +31,9 @@ grpcview invoke "Workspace/RunScript (generators)" --collection example --dry-ru
 # the streaming one: one frame per line, then the status
 grpcview invoke "Workspace/Streaming/InvokeStreaming" --collection example
 
-# the scenario: silence is a pass, the first failed assertion throws
-grpcview script run smoke --collection example
+# scripts are addressed by path, extension included
+grpcview script ls --collection example
+grpcview script run scripts/smoke.ts --collection example
 ```
 
 The same requests are addressable from the MCP server (`grpcview mcp` →
@@ -45,8 +46,8 @@ your history nor your resolve caches, and gets its own server:
 
 ```bash
 export GRPCVIEW_CONFIG_DIR=$(mktemp -d)
-grpcview script run smoke --collection example   # exit 0 is 13 assertions passed
-grpcview shutdown                                # stops the server that run started
+grpcview script run scripts/smoke.ts --collection example   # exit 0 is 13 assertions passed
+grpcview shutdown                                           # stops the server that run started
 ```
 
 `--in-process` does a command's work without a server at all, which is how a
@@ -58,18 +59,18 @@ fresh state directory gets set up before trust has been granted.
 Workspace/                 folder metadata: two headers everything below inherits
   ListCollections          no target; falls back to the collection's reflection source
   DescribeMethod (JSON)    a plain protojson body — valid JSON is valid TypeScript
-  RunScript (params)       gv.request.params, with a default for the one param
-  RunScript (generators)   body and metadata both call the collection's generators
-  RunScript (middleware)   trace-headers rewrites the body and stamps two headers
-  Invoke (chained)         a body built by gv.invoke, asking grpcview to call itself
-  Streaming/               folder metadata that spreads its parent's, then adds one
+  RunScript (params)       `params` from grpcview:request, with a default for the one param
+  RunScript (generators)   body and metadata both import scripts from this collection
+  RunScript (middleware)   ~/scripts/trace-headers.ts rewrites the body and stamps two headers
+  Invoke (chained)         a body built by invoke(), asking grpcview to call itself
+  Streaming/               folder metadata in expression form, spreading its parent's
     InvokeStreaming        grpcview streaming grpcview: two frames and a result
 
 scripts/
-  requestId                GENERATOR — a global any body or metadata script can call
-  stamp                    GENERATOR — imports dayjs, bundled from the embedded allowlist
-  trace-headers            MIDDLEWARE — attached to one request, runs after evaluation
-  smoke                    SCENARIO — 13 gv.assert checks over the saved requests
+  ids.ts                   exports requestId — imported by two bodies and the middleware
+  stamp.ts                 imports dayjs, bundled from the embedded allowlist
+  trace-headers.ts         middleware, attached to one request by its `~/` specifier
+  smoke.ts                 the scenario — 13 assert checks over the saved requests
 ```
 
 Three of the requests call `RunScript`, which evaluates a TypeScript scratchpad
@@ -77,6 +78,22 @@ inside grpcview's sandbox and answers with its last-expression value. That makes
 the response a direct echo of whatever the body computed — a generated id, an
 arithmetic expression from a param, a string a middleware rewrote — without any
 second service to bounce it off.
+
+## Imports, and the two grammars
+
+A script has no name and no kind: it is a `.ts` file, and it is reached by
+importing its path. `~/` resolves against the collection root, `@/` against the
+workspace root, so `~/scripts/ids` and `@/example/scripts/ids` are the same file
+named from two places. Nothing grpcview-specific is a global; `invoke`, `assert`,
+`inherit` and `params` come from `grpcview:` modules.
+
+A body written as a **module** — anything with `export default` — uses `import`
+statements, and every request here except the JSON one does. A body written as an
+**expression** is a single object literal, and an `import` statement cannot stand
+in expression position, so it uses `require(…)` instead:
+`Workspace/Streaming/`'s folder metadata is the example. Same resolver, different
+grammar. The specifier must be a string literal either way — a computed one is
+rejected before the bundle.
 
 ## Feature map
 
@@ -89,19 +106,21 @@ second service to bounce it off.
 | Target fallback | no request carries a target; each falls back to the collection's first *reflection* source, which is grpcview itself |
 | protojson body | `Workspace/DescribeMethod (JSON)` — no wrapper, no `{{ }}`, just JSON |
 | TypeScript body | every other request — a bare object literal under a hidden `export default` wrapper |
-| Generators | `requestId()` and `stamp()`, pulled in only where they are called |
-| npm dependency | `stamp` imports `dayjs`, bundled by esbuild from the embedded allowlist — no `node_modules`, no network |
+| Collection-relative import (`~/`) | `Workspace/RunScript (generators)` imports `~/scripts/ids` and `~/scripts/stamp` |
+| Import from a middleware | `scripts/trace-headers.ts` imports `~/scripts/ids` — a middleware is an ordinary module |
+| `require(…)` in expression position | `Workspace/Streaming/` folder metadata |
+| npm dependency | `scripts/stamp.ts` imports `dayjs`, bundled by esbuild from the embedded allowlist — no `node_modules`, no network |
 | A deterministic sandbox | the clock starts pinned at `2022-01-01T00:00:00Z` and `Math.random()` is seeded per instance, so two runs of `--dry-run` print the same body |
 | Request metadata script | `Workspace/RunScript (generators)` — evaluated to `{ [key: string]: string[] }` |
-| Folder metadata inheritance | `Workspace/` sets it, `Workspace/Streaming/` spreads `gv.metadata.inherit()`, the requests inherit without asking |
-| Middleware | `Workspace/RunScript (middleware)` — runs last, on the outgoing message |
-| `gv.request.params` | `Workspace/RunScript (params)` |
-| `gv.invoke` chaining | `Workspace/Invoke (chained)` — a body that invokes another saved request, then has grpcview place a second call to itself |
+| Folder metadata inheritance | `Workspace/` sets it, `Workspace/Streaming/` spreads `inherit()`, the requests inherit without asking |
+| Middleware | `Workspace/RunScript (middleware)` — attached by specifier, runs last, on the outgoing message |
+| `params` | `Workspace/RunScript (params)` |
+| `invoke` chaining | `Workspace/Invoke (chained)` — a body that invokes another saved request, then has grpcview place a second call to itself |
 | Streaming | `Workspace/Streaming/InvokeStreaming` — a server-streaming method whose frames are another grpcview stream's frames |
-| `gv.assert` scenario | `scripts/smoke` |
+| `assert` scenario | `scripts/smoke.ts` |
 
 ## Known gaps
 
-`gv.invoke` rejects a streaming path outright, so `smoke` cannot drive
+`invoke` rejects a streaming path outright, so `smoke` cannot drive
 `Workspace/Streaming/InvokeStreaming`; the UI, the CLI and the
 `invoke_saved_streaming` MCP tool all run it.

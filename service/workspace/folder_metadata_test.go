@@ -13,6 +13,8 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
+const inheritImport = "import { inherit } from \"grpcview:metadata\";\n"
+
 func createFolder(t *testing.T, w Workspace, ctx context.Context, parent []string, name, metadataScript string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
@@ -39,10 +41,10 @@ func TestResolveInvokeMetadataInheritanceAdditive(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createFolder(t, w, ctx, nil, "a", `export default () => ({ ...gv.metadata.inherit(), fromA: ["1"] })`)
+	createFolder(t, w, ctx, nil, "a", inheritImport+`export default () => ({ ...inherit(), fromA: ["1"] })`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"},
-		`export default () => ({ ...gv.metadata.inherit(), own: ["2"] })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit(), own: ["2"] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}
@@ -81,16 +83,39 @@ func TestResolveInvokeMetadataEmptyScriptStillInherits(t *testing.T) {
 	}
 }
 
+// The removed gate only ever decided whether the Go side computed the ancestor fold at all; it
+// never controlled whether the fold's result reached the returned metadata — that has always been
+// up to the leaf script itself, via spreading inherit(). So a leaf script that never mentions
+// inherit() must still see its own keys, with nothing from ancestors merged in for it.
+func TestResolveInvokeMetadataLeafNotMentioningInheritGetsNothingFromAncestors(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	createFolder(t, w, ctx, nil, "a", inheritImport+`export default () => ({ ...inherit(), fromA: ["1"] })`)
+
+	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"},
+		`export default () => ({ own: ["2"] })`, nil, nil)
+	if err != nil {
+		t.Fatalf("resolveInvokeMetadata: %v", err)
+	}
+	if got := mdValues(md, "fromA"); got != nil {
+		t.Errorf("fromA = %v, want absent (a leaf that never calls inherit() must not see ancestor keys)", got)
+	}
+	if got := mdValues(md, "own"); len(got) != 1 || got[0] != "2" {
+		t.Errorf("own = %v, want [2]", got)
+	}
+}
+
 func TestResolveInvokeMetadataInheritanceNestedTransitive(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createFolder(t, w, ctx, nil, "a", `export default () => ({ ...gv.metadata.inherit(), fromA: ["1"] })`)
-	createFolder(t, w, ctx, []string{"a"}, "b", `export default () => ({ ...gv.metadata.inherit(), fromB: ["2"] })`)
-	createFolder(t, w, ctx, []string{"a", "b"}, "c", `export default () => ({ ...gv.metadata.inherit(), fromC: ["3"] })`)
+	createFolder(t, w, ctx, nil, "a", inheritImport+`export default () => ({ ...inherit(), fromA: ["1"] })`)
+	createFolder(t, w, ctx, []string{"a"}, "b", inheritImport+`export default () => ({ ...inherit(), fromB: ["2"] })`)
+	createFolder(t, w, ctx, []string{"a", "b"}, "c", inheritImport+`export default () => ({ ...inherit(), fromC: ["3"] })`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a", "b", "c"},
-		`export default () => ({ ...gv.metadata.inherit(), own: ["4"] })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit(), own: ["4"] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}
@@ -105,11 +130,11 @@ func TestResolveInvokeMetadataInheritanceBarrier(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createFolder(t, w, ctx, nil, "a", `export default () => ({ ...gv.metadata.inherit(), fromA: ["1"] })`)
+	createFolder(t, w, ctx, nil, "a", inheritImport+`export default () => ({ ...inherit(), fromA: ["1"] })`)
 	createFolder(t, w, ctx, []string{"a"}, "b", `export default () => ({ fromB: ["2"] })`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a", "b"},
-		`export default () => ({ ...gv.metadata.inherit(), own: ["3"] })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit(), own: ["3"] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}
@@ -128,11 +153,11 @@ func TestResolveInvokeMetadataInheritanceOverride(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createFolder(t, w, ctx, nil, "a", `export default () => ({ ...gv.metadata.inherit(), shared: ["from-a-1", "from-a-2"] })`)
-	createFolder(t, w, ctx, []string{"a"}, "b", `export default () => ({ ...gv.metadata.inherit(), shared: ["from-b"] })`)
+	createFolder(t, w, ctx, nil, "a", inheritImport+`export default () => ({ ...inherit(), shared: ["from-a-1", "from-a-2"] })`)
+	createFolder(t, w, ctx, []string{"a"}, "b", inheritImport+`export default () => ({ ...inherit(), shared: ["from-b"] })`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a", "b"},
-		`export default () => ({ ...gv.metadata.inherit() })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit() })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}
@@ -141,19 +166,22 @@ func TestResolveInvokeMetadataInheritanceOverride(t *testing.T) {
 	}
 }
 
-func TestResolveInvokeMetadataInheritanceGateSkipsFold(t *testing.T) {
+// With the textual gate gone, folding is unconditional: a broken ancestor folder script now
+// errors regardless of whether the current script even mentions inherit().
+func TestResolveInvokeMetadataBrokenFolderErrorsEvenWithoutInherit(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 	createFolder(t, w, ctx, nil, "a", `export default () => ({ unterminated`)
 
-	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"},
+	_, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"},
 		`export default () => ({ plain: ["x"] })`, nil, nil)
-	if err != nil {
-		t.Fatalf("resolveInvokeMetadata: %v (the gate should have skipped the broken folder script entirely)", err)
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition (err=%v): folding is unconditional now, "+
+			"a broken ancestor folder must surface even when the leaf script never calls inherit()", connect.CodeOf(err), err)
 	}
-	if got := mdValues(md, "plain"); len(got) != 1 || got[0] != "x" {
-		t.Errorf("plain = %v, want [x]", got)
+	if !strings.Contains(err.Error(), `"a"`) {
+		t.Fatalf("error = %v, want it to name the offending folder \"a\"", err)
 	}
 }
 
@@ -164,7 +192,7 @@ func TestResolveInvokeMetadataInheritanceBrokenFolderNamesItself(t *testing.T) {
 	createFolder(t, w, ctx, nil, "a", `export default () => ({ unterminated`)
 
 	_, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"a"},
-		`export default () => ({ ...gv.metadata.inherit() })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit() })`, nil, nil)
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 	}
@@ -183,7 +211,7 @@ func TestResolveInvokeMetadataInheritanceDepthCap(t *testing.T) {
 		longPath[i] = fmt.Sprintf("f%d", i)
 	}
 	_, err := w.resolveInvokeMetadata(ctx, testWorkspace, longPath,
-		`export default () => ({ ...gv.metadata.inherit() })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit() })`, nil, nil)
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 	}
@@ -195,7 +223,7 @@ func TestResolveInvokeMetadataInheritanceMissingFolderTolerated(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"ghost"},
-		`export default () => ({ ...gv.metadata.inherit(), x: ["1"] })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit(), x: ["1"] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v (a missing folder path must degrade to no inheritance, not fail)", err)
 	}
@@ -217,7 +245,7 @@ func TestResolveInvokeMetadataInheritanceNotAFolderTolerated(t *testing.T) {
 	}
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"Leaf"},
-		`export default () => ({ ...gv.metadata.inherit(), x: ["1"] })`, nil, nil)
+		inheritImport+`export default () => ({ ...inherit(), x: ["1"] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v (ErrNotAFolder must degrade to no inheritance, not fail)", err)
 	}
@@ -230,7 +258,7 @@ func TestInvokeFolderMetadataInheritanceEndToEnd(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	createFolder(t, w, ctx, nil, "Folder", `export default () => ({ ...gv.metadata.inherit(), "x-from-folder": ["yes"] })`)
+	createFolder(t, w, ctx, nil, "Folder", inheritImport+`export default () => ({ ...inherit(), "x-from-folder": ["yes"] })`)
 
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
@@ -248,7 +276,7 @@ func TestInvokeFolderMetadataInheritanceEndToEnd(t *testing.T) {
 			ItemName:       "Echo",
 			Service:        echoService,
 			Method:         "Unary",
-			MetadataScript: `export default () => ({ ...gv.metadata.inherit(), "x-own": ["mine"] })`,
+			MetadataScript: inheritImport + `export default () => ({ ...inherit(), "x-own": ["mine"] })`,
 			Target:         &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},
 		Body: tsBody(`{"message":"hi"}`),
@@ -277,7 +305,7 @@ func TestBareObjectMetadataEvaluatesAtBothSeams(t *testing.T) {
 	createFolder(t, w, ctx, nil, "Echo", `{ "x-demo-suite": ["echo"] }`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, []string{"Echo"},
-		`{ ...gv.metadata.inherit(), "x-own": ["mine"] }`, nil, nil)
+		`{ ...require("grpcview:metadata").inherit(), "x-own": ["mine"] }`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
 	}

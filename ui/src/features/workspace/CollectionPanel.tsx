@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { MagnifyingGlass, FolderPlus, Plus } from "@/components/ui/icons";
-import { ScriptKind, type Service, type Method } from "@grpcview/v1/workspace_pb";
+import type { Service, Method } from "@grpcview/v1/workspace_pb";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -42,13 +42,12 @@ import {
 } from "./panel-wiring";
 import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
-import type { GeneratorDef } from "./generator-libs";
 import { deleteConfirmCopy } from "./delete-confirm";
 import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
 import { NewCollectionDialog } from "./NewCollectionDialog";
 
 export function CollectionPanel() {
-  const { collection: activeCollection, workspace, services } = useActiveWorkspace();
+  const { collection: activeCollection, services } = useActiveWorkspace();
   // Non-null everywhere this panel renders: App gates all three views behind the
   // collection listing, so "" is the unreachable pre-gate value rather than a default.
   const collection = activeCollection ?? "";
@@ -100,14 +99,6 @@ export function CollectionPanel() {
   // Tiered, the strip counts the whole workspace: no row carries a per-collection count, so
   // an active-collection count next to several collection rows would name none of them.
   const total = useMemo(() => countAllRequests(loaded), [loaded]);
-
-  const generators = useMemo<GeneratorDef[]>(
-    () =>
-      workspace?.scripts
-        .filter((s) => s.kind === ScriptKind.GENERATOR)
-        .map((s) => ({ name: s.name, source: s.source })) ?? [],
-    [workspace?.scripts]
-  );
 
   const expandFolder = (folder: ItemWithPath): void =>
     setTreeExpanded(new Set([...treeExpanded, itemKey(folder)]));
@@ -415,7 +406,6 @@ export function CollectionPanel() {
         key={metadataFolder ? itemKey(metadataFolder) : "none"}
         folder={metadataFolder}
         onClose={() => setMetadataFolder(null)}
-        generators={generators}
       />
 
       <Dialog

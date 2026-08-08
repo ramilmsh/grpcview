@@ -62,31 +62,37 @@ func newTestWorkspace(t *testing.T) Workspace {
 	}
 }
 
+// newTestWorkspaceWithEngine wires the engine's workspace root to the SAME directory the store
+// addresses, mirroring what New does in production: without it, `@/...` imports never resolve.
 func newTestWorkspaceWithEngine(t *testing.T) Workspace {
 	t.Helper()
-	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages)
+	root := t.TempDir()
+	eng, err := scripting.NewEngine(context.Background(), scriptingMaxPages, scripting.WithWorkspaceRoot(root))
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
 	t.Cleanup(func() { _ = eng.Close(context.Background()) })
 	return Workspace{
-		store:  store.New(t.TempDir(), t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+		store:  store.New(root, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
 		engine: eng,
 		defs:   newDefinitionsCache(),
+		root:   root,
 	}
 }
 
-func createGenerator(t *testing.T, w Workspace, ctx context.Context, name, source string) {
+// writeScript creates (or overwrites) a script at a collection-relative path under scripts/,
+// e.g. "scripts/mkid.ts". Scripts have no kind any more — identity is the path.
+func writeScript(t *testing.T, w Workspace, ctx context.Context, path, source string) {
 	t.Helper()
 	coll, err := w.store.Open(ctx, testWorkspace)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if err := coll.CreateScript(ctx, name, grpcviewv1.ScriptKind_SCRIPT_KIND_GENERATOR); err != nil {
-		t.Fatalf("CreateScript %q: %v", name, err)
+	if err := coll.CreateScript(ctx, path); err != nil {
+		t.Fatalf("CreateScript %q: %v", path, err)
 	}
-	if err := coll.UpdateScript(ctx, name, store.ScriptPatch{Source: &source}); err != nil {
-		t.Fatalf("UpdateScript %q: %v", name, err)
+	if err := coll.UpdateScript(ctx, path, store.ScriptPatch{Source: &source}); err != nil {
+		t.Fatalf("UpdateScript %q: %v", path, err)
 	}
 }
 
@@ -422,7 +428,7 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
-	script := "export default () => ({ ...gv.metadata.inherit(), team: ['users'] })"
+	script := "import { inherit } from \"grpcview:metadata\";\nexport default () => ({ ...inherit(), team: ['users'] })"
 	updResp, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
 		Collection:          testWorkspace,
 		ItemName:            "Users",

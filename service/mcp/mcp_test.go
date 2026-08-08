@@ -36,6 +36,12 @@ func TestTotality(t *testing.T) {
 		streaming := md.IsStreamingClient() || md.IsStreamingServer()
 
 		entry, hasToolName := rpcs[name]
+		if _, excluded := notTools[name]; excluded {
+			if hasToolName {
+				t.Errorf("method %s is both excluded and registered as a tool", name)
+			}
+			continue
+		}
 		if !hasToolName {
 			t.Errorf("method %s is missing a tool-name entry", name)
 			continue
@@ -271,7 +277,7 @@ func TestTrimHeavyFieldsKeepsDerivedListsOnlyForTheirOwners(t *testing.T) {
 		return &grpcviewv1.Collection{
 			Name:     "scratch",
 			Services: []*grpcviewv1.Service{{Package: "a.v1", Name: "S"}},
-			Scripts:  []*grpcviewv1.Script{{Name: "smoke"}},
+			Scripts:  []*grpcviewv1.Script{{Path: "scripts/smoke.ts"}},
 		}
 	}
 	handler := func(res proto.Message) gen.Handler {

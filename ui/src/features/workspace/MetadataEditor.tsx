@@ -4,8 +4,12 @@ import type * as Monaco from "monaco-editor";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
 // Side-effect import: global TS defaults. Our own TS_MODEL_URI keeps this model distinct.
 import "@/features/scripts/monaco-scripts";
-import { META_PREFIX_LINES, META_SUFFIX_LINES, isCanonical } from "./metadata-wrapper";
-import { registerGeneratorLibs, type GeneratorDef } from "./generator-libs";
+import {
+  META_PREFIX_LINES,
+  isCanonical,
+  metaBounds as boundsOf,
+  hiddenLineRanges,
+} from "./metadata-wrapper";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/metadata.ts";
@@ -19,19 +23,19 @@ type HasHiddenAreas = { setHiddenAreas?(ranges: Monaco.IRange[], source?: unknow
 // monaco merges hidden areas across sources; a private tag lets us replace only ours.
 const HIDDEN_SOURCE = "grpcview-metadata-wrapper";
 
+// Both derive from the live model text (via metadata-wrapper.ts's isCanonical), so a module —
+// never wrapped, per the two-forms rule — naturally gets `first: 1` and no hidden ranges at all.
 function metaBounds(model: Monaco.editor.ITextModel) {
-  const total = model.getLineCount();
-  const first = META_PREFIX_LINES + 1;
-  const last = Math.max(first, total - META_SUFFIX_LINES);
-  return { first, last, total };
+  return boundsOf(model.getValue());
 }
 
 function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
-  const { last, total } = metaBounds(model);
-  return [
-    { startLineNumber: 1, startColumn: 1, endLineNumber: META_PREFIX_LINES, endColumn: 1 },
-    { startLineNumber: last + 1, startColumn: 1, endLineNumber: total, endColumn: 1 },
-  ];
+  return hiddenLineRanges(model.getValue()).map((r) => ({
+    startLineNumber: r.startLine,
+    startColumn: 1,
+    endLineNumber: r.endLine,
+    endColumn: 1,
+  }));
 }
 
 // force: an identical re-set is skipped by monaco's cache, even after setValue reset the view.
@@ -42,8 +46,10 @@ function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor, force = false)
   if (force) ha.setHiddenAreas([], HIDDEN_SOURCE);
   ha.setHiddenAreas(hiddenRanges(model), HIDDEN_SOURCE);
   const pos = editor.getPosition();
-  if (pos && pos.lineNumber <= META_PREFIX_LINES) {
-    editor.setPosition({ lineNumber: META_PREFIX_LINES + 1, column: 1 });
+  const { first } = metaBounds(model);
+  // A module's `first` is 1, so this never fires — there is no hidden prefix to clamp out of.
+  if (pos && pos.lineNumber < first) {
+    editor.setPosition({ lineNumber: first, column: 1 });
   }
 }
 
@@ -51,7 +57,6 @@ interface MetadataEditorProps {
   data: string;
   onChange: (value: string) => void;
   currentKey: string; // request identity — reload the buffer when it changes
-  generators?: GeneratorDef[];
   onErrorsChange?: (errors: number) => void;
 }
 
@@ -59,13 +64,16 @@ export function MetadataEditor({
   data,
   onChange,
   currentKey,
-  generators = [],
   onErrorsChange,
 }: MetadataEditorProps) {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   // @monaco-editor/react only suppresses onChange for its own controlled `value` prop.
   const suppressChange = useRef(false);
   const lastGood = useRef<string>("");
+  // Fixed for the lifetime of the loaded buffer (re-derived only when currentKey reloads it): a
+  // module has no wrapper, so the corruption-guard below must never fight an edit that merely
+  // keeps the buffer non-canonical, the way it would for a wrapped script's broken wrapper.
+  const wrappedRef = useRef(true);
   const monaco = useMonaco();
 
   useEffect(() => {
@@ -77,6 +85,7 @@ export function MetadataEditor({
       suppressChange.current = false;
       lastGood.current = data;
     }
+    wrappedRef.current = isCanonical(data);
     // Forced: a remount has no hidden areas yet, and setValue may not change the geometry.
     applyHidden(ed, /* force */ true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,19 +130,6 @@ export function MetadataEditor({
     };
   }, [monaco]);
 
-  // scope="metadata" namespaces the URIs; a same-path re-add throws "Duplicate definition".
-  const genLibs = useRef<Monaco.IDisposable[]>([]);
-  useEffect(() => {
-    if (!monaco) return;
-    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-    genLibs.current.forEach((d) => d.dispose());
-    genLibs.current = registerGeneratorLibs(tsDefaults, generators, "metadata");
-    return () => {
-      genLibs.current.forEach((d) => d.dispose());
-      genLibs.current = [];
-    };
-  }, [monaco, generators]);
-
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
     registerEditorForDebug(TS_MODEL_URI, editor);
@@ -161,6 +157,7 @@ export function MetadataEditor({
     });
 
     lastGood.current = editor.getValue();
+    wrappedRef.current = isCanonical(editor.getValue());
     applyHidden(editor);
 
     // Hidden areas live on the editor's viewModel: the first real layout drops them.
@@ -203,13 +200,14 @@ export function MetadataEditor({
       },
     });
 
-    // Fail-safe: undo an exotic edit (IME, drag-drop, replace-all) that broke the wrapper.
+    // Fail-safe: undo an exotic edit (IME, drag-drop, replace-all) that broke the wrapper. A
+    // module was never wrapped, so there is nothing for it to break — every edit is accepted.
     editor.onDidChangeModelContent(() => {
       if (suppressChange.current) return;
       const model = editor.getModel();
       if (!model) return;
       const v = model.getValue();
-      if (isCanonical(v)) {
+      if (!wrappedRef.current || isCanonical(v)) {
         lastGood.current = v;
         applyHidden(editor);
         return;
@@ -240,7 +238,12 @@ export function MetadataEditor({
         formatOnType: false,
         formatOnPaste: false,
         folding: false,
-        lineNumbers: (n: number) => (n <= META_PREFIX_LINES ? "" : String(n - META_PREFIX_LINES)),
+        lineNumbers: (n: number) =>
+          !wrappedRef.current
+            ? String(n)
+            : n <= META_PREFIX_LINES
+              ? ""
+              : String(n - META_PREFIX_LINES),
         // monaco defaults quickSuggestions.strings=false (microsoft/monaco-editor#2883).
         quickSuggestions: { other: true, comments: false, strings: true },
         automaticLayout: true,

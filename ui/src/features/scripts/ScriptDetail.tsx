@@ -1,11 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import clsx from "clsx";
-import { Editor as MonacoEditor, useMonaco, type OnMount } from "@monaco-editor/react";
-import type * as Monaco from "monaco-editor";
-import {
-  registerGeneratorLibs,
-  type GeneratorDef,
-} from "@/features/workspace/generator-libs";
+import { useEffect, useRef, useState } from "react";
+import { Editor as MonacoEditor, type OnMount } from "@monaco-editor/react";
 import { Code, FloppyDisk, Package, Play, Shield, Trash } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -14,7 +8,6 @@ import { Subtab } from "@/components/ui/Subtab";
 import { EditableName } from "@/components/ui/EditableName";
 import {
   useActiveCollectionId,
-  useActiveWorkspace,
   useUpdateScript,
   useDeleteScript,
   useRunScript,
@@ -22,9 +15,10 @@ import {
 import { useUIStore } from "@/lib/ui-store";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
 import { SCRATCH_PATH } from "./monaco-scripts";
-import { ScriptKind, type Script } from "@grpcview/v1/workspace_pb";
+import type { Script } from "@grpcview/v1/workspace_pb";
 import type { RunScriptResponse } from "@grpcview/v1/service_pb";
-import { kindMeta, starterSource } from "./script-kinds";
+import { validateScriptPath } from "./script-path";
+import { STARTER_SOURCE } from "./script-starter";
 import { OutputRegion } from "./ScriptOutput";
 
 function configDigest(source: string): string {
@@ -47,6 +41,8 @@ interface ScriptDraft {
   runResult?: RunScriptResponse;
   runError: Error | null;
   rename: (next: string) => void;
+  renameError: string | null;
+  clearRenameError: () => void;
   doDelete: () => void;
   deleting: boolean;
   confirmDelete: boolean;
@@ -62,7 +58,7 @@ interface ScriptDraft {
 function useScriptDraft(script: Script): ScriptDraft {
   // Scripts belong to a collection, so every mutation here addresses the active one.
   const collection = useActiveCollectionId() ?? "";
-  const draftSource = useUIStore((s) => s.scriptDrafts[script.name]);
+  const draftSource = useUIStore((s) => s.scriptDrafts[script.path]);
   const seedScriptDraft = useUIStore((s) => s.seedScriptDraft);
   const setScriptDraft = useUIStore((s) => s.setScriptDraft);
   const renameScript = useUIStore((s) => s.renameScript);
@@ -74,35 +70,42 @@ function useScriptDraft(script: Script): ScriptDraft {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [outputOpen, setOutputOpen] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   useEffect(() => {
-    seedScriptDraft(script.name, script.source || starterSource(script.kind));
-  }, [script.name, script.source, script.kind, seedScriptDraft]);
+    seedScriptDraft(script.path, script.source || STARTER_SOURCE);
+  }, [script.path, script.source, seedScriptDraft]);
 
   const source = draftSource ?? script.source;
   const dirty = draftSource !== undefined && draftSource !== script.source;
 
   const save = () => {
     if (!dirty || updateScript.isPending) return;
-    updateScript.mutate({ collection, name: script.name, source });
+    updateScript.mutate({ collection, path: script.path, source });
   };
   const testRun = () => {
     if (!source.trim() || runScript.isPending) return;
     setOutputOpen(true);
-    runScript.mutate({ collection, source, kind: script.kind });
+    runScript.mutate({ collection, source });
   };
   const rename = (next: string) => {
+    const err = validateScriptPath(next);
+    if (err) {
+      setRenameError(err);
+      return;
+    }
+    setRenameError(null);
     updateScript.mutate(
-      { collection, name: script.name, newName: next },
-      { onSuccess: () => renameScript(script.name, next) }
+      { collection, path: script.path, newPath: next },
+      { onSuccess: () => renameScript(script.path, next) }
     );
   };
   const doDelete = () => {
     deleteScript.mutate(
-      { collection, name: script.name },
+      { collection, path: script.path },
       {
         onSuccess: () => {
-          forgetScript(script.name);
+          forgetScript(script.path);
           setConfirmDelete(false);
         },
       }
@@ -123,7 +126,7 @@ function useScriptDraft(script: Script): ScriptDraft {
   return {
     source,
     dirty,
-    setSource: (next) => setScriptDraft(script.name, next),
+    setSource: (next) => setScriptDraft(script.path, next),
     save,
     saving: updateScript.isPending,
     testRun,
@@ -131,6 +134,8 @@ function useScriptDraft(script: Script): ScriptDraft {
     runResult: runScript.data,
     runError: runScript.isError ? runScript.error : null,
     rename,
+    renameError,
+    clearRenameError: () => setRenameError(null),
     doDelete,
     deleting: deleteScript.isPending,
     confirmDelete,
@@ -141,121 +146,92 @@ function useScriptDraft(script: Script): ScriptDraft {
   };
 }
 
-// Registers the OTHER generators as ambient libs, so this buffer gets IntelliSense
-// for the ones it can call by name.
-function useGeneratorLibs(scriptName: string) {
-  const { workspace } = useActiveWorkspace();
-  const monaco = useMonaco();
-
-  const otherGenerators = useMemo<GeneratorDef[]>(() => {
-    const gens = (workspace?.scripts ?? [])
-      .filter((s) => s.kind === ScriptKind.GENERATOR && s.name !== scriptName)
-      .map((s) => ({ name: s.name, source: s.source }));
-    return gens;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    (workspace?.scripts ?? [])
-      .filter((s) => s.kind === ScriptKind.GENERATOR && s.name !== scriptName)
-      .map((s) => s.name + "\0" + s.source)
-      .join("|"),
-  ]);
-
-  const genLibs = useRef<Monaco.IDisposable[]>([]);
-  useEffect(() => {
-    if (!monaco) return;
-    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-    genLibs.current.forEach((d) => d.dispose());
-    genLibs.current = registerGeneratorLibs(tsDefaults, otherGenerators, "scripts");
-    return () => {
-      genLibs.current.forEach((d) => d.dispose());
-      genLibs.current = [];
-    };
-  }, [monaco, otherGenerators]);
-}
-
 export function ScriptDetail({ script }: { script: Script }) {
-  const meta = kindMeta(script.kind);
-  const KindIcon = meta.Icon;
-
   const subtab = useUIStore((s) => s.scriptSubtab);
   const setSubtab = useUIStore((s) => s.setScriptSubtab);
   const [editingName, setEditingName] = useState(false);
 
   const draft = useScriptDraft(script);
-  useGeneratorLibs(script.name);
 
   return (
     <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
       <div
-        className="flex items-center gap-[11px]"
-        style={{ flex: "none", padding: "12px 18px", borderBottom: "1px solid var(--line)" }}
+        className="flex flex-col"
+        style={{ flex: "none", borderBottom: "1px solid var(--line)" }}
       >
-        <span
-          className={clsx("tag", `tag-${meta.tag}`)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+        <div
+          className="flex items-center gap-[11px]"
+          style={{ padding: "12px 18px 6px" }}
         >
-          <KindIcon size={12} />
-          {meta.label}
-        </span>
-        <EditableName
-          value={script.name}
-          editing={editingName}
-          onEditingChange={setEditingName}
-          onCommit={draft.rename}
-          activateOnClick
-          className="font-mono"
-          title="Click to rename"
-          ariaLabel="Script name"
-          style={{
-            fontSize: 15,
-            color: "var(--color-text)",
-            maxWidth: 260,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          inputStyle={{ fontSize: 15, color: "var(--color-text)", maxWidth: 260 }}
-        />
-        <span
-          className="digest"
-          title="config digest — a short client-side hash of the source (display-only; the grant-binding digest is S4)"
-        >
-          {configDigest(draft.source)}
-        </span>
+          <Code size={14} style={{ color: "var(--color-neutral-500)", flex: "none" }} />
+          <EditableName
+            value={script.path}
+            editing={editingName}
+            onEditingChange={(editing) => {
+              if (editing) draft.clearRenameError();
+              setEditingName(editing);
+            }}
+            onCommit={draft.rename}
+            activateOnClick
+            className="font-mono"
+            title="Click to rename — this moves the file"
+            ariaLabel="Script path"
+            style={{
+              fontSize: 15,
+              color: "var(--color-text)",
+              maxWidth: 360,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            inputStyle={{ fontSize: 15, color: "var(--color-text)", maxWidth: 360 }}
+          />
+          <span
+            className="digest"
+            title="config digest — a short client-side hash of the source (display-only; the grant-binding digest is S4)"
+          >
+            {configDigest(draft.source)}
+          </span>
 
-        <div className="ml-auto flex items-center gap-[8px]">
-          <Button
-            variant="primary"
-            style={{ padding: "5px 13px", fontSize: 12, gap: 6 }}
-            onClick={draft.testRun}
-            disabled={draft.running || !draft.source.trim()}
-            title="Run the current buffer under this script's kind"
-          >
-            <Play weight="fill" size={12} />
-            {draft.running ? "Running…" : "Test run"}
-            <Kbd>⌘↵</Kbd>
-          </Button>
-          <Button
-            variant="secondary"
-            style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
-            onClick={draft.save}
-            disabled={!draft.dirty || draft.saving}
-            title={draft.dirty ? "Save the script's source" : "No unsaved changes"}
-          >
-            <FloppyDisk size={14} />
-            {draft.saving ? "Saving…" : "Save"}
-            <Kbd>⌘S</Kbd>
-          </Button>
-          <Button
-            variant="danger"
-            style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
-            onClick={() => draft.setConfirmDelete(true)}
-            title="Delete script"
-          >
-            <Trash size={14} />
-            Delete
-          </Button>
+          <div className="ml-auto flex items-center gap-[8px]">
+            <Button
+              variant="primary"
+              style={{ padding: "5px 13px", fontSize: 12, gap: 6 }}
+              onClick={draft.testRun}
+              disabled={draft.running || !draft.source.trim()}
+              title="export default runs as an entry (its default export is called); otherwise the buffer is a scratchpad and the last expression is the value"
+            >
+              <Play weight="fill" size={12} />
+              {draft.running ? "Running…" : "Test run"}
+              <Kbd>⌘↵</Kbd>
+            </Button>
+            <Button
+              variant="secondary"
+              style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
+              onClick={draft.save}
+              disabled={!draft.dirty || draft.saving}
+              title={draft.dirty ? "Save the script's source" : "No unsaved changes"}
+            >
+              <FloppyDisk size={14} />
+              {draft.saving ? "Saving…" : "Save"}
+              <Kbd>⌘S</Kbd>
+            </Button>
+            <Button
+              variant="danger"
+              style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
+              onClick={() => draft.setConfirmDelete(true)}
+              title="Delete script"
+            >
+              <Trash size={14} />
+              Delete
+            </Button>
+          </div>
         </div>
+        {draft.renameError && (
+          <p style={{ margin: "0 18px 8px", fontSize: 12, color: "var(--err-fg)" }}>
+            {draft.renameError}
+          </p>
+        )}
       </div>
 
       <div
@@ -328,7 +304,8 @@ export function ScriptDetail({ script }: { script: Script }) {
         width={400}
       >
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-          Delete <strong>{script.name}</strong>? This removes it from the collection.
+          Delete <strong className="font-mono">{script.path}</strong>? This removes it from
+          the collection.
         </p>
         <div className="dialog-actions">
           <Button onClick={() => draft.setConfirmDelete(false)}>Cancel</Button>

@@ -120,7 +120,7 @@ func decodeVLQ(s string) ([]int, error) {
 
 var stackPosRe = regexp.MustCompile(`<script>:(\d+):(\d+)`)
 
-func remapJSError(je *JSError, sourceMap []byte, preludeLines int, authorPreludeLines int) {
+func remapJSError(je *JSError, sourceMap []byte, preludeLines int) {
 	if je == nil || len(sourceMap) == 0 {
 		return
 	}
@@ -142,14 +142,7 @@ func remapJSError(je *JSError, sourceMap []byte, preludeLines int, authorPrelude
 	if err != nil {
 		return
 	}
-	if src, srcLine, ok := sm.originalPos(genLine, col); ok {
-		line := srcLine
-		if src == authorSource {
-			line -= authorPreludeLines
-			if line < 0 {
-				return
-			}
-		}
-		je.Line = line + 1
+	if _, srcLine, ok := sm.originalPos(genLine, col); ok {
+		je.Line = srcLine + 1
 	}
 }
