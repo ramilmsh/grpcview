@@ -94,18 +94,19 @@ Carried from the MCP track, which shipped on 2026-08-06; the decisions behind it
   Blast radius is the store schema, `convert.go`, `invoke.go`'s two assignment sites, and
   the UI's decoders. `AddDescriptorSourceRequest.descriptor_set` and
   `Collection.descriptor_set` stay `bytes` — those really are binary.
-- **History growth is still uncapped.** The payload half of this shipped 2026-08-07: every
-  MCP response *except* `get_collection`'s now has `history` stripped, so a mutation no
-  longer overflows the client's per-result cap while `get_collection` keeps an agent's only
-  access to history. What did not ship is the store-side half — `history` keeps the last
-  `historyLimit` entries with **no byte bound**, and one recorded response can be a
-  base64 descriptor set (160 KB of a 186 KB collection, measured). Cap it: elide a recorded
-  response over some byte cap with a marker rather than storing it verbatim. Then
-  `get_collection` is bounded too, which the strip does not make it.
+- **History growth is still uncapped *on disk*.** The payload half shipped in two rounds:
+  2026-08-07, every MCP response *except* `get_collection`'s has `history` stripped;
+  2026-08-08, a recorded response body over 8 KB is elided on the way out
+  (`shrinkResponseBody`), which bounds `get_collection` too — one measured read went from
+  396 KB to 48 KB. What did not ship is the store-side half: `history` keeps the last
+  `historyLimit` entries with **no byte bound**, so the 160 KB descriptor set is still
+  written to disk and still read back into the daemon, it just no longer reaches an agent.
+  Cap it at the store instead of at the seam.
 - **`find_method(query)`.** Substring search over the collection's services, returning
   matches instead of the whole list. A four-surface RPC (UI quick-open, CLI `--grep`, VS
-  Code palette), not an MCP-layer concern. `services` is only 4% of a response today, so
-  this is about ergonomics on a large API rather than payload size.
+  Code palette), not an MCP-layer concern. `services` is only 6% of a collection and is now
+  dropped from every response that cannot have changed it, so this is about ergonomics on a
+  large API rather than payload size.
 
 ---
 

@@ -60,6 +60,7 @@ go_test(
         "middleware_test.go",
         "paths_test.go",
         "resolve_target_test.go",
+        "runscript_test.go",
         "scripts_test.go",
         "sources_test.go",
         "workspace_test.go",

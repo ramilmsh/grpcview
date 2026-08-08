@@ -118,8 +118,8 @@ func lsRows(folder *grpcviewv1.Folder, prefix string, streaming map[string]strin
 	return rows
 }
 
-// A streaming request lists identically to a unary one otherwise, and invoke would be the
-// first thing to say it cannot be run. Say it here instead.
+// A streaming request lists identically to a unary one otherwise. The label says only what
+// the method is; why a call would fail belongs to describe.
 func streamingNotes(ws *grpcviewv1.Collection) map[string]string {
 	out := map[string]string{}
 	for _, svc := range ws.GetServices() {
@@ -139,11 +139,11 @@ func streamingNotes(ws *grpcviewv1.Collection) map[string]string {
 func streamingNote(client, server bool) string {
 	switch {
 	case client && server:
-		return "[bidi-streaming: not invocable yet]"
+		return "[bidi-streaming]"
 	case client:
-		return "[client-streaming: not invocable yet]"
+		return "[client-streaming]"
 	case server:
-		return "[server-streaming: not invocable yet]"
+		return "[server-streaming]"
 	}
 	return ""
 }

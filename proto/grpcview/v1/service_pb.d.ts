@@ -1422,10 +1422,18 @@ export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> &
 
   /**
    * Unset evaluates `source` as a scratchpad, yielding its last-expression value.
+   * Ignored when `script` names a saved script, which carries its own kind.
    *
    * @generated from field: optional grpcview.v1.ScriptKind kind = 3;
    */
   kind?: ScriptKind | undefined;
+
+  /**
+   * Name of a saved script to run instead of `source`. Exactly one of the two.
+   *
+   * @generated from field: optional string script = 4;
+   */
+  script?: string | undefined;
 };
 
 /**

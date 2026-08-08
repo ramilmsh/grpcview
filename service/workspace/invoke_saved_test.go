@@ -130,6 +130,36 @@ func TestInvokeSavedRunsTheSavedRequest(t *testing.T) {
 	}
 }
 
+func TestInvokeSavedRejectsAMissingSpec(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+
+	for _, tc := range []struct {
+		name string
+		spec *grpcviewv1.SavedInvokeSpec
+	}{
+		{"no spec at all", nil},
+		{"no collection", &grpcviewv1.SavedInvokeSpec{ItemName: "Echo"}},
+		{"no item name", &grpcviewv1.SavedInvokeSpec{Collection: testWorkspace}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{Spec: tc.spec})
+			if err == nil {
+				t.Fatal("InvokeSaved succeeded, want INVALID_ARGUMENT")
+			}
+			if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+				t.Fatalf("code = %v (%v), want INVALID_ARGUMENT", code, err)
+			}
+
+			serr := w.InvokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamRequest{Spec: tc.spec}, func(*grpcviewv1.InvokeStreamingResponse) error { return nil })
+			if code := connect.CodeOf(serr); code != connect.CodeInvalidArgument {
+				t.Fatalf("streaming code = %v (%v), want INVALID_ARGUMENT", code, serr)
+			}
+		})
+	}
+}
+
 func TestInvokeSavedNestedPath(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()

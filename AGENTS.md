@@ -1089,14 +1089,42 @@ long-lived and the global 30s default would kill it mid-conversation.
   The strip walks the whole response rather than one known key, because two
   unrelated shapes carry one: `Collection.descriptor_set` and, at the top level,
   `DescribeMethodResponse.descriptor_set`.
-- **`history` is stripped from every response except `get_collection`'s.** It is
-  the *other* payload bomb, and the bigger one: every write RPC returns the whole
-  `Collection`, a recorded response can itself hold a base64 descriptor set, and one
-  9-request collection measured 160 KB of history in a 186 KB response — over the
-  MCP client's per-result cap, so every mutation came back as an overflow error.
-  `get_collection` is an agent's only access to history and keeps it whole
-  (`historyBearingMethod`); nothing else needs it. Symmetry between the two strips
-  is deliberate: one walk, one interceptor, one place to add the next heavy field.
+- **A non-synthetic oneof is flattened back into `properties`** (`hoistOneofs`).
+  The plugin emits one as a message-level `anyOf` of `oneOf` groups and keeps its
+  members *out* of `properties`; a client that flattens `anyOf` into a single
+  property bag then shows the model nothing, which is why `add_source` could not
+  add a reflection or a bazel source at all. The branches are hoisted after they
+  are annotated, so their `.proto` comments come along, and each hoisted property
+  says which oneof it belongs to. Nothing changes on the argument side: the names
+  are real proto field names and `protojson` still rejects two members of one
+  oneof. The plugin's OpenAI mode does the same flattening but also marks **every**
+  field required and rewrites `google.protobuf.Struct` into a JSON string — not
+  worth it for one message.
+- **An oversized string inside a response body is elided** (`shrinkResponseBody`,
+  8 KB). A proto walk cannot see into a string, and the worst offender is exactly
+  that shape: a base64 descriptor set inside a JSON body inside a `bytes` field.
+  One `DescribeMethod` invoke measured 119,061 characters and spilled to a file.
+  Two message types carry a body and both are covered (`responseBodyOwners`):
+  `Request.Response`, which an invoke answers with, and `History.Response`, which
+  `get_collection` replays — the second is the larger source in practice, because
+  every recorded call keeps its body and they accumulate. Nothing is special-cased by
+  type — any string over the threshold becomes a marker naming the elided size and
+  pointing at the underlying RPC; a body that is not JSON at all is capped whole.
+- **A derived list survives only on the RPCs that can change it** (`fieldOwners`,
+  `dropSet`). Every write RPC answers with the whole `Collection`, and most of it
+  has nothing to do with the edit. `history` is the biggest offender — a recorded
+  response can itself hold a base64 descriptor set, and one 9-request collection
+  measured 160 KB of history in a 186 KB response, over the MCP client's per-result
+  cap, so every mutation came back as an overflow error. It is now owned by no
+  mutating RPC at all. `services` is owned by the five descriptor-source RPCs plus
+  `set_workspace_trust`, `scripts` by the three script RPCs. `get_collection` is
+  an agent's only access to `history` and keeps everything (`readMethod`).
+  Measured on `example` (9 requests, compact JSON): the whole `Collection` is
+  116.6 KB — 87.5 KB descriptor set, 16.0 KB tree, 9.3 KB history, 7.0 KB
+  `services`, 5.5 KB `scripts`. A request edit's response was 19.8 KB after the
+  descriptor-set and history strips and is 6.6 KB after this one. Returning only
+  the touched subtree was rejected: it changes the RPC contract for every surface,
+  not just MCP, to save the same 13 KB this does at the seam.
 - **Descriptions and field docs come from an embedded descriptor set that retains
   `source_code_info`.** Generated Go protobuf strips that section, so
   `protoregistry.GlobalFiles` carries no comments at all — this is *why* proto
@@ -1119,6 +1147,10 @@ long-lived and the global 30s default would kill it mid-conversation.
   duplicate a write — and anything the server itself answered is returned as-is.
 - **`run_script` now runs in the daemon**, not in the MCP child. Same exposure
   (arbitrary JS with `fetch`), different process, and it outlives the session.
+- **`run_script` takes `source` *or* `script`**, never both and never neither.
+  `script` names one of the collection's saved scripts and runs it with that
+  script's own kind, so a saved scenario no longer has to be pasted in to run from
+  MCP. `kind` is ignored when `script` is set.
 
 ## Views (no router)
 
@@ -1152,6 +1184,16 @@ The CLI remains the right tool for what MCP doesn't cover: shell/exit-code check
 (MCP's streaming tools drain the whole stream before returning, and cap it), and
 verifying the CLI's own argv/flag surface — none of which an MCP tool call
 exercises.
+
+**A collection that reflects grpcview describes a *snapshot* of grpcview.** The
+`example/` collection targets `localhost:10000`, which is grpcview's own workspace
+server, and its reflection descriptors are committed. After a `.proto` change the
+snapshot still describes the old service, so `invoke` answers
+`AddDescriptorSourceRequest has no known field named bazel` about a field that
+exists — `refresh_source` (or `grpcview sources refresh`) fixes it immediately.
+The same staleness applies to the server on the other end: `:10000` is held by
+whichever daemon bound it first, so verifying a *server-side* change means killing
+that daemon (or `grpcview shutdown`) and letting the new build take the port.
 
 **A CLI check leaves a daemon running.** That is the design, not a leak — but a
 rebuild is what makes it visible: the next verb restarts the server and says so on

@@ -219,14 +219,17 @@ func TestCollectSurfacesStreamerError(t *testing.T) {
 }
 
 type recordingServer struct {
-	tools map[string]mcpruntime.Tool
+	tools    map[string]mcpruntime.Tool
+	handlers map[string]mcpruntime.ToolHandler
 }
 
-func (r *recordingServer) AddTool(t mcpruntime.Tool, _ mcpruntime.ToolHandler) {
+func (r *recordingServer) AddTool(t mcpruntime.Tool, h mcpruntime.ToolHandler) {
 	if r.tools == nil {
 		r.tools = map[string]mcpruntime.Tool{}
+		r.handlers = map[string]mcpruntime.ToolHandler{}
 	}
 	r.tools[t.Name] = t
+	r.handlers[t.Name] = h
 }
 
 // The schema is still the plugin's, and it still goes through the shim: proving both is the

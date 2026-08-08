@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -22,6 +23,23 @@ type savedInvoke struct {
 type savedRun struct {
 	spec     invokeSpec
 	messages []string
+}
+
+// The fields live inside `spec`, and a caller that passes them flat sends none of them: without
+// this the empty collection name reaches the store and comes back as "collection not found",
+// which sends the caller looking at the collection rather than at the request.
+func checkSavedSpec(spec *grpcviewv1.SavedInvokeSpec) error {
+	if spec == nil {
+		return connect.NewError(connect.CodeInvalidArgument,
+			errors.New("spec is required: collection, path, item_name and params all nest inside it"))
+	}
+	if spec.GetCollection() == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("spec.collection is required"))
+	}
+	if spec.GetItemName() == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("spec.item_name is required"))
+	}
+	return nil
 }
 
 func (w Workspace) resolveSavedRun(ctx context.Context, in savedInvoke) (savedRun, error) {
@@ -75,6 +93,9 @@ func normalizeBodies(messages []string) []string {
 
 func (w Workspace) InvokeSaved(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedRequest]) (*connect.Response[grpcviewv1.InvokeSavedResponse], error) {
 	msg := request.Msg
+	if err := checkSavedSpec(msg.GetSpec()); err != nil {
+		return nil, err
+	}
 	run, err := w.resolveSavedRun(ctx, savedInvokeFrom(msg.GetSpec()))
 	if err != nil {
 		return nil, err
@@ -108,6 +129,9 @@ func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStrea
 }
 
 func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+	if err := checkSavedSpec(msg.GetSpec()); err != nil {
+		return err
+	}
 	run, err := w.resolveSavedRun(ctx, savedInvokeFrom(msg.GetSpec()))
 	if err != nil {
 		return err

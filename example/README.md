@@ -104,9 +104,4 @@ second service to bounce it off.
 
 `gv.invoke` rejects a streaming path outright, so `smoke` cannot drive
 `Workspace/Streaming/InvokeStreaming`; the UI, the CLI and the
-`invoke_saved_streaming` MCP tool all run it. `grpcview ls` also labels it
-`[server-streaming: not invocable yet]`, which is stale — `grpcview invoke` runs
-it and prints one frame per line.
-
-The MCP `run_script` tool only evaluates source passed inline; it cannot run a
-saved script by name, so `smoke` runs from the CLI or the UI.
+`invoke_saved_streaming` MCP tool all run it.

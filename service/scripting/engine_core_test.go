@@ -56,6 +56,42 @@ func TestStructuredOutput(t *testing.T) {
 	}
 }
 
+// The scratchpad's value used to depend on whether esbuild could constant-fold the last
+// expression, and on what the prelude happened to leave behind when it could. Both are pinned
+// here: `nil` means "no value", which is what RunScript reports as an unset value.
+func TestScratchpadValue(t *testing.T) {
+	e := newEngine(t)
+	for _, c := range []struct {
+		name, src, want string
+	}{
+		{"arithmetic", "1 + 1", "2"},
+		{"bare string", `"a"`, `"a"`},
+		{"unfoldable concat", `"a" + String(1)`, `"a1"`},
+		{"foldable concat", `"a" + "b"`, `"ab"`},
+		{"statement then foldable concat", "1 + 1;\n" + `"a" + "b";`, "2"},
+		{"binding then reference", `const x = "a" + "b"; x`, `"ab"`},
+		{"binding then foldable concat", `const x = 1; "a" + "b"`, ""},
+		{"multi-statement ending in an expression", "const a = 1;\nconst b = 2;\na + b", "3"},
+		{"multi-statement ending in an assertion", `const n = 2;` + "\n" + `gv.assert("n is 2", n === 2)`, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := e.RunScenario(context.Background(), c.src, Grant{}, Input{})
+			if err != nil {
+				t.Fatalf("run %q: %v", c.src, err)
+			}
+			if c.want == "" {
+				if res.Value != nil {
+					t.Fatalf("value = %s, want no value", res.Value)
+				}
+				return
+			}
+			if string(res.Value) != c.want {
+				t.Fatalf("value = %s, want %s", res.Value, c.want)
+			}
+		})
+	}
+}
+
 func TestUndefinedResult(t *testing.T) {
 	e := newEngine(t)
 

@@ -136,8 +136,8 @@ func TestLs(t *testing.T) {
 				}
 			},
 			wantOut: "Ping  echo.v1.EchoService/Unary\n" +
-				"Feed  echo.v1.EchoService/ServerStream  [server-streaming: not invocable yet]\n" +
-				"Chat  echo.v1.EchoService/BidiStream    [bidi-streaming: not invocable yet] [1 middleware]\n",
+				"Feed  echo.v1.EchoService/ServerStream  [server-streaming]\n" +
+				"Chat  echo.v1.EchoService/BidiStream    [bidi-streaming] [1 middleware]\n",
 			wantCode: 0,
 		},
 		{

@@ -3,6 +3,8 @@ package mcp
 import (
 	"encoding/json"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/redpanda-data/protoc-gen-go-mcp/pkg/gen"
@@ -206,27 +208,89 @@ func TestAnnotateSchema_OneofAnyOf(t *testing.T) {
 	if err := json.Unmarshal(got, &doc); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
-	anyOf, ok := doc["anyOf"].([]any)
-	if !ok || len(anyOf) != 1 {
-		t.Fatalf("expected anyOf with 1 entry, got %#v", doc["anyOf"])
+	if _, ok := doc["anyOf"]; ok {
+		t.Fatalf("anyOf survived: %#v", doc["anyOf"])
 	}
-	branch := anyOf[0].(map[string]any)
-	oneOf, ok := branch["oneOf"].([]any)
-	if !ok || len(oneOf) != 2 {
-		t.Fatalf("expected oneOf with 2 entries, got %#v", branch["oneOf"])
+	props, ok := doc["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("properties = %#v", doc["properties"])
 	}
 
-	nameBranch := oneOf[0].(map[string]any)
-	nameProp := nameBranch["properties"].(map[string]any)["name"].(map[string]any)
-	if nameProp["description"] != "Target name." {
-		t.Fatalf("name description = %#v, want %q", nameProp["description"], "Target name.")
+	nameProp, ok := props["name"].(map[string]any)
+	if !ok {
+		t.Fatalf("name was not hoisted: %#v", props)
+	}
+	nameDesc, _ := nameProp["description"].(string)
+	if !strings.HasPrefix(nameDesc, "Target name.") {
+		t.Fatalf("name description = %q, want it to open with the .proto comment", nameDesc)
+	}
+	if !strings.Contains(nameDesc, "'target' oneof group") {
+		t.Fatalf("name description = %q, want the oneof note", nameDesc)
 	}
 
-	id2Branch := oneOf[1].(map[string]any)
-	id2Prop := id2Branch["properties"].(map[string]any)["id2"].(map[string]any)
-	if _, ok := id2Prop["description"]; ok {
-		t.Fatalf("id2 should have no description, got %#v", id2Prop["description"])
+	id2Prop, ok := props["id2"].(map[string]any)
+	if !ok {
+		t.Fatalf("id2 was not hoisted: %#v", props)
 	}
+	id2Desc, _ := id2Prop["description"].(string)
+	if !strings.HasPrefix(id2Desc, "Note: This field is part of the 'target' oneof group.") {
+		t.Fatalf("id2 description = %q, want the oneof note alone", id2Desc)
+	}
+
+	req, ok := doc["required"].([]any)
+	if !ok || len(req) != 0 {
+		t.Fatalf("required = %#v, want the hoisted members to stay optional", doc["required"])
+	}
+}
+
+// A oneof member the model cannot see is a tool it cannot call: add_source could not add a
+// reflection or a bazel source at all while the branches lived under anyOf.
+func TestAnnotateSchema_AddDescriptorSourceIsFlat(t *testing.T) {
+	sd, err := loadWorkspaceService()
+	if err != nil {
+		t.Fatalf("loadWorkspaceService: %v", err)
+	}
+	md := sd.Methods().ByName("AddDescriptorSource").Input()
+
+	raw, err := json.Marshal(gen.MessageSchema(md, gen.SchemaOptions{}))
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(annotateSchema(raw, md), &doc); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if _, ok := doc["anyOf"]; ok {
+		t.Fatalf("anyOf survived: %#v", doc["anyOf"])
+	}
+	props, ok := doc["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("properties = %#v", doc["properties"])
+	}
+	for _, name := range []string{"collection", "descriptor_set", "reflection", "bazel", "file_name", "path", "commit_descriptors"} {
+		if _, ok := props[name]; !ok {
+			t.Fatalf("properties has no %q: %v", name, keysOf(props))
+		}
+	}
+
+	refl := props["reflection"].(map[string]any)["properties"].(map[string]any)
+	if _, ok := refl["address"]; !ok {
+		t.Fatalf("reflection kept no nested fields: %v", keysOf(refl))
+	}
+	bazel := props["bazel"].(map[string]any)["properties"].(map[string]any)
+	if _, ok := bazel["label"]; !ok {
+		t.Fatalf("bazel kept no nested fields: %v", keysOf(bazel))
+	}
+}
+
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestAnnotateSchema_NestedMessage(t *testing.T) {

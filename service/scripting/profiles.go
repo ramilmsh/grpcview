@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -118,13 +119,35 @@ func (e *Engine) RunMiddleware(ctx context.Context, source string, gens map[stri
 }
 
 func (e *Engine) RunScenario(ctx context.Context, source string, g Grant, in Input) (Result, error) {
+	rctx, cancel := withProfileDeadline(ctx, Scenario)
+	defer cancel()
+
+	if c, postlude, ok := e.compileScratchpadExpression(source, g); ok {
+		return e.runFresh(rctx, c, g, in, Scenario.MemLimit, postlude)
+	}
+
 	c, err := e.bundler.compile(source, g)
 	if err != nil {
 		return Result{}, err
 	}
-	rctx, cancel := withProfileDeadline(ctx, Scenario)
-	defer cancel()
 	return e.runFresh(rctx, c, g, in, Scenario.MemLimit, "")
+}
+
+// A scratchpad answers with its value, and the statement path cannot always produce one: esbuild
+// constant-folds `"a" + "b"` into a lone string literal, which cannot be printed at the top of a
+// module without becoming a directive, so it is dropped instead. Compiling the source as an
+// expression sidesteps the printer entirely. Anything that is not a single expression fails to
+// parse here and falls back to the statement path, which reports the real error if the source is
+// genuinely broken.
+func (e *Engine) compileScratchpadExpression(source string, g Grant) (compiled, string, bool) {
+	if strings.TrimSpace(source) == "" || hasDefaultExport(source) {
+		return compiled{}, "", false
+	}
+	c, err := e.bundler.compileEntry(WrapExpression(source), g)
+	if err != nil {
+		return compiled{}, "", false
+	}
+	return c, generatorPostlude(nil), true
 }
 
 func (e *Engine) runFresh(ctx context.Context, c compiled, g Grant, in Input, memLimit uint64, postlude string) (Result, error) {

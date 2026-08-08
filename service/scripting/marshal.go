@@ -85,6 +85,10 @@ func buildInputPrelude(in Input) string {
 	writeGlobal(&b, "secrets", orEmptyMap(in.Secrets))
 	writeGlobal(&b, "env", orEmptyMap(in.Env))
 	b.WriteString(buildGvPrelude(in))
+	// The prelude and the author's code are ONE program, so the program's completion value falls
+	// back to the prelude's last expression when the author's code contributes none. Ending on a
+	// statement with no useful value keeps `gv` from being reported as a scratchpad's answer.
+	b.WriteString("void 0;\n")
 	return b.String()
 }
 

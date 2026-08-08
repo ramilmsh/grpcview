@@ -16,6 +16,13 @@ func hasDefaultExport(source string) bool { return exportDefaultRe.MatchString(s
 
 func HasDefaultExport(source string) bool { return hasDefaultExport(source) }
 
+// The ONE rule for every script position an author writes a value at: a module, or an expression
+// that gets wrapped into one. The wrap opens no new line, so a bundler error still names the
+// author's line.
+func WrapExpression(source string) string {
+	return "export default async () => (" + source + "\n)"
+}
+
 func hasHandleOrDefaultExport(source string) bool {
 	return hasDefaultExport(source) || exportHandleRe.MatchString(source)
 }

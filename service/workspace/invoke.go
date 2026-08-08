@@ -372,16 +372,13 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 	return out, nil
 }
 
-// The ONE rule for every script position an author writes an object at — request body, request
-// metadata, folder metadata: a module, or an expression that gets wrapped into one. Only the UI
-// stores the wrapper; MCP, the CLI and a hand-edited request.json all arrive bare.
-//
-// The wrap opens no new line, so a bundler error still names the author's line.
+// Request body, request metadata, folder metadata: only the UI stores the wrapper; MCP, the CLI
+// and a hand-edited request.json all arrive bare.
 func wrapExpressionScript(src string) string {
 	if scripting.HasDefaultExport(src) {
 		return src
 	}
-	return "export default async () => (" + src + "\n)"
+	return scripting.WrapExpression(src)
 }
 
 func calledNames(src string) map[string]struct{} {
