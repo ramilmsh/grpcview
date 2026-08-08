@@ -2,10 +2,16 @@
   "schemaVersion":  1,
   "name":  "example",
   "items":  [
-    "echo",
-    "collections"
+    "workspace"
   ],
   "sources":  [
+    {
+      "id":  "bazel://proto/grpcview/v1:grpcviewv1_proto",
+      "bazel":  {
+        "label":  "//proto/grpcview/v1:grpcviewv1_proto"
+      },
+      "commitDescriptors":  false
+    },
     {
       "id":  "reflection:localhost:10000",
       "reflection":  {
@@ -13,13 +19,6 @@
         "tls":  false
       },
       "commitDescriptors":  true
-    },
-    {
-      "id":  "bazel://proto/echo/v1:echov1_proto",
-      "bazel":  {
-        "label":  "//proto/echo/v1:echov1_proto"
-      },
-      "commitDescriptors":  false
     }
   ],
   "scripts":  [

@@ -1,0 +1,10 @@
+{
+  "meta":  {
+    "name":  "InvokeStreaming"
+  },
+  "service":  "grpcview.v1.WorkspaceService",
+  "method":  "InvokeStreaming",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // InvokeStreaming is server-streaming, so THIS saved request is a streaming\n  // one: the UI streams it frame by frame, `grpcview invoke` prints one frame\n  // per line, and the MCP tool for it is invoke_saved_streaming. The unary\n  // paths refuse it outright.\n  //\n  // What it streams is grpcview streaming grpcview: the workspace server is\n  // asked to run its own InvokeStreaming, which in turn calls the unary\n  // ListCollections. Every frame the inner call emits is forwarded here, so the\n  // run ends with two message frames and one terminal result.\n  spec: {\n    collection: \"example\",\n    service: \"grpcview.v1.WorkspaceService\",\n    method: \"InvokeStreaming\",\n  },\n  // A streaming body's `messages` are the client frames, in send order. Here\n  // there is one: the InvokeStreamRequest the middle call receives.\n  messages: [\n    JSON.stringify({\n      spec: {\n        collection: \"example\",\n        service: \"grpcview.v1.WorkspaceService\",\n        method: \"ListCollections\",\n      },\n      messages: [\"{}\"],\n    }),\n  ],\n}\n)",
+  "middleware":  [],
+  "draftMetadataScript":  ""
+}

@@ -745,7 +745,7 @@ is shipped.
   left to `.gitignore`. **`GRPCVIEW_CONFIG_DIR` moves that root**, and the trust
   list with it (`wsroot.configRoot`), and the daemon registrations too — that is
   what a throwaway run uses
-  (`//example:up --isolated`, CI). Overriding `HOME` would do the same to grpcview
+  (CI, `example/README.md`'s throwaway run). Overriding `HOME` would do the same to grpcview
   and *also* relocate the output base of the `bazel build` a bazel source shells
   out to, which is a different request entirely.
 - **Discovery is declared-or-scanned** (`store.List`). A `grpcview.work.json` with
@@ -1003,8 +1003,8 @@ rebuilt per `grpcview invoke`.
   a page cannot start a process, so it beats again on `visibilitychange` and that is the
   ceiling.
 - **`--in-process` is bazel's `--batch`** — the escape hatch for CI, a read-only checkout,
-  and debugging. `tools/example-up.sh` uses it because its state directory is deleted when
-  the run ends and a daemon would outlive it.
+  and debugging. A run with a throwaway `GRPCVIEW_CONFIG_DIR` wants it for the setup calls it
+  makes before trust has been granted, and because a daemon would outlive that state directory.
 - **The dev flow stays out of the registry entirely.** `ui/src/lib/client.ts` hardcodes
   `http://127.0.0.1:10000` when `import.meta.env.PROD` is false, so `//service/cmd/dev`
   pins that port and registers nothing: it serves a dummy index page and is a different

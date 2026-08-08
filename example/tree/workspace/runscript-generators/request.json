@@ -1,0 +1,10 @@
+{
+  "meta":  {
+    "name":  "RunScript (generators)"
+  },
+  "service":  "grpcview.v1.WorkspaceService",
+  "method":  "RunScript",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  collection: \"example\",\n  // `requestId` and `stamp` are this collection's own GENERATOR scripts, bound\n  // as globals under their script names. Only the ones a body actually calls\n  // are pulled into the sandbox.\n  //\n  // JSON.stringify turns the generated text into a quoted string literal, so\n  // the scratchpad grpcview runs is a single expression and its value comes\n  // straight back in the response.\n  source: JSON.stringify(`${requestId(\"gv\")} at ${stamp()}`),\n}\n)",
+  "middleware":  [],
+  "draftMetadataScript":  "export default async (): Promise<Metadata> => (\n{\n  // Metadata is the same language as the body, evaluated to a\n  // { [key: string]: string[] } map. Spread the folder chain first, then add\n  // the per-request headers — dropping the spread would discard them.\n  ...gv.metadata.inherit(),\n  \"x-request-id\": [requestId()],\n  \"x-sent-at\": [stamp()],\n}\n)"
+}

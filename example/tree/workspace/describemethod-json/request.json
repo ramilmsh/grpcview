@@ -1,0 +1,10 @@
+{
+  "meta":  {
+    "name":  "DescribeMethod (JSON)"
+  },
+  "service":  "grpcview.v1.WorkspaceService",
+  "method":  "DescribeMethod",
+  "draftBody":  "{\n  \"collection\": \"example\",\n  \"service\": \"grpcview.v1.WorkspaceService\",\n  \"method\": \"ListCollections\"\n}",
+  "middleware":  [],
+  "draftMetadataScript":  ""
+}

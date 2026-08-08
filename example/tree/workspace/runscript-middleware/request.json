@@ -1,0 +1,12 @@
+{
+  "meta":  {
+    "name":  "RunScript (middleware)"
+  },
+  "service":  "grpcview.v1.WorkspaceService",
+  "method":  "RunScript",
+  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  collection: \"example\",\n  // The `trace-headers` middleware attached to this request runs after this\n  // body is evaluated. It wraps this expression so the scratchpad grpcview\n  // actually runs returns a prefixed string, and stamps two extra headers.\n  source: '\"before middleware\"',\n}\n)",
+  "middleware":  [
+    "trace-headers"
+  ],
+  "draftMetadataScript":  ""
+}
