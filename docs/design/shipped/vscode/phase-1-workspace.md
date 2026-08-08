@@ -5,7 +5,7 @@ covered and the five details 1e changed). **Prereqs:** none. **Unblocks:** every
 (the extension must be able to say "the collection is *this* folder"). The rest of the
 track — phases 2–6 — is unbuilt and lives in
 [`active/vscode/README.md`](../../active/vscode/README.md). The workspace **daemon** was
-part of this phase and is now its own document: [`daemon.md`](../../planned/daemon.md).
+part of this phase and is now its own document: [`daemon.md`](../../shipped/daemon.md).
 
 Its four **Open questions** at the bottom are still open, and they are inputs to phase 2
 and later rather than leftovers of this one.
@@ -262,7 +262,7 @@ directory becomes 100% committed content.
   pointerless upload's descriptors (Decision 7) cannot be re-fetched, so neither may live
   somewhere disposable. Use a state dir (`os.UserConfigDir()`-rooted), and reserve
   `os.UserCacheDir()` for the daemon's registration file, which genuinely is disposable
-  ([`daemon.md`](../../planned/daemon.md)).
+  ([`daemon.md`](../../shipped/daemon.md)).
 - **`ensureGitignore` is deleted, not fixed** (`fs.go:757-764`). Its bug — returning early
   whenever any `.gitignore` exists, and so never ignoring `.grpcview/` inside a repo that
   already has one — becomes unreachable because there is nothing left to ignore. Earlier
@@ -679,7 +679,7 @@ not the repo, so cwd-walk discovery would root the workspace inside `bazel-out`.
 
 Not a consequence of this phase — **a live defect in today's release binary**, pulled
 forward because this is when the code is open, and because it should not wait behind
-[`daemon.md`](../../planned/daemon.md).
+[`daemon.md`](../../shipped/daemon.md).
 
 `service/service.go:81` binds `net.IPv4zero` — every interface, so the server is
 LAN-reachable — and `:73-79` sets `AllowedOrigins: []string{"*"}`, so *any* web page you
@@ -696,7 +696,7 @@ internal services.
   becomes a **dev-only allowance for one known origin**, and today's `"*"` is a dev
   convenience that shipped into the release binary.
 - **Loopback is not an authorization boundary** — any local process under any local user
-  can connect. There is no token in this phase (see [`daemon.md`](../../planned/daemon.md) for what
+  can connect. There is no token in this phase (see [`daemon.md`](../../shipped/daemon.md) for what
   was considered and why it was dropped); the boundary is loopback plus origin policy, and
   the doc should say that rather than implying more.
 
@@ -745,7 +745,7 @@ should not be building CAS.
 
 1d before 1e is deliberate: the store is the thing both new kinds write into, and building
 it the other way round hides the general primitive inside the specific one. The daemon
-([`daemon.md`](../../planned/daemon.md)) depends only on 1a and can land any time after it — the VS
+([`daemon.md`](../../shipped/daemon.md)) depends only on 1a and can land any time after it — the VS
 Code extension is its second customer.
 
 ## Watch out
@@ -755,7 +755,7 @@ Code extension is its second customer.
 - **Two processes, one collection, no lock** is currently accepted (`AGENTS.md`, "The CLI").
   1a–1e make concurrent writers *likelier* (more collections, more surfaces); the daemon is
   what actually fixes it by funnelling every surface into one process. Until it lands the
-  wart is worse than today, not the same — see [`daemon.md`](../../planned/daemon.md).
+  wart is worse than today, not the same — see [`daemon.md`](../../shipped/daemon.md).
 - **`AGENTS.md` will need editing when the daemon lands**, in two places: "no
   autodetection" and the no-lock wart. Do not edit it before then — it documents shipped
   behavior, and these documents are the record of the intent.

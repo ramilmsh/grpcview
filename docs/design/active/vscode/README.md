@@ -4,8 +4,8 @@
 behavior is documented in `AGENTS.md`. Phases 2–6 are planning only.
 
 **The track spans folders**, sorted per doc rather than as a block: phase 1 sits in
-[`shipped/vscode/`](../../shipped/vscode/) and the daemon it spun off sits in
-[`planned/`](../../planned/daemon.md), while this README and phases 2–6 stay in `active/`.
+[`shipped/vscode/`](../../shipped/vscode/) and the daemon it spun off shipped too
+([`shipped/daemon.md`](../../shipped/daemon.md)), while this README and phases 2–6 stay in `active/`.
 The table below is the map; every link works from here.
 
 Every phase doc, phase 1 included, is written in the present tense about the code as it
@@ -28,7 +28,7 @@ two architecture decisions every phase depends on.
 | 5 | [`phase-5-extension.md`](./phase-5-extension.md) | The extension itself |
 | 6 | [`phase-6-optional.md`](./phase-6-optional.md) | QuickJS producer, tsserver plugin, tsgo IPC, CI checking |
 | — | [`body-contract.md`](./body-contract.md) | Enforcing the body/metadata export signature (spans 2 and 5) |
-| — | [`daemon.md`](../../planned/daemon.md) | One daemon per workspace — was phase 1's Decision 10; depends only on 1a |
+| — | [`daemon.md`](../../shipped/daemon.md) | One daemon per workspace — was phase 1's Decision 10; SHIPPED 2026-08-08 |
 
 ---
 

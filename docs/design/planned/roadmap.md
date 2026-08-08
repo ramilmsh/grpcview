@@ -9,8 +9,8 @@ is in one place and the shipped docs stop reading like worklists.
 
 **Nothing here is planned.** Each item is a paragraph of intent, not a sequence you can
 execute — when one is picked up it gets its own doc in this folder. The distinction
-matters: [`daemon.md`](./daemon.md) and [`invoke-from-the-store.md`](./invoke-from-the-store.md)
-are *plans* with decisions and steps; these are *wants*.
+matters: [`invoke-from-the-store.md`](./invoke-from-the-store.md) is a *plan* with decisions
+and steps; these are *wants*.
 
 **Statuses below were re-verified against trunk on 2026-08-06**, and several items the old
 docs listed as remaining had in fact shipped — see the last section, which is the reason
@@ -121,3 +121,40 @@ a backlog that lies about what is left is worse than no backlog.
 | Multi-collection switcher | Switch, create and rename collections from the top bar (`collection-switcher.ts`, `NewCollectionDialog`, `RenameCollectionDialog`) |
 | Sources: priority/reorder, per-source attribution | `ReorderDescriptorSources` RPC + the sources table — the definition-sources track (2026-07-29) |
 | Descriptor-set upload ("currently `Unimplemented` server-side") | Uploads land as content-addressed blobs with a refresh recipe; a bazel label is a source kind too |
+
+---
+
+## The collection listing, held in memory and watched
+
+Left over from [`daemon.md`](../shipped/daemon.md), which shipped everything else. `store.List`
+rescans the workspace on every call (~130ms on a 5k-directory monorepo) because it has no way
+to know the tree is unchanged, and now that a daemon holds the process open, that scan repeats
+per request rather than per CLI invocation. A daemon can do what a one-shot process cannot:
+hold the listing and invalidate it from filesystem events — fsevents on macOS, inotify on Linux
+— watching the same tree the scan walks with the same prune rules.
+
+The bar is set by the memo this replaces, which was **removed rather than patched**: it keyed
+on the workspace root's own mtime, which a collection created *below* the root never changes,
+so a hand-written `grpcview.json` or one arriving on a `git checkout` was invisible. Any
+implementation has to be asserted against a collection grpcview did **not** create — `mkdir` +
+a hand-written manifest deep in the tree, then `grpcview collections ls`. A cache that
+reintroduces that bug is worse than no cache. The same watcher is what picking up
+`grpcview.json` edits made outside the app wants anyway.
+
+---
+
+## Watch instead of Get: live editing across surfaces
+
+Now that every surface — UI, CLI, MCP session, VS Code extension — is a client of one daemon
+holding one `Collection.mu`, "who wrote this last" has a single answer, and the missing half is
+telling the others. `Get` and `ListCollections` are polls of state one process already owns;
+as **server-streaming `Watch`** RPCs they would push instead, and an agent editing a request
+through MCP would show up in an open browser tab without a refresh, and vice versa.
+
+Two things this wants first, and they are the actual work: an invalidation signal inside the
+store (today a write returns the new `Collection` to its caller and tells nobody else), and a
+decision about what a frame carries — the whole collection is simple and re-sends ~200 KB per
+keystroke-sized edit, a delta is not. It also composes with the filesystem watcher above:
+`grpcview.json` edited in an editor is exactly the event a `Watch` subscriber wants and the
+only one the daemon cannot currently see.
+

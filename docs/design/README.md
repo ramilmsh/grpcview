@@ -38,6 +38,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`vscode/phase-1-workspace.md`](./shipped/vscode/phase-1-workspace.md) | The workspace is the repo, collections are what's in it — 1a–1e (2026-08-06). One shipped phase of the [VS Code track](./active/vscode/README.md), whose phases 2–6 are still in `active/`. |
 | [`mcp.md`](./shipped/mcp.md) | `grpcview mcp` — the `WorkspaceService` as MCP tools over stdio (2026-08-06). Kept for the three things the four-phase plan got wrong; the plan itself is deleted. |
 | [`example-collection-fixes.md`](./shipped/example-collection-fixes.md) | Five defects an agent-only author hit building the `example` collection — all five fixed (2026-08-07). Kept for the measurements and for why the obvious fix to each was wrong. |
+| [`daemon.md`](./shipped/daemon.md) | One daemon per workspace — registration file, connect-or-spawn, idle exit (2026-08-08). Kept for the naming/token/unix-socket calls it closes and the two deferrals it names. |
 
 ## active/
 
@@ -50,7 +51,6 @@ of trunk. For what the code does now, read `AGENTS.md`.
 
 | Doc | What it plans |
 |---|---|
-| [`daemon.md`](./planned/daemon.md) | One daemon per workspace, bazel's client/server model. Needs only vscode phase 1a. |
 | [`invoke-from-the-store.md`](./planned/invoke-from-the-store.md) | Send resolves the saved request server-side instead of shipping the editor buffer. The RPC now exists; the UI migration does not. |
 | [`descriptor-explorer-plan.md`](./planned/descriptor-explorer-plan.md) | A navigable read-only `.proto` browser — field numbers and comments the TS-shape view cannot recover. |
 | [`roadmap.md`](./planned/roadmap.md) | **Wants, not plans** — the backlog the three shipped UI/scripting/tree docs used to carry. Each item gets its own doc when picked up. |
@@ -63,7 +63,7 @@ plan archive. The reason to keep one is that it is the only record of a decision
 libraries were rejected and why, which calls the build forced, what must not be violated.
 
 **A multi-phase track sorts per doc, not as a block.** The VS Code track is the worked
-example: phase 1 in `shipped/vscode/`, the daemon it spun off in `planned/`, phases 2–6 in
+example: phase 1 in `shipped/vscode/`, the daemon it spun off in `shipped/`, phases 2–6 in
 `active/vscode/`. The track README is the map and must stay wherever the unbuilt phases
 are, so a reader lands on the open work.
 

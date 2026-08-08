@@ -24,7 +24,7 @@ plumbing.
 ### 2. Backend supervisor
 
 Spawn the Go binary with `--workspace <workspaceFolder>` (the port is random —
-[`daemon.md`](../../planned/daemon.md)), or better, let the daemon's connect-or-spawn registry do it
+[`daemon.md`](../../shipped/daemon.md)), or better, let the daemon's connect-or-spawn registry do it
 and just read the registration file. Health-check, restart on crash, kill on `deactivate`.
 Which of the two is an open question in that document.
 

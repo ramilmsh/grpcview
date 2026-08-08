@@ -1,9 +1,56 @@
 # One daemon per workspace
 
-**Status:** Planning only. **Not started.** Depends only on sub-phase 1a of
-[`phase-1-workspace.md`](../shipped/vscode/phase-1-workspace.md) — it needs a workspace root
-to key on and nothing else. Research on the discovery mechanism is closed:
+**Status: SHIPPED 2026-08-08.** The behavior lives in `AGENTS.md`, "The workspace daemon";
+this doc is kept for the calls it closes — why not a registered name, why not a token, why
+a unix socket is a second transport and not a replacement. Research on the discovery
+mechanism is closed:
 [`server-discovery-and-naming.md`](../research/server-discovery-and-naming.md).
+
+**Five deviations from the plan below, all deliberate:**
+
+1. **The default port is `10000`, not `:0`** — the caller's call. A busy default falls back
+   to an ephemeral port instead of failing, so several workspaces still coexist; `--port`
+   pins one and *then* a busy port is an error. So the common single-workspace case keeps a
+   guessable URL and the collision case still resolves. Everything downstream reads the port
+   out of the registration and never assumes it, exactly as the `:0` design required.
+2. **`ServerInfo`/`Shutdown` are a second service, `ServerService`, not two more
+   `WorkspaceService` RPCs.** They are properties of a *process*: adding them to
+   `WorkspaceService` would have made them MCP tools (`service/mcp/dispatch.go` registers
+   one per RPC and a totality test enforces it), and handing an agent a `shutdown` tool is
+   not a thing anyone asked for.
+3. **`syscall.Flock`, not `golang.org/x/sys/unix`.** The standard library has it on both
+   platforms this repo targets; the dependency move and gazelle run bought nothing.
+4. **No filesystem watcher, so `store.List` still rescans.** The listing-cache payoff below
+   is the one part not built: a daemon *could* hold the listing and invalidate it from
+   fsevents/inotify, but rescanning is correct and the cache is the part with the shipped
+   correctness bug. Left as a want; nothing else in the design depends on it.
+5. **The idle default is 1 hour, not bazel's 3.** The semantics below are unchanged and were
+   already right — the clock measures time since the *last* request, not since startup — so
+   this is only the constant. An hour is long enough that a working session never pays for a
+   respawn and short enough that a workspace touched once does not hold a process all
+   afternoon; a respawn costs one dial failure and is invisible.
+
+**MCP shipped as a client of the daemon**, which the plan below files under "MCP is exempt"
+and only half-defers: it is exempt from *discovery* (its client launches it over stdio, so it
+has no port to publish) and never was from being a client. `service/wire` now holds the one
+`Client` interface and its bindings so `cli` and `mcp` take the same value. That closes the
+last second-writer, and it is what makes "one workspace, one writer" true rather than true
+for three surfaces out of four. Two things it forced that the plan does not mention: the
+daemon binding has to **reconnect** (an MCP session outlives an idle-out and a skew
+restart), and the retry has to be narrow enough not to replay a write — a dial failure only.
+
+**Two things were added after the fact, both about a client outliving its server.** The plan
+treats "the server went away" as one event; it is three, and only the first two may end in a
+retry — a dial that never wrote to a socket (replay anything), a connection that broke in
+flight (repair, replay reads only, because the write may already be on disk), and a caller who
+gave up (do nothing, or a `--timeout` expiry would spawn a daemon). And the idle timer is armed
+by *silence*, not by disconnection, so a connected-but-quiet session — an MCP conversation
+between tool calls, a browser tab left open — has to say something: `wire.Keepalive` and
+`ui/src/lib/keepalive.ts` beat `ServerInfo` at `idle/3`. The heartbeat doubles as the detector,
+so a session that has been quiet for an hour is already repaired when its next real call
+arrives.
+
+The **unix socket** in the open questions is the one thing left untouched.
 
 This was Decision 10 of phase 1. It is its own document because it is its own concern: the
 daemon serves the CLI, the browser and the VS Code extension equally, and phase 1 is about
@@ -143,7 +190,8 @@ server that is always this workspace's**. New rule:
 
 ## Dying quietly
 
-- **`--idle-timeout`, defaulting to bazel's 3 hours.** Reset by activity, and *only armed
+- **`--idle-timeout`, defaulting to bazel's 3 hours** (shipped as 1 hour, deviation 5).
+  Reset by activity, and *only armed
   when nothing is in flight* — a counter, not a timestamp. A server-streaming invoke that
   runs past the deadline must not be killed mid-stream, which a naive last-request-time
   timer would do.
@@ -231,7 +279,7 @@ restricted to already-registered workspaces.
 MCP server is launched by its client over stdio, so it has no port to publish and nothing to
 discover about itself. What it does need is to be a *client* of the workspace daemon — same
 registry, same connect-or-spawn — so that an agent's writes and the UI's writes go through one
-process. [`mcp/phase-1-server.md`](./mcp/phase-1-server.md) planned the opposite ("no new
+process. [`mcp.md`](./mcp.md) planned the opposite ("no new
 flags", the collection is `os.UserConfigDir()`); that is the correction this hands it.
 
 ## No token, and what that leaves

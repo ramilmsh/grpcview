@@ -743,7 +743,8 @@ is shipped.
   history. Not `os.UserCacheDir()`: history is user data.
   A collection directory is therefore 100% committed content, and there is nothing
   left to `.gitignore`. **`GRPCVIEW_CONFIG_DIR` moves that root**, and the trust
-  list with it (`wsroot.configRoot`) — that is what a throwaway run uses
+  list with it (`wsroot.configRoot`), and the daemon registrations too — that is
+  what a throwaway run uses
   (`//example:up --isolated`, CI). Overriding `HOME` would do the same to grpcview
   and *also* relocate the output base of the `bazel build` a bazel source shells
   out to, which is a different request entirely.
@@ -784,8 +785,9 @@ cobra verb in `service/cli/`, on the **same binary** — the embedded UI is 26.9
 of the 51.5 MB binary, so a second CLI binary would duplicate ~20 MB of Go.
 
 ```
-grpcview                                serve the UI + API (default)
-grpcview serve --port 10000
+grpcview                                serve the UI + API (default), open a browser
+grpcview serve [--port 10000] [--idle-timeout <d>] [--no-open]
+grpcview url | open | shutdown          address this workspace's daemon
 grpcview invoke <request-path>|<service>/<method>
 grpcview describe <service>/<method>    [-o proto|json]
 grpcview ls [<folder-path>]             [-o text|json]
@@ -802,7 +804,8 @@ grpcview mcp                            serve MCP over stdio
 The reason it exists is one verb: **run a saved request from a shell, with an exit
 code that reflects the gRPC status.** The rest is in service of that.
 
-Every verb takes `--workspace <root>` and `--collection <id>`.
+Every verb takes `--workspace <root>`, `--collection <id>`, `--server <addr>` and
+`--in-process`.
 
 **The workspace root resolves in one place, `wsroot.Discover`, in this order:** explicit
 `--workspace`, else **`$BUILD_WORKSPACE_DIRECTORY`**, else the nearest ancestor of the
@@ -814,18 +817,23 @@ that way — `ls`, `collections ls`, `mcp` — would walk up from `bazel-out` an
 `wsroot.InvocationDir` answers the adjacent but different question of *which directory the
 user is standing in* (which collection does it address); it is not the root.
 
-- **`service.Run` does not own argv.** It takes `service.Options{Port}`; the CLI
-  (or `dev`'s own two-line flag set) parses. The flag is `--port`: pflag reads
+- **`service.Run` does not own argv.** It takes a `service.Options`; the CLI (or
+  `dev`'s own two-line flag set) parses. The flag is `--port`: pflag reads
   Go-flag style `-port` as the shorthand cluster `-p -o -r -t`, and there is no
-  alias.
+  alias. It *does* own lifecycle — bind, publish, drain, idle out — see "The
+  workspace daemon".
 - **`service/cli` must not import `//service`.** The UI embed lives in
   `//service/cmd`, and that edge would drag 26.9 MB of `embedsrcs` into every CLI
   test. `cli.Main` receives a `serve` closure instead.
-- **One `Client` interface, two bindings, no autodetection.** In-process
-  (`workspace.Workspace` called as a plain Go value) is the default; `--server
-  addr` is the explicit opt-in to the wire. "Dial the local server if one happens
-  to be listening" was rejected so that *which process wrote my history* never
-  depends on whether a server was up. Unary RPCs need no adapter — the handler and
+- **One `Client` interface, three bindings, and the wire is the default.** The
+  interface and its bindings live in `service/wire`, not in `cli`, because
+  `service/mcp` takes the same value: local (`workspace.Workspace` called as a
+  plain Go value), pinned-remote, and reconnecting-remote. A verb talks to this
+  workspace's daemon, starting one if none is running; `--server <addr>` pins a
+  specific one and `--in-process` starts nothing. "Dial the local server if one happens to be
+  listening" is still rejected — that was ambient, this is addressed: the
+  registration is keyed by workspace root and re-verified over the wire, so
+  *which process wrote my history* is always this workspace's one. Unary RPCs need no adapter — the handler and
   the generated client have the same signature, asserted at compile time. Only
   streaming differs (a handler takes `*connect.ServerStream`, a client returns
   `*connect.ServerStreamForClient`, and connect cannot build the former outside a
@@ -904,10 +912,117 @@ user is standing in* (which collection does it address); it is not the root.
   add` of an *address* keeps the 30s default: the reflection dial has no timeout of
   its own and would otherwise hang. Passing `--timeout` explicitly always wins, in
   either direction.
-- **Two processes can write one collection directory without a lock**
-  (`Collection.mu` is in-process only). Accepted: `--server` is the opt-out and
-  `--no-history` removes the only write `invoke` performs. If a lost update ever
-  bites, the fix is one advisory lock in the store that benefits every surface.
+- **One writer, because everything routes through one process.** The default path
+  puts every verb — `mcp` included — on this workspace's daemon, so
+  `Collection.mu`, which is in-process only, is again the only serialization
+  anyone needs. `--in-process` is the documented way back to two writers on one
+  directory (`--no-history` removes the only write `invoke` performs). Nothing
+  but a human with an editor writes a collection behind the daemon's back.
+
+## The workspace daemon
+
+Bazel's client/server model, copied whole rather than just its port file: **a CLI verb
+connects to the workspace's server if one is running, starts one if not, and the server
+exits after a few hours of inactivity.** The design and the calls behind it are
+[`docs/design/shipped/daemon.md`](docs/design/shipped/daemon.md).
+
+The payoff is that every surface ends up in one process, so "one workspace, one writer"
+stops being aspirational — and the linked-descriptor cache (`definitionsCacheSize`, an LRU
+of 16) and the compiled QuickJS engine stay warm between invocations instead of being
+rebuilt per `grpcview invoke`.
+
+- **The registration file is the rendezvous, and it is a hint, never an authority.**
+  `<cache>/grpcview/servers/<sha256 of the absolute root>.json`, `0600` inside a `0700`
+  directory, holding port, pid, root, and the executable's identity. Not inside the
+  workspace (a read-only or network-mounted checkout breaks it) and not bare `/tmp` (mode
+  1777, shared between users). `GRPCVIEW_CONFIG_DIR` moves it, so a throwaway run cannot
+  adopt the developer's daemon. A client checks pid-alive → connects → **verifies the
+  server reports the same workspace root**; pid reuse and hash collisions both die there,
+  and anything that fails is treated as stale.
+- **The port defaults to `10000` and falls back.** A busy default takes an ephemeral port
+  instead of failing; a busy `--port` is an error. So the single-workspace case keeps a
+  guessable URL, a second workspace still starts, and nothing downstream may assume a port
+  — `grpcview url` is how you learn it. Bind first, publish second: the port written down
+  is read off `l.Addr()`.
+- **`ServerService` (`ServerInfo`, `Shutdown`) is a second service on purpose.** They are
+  properties of a *process*, not of a workspace, and putting them on `WorkspaceService`
+  would have registered them as MCP tools. In-process, `ServerInfo` describes this process
+  and `Shutdown` is `Unimplemented` rather than a silent success.
+- **Nothing signals a pid the connect has not vouched for.** `grpcview shutdown` and the
+  version-skew restart ask **over the wire**, after identity is verified; `SIGTERM` is the
+  last resort for a process that answered and then refused to leave.
+- **Startup is locked, and a failure is never a hang.** An advisory `flock` covers
+  *check → spawn → wait → connect* and is released once connected — a rendezvous lock, not
+  a command lock, so concurrent verbs are not serialized. The spawn is a detached self-exec
+  (`serve --workspace <abs root> --no-open --idle-timeout <d>`, `Setsid`, stdio to
+  `<cache>/grpcview/servers/<hash>.log`); the child inherits one end of a pipe it never
+  learns about, so a crash is EOF in milliseconds rather than a 10s timeout, and the failure
+  path prints the log tail and exits 2.
+- **`cwd` never crosses the wire.** The client resolves the collection to an id and spawns
+  with an absolute root; the daemon's own cwd is whatever shell first started it.
+- **Version skew restarts the server, keyed on the *binary*, not the version string.**
+  `version` links `"dev"` for every unstamped build, so a string compare would miss exactly
+  the rebuild you just did. The registration carries `os.Executable()` + mtime + size, and
+  any change restarts — with one line on stderr, because a daemon serving last hour's code
+  is a trap that looks like success.
+- **Idle exit is a counter, not a timestamp.** The clock runs from the *last* request, not
+  from startup, and the deadline is only armed when nothing is in flight, so a
+  server-streaming invoke that outruns it survives to completion (verified: 100 frames over
+  12s against a 5s timeout). The default is **1 hour since last use**. **Only an
+  auto-spawned server idles out** — a
+  hand-run `grpcview` keeps running until stopped. That is the same predicate as the
+  browser: an explicitly launched server opens one and lives; an auto-spawned one is silent
+  and dies. `grpcview invoke` must never pop a tab.
+- **`--no-open`, and degrade rather than fail.** No `DISPLAY`, a headless box or an SSH
+  session prints the URL and carries on. `grpcview url` prints to **stdout** so it stays
+  scriptable (`open "$(grpcview url)"`); `grpcview open` names what it launched on stderr,
+  since the launch is the action.
+- **Every surface is a client of it, `grpcview mcp` included** — `service/wire` holds the one
+  `Client` interface and its bindings so `cli` and `mcp` take the same value, and the daemon
+  binding *reconnects* so a long-lived MCP session survives an idle-out or a skew restart.
+- **Repairing the connection and replaying the request are two decisions, not one.** Every
+  failure that is the connection's rather than the server's re-runs connect-or-spawn, because
+  the *next* call must not find the same dead server. Only then does replay come up, and it
+  is narrow: a **dial** failure proves nothing was written to a socket, so anything may run
+  again; a connection that broke **in flight** proves nothing at all — the write may already
+  be on disk — so only reads (`Get`, `ListCollections`, `ListBazelTargets`, `DescribeMethod`,
+  `ServerInfo`, marked by `read` rather than `call` in `service/wire/reconnect.go`) run
+  twice. A client timeout is neither: a caller who gave up must not spawn a daemon, so
+  `classify` checks `ctx.Err()` first. Anything the server itself answered, including its own
+  `Unavailable`, is returned untouched.
+- **A quiet client heartbeats, because silence is what arms the idle timer.** A connected but
+  idle session is indistinguishable, server-side, from no session at all. `wire.Keepalive`
+  beats `ServerInfo` — a real request on the same idle timer, no separate liveness path —
+  every `idle/3`, clamped to [30s, 10min] and retuned from the timeout the server reports.
+  `grpcview mcp` runs it, so a daemon outlives its agent by one idle window and no longer;
+  the browser runs its own in `ui/src/lib/keepalive.ts`, since `grpcview open` spawns a
+  daemon that would otherwise die under a tab left open. A beat that fails repairs on its own
+  schedule, so a session quiet for an hour is already pointed at a live server when its next
+  real call arrives. A server reporting no idle timeout ends the loop — nothing to hold open.
+  The one case a heartbeat cannot cover: a fully backgrounded tab has its timers frozen, and
+  a page cannot start a process, so it beats again on `visibilitychange` and that is the
+  ceiling.
+- **`--in-process` is bazel's `--batch`** — the escape hatch for CI, a read-only checkout,
+  and debugging. `tools/example-up.sh` uses it because its state directory is deleted when
+  the run ends and a daemon would outlive it.
+- **The dev flow stays out of the registry entirely.** `ui/src/lib/client.ts` hardcodes
+  `http://127.0.0.1:10000` when `import.meta.env.PROD` is false, so `//service/cmd/dev`
+  pins that port and registers nothing: it serves a dummy index page and is a different
+  binary, so a registered dev server would be shut down as skew by the next CLI verb.
+- **The daemon's environment is frozen at spawn**, and `exec.Command("bazel", …)` for a
+  bazel source resolves `PATH` as the spawning shell had it. Nothing else reads the
+  environment (`service/scripting/` has no `os.Environ`/`os.Getenv`/`process.env`), and that
+  is worth re-checking before adding one.
+- **Not built: a filesystem watcher.** `store.List` still rescans on every call. Holding the
+  listing in a daemon and invalidating from fsevents/inotify is the remaining payoff, and
+  deliberately not the shipped shape — the mtime-keyed memo that preceded it missed
+  collections created below the root, so a cache that reintroduces that is worse than none.
+- **The boundary is loopback + origin policy, and nothing more.** No token: the browser
+  cannot read a file, so the server would have to inject it into the HTML anything can
+  `GET`, which is hygiene rather than a boundary, and it defeats neither of the attacks
+  usually cited for it. A unix socket for the CLI is the properly-scoped version and is
+  still open — the browser cannot speak to one, so it would be a *second* transport, not a
+  replacement.
 
 ## The MCP server
 
@@ -991,9 +1106,19 @@ long-lived and the global 30s default would kill it mid-conversation.
   is named here as a known exposure, not mitigated — there is no sandboxing beyond
   what the scripting engine already does for the UI/CLI paths, and an agent with
   this tool available can reach the network from inside the collection process.
-- **Two processes on one collection directory is the existing model** (see the CLI
-  section's last bullet) — an MCP session and a `serve`/CLI process both writing
-  the same collection share the same last-write-wins exposure, unchanged.
+- **An MCP session is a client of the workspace daemon, like every other verb.**
+  `newMcpCmd` opens a session through the same `openClient` and hands `mcp.Run` a
+  `wire.Workspace`, so an agent's writes, the UI's and the CLI's all serialize on
+  one `Collection.mu`. MCP is exempt from the *discovery* half and only that half:
+  its client launches it over stdio, so it has no port to publish and nothing to
+  find out about itself. `--in-process` opts a session out.
+- **The session outlives its backend, so the binding reconnects.** A daemon idles
+  out an hour after its last request and a rebuild restarts it, both of which would kill a
+  long-running session. `wire.Reconnecting` re-runs connect-or-spawn on a **dial**
+  failure only — proof the request never reached a server, so replaying it cannot
+  duplicate a write — and anything the server itself answered is returned as-is.
+- **`run_script` now runs in the daemon**, not in the MCP child. Same exposure
+  (arbitrary JS with `fetch`), different process, and it outlives the session.
 
 ## Views (no router)
 
@@ -1027,6 +1152,12 @@ The CLI remains the right tool for what MCP doesn't cover: shell/exit-code check
 (MCP's streaming tools drain the whole stream before returning, and cap it), and
 verifying the CLI's own argv/flag surface — none of which an MCP tool call
 exercises.
+
+**A CLI check leaves a daemon running.** That is the design, not a leak — but a
+rebuild is what makes it visible: the next verb restarts the server and says so on
+stderr, and `grpcview shutdown` ends it outright. Add `--in-process` when a check
+must not outlive itself (a temp `GRPCVIEW_CONFIG_DIR`, a workspace you are about to
+delete).
 
 The browser is the last resort, reserved for what only it can exercise: rendering,
 Monaco behavior, the tree's keyboard/mouse/DnD semantics, focus and layout,
@@ -1238,14 +1369,17 @@ verified in a browser (see Browser verification hook above).
 
 ```
 proto/
-  grpcview/v1/      Wire API: service.proto (WorkspaceService Connect RPCs) +
-                    workspace.proto (messages)
+  grpcview/v1/      Wire API: service.proto (WorkspaceService + ServerService
+                    Connect RPCs) + workspace.proto (messages)
   grpcview/store/v1/ On-disk persistence schema (storage.proto)
   echo/v1/          A trivial echo service used for testing invoke end-to-end
 service/
-  service.go        Wires up the HTTP/Connect server; logging.go alongside
+  service.go        Serves and owns the server's lifecycle (bind, publish, drain);
+                    idle.go and logging.go alongside
   cmd/              Production entry point (main.go embeds index.html)
   cmd/dev/          Dev backend entry point
+  daemon/           Registration file, spawn lock, connect-or-spawn, browser launch
+  wire/             The one Client interface + its local and remote bindings
   workspace/        WorkspaceService handler (reflection, invoke, CRUD)
   store/            Filesystem-backed collection (protojson tree); convert.go
                     bridges store↔wire schemas
