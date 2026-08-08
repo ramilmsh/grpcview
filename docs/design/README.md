@@ -53,6 +53,9 @@ of trunk. For what the code does now, read `AGENTS.md`.
 |---|---|
 | [`invoke-from-the-store.md`](./planned/invoke-from-the-store.md) | Send resolves the saved request server-side instead of shipping the editor buffer. The RPC now exists; the UI migration does not. |
 | [`descriptor-explorer-plan.md`](./planned/descriptor-explorer-plan.md) | A navigable read-only `.proto` browser — field numbers and comments the TS-shape view cannot recover. |
+| [`script-imports.md`](./planned/script-imports.md) | A script is a `.ts` file imported as `@/path/from/root`. Deletes `script.json`, `ScriptKind`, the generator prelude, and `gv` as a global. |
+| [`cross-collection-invoke.md`](./planned/cross-collection-invoke.md) | `gv.invoke("//identity:Auth/Login")` — Bazel-style labels over per-collection slugs, never paths. Sibling of `script-imports.md`. |
+| [`workspace-diagnostics.md`](./planned/workspace-diagnostics.md) | `grpcview check` — one pass reporting broken imports, invoke paths, slugs and sources. The precondition for letting the other two tracks break references. |
 | [`roadmap.md`](./planned/roadmap.md) | **Wants, not plans** — the backlog the three shipped UI/scripting/tree docs used to carry. Each item gets its own doc when picked up. |
 
 ## Housekeeping
