@@ -5,6 +5,9 @@ import {
   insertImportEdit,
   namesAlreadyInScope,
 } from "./auto-import";
+import { buildWrapped } from "./script-region";
+
+const SKELETON = "export default async (): Promise<RequestMessage> => (";
 
 // example/scripts/ids.ts and example/scripts/trace-headers.ts, the two real fixtures the
 // browser repro in the task brief is built around ("requ" → requestId, "handl" → handle).
@@ -129,5 +132,36 @@ describe("insertImportEdit", () => {
     const source = '// import { fake } from "x";\nconst s = "import y from \'z\';";\nexport default 1;\n';
     const edit = insertImportEdit(source, "requestId", "#/scripts/ids");
     expect(edit.offset).toBe(0);
+  });
+
+  it("in a wrapped document with no existing imports, lands at offset 0 — never in the region", () => {
+    const source = buildWrapped({ skeleton: SKELETON, region: "{\n  id: 1,\n}" });
+    const edit = insertImportEdit(source, "requestId", "#/scripts/ids");
+    expect(edit.offset).toBe(0);
+    expect(source.slice(0, edit.offset)).toBe("");
+  });
+
+  it("in a wrapped document with two existing imports, lands after the second — never after a line inside the region", () => {
+    const source = buildWrapped({
+      imports: [
+        'import { inherit } from "grpcview:metadata";',
+        'import { invoke } from "grpcview:invoke";',
+      ],
+      skeleton: SKELETON,
+      region: "{\n  id: 1,\n}",
+    });
+    const edit = insertImportEdit(source, "requestId", "#/scripts/ids");
+    const before = source.slice(0, edit.offset);
+    expect(before).toBe(
+      [
+        'import { inherit } from "grpcview:metadata";',
+        'import { invoke } from "grpcview:invoke";',
+        "",
+      ].join("\n"),
+    );
+    // The insertion point precedes the skeleton line, which precedes the start marker — nowhere
+    // near the region.
+    expect(edit.offset).toBeLessThan(source.indexOf(SKELETON));
+    expect(edit.offset).toBeLessThan(source.indexOf("// grpcview:script start"));
   });
 });

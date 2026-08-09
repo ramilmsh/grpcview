@@ -7,9 +7,20 @@ import "@/features/scripts/monaco-scripts";
 import { META_SKELETON, metaBounds as boundsOf, hiddenLineRanges } from "./metadata-wrapper";
 import { findRegion, type Region } from "./script-region";
 import { modeSwitchFor, unwrapEdits, wrapEdits } from "./region-edits";
+import { pruneEdits, type UnusedSpan } from "./import-block";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/metadata.ts";
+
+// D7 + D8 (docs/design/planned/script-region.md): the hidden import block is pruned of unused
+// entries, driven off the TS worker's own suggestion diagnostics (getSuggestionDiagnostics) — not
+// a hand-rolled parser. Idle-triggered off the last keystroke, so a run of typing doesn't hammer
+// the worker with a getSuggestionDiagnostics round trip per character.
+const PRUNE_DEBOUNCE_MS = 800;
+// Unused-identifier codes observed from the vendored ts.worker.js, confirmed against the
+// `typescript` package's own language service (see import-block.ts's UnusedSpan doc for the two
+// span shapes 6133 can take). Every other code is ignored.
+const UNUSED_IMPORT_CODES = new Set([6133, 6192]);
 
 // A .d.ts with no import/export is ambient, so `Metadata` is visible in the module body.
 const METADATA_TYPE_DTS = "type Metadata = { [key: string]: string[] };";
@@ -69,8 +80,55 @@ export function MetadataEditor({
   // The region the buffer is CURRENTLY in, not the region it loaded in: the gutter offset is the
   // start marker's line number, which moves as the import block above it grows or shrinks.
   const regionRef = useRef<Region | undefined>(undefined);
+  // The monaco namespace `onMount` is handed, not the reactive useMonaco() value: onMount's `m`
+  // is guaranteed non-null by the time it fires, so the debounced prune pass never has to guard
+  // against a not-yet-loaded monaco.
+  const monacoNsRef = useRef<typeof Monaco | null>(null);
+  const pruneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const monaco = useMonaco();
+
+  const clearPruneTimer = () => {
+    if (pruneTimerRef.current !== null) {
+      clearTimeout(pruneTimerRef.current);
+      pruneTimerRef.current = null;
+    }
+  };
+
+  // D7 + D8: prune the hidden import block of names the TS worker reports unused. Async — it
+  // waits on the worker round trip — so the model is re-read on resolve and the pass bails if the
+  // text changed underneath it, rather than applying edits against stale offsets.
+  const runPrune = async () => {
+    const editor = editorRef.current;
+    const m = monacoNsRef.current;
+    if (!editor || !m) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const before = model.getValue();
+    if (!findRegion(before)) return;
+    const getWorker = await m.languages.typescript.getTypeScriptWorker();
+    const client = await getWorker(model.uri);
+    const diags = await client.getSuggestionDiagnostics(model.uri.toString());
+    if (editor.getModel() !== model || model.getValue() !== before) return;
+    const unused: UnusedSpan[] = [];
+    for (const d of diags) {
+      if (!UNUSED_IMPORT_CODES.has(d.code) || d.start == null || d.length == null) continue;
+      unused.push({ start: d.start, length: d.length, code: d.code });
+    }
+    const edits = pruneEdits(before, META_SKELETON, unused);
+    if (!edits) return;
+    // No popUndoStop: this is a debounced machine edit with no keystroke to merge into. It is its
+    // own undo stop, unlike the mode-switch edits above.
+    editor.executeEdits("grpcview.prune-imports", edits);
+  };
+
+  const schedulePrune = () => {
+    clearPruneTimer();
+    pruneTimerRef.current = setTimeout(() => {
+      pruneTimerRef.current = null;
+      void runPrune();
+    }, PRUNE_DEBOUNCE_MS);
+  };
 
   const lineNumbersFor = (n: number) => {
     const r = regionRef.current;
@@ -99,6 +157,9 @@ export function MetadataEditor({
   };
 
   useEffect(() => {
+    // A pending prune targets the buffer being left behind; its offsets have no meaning once the
+    // request identity changes.
+    clearPruneTimer();
     const ed = editorRef.current;
     if (!ed) return;
     if (ed.getValue() !== data) {
@@ -111,6 +172,8 @@ export function MetadataEditor({
     applyHidden(ed, /* force */ true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey]);
+
+  useEffect(() => clearPruneTimer, []);
 
   useEffect(() => {
     if (!monaco || !onErrorsChange) return;
@@ -151,6 +214,7 @@ export function MetadataEditor({
 
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
+    monacoNsRef.current = m;
     registerEditorForDebug(TS_MODEL_URI, editor);
     // A full-document format would reflow the wrapper across the hidden boundary.
     editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
@@ -243,9 +307,16 @@ export function MetadataEditor({
         // `export default` and after toWrapped the region's first token is `{`, so modeSwitchFor
         // reads "none" on the way back out and this branch does not recurse further.
         applyHidden(editor, setRegion(editor, findRegion(model.getValue())));
-        return;
+      } else {
+        applyHidden(editor, setRegion(editor, findRegion(v)));
       }
-      applyHidden(editor, setRegion(editor, findRegion(v)));
+      // Reschedule on every change: a wrapped buffer gets a fresh idle-debounced prune pass, a
+      // plain one (or one that just switched to plain) drops any pass in flight.
+      if (findRegion(editor.getModel()?.getValue() ?? "")) {
+        schedulePrune();
+      } else {
+        clearPruneTimer();
+      }
     });
   };
 

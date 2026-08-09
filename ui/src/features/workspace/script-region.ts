@@ -70,6 +70,16 @@ export function regionBounds(text: string): Bounds {
   return { first: region.startLine + 1, last: region.endLine - 1, total: region.total };
 }
 
+// Everything above the start marker — the machine-owned header — or the whole text when there is
+// no region. A prefix of `text` (same characters, not a re-render), so offsets found in it index
+// correctly into the original: an inserted import must never land inside the region, since
+// `import` is a statement and cannot stand in the expression position the region occupies.
+export function regionHeader(text: string): string {
+  const region = findRegion(text);
+  if (!region) return text;
+  return text.split("\n").slice(0, region.startLine - 1).join("\n");
+}
+
 export interface HiddenLineRange {
   startLine: number;
   endLine: number;

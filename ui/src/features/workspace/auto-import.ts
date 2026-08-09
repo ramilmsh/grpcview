@@ -13,6 +13,7 @@
 // functions below reimplement just enough of it, working off data the app already has (the
 // workspace's module list and the `#/` / `@/` path-sigil mapping), rather than the compiler's.
 import { maskLiterals } from "./module-sniff";
+import { regionHeader } from "./script-region";
 
 // Declarations that create a name in a module's OWN scope: found lines are scanned regardless of
 // whether they carry `export`, because a name declared but not exported still shadows an
@@ -116,8 +117,15 @@ export interface ImportInsertion {
 // if there is none yet. Offsets are computed against the UNMASKED source (maskLiterals preserves
 // length and newlines byte-for-byte, so positions found in the masked text still index correctly
 // into the original).
+//
+// The scan is bounded to regionHeader(source) — everything above the start marker, or the whole
+// text in plain mode (script-region.ts). `import` is a statement and cannot appear where the
+// region's expression sits, so a wrapped document's import block must live strictly above the
+// marker; scanning the whole source could splice one into the region and produce a hard parse
+// error. regionHeader is a prefix of `source`, so offsets found within it still index correctly.
 export function insertImportEdit(source: string, name: string, specifier: string): ImportInsertion {
-  const masked = maskLiterals(source);
+  const header = regionHeader(source);
+  const masked = maskLiterals(header);
   const importLineRe = /^[ \t]*import\b.*$/gm;
   let lastEnd = -1;
   let m: RegExpExecArray | null;

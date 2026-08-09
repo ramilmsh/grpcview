@@ -5,6 +5,7 @@ import {
   findRegion,
   normalizeSkeleton,
   regionBounds,
+  regionHeader,
   regionHiddenRanges,
   regionText,
   START_MARKER,
@@ -203,6 +204,29 @@ describe("normalizeSkeleton", () => {
   it("stays byte-identical across a store-normalized trailing newline round trip", () => {
     const stripped = (WRAPPED_WITH_IMPORTS + "\n").replace(/\n+$/, "");
     expect(normalizeSkeleton(stripped, SKELETON)).toBe(WRAPPED_WITH_IMPORTS);
+  });
+});
+
+describe("regionHeader", () => {
+  it("returns everything above the start marker", () => {
+    expect(regionHeader(WRAPPED_WITH_IMPORTS)).toBe(
+      [
+        'import { inherit } from "grpcview:metadata";',
+        'import { invoke } from "grpcview:invoke";',
+        "",
+        SKELETON,
+      ].join("\n"),
+    );
+  });
+
+  it("returns the whole text when there is no region", () => {
+    const plain = "export default async () => ({ ok: true });";
+    expect(regionHeader(plain)).toBe(plain);
+  });
+
+  it("is a prefix of the original text", () => {
+    const header = regionHeader(WRAPPED_WITH_IMPORTS);
+    expect(WRAPPED_WITH_IMPORTS.startsWith(header)).toBe(true);
   });
 });
 
