@@ -122,58 +122,84 @@ plain protojson must run the *same* evaluation path rather than a separate one �
 protojson body that could not import a script would be `{{ }}` all over again.
 
 - A request **body** is authored as a bare TypeScript object literal in a Monaco
-  editor. What the user edits is wrapped in a hidden canonical module whose prefix is
+  editor. What the user edits is a **region delimited by two comment markers**, each on
+  its own line:
 
   ```ts
-  import { invoke } from "grpcview:invoke";
-  import { params } from "grpcview:request";
+  import { requestId } from "#/scripts/ids";
 
   export default async (): Promise<RequestMessage> => (
+  // grpcview:script start
+  {
+    id: requestId(),
+  }
+  // grpcview:script end
+  )
   ```
 
-  and whose suffix is `\n)`; the editor hides both (`body-wrapper.ts`). The two imports
-  are there so a JSON-like body can `await invoke(…)` or read `params.x` without first
-  having to break out of the JSON-like form — they cost nothing unused (no
-  `noUnusedLocals`, and esbuild drops them). Metadata gets the same treatment with
-  `inherit` in place of `params` (`metadata-wrapper.ts`) — an auth header is routinely
-  another saved request's response, hence `invoke` on both.
-  **What decides wrapping is the first token, not an `export default` sniff**: leading
-  whitespace and comments are skipped, and a `{` means JSON-like and gets wrapped
-  (`leadsWithBrace` in `module-sniff.ts`). Anything else — an `import`, an `export`, a
-  `[`, a call — is a module the author owns, shown whole with nothing hidden. The
-  inverted rule is what lets the wrapper carry imports at all: sniffing `export default`
-  cannot tell the wrapper's own prefix from an author module that opens the same way.
-  `isCanonical` stays an exact prefix/suffix string match for the same reason, so an
-  author module with *different* imports (`example/tree/workspace/runscript-generators/body.ts`)
-  is never mistaken for one. Adding an import via auto-import breaks that exact match and
-  promotes the body to a plain visible module, which is the honest outcome — hiding a
-  wrapper above a module would put auto-import's insertion point in a region the author
-  cannot see. **The promotion is applied live**: `Editor.tsx` / `MetadataEditor.tsx` track
-  the buffer's current form, not the form it loaded in, so the hidden areas drop and the
-  gutter renumbers on the keystroke that accepted the import (and an undo back to the
-  canonical text re-hides them). The wrapper-guard that reverts an exotic edge-case edit
-  — IME, drag-drop, replace-all — therefore reverts only text that is *neither* form:
-  text that left the canonical form but is still a module (`isModule`) is a promotion, not
-  corruption. Getting this wrong is not merely cosmetic: the guard's revert does not
-  propagate to the draft, so a reverted promotion leaves the editor and the saved body
-  disagreeing until a reload. Only the current wrapper is recognized: a body still carrying the older
-  import-free `export default async (): Promise<RequestMessage> => (` reads as a module
-  and shows whole.
-  Because `isCanonical` matches on `endsWith(")")` while the store normalizes every
-  `body.ts` / `metadata.ts` to exactly one trailing newline, a persisted body reaches the
-  UI as `"<canonical>\n"` and must be **hosted** before the canonical test — trailing
-  newlines are stripped by `migrateBodyToTs` and `hostMetadataScript`, and the store
-  re-adds one on write, so the round trip stays byte-identical. Skip that and the wrapper
-  silently stops being hidden and becomes editable.
+  The editor hides line 1 through the start marker and the end marker through EOF, and
+  the gutter numbers the region from 1 (`script-region.ts`, `body-wrapper.ts`,
+  `Editor.tsx`). **The mode is stated by the markers, not inferred from a string match**:
+  the hidden-line geometry is derived from where the markers are (`findRegion`), so
+  everything above the start marker is free to grow and shrink — which is exactly what
+  accepting an auto-import does — without changing what "wrapped" means. There is no
+  `isCanonical`, no constant wrapper text and no `PREFIX_LINES`; a corruption guard, a
+  `lastGood` snapshot and a live-promotion path all existed only to survive the exact
+  match breaking, and all three are gone.
+  **The shim carries no standard imports.** `invoke`, `params` and `inherit` are ordinary
+  auto-import candidates from the `grpcview:*` virtuals, not an always-on prefix, so in a
+  fresh `{}` body `params.x` is an error until you accept the completion. The one place a
+  standard import is still seeded is `defaultMetadataModule` (`metadata-wrapper.ts`),
+  which spells out `inherit` because the seed text itself calls `inherit()`.
+  **The import block above the start marker is derived, not authored**: auto-import
+  inserts into it on accept (`module-auto-import.ts`), an entry the TS worker reports
+  unused is pruned back out on an 800 ms idle debounce driven by
+  `getSuggestionDiagnostics` (`baseCompilerOptions` has no `noUnusedLocals`, so an unused
+  import never surfaces as a marker), and the block is re-rendered wholesale, sorted by
+  specifier then by name so it does not churn in git (`import-block.ts`). A **plain**
+  document's imports are visible and therefore the author's: they are never pruned.
+  **The region's first token decides the mode, not the file's** (`region-edits.ts`,
+  `leadsWithBrace` in `module-sniff.ts`, which skips leading whitespace and whole
+  comments). A region whose first token is `{` stays wrapped; anything else deletes the
+  two marker lines and the document becomes plain, with the skeleton and the imports left
+  behind, now visible and author-owned. A plain document gets wrapped only when the
+  *whole file's* first token is `{`. An **empty region holds the current mode**, so
+  deleting the last `}` of `{}` does not rip the shim out and put it back as you retype.
+  The switch is a pair of text edits pushed as one undo stop, and it reaches the draft —
+  the old guard's revert did not, which is why the editor and the saved body used to
+  disagree until a reload.
+  A **paste** into a wrapped region resolves each name the worker reports unresolved
+  (TS2304) against the workspace export index plus the `grpcview:*` virtuals: exactly one
+  module exporting it adds the import, zero or two-or-more **bails** — the region is
+  unwrapped to plain and the names are left as ordinary red squiggles
+  (`resolve-imports.ts`). Paste only, and that exclusion is load-bearing: a diagnostic
+  cannot tell a half-typed `requestI` from a name nothing exports, so a bail-on-every-edit
+  rule would tear the wrapper out on the way to typing any new identifier. It is paste
+  and not also drop because monaco fires `onDidPaste` solely for source `"keyboard"` and
+  exposes no drop event at all.
+  The **skeleton is normalized at the UI read seam** (`migrateBodyToTs`,
+  `hostMetadataScript`), never by a daemon pass that would rewrite the user's files at
+  startup: a shim-version bump repairs files as they are opened, and the import block
+  above the skeleton is preserved verbatim because it is derived content, not shim.
+  The store normalizes every `body.ts` / `metadata.ts` to exactly one trailing newline, so
+  a persisted body reaches the UI as `"<text>\n"`; both read-seam functions strip trailing
+  newlines before the marker scan and the store re-adds one on write, so the round trip
+  stays byte-identical.
+  A `body.ts` / `metadata.ts` **without both markers is a plain script, shown whole** —
+  including every file still carrying the older marker-less wrapper. That is a deliberate
+  one-time break, taken over a read-seam migration that would have to recognize the old
+  wrapper; nothing migrates those files, and `example/` was rewritten by hand.
   The `RequestMessage` type is generated
   **in the browser** by `@bufbuild/protoc-gen-es` from the workspace's reflected
   `FileDescriptorSet` (`proto-types.ts`), giving full IntelliSense and
   type-checking against the selected method's input message.
 - Request **metadata** is authored identically — a bare object evaluated to
-  `{ [key: string]: string[] }` under the hidden wrapper described above
-  (`metadata-wrapper.ts`, `MetadataEditor.tsx`). `hostMetadataScript` is where a
-  hand-written JSON-like `metadata.ts` picks the wrapper up, since metadata has no
-  `migrateBodyToTs` of its own.
+  `{ [key: string]: string[] }` inside the same marked region, under the skeleton
+  `export default async (): Promise<Metadata> => (` (`metadata-wrapper.ts`,
+  `MetadataEditor.tsx`). The marker text is the same on both surfaces; the filename is
+  what decides which skeleton applies. `hostMetadataScript` is where a hand-written
+  JSON-like `metadata.ts` picks the markers up, since metadata has no `migrateBodyToTs`
+  of its own.
 - Both body and metadata strings are **evaluated on the backend in QuickJS** at
   invoke time (same machinery as scripts), so they can import the collection's own
   scripts and npm packages.
@@ -199,9 +225,10 @@ protojson body that could not import a script would be `{{ }}` all over again.
   TypeScript** — a JSON object is a TS object literal in expression position, so it is
   not a second case and gets no second code path. There are two forms: a **module**
   (has `export default`) or an **expression** (anything else, wrapped in
-  `export default async () => ( … )` and run on the same path). The Monaco
-  hidden-wrapper form above is what the browser authors; it is not what the backend
-  requires. `wrapExpressionScript` (`service/workspace/invoke.go`) is the single seam
+  `export default async () => ( … )` and run on the same path). The marked-region form
+  above is what the browser authors; it is not what the backend requires — the markers
+  are comments and the backend never looks for them.
+  `wrapExpressionScript` (`service/workspace/invoke.go`) is the single seam
   that applies the wrap, and **all three object positions go through it** — request
   body, request metadata, folder metadata — so every surface (UI, VS Code, CLI, MCP,
   a hand-edited `request.json`) inherits one behavior. The wrap opens no new line, so

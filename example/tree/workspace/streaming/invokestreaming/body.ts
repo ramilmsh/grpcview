@@ -1,7 +1,5 @@
-import { invoke } from "grpcview:invoke";
-import { params } from "grpcview:request";
-
 export default async (): Promise<RequestMessage> => (
+// grpcview:script start
 {
   // InvokeStreaming is server-streaming, so THIS saved request is a streaming
   // one: the UI streams it frame by frame, `grpcview invoke` prints one frame
@@ -30,4 +28,5 @@ export default async (): Promise<RequestMessage> => (
     }),
   ],
 }
+// grpcview:script end
 )

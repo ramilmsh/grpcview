@@ -4,8 +4,11 @@
 by comments, with everything outside the markers owned by the machine.**
 
 This replaces the hidden-wrapper model in `body-wrapper.ts` / `metadata-wrapper.ts`.
-Nothing here is built. The behaviour it replaces is described in `AGENTS.md` under
-"Request authoring model"; read that first, then this.
+
+**Shipped 2026-08-09** (W1–W6). The doc below is left in the present tense it was written
+in, as a record of the decisions; what the code does now is in `AGENTS.md` under "Request
+authoring model". Where the implementation contradicted a claim made here, the claim is
+left in place and followed by a **Shipped correction** — D6, D7 and D8 each carry one.
 
 ## The problem being solved
 
@@ -135,6 +138,14 @@ The pass is async (it waits on the TS worker), so a failing paste flips the regi
 a beat after the paste, not instantly. In wrapped mode the import block updating is
 invisible, so only the bail is ever seen.
 
+**Shipped correction:** the pass runs on **paste only**, not on drop. Monaco's
+`codeEditorWidget.js` fires `onDidPaste` from `_paste` solely when the source is
+`"keyboard"`, and it exposes no drop event at all, so there is no honest drop signal to
+hook — a fabricated one was rejected over inventing a path the editor does not report.
+"Programmatic replacement" likewise never arms it: the only programmatic writes are the
+editors' own `setValue` on a request switch, which explicitly clears the arm flag so a
+saved file that opens with red squiggles is not unwrapped on load.
+
 ### D7. Pruning is aggressive, but only of machine-owned imports
 
 An import the author cannot see and did not write must not be allowed to go stale: a
@@ -147,6 +158,11 @@ author's and are never pruned. Deleting a visible import on a debounce timer is 
 the "behind my back" behaviour this design rejects; a stale one there is in plain sight
 and can be deleted by hand.
 
+**Shipped correction:** "pruned on serialize" is not where it happens. There is no
+serialize step — the model text, the draft and the invoke payload are the same string —
+so the prune runs in the editor, on an 800 ms idle debounce off the last content change
+(`Editor.tsx` / `MetadataEditor.tsx`), sharing one worker round trip with D6's pass.
+
 ### D8. The TS worker is the oracle. Do not hand-roll a parser
 
 Unresolved names come back as `TS2304 Cannot find name 'x'`. Unused imports come back as
@@ -157,6 +173,16 @@ binding and treat "only the declaration" as unused.
 *Rejected:* scanning the region for identifiers with a regex over `maskLiterals` output.
 It cannot tell `{ id: 1 }`'s **key** from a reference, so it either imports property names
 or drops needed imports. The language service already does this scoping correctly.
+
+**Shipped correction:** monaco's worker does expose `getSuggestionDiagnostics`, so the
+references-at-position fallback was never needed. But the assumption that an
+unused-import diagnostic points at the bound identifier is wrong. Verified against the
+`typescript` package's own language service: **6133's span is the whole import
+declaration** whenever the declaration has exactly one binding and that binding is unused,
+and only a bare identifier when it is one of several bindings and the others are still
+used; 6192 is always the whole declaration. The code alone does not distinguish the two
+shapes — the span's own text does, since a whole declaration starts with `import` and a
+bound name never does — so `pruneEdits` dispatches on the shape, not on which code fired.
 
 ### D9. Imports are sorted by specifier, then by name
 
@@ -252,10 +278,12 @@ the generated block, deterministic ordering. Verify the D8 fallback question
 
 **W5 — resolve-or-bail.** D6. Paste/drop only.
 
-**W6 — `example/` and docs.** Rewrite the five `body.ts` files and the two `folder.json`
-inline metadata scripts with markers and no standard imports. Rewrite the `AGENTS.md`
-"Request authoring model" section, which currently documents the constant-wrapper model.
-Move this doc to `shipped/`.
+**W6 — `example/` and docs.** Rewrite the `body.ts` files and the two `folder.json`
+inline metadata scripts with markers and no standard imports (six `body.ts` files, not
+five — `describemethod-json/body.ts` is bare protojson with no wrapper and stays exactly
+as it is, being the byte-identical-round-trip demo). Rewrite the `AGENTS.md` "Request
+authoring model" section, which currently documents the constant-wrapper model. Move this
+doc to `shipped/`.
 
 ## Starting state
 

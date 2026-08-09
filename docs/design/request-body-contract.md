@@ -137,9 +137,10 @@ against `transitiveGenerators`, the textual generator-name scan. That scan is go
 are reached by import now, so nothing scans the source for call sites.)
 
 One branch, one evaluation path, and every surface inherits it including ones not yet
-designed. The UI keeps `wrap` / `isCanonical` / the hidden-wrapper machinery, but
-strictly as a **view** concern — how Monaco presents a body and gets it type-checked. It
-stopped being what makes invoke work.
+designed. The UI keeps the marked-region machinery — `// grpcview:script start` and its
+hidden shim, see `docs/design/shipped/script-region.md` — but strictly as a **view**
+concern: how Monaco presents a body and gets it type-checked. The markers are comments,
+the backend never looks for them, and none of it is what makes invoke work.
 
 ## Consequences worth stating
 
