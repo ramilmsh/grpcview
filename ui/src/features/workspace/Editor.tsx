@@ -10,6 +10,14 @@ import { BODY_SKELETON, bodyBounds as boundsOf, hiddenLineRanges } from "./body-
 import { findRegion, type Region } from "./script-region";
 import { modeSwitchFor, unwrapEdits, wrapEdits } from "./region-edits";
 import { pruneEdits, type UnusedSpan } from "./import-block";
+import {
+  candidatesFrom,
+  resolveOrBail,
+  unresolvedNamesIn,
+  type NameSpan,
+} from "./resolve-imports";
+import { getAutoImportContext } from "./module-auto-import";
+import { workspacePathForUri } from "./module-specifier";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
@@ -17,7 +25,8 @@ const TS_MODEL_URI = "file:///grpcview/request/body.ts";
 // D7 + D8 (docs/design/planned/script-region.md): the hidden import block is pruned of unused
 // entries, driven off the TS worker's own suggestion diagnostics (getSuggestionDiagnostics) — not
 // a hand-rolled parser. Idle-triggered off the last keystroke, so a run of typing doesn't hammer
-// the worker with a getSuggestionDiagnostics round trip per character.
+// the worker with a getSuggestionDiagnostics round trip per character. The same timer carries the
+// D6 resolve-or-bail pass, which a paste arms — one debounce, one worker round trip per idle.
 const PRUNE_DEBOUNCE_MS = 800;
 // Unused-identifier codes observed from the vendored ts.worker.js, confirmed against the
 // `typescript` package's own language service (see import-block.ts's UnusedSpan doc for the two
@@ -92,6 +101,9 @@ export function Editor({
   // against a not-yet-loaded monaco.
   const monacoNsRef = useRef<typeof Monaco | null>(null);
   const pruneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // D6: set by onDidPaste, consumed by the next debounced pass. Only a paste arms the
+  // resolve-or-bail step; typing must never arm it (see resolve-imports.ts's header).
+  const resolveArmedRef = useRef(false);
 
   const monaco = useMonaco();
 
@@ -129,11 +141,63 @@ export function Editor({
     editor.executeEdits("grpcview.prune-imports", edits);
   };
 
+  // D6: resolve-or-bail, armed by a paste only. Semantic diagnostics, not the suggestion ones the
+  // prune reads — an unresolved name is TS2304. Returns whether it edited the buffer, so the
+  // caller can leave the prune to the pass that edit reschedules.
+  const runResolve = async (): Promise<boolean> => {
+    const editor = editorRef.current;
+    const m = monacoNsRef.current;
+    if (!editor || !m) return false;
+    const model = editor.getModel();
+    if (!model) return false;
+    const before = model.getValue();
+    const region = findRegion(before);
+    if (!region) return false;
+    const getWorker = await m.languages.typescript.getTypeScriptWorker();
+    const client = await getWorker(model.uri);
+    const diags = await client.getSemanticDiagnostics(model.uri.toString());
+    if (editor.getModel() !== model || model.getValue() !== before) return false;
+    const spans: NameSpan[] = [];
+    for (const d of diags) {
+      if (d.start == null || d.length == null) continue;
+      spans.push({ start: d.start, length: d.length, code: d.code });
+    }
+    const outcome = resolveOrBail({
+      text: before,
+      skeleton: BODY_SKELETON,
+      unresolved: unresolvedNamesIn(before, spans),
+      candidates: candidatesFrom(getAutoImportContext(), workspacePathForUri(model.uri.toString())),
+    });
+    if (outcome.kind === "addImports") {
+      editor.executeEdits("grpcview.resolve-imports", outcome.edits);
+      return true;
+    }
+    if (outcome.kind === "bail") {
+      editor.executeEdits("grpcview.resolve-bail", unwrapEdits(region));
+      applyHidden(editor, setRegion(editor, findRegion(model.getValue())));
+      return true;
+    }
+    return false;
+  };
+
+  const runIdlePass = async () => {
+    if (!resolveArmedRef.current) {
+      await runPrune();
+      return;
+    }
+    resolveArmedRef.current = false;
+    // An edit of its own reschedules this pass through onDidChangeModelContent, and the TS worker
+    // has not seen the new text yet — pruning against diagnostics for the pre-edit buffer would
+    // drop the import just added.
+    if (await runResolve()) return;
+    await runPrune();
+  };
+
   const schedulePrune = () => {
     clearPruneTimer();
     pruneTimerRef.current = setTimeout(() => {
       pruneTimerRef.current = null;
-      void runPrune();
+      void runIdlePass();
     }, PRUNE_DEBOUNCE_MS);
   };
 
@@ -165,8 +229,10 @@ export function Editor({
 
   useEffect(() => {
     // A pending prune targets the buffer being left behind; its offsets have no meaning once the
-    // request identity changes.
+    // request identity changes. The arm flag goes with it: the setValue below is a document swap,
+    // not an author edit, and a saved file that opens with red squiggles must not be unwrapped.
     clearPruneTimer();
+    resolveArmedRef.current = false;
     const ed = editorRef.current;
     if (!ed) return;
     if (ed.getValue() !== data) {
@@ -263,6 +329,14 @@ export function Editor({
 
     // Hidden areas live on the editor's viewModel: the first real layout drops them.
     editor.onDidLayoutChange(() => applyHidden(editor));
+
+    // D6: the only signal that arms resolve-or-bail. codeEditorWidget.js fires this from _paste
+    // solely when the source is "keyboard", and monaco exposes no drop event at all, so a text
+    // DROP into the editor does not arm the pass — paste only, deliberately, rather than a
+    // fabricated drop path.
+    editor.onDidPaste(() => {
+      resolveArmedRef.current = true;
+    });
 
     // Swallow the boundary keystrokes that would merge a body line into a hidden one.
     editor.onKeyDown((e) => {

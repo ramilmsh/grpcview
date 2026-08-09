@@ -7,7 +7,7 @@
 // BLOCK itself (not the region) is a much smaller, regular surface: one declaration per line,
 // always of the form `import { ... } from "...";`. That much is safe to parse directly.
 import type { LineEdit } from "./region-edits";
-import { findRegion } from "./script-region";
+import { findRegion, type Region } from "./script-region";
 
 // One `import { a, b as c } from "spec";` line, decomposed. `names` keeps each entry exactly as
 // written (`"a"` or `"b as c"`) so re-rendering doesn't need to reconstruct alias syntax.
@@ -30,7 +30,8 @@ const NAME_RE = /^\w+(?:\s+as\s+\w+)?$/;
 // module never receives the skeleton text itself, only the header that contains it.
 const SKELETON_LINE_RE = /^\s*export\s+default\b/;
 
-function localNameOf(entry: string): string {
+// The name an entry actually binds: the alias when there is one, the imported name otherwise.
+export function localNameOf(entry: string): string {
   const m = entry.match(/\bas\s+(\w+)\s*$/);
   return m ? m[1] : entry.trim();
 }
@@ -81,6 +82,27 @@ export function renderImportBlock(imports: readonly NamedImport[]): string[] {
     const names = [...bySpecifier.get(specifier)!].sort((a, b) => a.localeCompare(b));
     return `import { ${names.join(", ")} } from "${specifier}";`;
   });
+}
+
+// The single edit that replaces the whole machine-owned header — lines 1 through the line before
+// the start marker — with `other` (the unmanaged lines, verbatim), the re-rendered import block,
+// a blank line and the skeleton. One edit, not several, because the block is regenerated wholesale
+// rather than patched. Shared by pruneEdits and by resolve-imports.ts so there is exactly one
+// definition of what a rewritten header looks like.
+export function rewriteHeaderEdits(
+  region: Region,
+  skeleton: string,
+  imports: readonly NamedImport[],
+  other: readonly string[]
+): LineEdit[] {
+  const headerBody = [...other, ...renderImportBlock(imports)];
+  const finalLines = headerBody.length === 0 ? [skeleton] : [...headerBody, "", skeleton];
+  return [
+    {
+      range: { startLineNumber: 1, startColumn: 1, endLineNumber: region.startLine, endColumn: 1 },
+      text: finalLines.join("\n") + "\n",
+    },
+  ];
 }
 
 export interface UnusedSpan {
@@ -174,13 +196,5 @@ export function pruneEdits(
     specifier,
     names: [...names],
   }));
-  const headerBody = [...other, ...renderImportBlock(prunedImports)];
-  const finalLines = headerBody.length === 0 ? [skeleton] : [...headerBody, "", skeleton];
-
-  return [
-    {
-      range: { startLineNumber: 1, startColumn: 1, endLineNumber: region.startLine, endColumn: 1 },
-      text: finalLines.join("\n") + "\n",
-    },
-  ];
+  return rewriteHeaderEdits(region, skeleton, prunedImports, other);
 }
