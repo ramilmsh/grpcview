@@ -3,17 +3,16 @@ import {
   defaultMetadataModule,
   hiddenLineRanges,
   hostMetadataScript,
-  isCanonical,
-  META_PREFIX_LINES,
-  META_WRAP_PREFIX,
-  META_WRAP_SUFFIX,
+  isWrapped,
+  META_SKELETON,
   metaBounds,
   migrateMetadataToTs,
   wrap,
 } from "./metadata-wrapper";
+import { buildWrapped, END_MARKER, findRegion, START_MARKER } from "./script-region";
 
-// example's `RunScript (generators)` metadata script: a module reached via `import`, the same
-// shape that exposed the double-wrap bug in body-wrapper.ts.
+// example's `RunScript (generators)` metadata script: a module reached via `import`, carrying no
+// `grpcview:script` markers.
 const MODULE_WITH_IMPORTS = [
   'import { traceId } from "#/scripts/ids";',
   "",
@@ -23,6 +22,17 @@ const MODULE_WITH_IMPORTS = [
 ].join("\n");
 
 const MODULE_NO_IMPORTS = ["export default async () => ({", '  a: ["b"],', "});"].join("\n");
+
+// D11: the old marker-less wrapper this design replaces. No markers, does not lead with `{` — a
+// plain script, with no migration path back into a marked region.
+const OLD_MARKERLESS_WRAPPED_METADATA = [
+  'import { invoke } from "grpcview:invoke";',
+  'import { inherit } from "grpcview:metadata";',
+  "",
+  "export default async (): Promise<Metadata> => (",
+  "{}",
+  ")",
+].join("\n");
 
 describe("metaBounds / hiddenLineRanges", () => {
   it("hides nothing for a module with leading imports", () => {
@@ -36,80 +46,102 @@ describe("metaBounds / hiddenLineRanges", () => {
     expect(hiddenLineRanges(MODULE_NO_IMPORTS)).toEqual([]);
   });
 
-  it("still hides the prefix/suffix wrapper lines for the canonical default module", () => {
+  it("hides line 1 through the start marker and the end marker through EOF for the default module", () => {
     const canonical = defaultMetadataModule();
+    const region = findRegion(canonical)!;
     const ranges = hiddenLineRanges(canonical);
-    expect(ranges.length).toBe(2);
-    expect(ranges[0]).toEqual({ startLine: 1, endLine: META_PREFIX_LINES });
-    const total = canonical.split("\n").length;
-    expect(ranges[1]).toEqual({ startLine: total, endLine: total });
+    expect(ranges).toEqual([
+      { startLine: 1, endLine: region.startLine },
+      { startLine: region.endLine, endLine: region.total },
+    ]);
   });
 
-  it("still hides the prefix/suffix wrapper lines for a migrated history entry", () => {
-    const canonical = migrateMetadataToTs({ "x-request-id": "abc" });
-    expect(isCanonical(canonical)).toBe(true);
-    expect(hiddenLineRanges(canonical).length).toBe(2);
+  it("hides the wrapper for a migrated history entry", () => {
+    const migrated = migrateMetadataToTs({ "x-request-id": "abc" });
+    expect(isWrapped(migrated)).toBe(true);
+    expect(hiddenLineRanges(migrated).length).toBe(2);
   });
 });
 
-describe("isCanonical", () => {
-  it("recognizes the exact wrap", () => {
-    expect(isCanonical(META_WRAP_PREFIX + "{}" + META_WRAP_SUFFIX)).toBe(true);
+describe("isWrapped", () => {
+  it("recognizes a marked region", () => {
+    expect(isWrapped(wrap("{}"))).toBe(true);
   });
 
   it("rejects a module that merely contains export default", () => {
-    expect(isCanonical(MODULE_WITH_IMPORTS)).toBe(false);
+    expect(isWrapped(MODULE_WITH_IMPORTS)).toBe(false);
   });
 
   it("recognizes the default (inherit()) metadata module", () => {
-    expect(isCanonical(defaultMetadataModule())).toBe(true);
+    expect(isWrapped(defaultMetadataModule())).toBe(true);
+  });
+
+  it("rejects the old marker-less wrapper", () => {
+    expect(isWrapped(OLD_MARKERLESS_WRAPPED_METADATA)).toBe(false);
   });
 });
 
 describe("migrateMetadataToTs", () => {
   it("wraps an empty seed and is idempotent to re-wrap", () => {
     const empty = migrateMetadataToTs();
-    expect(isCanonical(empty)).toBe(true);
+    expect(isWrapped(empty)).toBe(true);
     expect(migrateMetadataToTs()).toBe(empty);
   });
 
   it("renders every value as a string[] literal", () => {
     const migrated = migrateMetadataToTs({ "x-a": "1", "x-b": ["2", "3"] });
-    expect(isCanonical(migrated)).toBe(true);
+    expect(isWrapped(migrated)).toBe(true);
     expect(migrated).toContain('"x-a": ["1"]');
     expect(migrated).toContain('"x-b": ["2", "3"]');
   });
 });
 
 describe("wrap", () => {
-  it("round-trips through isCanonical", () => {
-    expect(isCanonical(wrap("{}"))).toBe(true);
+  it("round-trips through isWrapped", () => {
+    expect(isWrapped(wrap("{}"))).toBe(true);
+  });
+});
+
+describe("defaultMetadataModule", () => {
+  it("carries `inherit` as a derived import above the region, the one standard import that survives D2", () => {
+    const canonical = defaultMetadataModule();
+    expect(canonical).toContain('import { inherit } from "grpcview:metadata";');
+    expect(canonical).not.toContain("grpcview:invoke");
+    expect(META_SKELETON).not.toContain("import");
+  });
+
+  it("preserves that import block through skeleton normalization", () => {
+    const canonical = defaultMetadataModule();
+    expect(hostMetadataScript(canonical + "\n")).toBe(canonical);
   });
 });
 
 // The store (service/store/codec.go's writeSourceFile) normalizes metadata.ts to exactly one
 // trailing newline on write, so every persisted script arrives here as "<content>\n".
 describe("hostMetadataScript", () => {
-  it("recognizes a canonical script + trailing newline as canonical after hosting", () => {
+  it("recognizes a wrapped script + trailing newline as wrapped after hosting, byte-identical", () => {
     const canonical = defaultMetadataModule();
     const hosted = hostMetadataScript(canonical + "\n");
     expect(hosted).toBe(canonical);
-    expect(isCanonical(hosted)).toBe(true);
+    expect(isWrapped(hosted)).toBe(true);
   });
 
-  it("hides the whole import prefix and one suffix line for the hosted text", () => {
+  it("hides line 1 through the start marker and the end marker through EOF for the hosted text", () => {
     const hosted = hostMetadataScript(defaultMetadataModule() + "\n");
+    const region = findRegion(hosted)!;
     const ranges = hiddenLineRanges(hosted);
-    expect(ranges.length).toBe(2);
-    expect(ranges[0]).toEqual({ startLine: 1, endLine: META_PREFIX_LINES });
-    expect(ranges[1].endLine - ranges[1].startLine).toBe(0);
+    expect(ranges).toEqual([
+      { startLine: 1, endLine: region.startLine },
+      { startLine: region.endLine, endLine: region.total },
+    ]);
   });
 
-  it("puts the editable region strictly inside the wrapper for the hosted text", () => {
+  it("puts the editable region strictly between the markers for the hosted text", () => {
     const hosted = hostMetadataScript(defaultMetadataModule() + "\n");
+    const lines = hosted.split("\n");
     const bounds = metaBounds(hosted);
-    expect(bounds.first).toBeGreaterThan(1);
-    expect(bounds.last).toBeLessThan(bounds.total);
+    expect(lines[bounds.first - 2].trim()).toBe(START_MARKER);
+    expect(lines[bounds.last].trim()).toBe(END_MARKER);
   });
 
   it("leaves an author-written module unchanged apart from the stripped newline", () => {
@@ -118,32 +150,46 @@ describe("hostMetadataScript", () => {
     expect(hiddenLineRanges(hosted)).toEqual([]);
   });
 
+  it("D11: leaves the old marker-less wrapper as a plain script, unmigrated", () => {
+    const hosted = hostMetadataScript(OLD_MARKERLESS_WRAPPED_METADATA);
+    expect(hosted).toBe(OLD_MARKERLESS_WRAPPED_METADATA);
+    expect(isWrapped(hosted)).toBe(false);
+  });
+
   it("returns an empty script unchanged", () => {
     expect(hostMetadataScript("")).toBe("");
   });
 
   it("wraps a hand-written JSON-like script, whose first token is `{`", () => {
     const hosted = hostMetadataScript('{\n  "x-a": ["1"],\n}\n');
-    expect(isCanonical(hosted)).toBe(true);
+    expect(isWrapped(hosted)).toBe(true);
     expect(hosted).toBe(wrap('{\n  "x-a": ["1"],\n}'));
   });
 
   it("wraps a JSON-like script behind a leading comment", () => {
     const hosted = hostMetadataScript('// headers\n{ "x-a": ["1"] }');
-    expect(isCanonical(hosted)).toBe(true);
+    expect(isWrapped(hosted)).toBe(true);
   });
 
   it("leaves a module that never mentions export default alone", () => {
-    const helper = 'const md: Metadata = {};\nexport { md };';
+    const helper = "const md: Metadata = {};\nexport { md };";
     expect(hostMetadataScript(helper)).toBe(helper);
     expect(hiddenLineRanges(helper)).toEqual([]);
   });
 
-  it("carries invoke and inherit in the hidden prefix", () => {
-    expect(META_WRAP_PREFIX).toContain('import { invoke } from "grpcview:invoke";');
-    expect(META_WRAP_PREFIX).toContain('import { inherit } from "grpcview:metadata";');
-    expect(META_WRAP_PREFIX).not.toContain("grpcview:request");
-    expect(META_WRAP_PREFIX.split("\n").length - 1).toBe(META_PREFIX_LINES);
+  it("repairs a wrapped script carrying the wrong skeleton line", () => {
+    const wrongSkeleton = buildWrapped({
+      skeleton: "export default async () => (",
+      region: "{\n  ok: true,\n}",
+    });
+    const hosted = hostMetadataScript(wrongSkeleton);
+    expect(hosted).toBe(wrap("{\n  ok: true,\n}"));
+  });
+
+  it("carries no standard imports in the skeleton beyond the derived default seed", () => {
+    expect(META_SKELETON).not.toContain("import");
+    expect(wrap("{}")).not.toContain("grpcview:invoke");
+    expect(wrap("{}")).not.toContain("grpcview:metadata");
   });
 
   it("is idempotent", () => {

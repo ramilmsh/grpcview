@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  BODY_SKELETON,
   bodyBounds,
   hiddenLineRanges,
-  isCanonical,
+  isWrapped,
   migrateBodyToTs,
-  PREFIX_LINES,
   wrap,
-  WRAP_PREFIX,
-  WRAP_SUFFIX,
 } from "./body-wrapper";
+import { buildWrapped, END_MARKER, findRegion, START_MARKER } from "./script-region";
 
 const MODULE_WITH_IMPORTS = [
   'import { requestId } from "#/scripts/ids";',
@@ -22,7 +21,8 @@ const MODULE_NO_IMPORTS = ["export default async () => ({", "  ok: true,", "});"
 
 // The regression fixture: example/tree/workspace/runscript-generators/body.ts — a module whose
 // own `export default async (): Promise<RequestMessage> => (` line reads like the wrapper's, and
-// whose imports are NOT the wrapper's two, so it must be left entirely alone.
+// whose imports are its own (not the wrapper's), and which carries no `grpcview:script` markers.
+// It must be left entirely alone.
 const RUNSCRIPT_GENERATORS_BODY = [
   'import { requestId } from "#/scripts/ids";',
   'import { stamp } from "#/scripts/stamp";',
@@ -30,19 +30,24 @@ const RUNSCRIPT_GENERATORS_BODY = [
   "export default async (): Promise<RequestMessage> => (",
   "{",
   '  collection: "example",',
-  "  // `requestId` and `stamp` are files in this collection, imported by path.",
-  "  // Nothing is bound by name and nothing is pulled in implicitly: the import",
-  "  // graph above is exactly what the sandbox bundles.",
-  "  //",
-  "  // JSON.stringify turns the generated text into a quoted string literal, so",
-  "  // the scratchpad grpcview runs is a single expression and its value comes",
-  "  // straight back in the response.",
-  '  source: JSON.stringify(`${requestId("gv")} at ${stamp()}`),',
+  "  source: JSON.stringify(`${requestId(\"gv\")} at ${stamp()}`),",
   "}",
   ")",
 ].join("\n");
 
-const BARE_OBJECT = '{\n  ok: true,\n}';
+// D11: a body.ts left over from the marker-less wrapper this design replaces. It has no markers
+// and does not lead with `{` (it starts with `import`), so it reads as a plain script — there is
+// no migration path back into a marked region. This is a deliberate one-time break.
+const OLD_MARKERLESS_WRAPPED_BODY = [
+  'import { invoke } from "grpcview:invoke";',
+  'import { params } from "grpcview:request";',
+  "",
+  "export default async (): Promise<RequestMessage> => (",
+  "{}",
+  ")",
+].join("\n");
+
+const BARE_OBJECT = "{\n  ok: true,\n}";
 
 const MODULE_WITH_COMMENT_MENTION = [
   "// there is no export default here",
@@ -65,28 +70,34 @@ describe("migrateBodyToTs", () => {
     expect(migrateBodyToTs(MODULE_NO_IMPORTS)).toBe(MODULE_NO_IMPORTS);
   });
 
-  it("leaves the runscript-generators example body untouched, byte-identical, one wrap only", () => {
+  it("leaves the runscript-generators example body untouched, byte-identical", () => {
     const migrated = migrateBodyToTs(RUNSCRIPT_GENERATORS_BODY);
     expect(migrated).toBe(RUNSCRIPT_GENERATORS_BODY);
-    expect(migrated.match(/export default/g)?.length).toBe(1);
+    expect(hiddenLineRanges(migrated)).toEqual([]);
+  });
+
+  it("D11: leaves the old marker-less wrapper as a plain script, unmigrated", () => {
+    const migrated = migrateBodyToTs(OLD_MARKERLESS_WRAPPED_BODY);
+    expect(migrated).toBe(OLD_MARKERLESS_WRAPPED_BODY);
+    expect(isWrapped(migrated)).toBe(false);
     expect(hiddenLineRanges(migrated)).toEqual([]);
   });
 
   it("still wraps a bare object literal", () => {
     const migrated = migrateBodyToTs(BARE_OBJECT);
     expect(migrated).toBe(wrap(BARE_OBJECT.trim()));
-    expect(isCanonical(migrated)).toBe(true);
+    expect(isWrapped(migrated)).toBe(true);
   });
 
   it('still wraps "" as the empty-body seed', () => {
     const migrated = migrateBodyToTs("");
-    expect(isCanonical(migrated)).toBe(true);
+    expect(isWrapped(migrated)).toBe(true);
     expect(migrated).not.toBe("");
   });
 
   it('still wraps "{}" as the empty-body seed', () => {
     const migrated = migrateBodyToTs("{}");
-    expect(isCanonical(migrated)).toBe(true);
+    expect(isWrapped(migrated)).toBe(true);
   });
 
   it("leaves a bare expression that does not lead with `{` alone", () => {
@@ -94,28 +105,48 @@ describe("migrateBodyToTs", () => {
     expect(migrateBodyToTs("makeBody()")).toBe("makeBody()");
   });
 
-  it("carries invoke and params in the hidden prefix", () => {
-    expect(WRAP_PREFIX).toContain('import { invoke } from "grpcview:invoke";');
-    expect(WRAP_PREFIX).toContain('import { params } from "grpcview:request";');
-    expect(WRAP_PREFIX.split("\n").length - 1).toBe(PREFIX_LINES);
+  it("carries no standard imports in the skeleton", () => {
+    expect(BODY_SKELETON).not.toContain("import");
+    const migrated = wrap("{}");
+    expect(migrated).not.toContain("grpcview:invoke");
+    expect(migrated).not.toContain("grpcview:request");
   });
 
   it("does not treat a `// ` comment mentioning export default as a module", () => {
     const migrated = migrateBodyToTs(MODULE_WITH_COMMENT_MENTION);
-    expect(isCanonical(migrated)).toBe(true);
+    expect(isWrapped(migrated)).toBe(true);
     expect(migrated).toBe(wrap(MODULE_WITH_COMMENT_MENTION.trim()));
   });
 
   it("does not treat a `/* */` comment mentioning export default as a module", () => {
     const migrated = migrateBodyToTs(MODULE_WITH_BLOCK_COMMENT_MENTION);
-    expect(isCanonical(migrated)).toBe(true);
+    expect(isWrapped(migrated)).toBe(true);
     expect(migrated).toBe(wrap(MODULE_WITH_BLOCK_COMMENT_MENTION.trim()));
+  });
+
+  it("repairs a wrapped body carrying the wrong skeleton line", () => {
+    const wrongSkeleton = buildWrapped({
+      skeleton: "export default async () => (",
+      region: "{\n  ok: true,\n}",
+    });
+    const migrated = migrateBodyToTs(wrongSkeleton);
+    expect(migrated).toBe(wrap("{\n  ok: true,\n}"));
+  });
+
+  it("preserves a machine-owned import block above the region", () => {
+    const withImport = buildWrapped({
+      imports: ['import { requestId } from "#/scripts/ids";'],
+      skeleton: BODY_SKELETON,
+      region: "{\n  id: requestId(),\n}",
+    });
+    expect(migrateBodyToTs(withImport)).toBe(withImport);
   });
 
   for (const [name, body] of Object.entries({
     "module with imports": MODULE_WITH_IMPORTS,
     "module without imports": MODULE_NO_IMPORTS,
     "runscript-generators example body": RUNSCRIPT_GENERATORS_BODY,
+    "old marker-less wrapper": OLD_MARKERLESS_WRAPPED_BODY,
     "bare object": BARE_OBJECT,
     empty: "",
     "empty object": "{}",
@@ -132,11 +163,11 @@ describe("migrateBodyToTs", () => {
   // The store (service/store/codec.go's writeSourceFile) normalizes body.ts to exactly one
   // trailing newline on write, so every persisted body arrives here as "<content>\n".
   describe("a store-normalized trailing newline", () => {
-    it("is still recognized as canonical", () => {
-      const canonical = wrap(BARE_OBJECT.trim());
-      const migrated = migrateBodyToTs(canonical + "\n");
-      expect(migrated).toBe(canonical);
-      expect(isCanonical(migrated)).toBe(true);
+    it("is still recognized as wrapped, and the round trip is byte-identical", () => {
+      const wrapped = wrap(BARE_OBJECT.trim());
+      const migrated = migrateBodyToTs(wrapped + "\n");
+      expect(migrated).toBe(wrapped);
+      expect(isWrapped(migrated)).toBe(true);
     });
 
     it("leaves an author-written module unchanged apart from the stripped newline", () => {
@@ -163,37 +194,45 @@ describe("hiddenLineRanges / bodyBounds", () => {
   });
 
   it("hides nothing for a module with no imports", () => {
-    const migrated = migrateBodyToTs(MODULE_NO_IMPORTS);
-    expect(hiddenLineRanges(migrated)).toEqual([]);
+    expect(hiddenLineRanges(MODULE_NO_IMPORTS)).toEqual([]);
   });
 
-  it("still hides the prefix/suffix wrapper lines for a wrapped bare object", () => {
+  it("hides line 1 through the start marker and the end marker through EOF for a wrapped bare object", () => {
     const migrated = migrateBodyToTs(BARE_OBJECT);
+    const region = findRegion(migrated)!;
     const ranges = hiddenLineRanges(migrated);
-    expect(ranges.length).toBe(2);
-    expect(ranges[0]).toEqual({ startLine: 1, endLine: PREFIX_LINES });
-    const total = migrated.split("\n").length;
-    expect(ranges[1]).toEqual({ startLine: total, endLine: total });
+    expect(ranges).toEqual([
+      { startLine: 1, endLine: region.startLine },
+      { startLine: region.endLine, endLine: region.total },
+    ]);
   });
 
-  it("hides the whole import prefix and one suffix line for a store-normalized trailing newline", () => {
+  it("puts the editable region strictly between the markers", () => {
+    const migrated = migrateBodyToTs(BARE_OBJECT);
+    const lines = migrated.split("\n");
+    const bounds = bodyBounds(migrated);
+    expect(lines[bounds.first - 2].trim()).toBe(START_MARKER);
+    expect(lines[bounds.last].trim()).toBe(END_MARKER);
+  });
+
+  it("stays put across a store-normalized trailing newline", () => {
     const migrated = migrateBodyToTs(wrap(BARE_OBJECT.trim()) + "\n");
-    const ranges = hiddenLineRanges(migrated);
-    expect(ranges.length).toBe(2);
-    expect(ranges[0]).toEqual({ startLine: 1, endLine: PREFIX_LINES });
-    expect(ranges[1].endLine - ranges[1].startLine).toBe(0);
     const bounds = bodyBounds(migrated);
     expect(bounds.first).toBeGreaterThan(1);
     expect(bounds.last).toBeLessThan(bounds.total);
   });
 });
 
-describe("isCanonical", () => {
-  it("recognizes the exact wrap", () => {
-    expect(isCanonical(WRAP_PREFIX + "{}" + WRAP_SUFFIX)).toBe(true);
+describe("isWrapped", () => {
+  it("recognizes a marked region", () => {
+    expect(isWrapped(wrap("{}"))).toBe(true);
   });
 
   it("rejects a module that merely contains export default", () => {
-    expect(isCanonical(MODULE_WITH_IMPORTS)).toBe(false);
+    expect(isWrapped(MODULE_WITH_IMPORTS)).toBe(false);
+  });
+
+  it("rejects the old marker-less wrapper", () => {
+    expect(isWrapped(OLD_MARKERLESS_WRAPPED_BODY)).toBe(false);
   });
 });
