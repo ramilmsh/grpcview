@@ -140,7 +140,8 @@
   border-radius: 6px; color: var(--color-neutral-400); cursor: pointer; font-size: 16px;
   background: transparent; border: none;
 }
-.iconbtn:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-neutral-100); }
+.iconbtn:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-neutral-100); }
+.iconbtn:disabled { color: var(--color-neutral-600); cursor: default; }
 
 /* status dots */
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }

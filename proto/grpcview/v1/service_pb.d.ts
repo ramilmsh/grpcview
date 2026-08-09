@@ -1681,6 +1681,142 @@ export declare type ShutdownResponse = Message<"grpcview.v1.ShutdownResponse"> &
 export declare const ShutdownResponseSchema: GenMessage<ShutdownResponse>;
 
 /**
+ * One registered server as the answering one sees it. The registration fields are read off
+ * the file; everything else is what that server itself answered, so a row that is not
+ * running carries only what the file claimed.
+ *
+ * @generated from message grpcview.v1.ServerEntry
+ */
+export declare type ServerEntry = Message<"grpcview.v1.ServerEntry"> & {
+  /**
+   * @generated from field: string workspace_root = 1;
+   */
+  workspaceRoot: string;
+
+  /**
+   * @generated from field: int32 port = 2;
+   */
+  port: number;
+
+  /**
+   * @generated from field: int32 pid = 3;
+   */
+  pid: number;
+
+  /**
+   * @generated from field: string version = 4;
+   */
+  version: string;
+
+  /**
+   * @generated from field: grpcview.v1.ServerExecutable executable = 5;
+   */
+  executable?: ServerExecutable | undefined;
+
+  /**
+   * Zero when it never idles out, which is every hand-run one.
+   *
+   * @generated from field: google.protobuf.Duration idle_timeout = 6;
+   */
+  idleTimeout?: Duration | undefined;
+
+  /**
+   * @generated from field: int64 started_unix = 7;
+   */
+  startedUnix: bigint;
+
+  /**
+   * A registration is a hint: false means nothing answered on that port, or what did
+   * reports another root. The file outliving its process is the ordinary case.
+   *
+   * @generated from field: bool running = 8;
+   */
+  running: boolean;
+
+  /**
+   * The server answering this call, so a client can tell which row it is talking through.
+   *
+   * @generated from field: bool current = 9;
+   */
+  current: boolean;
+
+  /**
+   * Answers, and it is that workspace's, but it is running a different build than the
+   * server answering this call.
+   *
+   * @generated from field: bool skewed = 10;
+   */
+  skewed: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.ServerEntry.
+ * Use `create(ServerEntrySchema)` to create a new message.
+ */
+export declare const ServerEntrySchema: GenMessage<ServerEntry>;
+
+/**
+ * @generated from message grpcview.v1.ListServersRequest
+ */
+export declare type ListServersRequest = Message<"grpcview.v1.ListServersRequest"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.ListServersRequest.
+ * Use `create(ListServersRequestSchema)` to create a new message.
+ */
+export declare const ListServersRequestSchema: GenMessage<ListServersRequest>;
+
+/**
+ * @generated from message grpcview.v1.ListServersResponse
+ */
+export declare type ListServersResponse = Message<"grpcview.v1.ListServersResponse"> & {
+  /**
+   * Every registration on this machine for this user, ordered by workspace root.
+   *
+   * @generated from field: repeated grpcview.v1.ServerEntry servers = 1;
+   */
+  servers: ServerEntry[];
+};
+
+/**
+ * Describes the message grpcview.v1.ListServersResponse.
+ * Use `create(ListServersResponseSchema)` to create a new message.
+ */
+export declare const ListServersResponseSchema: GenMessage<ListServersResponse>;
+
+/**
+ * @generated from message grpcview.v1.StopServerRequest
+ */
+export declare type StopServerRequest = Message<"grpcview.v1.StopServerRequest"> & {
+  /**
+   * Absolute, and matched against the registration rather than against a port: a port is
+   * reused, a root is the identity.
+   *
+   * @generated from field: string workspace_root = 1;
+   */
+  workspaceRoot: string;
+};
+
+/**
+ * Describes the message grpcview.v1.StopServerRequest.
+ * Use `create(StopServerRequestSchema)` to create a new message.
+ */
+export declare const StopServerRequestSchema: GenMessage<StopServerRequest>;
+
+/**
+ * @generated from message grpcview.v1.StopServerResponse
+ */
+export declare type StopServerResponse = Message<"grpcview.v1.StopServerResponse"> & {
+};
+
+/**
+ * Describes the message grpcview.v1.StopServerResponse.
+ * Use `create(StopServerResponseSchema)` to create a new message.
+ */
+export declare const StopServerResponseSchema: GenMessage<StopServerResponse>;
+
+/**
  * @generated from service grpcview.v1.WorkspaceService
  */
 export declare const WorkspaceService: GenService<{
@@ -2006,6 +2142,28 @@ export declare const ServerService: GenService<{
     methodKind: "unary";
     input: typeof ShutdownRequestSchema;
     output: typeof ShutdownResponseSchema;
+  },
+  /**
+   * Every server registered on this machine, this one included, each verified over the
+   * wire before it is reported running. Reads the registry, never a process table.
+   *
+   * @generated from rpc grpcview.v1.ServerService.ListServers
+   */
+  listServers: {
+    methodKind: "unary";
+    input: typeof ListServersRequestSchema;
+    output: typeof ListServersResponseSchema;
+  },
+  /**
+   * Asks another workspace's server to exit, after verifying it is that workspace's, and
+   * waits for it to go. Naming this server's own root is Shutdown.
+   *
+   * @generated from rpc grpcview.v1.ServerService.StopServer
+   */
+  stopServer: {
+    methodKind: "unary";
+    input: typeof StopServerRequestSchema;
+    output: typeof StopServerResponseSchema;
   },
 }>;
 

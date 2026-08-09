@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"syscall"
 
@@ -165,6 +166,40 @@ func Write(reg Registration) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// List returns every registration in the registry, ordered by workspace root. Each one is a
+// hint like any single Read: whether a process is behind it is Verify's answer, not this one's.
+// An unreadable or corrupt file is skipped rather than failing the listing.
+func List() ([]Registration, error) {
+	base, err := dir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(base)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %q: %w", base, err)
+	}
+	var regs []Registration
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(base, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var reg Registration
+		if err := json.Unmarshal(data, &reg); err != nil || reg.Port <= 0 || reg.Root == "" {
+			continue
+		}
+		regs = append(regs, reg)
+	}
+	sort.Slice(regs, func(i, j int) bool { return regs[i].Root < regs[j].Root })
+	return regs, nil
 }
 
 // Remove unlinks a registration; an absent one is a success.

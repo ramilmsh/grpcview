@@ -1040,10 +1040,19 @@ rebuilt per `grpcview invoke`.
   guessable URL, a second workspace still starts, and nothing downstream may assume a port
   — `grpcview url` is how you learn it. Bind first, publish second: the port written down
   is read off `l.Addr()`.
-- **`ServerService` (`ServerInfo`, `Shutdown`) is a second service on purpose.** They are
-  properties of a *process*, not of a workspace, and putting them on `WorkspaceService`
-  would have registered them as MCP tools. In-process, `ServerInfo` describes this process
-  and `Shutdown` is `Unimplemented` rather than a silent success.
+- **`ServerService` (`ServerInfo`, `Shutdown`, `ListServers`, `StopServer`) is a second
+  service on purpose.** They are properties of a *process*, not of a workspace, and putting
+  them on `WorkspaceService` would have registered them as MCP tools — the MCP server
+  registers one tool per `WorkspaceService` RPC, so these four deliberately never appear
+  there. In-process, `ServerInfo` describes this process and `Shutdown` is `Unimplemented`
+  rather than a silent success.
+- **The UI's Daemons view is `ListServers` + `StopServer` and nothing else.** It reads the
+  registry (every registration on the machine, each re-verified over the wire, so a stale
+  file reads as not-running rather than as an error) and lets a row be opened in a new tab
+  or stopped. Deliberately narrower than the CLI: no "forget" for a stale registration, no
+  "start by path", no restart-on-skew button — skew is shown as a badge and nothing more.
+  Stopping the row that is serving the page itself goes through a confirmation dialog, since
+  it disconnects the very tab making the call.
 - **Nothing signals a pid the connect has not vouched for.** `grpcview shutdown` and the
   version-skew restart ask **over the wire**, after identity is verified; `SIGTERM` is the
   last resort for a process that answered and then refused to leave.

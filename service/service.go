@@ -257,3 +257,77 @@ func (s *serverService) Shutdown(
 	go s.stop()
 	return connect.NewResponse(&grpcviewv1.ShutdownResponse{}), nil
 }
+
+// ListServers answers for the machine, not for this workspace: the registry is per user, and a
+// client that can only see the daemon it is already talking to cannot manage the others.
+//
+// Each row is verified in parallel because a dead registration costs a full probe timeout, and
+// a machine with a handful of stale files would otherwise serialize into seconds.
+func (s *serverService) ListServers(
+	ctx context.Context,
+	_ *connect.Request[grpcviewv1.ListServersRequest],
+) (*connect.Response[grpcviewv1.ListServersResponse], error) {
+	regs, err := daemon.List()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	entries := make([]*grpcviewv1.ServerEntry, len(regs))
+	var wg sync.WaitGroup
+	for i, reg := range regs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			verified, state := daemon.Verify(ctx, reg)
+			entries[i] = &grpcviewv1.ServerEntry{
+				WorkspaceRoot: verified.Root,
+				Port:          int32(verified.Port),
+				Pid:           int32(verified.Pid),
+				Version:       verified.Version,
+				Executable:    verified.Executable.Proto(),
+				IdleTimeout:   durationpb.New(time.Duration(verified.IdleTimeout)),
+				StartedUnix:   verified.StartedUnix,
+				Running:       state != daemon.StateNone,
+				Skewed:        state == daemon.StateSkew,
+				Current:       verified.Root == s.root && verified.Port == s.port,
+			}
+		}()
+	}
+	wg.Wait()
+
+	return connect.NewResponse(&grpcviewv1.ListServersResponse{Servers: entries}), nil
+}
+
+// StopServer is Shutdown pointed at somebody else, and it goes through the same verified path a
+// CLI takes: the registration names a port, the server on it has to claim the same root, and
+// only then is it asked to exit. A root nothing is running for is a success — the caller asked
+// for it to be stopped, and it is.
+func (s *serverService) StopServer(
+	ctx context.Context,
+	req *connect.Request[grpcviewv1.StopServerRequest],
+) (*connect.Response[grpcviewv1.StopServerResponse], error) {
+	root := req.Msg.GetWorkspaceRoot()
+	if root == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a workspace root is required"))
+	}
+	if root == s.root {
+		go s.stop()
+		return connect.NewResponse(&grpcviewv1.StopServerResponse{}), nil
+	}
+
+	reg, err := daemon.Read(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return connect.NewResponse(&grpcviewv1.StopServerResponse{}), nil
+	}
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	verified, state := daemon.Verify(ctx, reg)
+	if state == daemon.StateNone {
+		return connect.NewResponse(&grpcviewv1.StopServerResponse{}), nil
+	}
+	if err := daemon.Stop(ctx, verified); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&grpcviewv1.StopServerResponse{}), nil
+}

@@ -192,6 +192,42 @@ export const middleEllipsis = (s: string, max: number): string => {
   return `${s.slice(0, head)}…${s.slice(s.length - tail)}`;
 };
 
+// h/m/s breakdown shared by uptime and idle-timeout labels: "2h 14m", "45s", "3d 1h" — the
+// Daemons view's two duration columns are the only callers, so this stays unexported.
+// `trimTrailingZero` drops the finer component when it is zero ("1h" rather than "1h 0m") —
+// the idle-timeout column wants that (its value is usually a round config number), the uptime
+// column doesn't (a real clock reading "1h 0m" instead of "1h" is information, not noise).
+function elapsedLabel(totalSeconds: number, trimTrailingZero = false): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  const seconds = s % 60;
+  const pair = (coarse: number, unit: string, fine: number, fineUnit: string): string =>
+    trimTrailingZero && fine === 0 ? `${coarse}${unit}` : `${coarse}${unit} ${fine}${fineUnit}`;
+  if (days > 0) return pair(days, "d", hours, "h");
+  if (hours > 0) return pair(hours, "h", minutes, "m");
+  if (minutes > 0) return pair(minutes, "m", seconds, "s");
+  return `${seconds}s`;
+}
+
+// Wall-clock elapsed since a daemon's `started_unix` (seconds since epoch — int64 on the
+// wire, hence bigint), for the Daemons view's uptime column. `now` is a parameter (ms epoch,
+// defaulting to Date.now()) purely so a test can pin it rather than racing the clock.
+export const uptimeLabel = (startedUnix: number | bigint, now: number = Date.now()): string => {
+  const started = Number(startedUnix);
+  if (!started) return "";
+  return elapsedLabel(now / 1000 - started);
+};
+
+// Idle-timeout column: a zero duration is the sentinel for "never idles out" — every hand-run
+// server, per the daemon design (AGENTS.md "The workspace daemon"). The "idle" prefix is what
+// makes the value self-describing next to the uptime column it sits beside (Daemons view).
+export const idleTimeoutLabel = (d?: Duration): string => {
+  const ms = durationMs(d);
+  return ms <= 0 ? "never idles out" : `idle ${elapsedLabel(ms / 1000, true)}`;
+};
+
 export const prettyBody = (bytes: Uint8Array): string => {
   const text = new TextDecoder().decode(bytes);
   try {

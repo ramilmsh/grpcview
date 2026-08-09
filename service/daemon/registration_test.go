@@ -124,6 +124,55 @@ func TestExecutable_Same(t *testing.T) {
 	}
 }
 
+func TestList_noDirectory(t *testing.T) {
+	t.Setenv("GRPCVIEW_CONFIG_DIR", t.TempDir())
+	regs, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(regs) != 0 {
+		t.Fatalf("List with no registry directory = %v, want none", regs)
+	}
+}
+
+func TestList_skipsCorruptAndOrdersByRoot(t *testing.T) {
+	t.Setenv("GRPCVIEW_CONFIG_DIR", t.TempDir())
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	if rootB < rootA {
+		rootA, rootB = rootB, rootA
+	}
+
+	if err := Write(Registration{Port: 1, Root: rootB}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(Registration{Port: 2, Root: rootA}); err != nil {
+		t.Fatal(err)
+	}
+	base, err := dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "garbage.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Not even a .json file: List must not choke on an arbitrary directory entry.
+	if err := os.Mkdir(filepath.Join(base, "a-directory.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	regs, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(regs) != 2 {
+		t.Fatalf("List = %d registrations, want 2 (corrupt/dir entries skipped): %+v", len(regs), regs)
+	}
+	if regs[0].Root != rootA || regs[1].Root != rootB {
+		t.Fatalf("List order = [%q, %q], want [%q, %q]", regs[0].Root, regs[1].Root, rootA, rootB)
+	}
+}
+
 func TestAlive(t *testing.T) {
 	if !Alive(os.Getpid()) {
 		t.Error("this process is not alive")

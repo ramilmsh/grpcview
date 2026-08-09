@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { DurationSchema } from "@bufbuild/protobuf/wkt";
 import type { Item, Method, Service } from "@grpcview/v1/workspace_pb";
 import {
   childPathOf,
   findByKey,
+  idleTimeoutLabel,
   itemKey,
   middleEllipsis,
   pruneNestedSelections,
@@ -10,6 +13,7 @@ import {
   rootItemsOf,
   serviceName,
   slugKeyIn,
+  uptimeLabel,
   type ItemWithPath,
 } from "./format";
 
@@ -278,5 +282,51 @@ describe("middleEllipsis", () => {
   it("holds at tiny caps", () => {
     expect(middleEllipsis("abcdef", 3)).toBe("a…f");
     expect(middleEllipsis("abcdef", 2)).toBe("a…");
+  });
+});
+
+describe("uptimeLabel", () => {
+  it("is empty for a zero/unset started_unix", () => {
+    expect(uptimeLabel(0, 1_000_000)).toBe("");
+  });
+
+  it("renders seconds, minutes and hours at their own granularity", () => {
+    const now = 1_000_000_000; // ms
+    expect(uptimeLabel(now / 1000 - 45, now)).toBe("45s");
+    expect(uptimeLabel(now / 1000 - 125, now)).toBe("2m 5s");
+    expect(uptimeLabel(now / 1000 - 7500, now)).toBe("2h 5m");
+    expect(uptimeLabel(now / 1000 - 90000, now)).toBe("1d 1h");
+  });
+
+  it("defaults `now` to the current clock when omitted", () => {
+    const startedUnix = Math.floor(Date.now() / 1000) - 10;
+    expect(uptimeLabel(startedUnix)).toMatch(/^(9|10|11)s$/);
+  });
+});
+
+describe("idleTimeoutLabel", () => {
+  it("reads an absent or zero duration as never idling out", () => {
+    expect(idleTimeoutLabel(undefined)).toBe("never idles out");
+    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 0n, nanos: 0 }))).toBe(
+      "never idles out"
+    );
+  });
+
+  it("prefixes a real timeout with 'idle' so the column reads on its own", () => {
+    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 90n, nanos: 0 }))).toBe(
+      "idle 1m 30s"
+    );
+  });
+
+  it("drops a trailing zero component — 'idle 1h', not 'idle 1h 0m'", () => {
+    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 3600n, nanos: 0 }))).toBe(
+      "idle 1h"
+    );
+    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 86400n, nanos: 0 }))).toBe(
+      "idle 1d"
+    );
+    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 60n, nanos: 0 }))).toBe(
+      "idle 1m"
+    );
   });
 });

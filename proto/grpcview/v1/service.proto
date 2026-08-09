@@ -526,6 +526,43 @@ message ShutdownRequest {}
 
 message ShutdownResponse {}
 
+// One registered server as the answering one sees it. The registration fields are read off
+// the file; everything else is what that server itself answered, so a row that is not
+// running carries only what the file claimed.
+message ServerEntry {
+  string           workspace_root = 1;
+  int32            port           = 2;
+  int32            pid            = 3;
+  string           version        = 4;
+  ServerExecutable executable     = 5;
+  // Zero when it never idles out, which is every hand-run one.
+  google.protobuf.Duration idle_timeout = 6;
+  int64            started_unix   = 7;
+  // A registration is a hint: false means nothing answered on that port, or what did
+  // reports another root. The file outliving its process is the ordinary case.
+  bool             running        = 8;
+  // The server answering this call, so a client can tell which row it is talking through.
+  bool             current        = 9;
+  // Answers, and it is that workspace's, but it is running a different build than the
+  // server answering this call.
+  bool             skewed         = 10;
+}
+
+message ListServersRequest {}
+
+message ListServersResponse {
+  // Every registration on this machine for this user, ordered by workspace root.
+  repeated ServerEntry servers = 1;
+}
+
+message StopServerRequest {
+  // Absolute, and matched against the registration rather than against a port: a port is
+  // reused, a root is the identity.
+  string workspace_root = 1;
+}
+
+message StopServerResponse {}
+
 // Server lifecycle, deliberately NOT part of WorkspaceService: it is a property of the
 // process, it is meaningless in-process, and Shutdown has no business being an MCP tool.
 service ServerService {
@@ -534,4 +571,10 @@ service ServerService {
   // Returns first, then stops accepting, drains in flight requests and unlinks the
   // registration. Asking over the wire is why the design never has to signal a pid.
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  // Every server registered on this machine, this one included, each verified over the
+  // wire before it is reported running. Reads the registry, never a process table.
+  rpc ListServers(ListServersRequest) returns (ListServersResponse);
+  // Asks another workspace's server to exit, after verifying it is that workspace's, and
+  // waits for it to go. Naming this server's own root is Shutdown.
+  rpc StopServer(StopServerRequest) returns (StopServerResponse);
 }

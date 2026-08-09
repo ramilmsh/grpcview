@@ -60,30 +60,37 @@ func Info(ctx context.Context, baseURL string) (*grpcviewv1.ServerInfoResponse, 
 	return res.Msg, nil
 }
 
-type state int
+// State is what a registration turned out to be once a client asked the port behind it.
+type State int
 
 const (
-	stateNone state = iota // nothing registered, or what is registered does not answer
-	stateOK                // answers, and it is this workspace's, running this binary
-	stateSkew              // answers, and it is this workspace's, running a different binary
+	StateNone State = iota // nothing registered, or what is registered does not answer
+	StateOK                // answers, and it is this workspace's, running this binary
+	StateSkew              // answers, and it is this workspace's, running a different binary
 )
 
-func probe(ctx context.Context, root string) (Registration, state) {
+func probe(ctx context.Context, root string) (Registration, State) {
 	reg, err := Read(root)
 	if err != nil {
-		return Registration{}, stateNone
+		return Registration{}, StateNone
 	}
+	return Verify(ctx, reg)
+}
+
+// Verify turns a registration from a guess into a fact by asking the port behind it. The
+// returned registration carries the pid that ANSWERED where they differ.
+func Verify(ctx context.Context, reg Registration) (Registration, State) {
 	if !Alive(reg.Pid) {
-		return reg, stateNone
+		return reg, StateNone
 	}
 	info, err := Info(ctx, reg.URL())
 	if err != nil {
-		return reg, stateNone
+		return reg, StateNone
 	}
 	// Pid reuse and hash collisions both die here, and this is also what `--server` needs:
 	// a collection id resolved against one root must never be interpreted against another's.
-	if info.GetWorkspaceRoot() != root {
-		return reg, stateNone
+	if info.GetWorkspaceRoot() != reg.Root {
+		return reg, StateNone
 	}
 	// The pid that ANSWERED, not the one the file claims: it is the only one Stop may ever
 	// signal. The port stays as read — it is the one this connect succeeded on.
@@ -91,9 +98,9 @@ func probe(ctx context.Context, root string) (Registration, state) {
 		reg.Pid = pid
 	}
 	if self := SelfExecutable(); self != (Executable{}) && self != executableOf(info) {
-		return reg, stateSkew
+		return reg, StateSkew
 	}
-	return reg, stateOK
+	return reg, StateOK
 }
 
 func executableOf(info *grpcviewv1.ServerInfoResponse) Executable {
@@ -118,11 +125,11 @@ func Connect(ctx context.Context, opts Options) (Registration, error) {
 	}
 
 	reg, st := probe(ctx, opts.Root)
-	if st == stateOK {
+	if st == StateOK {
 		return reg, nil
 	}
 	if opts.NoSpawn {
-		if st == stateSkew {
+		if st == StateSkew {
 			return reg, nil
 		}
 		return Registration{}, ErrNotRunning
@@ -136,9 +143,9 @@ func Connect(ctx context.Context, opts Options) (Registration, error) {
 
 	reg, st = probe(ctx, opts.Root)
 	switch st {
-	case stateOK:
+	case StateOK:
 		return reg, nil
-	case stateSkew:
+	case StateSkew:
 		note(opts.Notes, fmt.Sprintf(
 			"grpcview: the server for %s is running a different build; restarting it", opts.Root))
 		if err := Stop(ctx, reg); err != nil {
@@ -236,7 +243,7 @@ func spawn(ctx context.Context, opts Options) (Registration, error) {
 
 	deadline := time.Now().Add(startupTimeout)
 	for {
-		if reg, st := probe(ctx, opts.Root); st == stateOK || st == stateSkew {
+		if reg, st := probe(ctx, opts.Root); st == StateOK || st == StateSkew {
 			return reg, nil
 		}
 		select {

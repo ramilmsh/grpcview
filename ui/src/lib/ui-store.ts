@@ -4,7 +4,7 @@ import type { Request_Response, Server } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "./format";
 import { itemKey } from "./format";
 
-export type ActiveView = "workspace" | "sources" | "scripts";
+export type ActiveView = "workspace" | "sources" | "scripts" | "daemons";
 
 // The user's explicit collection choice, persisted so a reload restores it. Read
 // through resolveActiveCollection (active-collection.ts), which drops it if the

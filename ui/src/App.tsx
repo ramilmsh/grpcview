@@ -10,6 +10,7 @@ import { WorkspaceView } from "@/features/workspace/WorkspaceView";
 import { NoCollection } from "@/features/workspace/NoCollection";
 import { SourcesView } from "@/features/sources/SourcesView";
 import { ScriptsView } from "@/features/scripts/ScriptsView";
+import { DaemonsView } from "@/features/daemons/DaemonsView";
 
 // TransportProvider must sit OUTSIDE QueryClientProvider.
 //
@@ -37,6 +38,10 @@ function CurrentView() {
   useGvInvokeTypes();
   // Same reasoning: an import ("@/…" or "#/…") is legal from any script surface too.
   useWorkspaceModuleTypes();
+  // Daemons are machine-scope, not collection-scope: this has to work in a workspace with
+  // no collections at all, so it is routed before every gate below that exists only because
+  // the other three views need a collection to address.
+  if (activeView === "daemons") return <DaemonsView />;
   // Nothing at all until the listing resolves: a flash of "No collection here" over a
   // workspace that has one reads as data loss.
   if (isPending) return null;

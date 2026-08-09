@@ -12,6 +12,7 @@ export interface IconProps extends SVGProps<SVGSVGElement> {
 type Icon = ComponentType<IconProps>;
 
 export const ArrowClockwise = Ph.ArrowClockwise as unknown as Icon;
+export const ArrowSquareOut = Ph.ArrowSquareOut as unknown as Icon;
 export const ArrowsSplit = Ph.ArrowsSplit as unknown as Icon;
 export const BracketsCurly = Ph.BracketsCurly as unknown as Icon;
 export const Broadcast = Ph.Broadcast as unknown as Icon;

@@ -37,7 +37,12 @@ go_test(
     srcs = [
         "idle_test.go",
         "logging_test.go",
+        "service_test.go",
     ],
     embed = [":service"],
-    deps = ["@com_connectrpc_connect//:connect"],
+    deps = [
+        "//proto/grpcview/v1:grpcview",
+        "//service/daemon",
+        "@com_connectrpc_connect//:connect",
+    ],
 )
