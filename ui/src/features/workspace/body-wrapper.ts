@@ -2,14 +2,23 @@
 // draftBody and the invoke payload are all the same string, with the editor merely HIDING the
 // prefix/suffix lines. `=> (` … `)` is load-bearing — without it `{ … }` parses as a block.
 //
-// Two forms only, matching the backend (service/scripting/entry.go): a module (has its own
-// `export default`) or an expression (wrapped into one). A module is never wrapped and nothing
-// about it is hidden — see isModule's callers below.
-import { isModule } from "./module-sniff";
+// Two forms only: a JSON-like object literal (wrapped) or a module the author owns (never
+// wrapped, nothing hidden). Which one a given text is comes from leadsWithBrace, NOT from
+// sniffing `export default` — a body is wrapped if and only if its first token is `{`.
+//
+// The hidden prefix carries `invoke` and `params` already imported. They cost nothing when
+// unused (no noUnusedLocals in monaco-scripts.ts's compiler options, and esbuild drops them),
+// and they are what makes a wrapped body able to `await invoke(…)` or read `params.x` without
+// the author first having to break out of the JSON-like form.
+import { leadsWithBrace } from "./module-sniff";
 
-export const WRAP_PREFIX = "export default async (): Promise<RequestMessage> => (\n";
+export const WRAP_PREFIX =
+  'import { invoke } from "grpcview:invoke";\n' +
+  'import { params } from "grpcview:request";\n' +
+  "\n" +
+  "export default async (): Promise<RequestMessage> => (\n";
 export const WRAP_SUFFIX = "\n)";
-export const PREFIX_LINES = 1;
+export const PREFIX_LINES = 4;
 export const SUFFIX_LINES = 1;
 
 export const wrap = (body: string): string => WRAP_PREFIX + body + WRAP_SUFFIX;
@@ -20,20 +29,20 @@ export const isCanonical = (text: string): boolean =>
 // Never `wrap("")`, which serializes to `=> ()` — a JS syntax error.
 const EMPTY_BODY = "{\n  \n}";
 
-// migrateBodyToTs normalizes a body to the canonical module, or leaves an author-written module
-// (e.g. one reached via `import`) untouched, byte-for-byte. Idempotent.
+// migrateBodyToTs wraps a JSON-like body into the canonical module, or leaves anything else —
+// an author-written module, a bare expression, a `[` array — untouched, byte-for-byte. Idempotent.
 //
 // The store (service/store/codec.go's writeSourceFile) normalizes body.ts/metadata.ts to exactly
 // one trailing newline on write, so a persisted body arrives here as "<canonical>\n" — one byte
 // isCanonical never matched, since WRAP_SUFFIX ends in `)`, not `\n`. Stripping trailing newlines
-// before the canonical/module checks is what re-recognizes it; the store re-adds exactly one on
-// the next write, so the round trip is byte-identical and produces no spurious git diff.
+// before the canonical check is what re-recognizes it; the store re-adds exactly one on the next
+// write, so the round trip is byte-identical and produces no spurious git diff.
 export const migrateBodyToTs = (body: string): string => {
   const stripped = body.replace(/\n+$/, "");
   if (isCanonical(stripped)) return stripped;
-  if (isModule(stripped)) return stripped;
   const trimmed = stripped.trim();
   if (trimmed === "" || trimmed === "{}") return wrap(EMPTY_BODY);
+  if (!leadsWithBrace(stripped)) return stripped;
   return wrap(trimmed);
 };
 

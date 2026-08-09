@@ -1,3 +1,4 @@
+import { invoke } from "grpcview:invoke";
 import { params } from "grpcview:request";
 
 export default async (): Promise<RequestMessage> => (

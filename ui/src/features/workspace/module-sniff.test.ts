@@ -1,5 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { isModule } from "./module-sniff";
+import { isModule, leadsWithBrace } from "./module-sniff";
+
+describe("leadsWithBrace", () => {
+  it("is true for a bare object literal", () => {
+    expect(leadsWithBrace("{ ok: true }")).toBe(true);
+  });
+
+  it("is true past leading whitespace", () => {
+    expect(leadsWithBrace("\n\n  {\n  ok: true,\n}")).toBe(true);
+  });
+
+  it("is true past a leading line comment", () => {
+    expect(leadsWithBrace("// a note\n{ ok: true }")).toBe(true);
+  });
+
+  it("is true past a leading block comment", () => {
+    expect(leadsWithBrace("/*\n * a note\n */\n{ ok: true }")).toBe(true);
+  });
+
+  it("is false for a module with imports", () => {
+    expect(leadsWithBrace('import { x } from "#/x";\nexport default async () => ({});')).toBe(
+      false
+    );
+  });
+
+  it("is false for a module with no imports", () => {
+    expect(leadsWithBrace("export default async () => ({})")).toBe(false);
+  });
+
+  it("is false for a non-object expression", () => {
+    expect(leadsWithBrace("[1, 2, 3]")).toBe(false);
+    expect(leadsWithBrace("makeBody()")).toBe(false);
+  });
+
+  it("is false for empty text", () => {
+    expect(leadsWithBrace("")).toBe(false);
+    expect(leadsWithBrace("   \n ")).toBe(false);
+  });
+
+  it("is not fooled by a `{` inside a leading string", () => {
+    expect(leadsWithBrace('const s = "{"; export default s;')).toBe(false);
+  });
+});
 
 describe("isModule", () => {
   it("is true for a plain default export", () => {

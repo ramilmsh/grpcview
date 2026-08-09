@@ -1,15 +1,20 @@
 // Canonical wrapping for the TypeScript request METADATA, mirroring body-wrapper.ts. The object is
 // typed against an ambient `type Metadata = { [k: string]: string[] }` — metadata is multi-valued.
 //
-// Two forms only — see body-wrapper.ts's header. Unlike a body, a metadata script is never
-// migrated from raw text (every persisted one is already TS), so there is no wrap-or-not decision
-// here — but bounds/hiddenLineRanges below still must not hide anything for a script the author
-// wrote as a module (e.g. one reached via `import`).
+// Two forms only, decided the same way as a body: first token `{` means JSON-like and gets
+// wrapped, anything else is a module the author owns. The hidden prefix imports `inherit` (the
+// spread nearly every metadata script opens with) and `invoke` (an auth header is routinely
+// another saved request's response). `params` is deliberately absent — see body-wrapper.ts.
 import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
+import { leadsWithBrace } from "./module-sniff";
 
-export const META_WRAP_PREFIX = "export default async (): Promise<Metadata> => (\n";
+export const META_WRAP_PREFIX =
+  'import { invoke } from "grpcview:invoke";\n' +
+  'import { inherit } from "grpcview:metadata";\n' +
+  "\n" +
+  "export default async (): Promise<Metadata> => (\n";
 export const META_WRAP_SUFFIX = "\n)";
-export const META_PREFIX_LINES = 1;
+export const META_PREFIX_LINES = 4;
 export const META_SUFFIX_LINES = 1;
 
 export const wrap = (obj: string): string => META_WRAP_PREFIX + obj + META_WRAP_SUFFIX;
@@ -17,19 +22,26 @@ export const wrap = (obj: string): string => META_WRAP_PREFIX + obj + META_WRAP_
 export const isCanonical = (text: string): boolean =>
   text.startsWith(META_WRAP_PREFIX) && text.endsWith(META_WRAP_SUFFIX);
 
-// hostMetadataScript is the read-seam counterpart of body-wrapper.ts's migrateBodyToTs, needed
-// because metadata has no migration step of its own (RequestWorkspace.tsx reads
-// request.draftMetadataScript raw). The store (service/store/codec.go's writeSourceFile)
+// hostMetadataScript is the read-seam counterpart of body-wrapper.ts's migrateBodyToTs.
+// RequestWorkspace.tsx reads request.draftMetadataScript raw, so this is where a hand-written
+// JSON-like metadata.ts gets the wrapper. The store (service/store/codec.go's writeSourceFile)
 // normalizes metadata.ts to exactly one trailing newline on write, so a persisted script arrives
 // here as "<canonical>\n" — one byte isCanonical never matched. Stripping it before hosting is
 // what re-recognizes the canonical wrapper; the store re-adds exactly one on the next write, so
-// the round trip is byte-identical and produces no spurious git diff. An empty script stays "".
-export const hostMetadataScript = (script: string): string => script.replace(/\n+$/, "");
+// the round trip is byte-identical and produces no spurious git diff. An empty script stays ""
+// (an absent metadata.ts is not the same as an empty object — the editor seeds that separately).
+export const hostMetadataScript = (script: string): string => {
+  const stripped = script.replace(/\n+$/, "");
+  if (isCanonical(stripped) || !leadsWithBrace(stripped)) return stripped;
+  return wrap(stripped.trim());
+};
 
 // Never `wrap("")`, which serializes to `=> ()` — a JS syntax error.
 const EMPTY_METADATA = "{\n  \n}";
 
-const DEFAULT_METADATA = '{ ...require("grpcview:metadata").inherit() }';
+// `inherit` comes from the hidden prefix, so the seed reads as the plain spread an author would
+// have written by hand.
+const DEFAULT_METADATA = "{\n  ...inherit(),\n}";
 
 export const defaultMetadataModule = (): string => wrap(DEFAULT_METADATA);
 

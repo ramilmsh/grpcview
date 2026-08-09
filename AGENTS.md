@@ -122,13 +122,43 @@ plain protojson must run the *same* evaluation path rather than a separate one �
 protojson body that could not import a script would be `{{ }}` all over again.
 
 - A request **body** is authored as a bare TypeScript object literal in a Monaco
-  editor. What the user edits is wrapped in a hidden canonical module —
-  `export default (): RequestMessage => ( <body> )` — whose prefix/suffix lines
-  the editor hides (`body-wrapper.ts`). A body that carries its own `export default`
-  is a module already, so the editor shows it whole and hides nothing; `module-sniff.ts`
-  is what tells the two apart, over comment- and string-masked source for the same
-  reason `maskLiterals` exists on the backend. Hiding the wrapper above a module would
-  also put auto-import's insertion point inside a region the author cannot see.
+  editor. What the user edits is wrapped in a hidden canonical module whose prefix is
+
+  ```ts
+  import { invoke } from "grpcview:invoke";
+  import { params } from "grpcview:request";
+
+  export default async (): Promise<RequestMessage> => (
+  ```
+
+  and whose suffix is `\n)`; the editor hides both (`body-wrapper.ts`). The two imports
+  are there so a JSON-like body can `await invoke(…)` or read `params.x` without first
+  having to break out of the JSON-like form — they cost nothing unused (no
+  `noUnusedLocals`, and esbuild drops them). Metadata gets the same treatment with
+  `inherit` in place of `params` (`metadata-wrapper.ts`) — an auth header is routinely
+  another saved request's response, hence `invoke` on both.
+  **What decides wrapping is the first token, not an `export default` sniff**: leading
+  whitespace and comments are skipped, and a `{` means JSON-like and gets wrapped
+  (`leadsWithBrace` in `module-sniff.ts`). Anything else — an `import`, an `export`, a
+  `[`, a call — is a module the author owns, shown whole with nothing hidden. The
+  inverted rule is what lets the wrapper carry imports at all: sniffing `export default`
+  cannot tell the wrapper's own prefix from an author module that opens the same way.
+  `isCanonical` stays an exact prefix/suffix string match for the same reason, so an
+  author module with *different* imports (`example/tree/workspace/runscript-generators/body.ts`)
+  is never mistaken for one. Adding an import via auto-import breaks that exact match and
+  promotes the body to a plain visible module, which is the honest outcome — hiding a
+  wrapper above a module would put auto-import's insertion point in a region the author
+  cannot see. **The promotion is applied live**: `Editor.tsx` / `MetadataEditor.tsx` track
+  the buffer's current form, not the form it loaded in, so the hidden areas drop and the
+  gutter renumbers on the keystroke that accepted the import (and an undo back to the
+  canonical text re-hides them). The wrapper-guard that reverts an exotic edge-case edit
+  — IME, drag-drop, replace-all — therefore reverts only text that is *neither* form:
+  text that left the canonical form but is still a module (`isModule`) is a promotion, not
+  corruption. Getting this wrong is not merely cosmetic: the guard's revert does not
+  propagate to the draft, so a reverted promotion leaves the editor and the saved body
+  disagreeing until a reload. Only the current wrapper is recognized: a body still carrying the older
+  import-free `export default async (): Promise<RequestMessage> => (` reads as a module
+  and shows whole.
   Because `isCanonical` matches on `endsWith(")")` while the store normalizes every
   `body.ts` / `metadata.ts` to exactly one trailing newline, a persisted body reaches the
   UI as `"<canonical>\n"` and must be **hosted** before the canonical test — trailing
@@ -140,8 +170,10 @@ protojson body that could not import a script would be `{{ }}` all over again.
   `FileDescriptorSet` (`proto-types.ts`), giving full IntelliSense and
   type-checking against the selected method's input message.
 - Request **metadata** is authored identically — a bare object evaluated to
-  `{ [key: string]: string[] }` under a hidden `=> ( … )` wrapper
-  (`metadata-wrapper.ts`, `MetadataEditor.tsx`).
+  `{ [key: string]: string[] }` under the hidden wrapper described above
+  (`metadata-wrapper.ts`, `MetadataEditor.tsx`). `hostMetadataScript` is where a
+  hand-written JSON-like `metadata.ts` picks the wrapper up, since metadata has no
+  `migrateBodyToTs` of its own.
 - Both body and metadata strings are **evaluated on the backend in QuickJS** at
   invoke time (same machinery as scripts), so they can import the collection's own
   scripts and npm packages.
@@ -286,9 +318,12 @@ Facts that are load bearing:
   missing one reports `no <which> root for this run` rather than resolving to something else.
   Escaping a root is `resolves outside the <which>`.
 - **`import` is a statement, so it cannot stand in expression position.** A body or metadata
-  written as a bare object literal must use `require("…")`; a module (anything with
-  `export default`) uses `import`. The rule is grammatical, not a preference. The
+  that reaches the backend as a bare object literal must use `require("…")`; a module
+  (anything with `export default`) uses `import`. The rule is grammatical, not a preference. The
   `Expected "(" but found …` parse error is caught and replaced with a message that says so.
+  The UI's wrapper is what usually spares an author this: a `{`-leading body is wrapped into
+  a module before it is sent, so its `invoke`/`params`/`inherit` arrive as real imports.
+  Inline **folder** metadata (`folder.json`) is the one that still gets hand-written both ways.
 - **Computed specifiers are rejected before the build** (`rejectComputedImports`). esbuild
   reports neither an error nor a warning for `require(p)`, and emits code that fails at run
   time. A conservative regex is correct here: we are forbidding, not resolving.
@@ -353,6 +388,35 @@ Degradation is the point: no descriptor set, an unresolvable symbol or an empty
 collection means no map, `keyof GvRequestMap` is `never`, and every path falls back
 to `body: any` — never a false error. The map is rebuilt whenever the tree or the
 descriptor set changes, so a rename retargets the paths.
+
+### Typed `require` specifiers
+
+The same trick, for the expression-position escape hatch. `require` is generic over its
+specifier, so a literal one gets the module's real exports:
+
+```ts
+({ "x-request-id": [require("#/scripts/ids").requestId()] })
+```
+
+- `gv.d.ts` (`monaco-scripts.ts`) declares `interface GvModules` holding the four
+  `grpcview:` capabilities, plus
+  `require<S extends string>(s: S): S extends keyof GvModules ? GvModules[S] : any`.
+  A literal argument infers `S` as its own literal type; a computed one widens to `string`,
+  misses the key, and stays `any` — the same never-a-false-error degradation as `GvPath`.
+- `requireTypesDts` (`require-types.ts`) merges the workspace's own modules in, one
+  `"<specifier>": typeof import("<specifier>")` per entry: `@/…` for every module and `#/…`
+  for those under the active collection (for the root collection both spellings, since the
+  sigils name the same root). A file with no `export` is skipped — it is not a module, and
+  `typeof import()` of it does not typecheck. `gv-types.ts` registers the result app-level as
+  `gv-modules.d.ts` and recomputes it on module-list or active-collection change.
+
+Why a keyed lookup rather than the obvious overload set: overloads that merge across *files*
+take the program's file order, which nothing here controls, so a `(specifier: string): any`
+landing first would swallow every literal.
+
+This is only needed because the checker will not follow `paths` from a call expression —
+`typeof import("<literal>")` is the one construct that maps a specifier to a module type, and
+it needs the literal spelled out. An `import` statement resolves through `paths` unaided.
 
 ## Definition sources (where schemas come from)
 

@@ -21,6 +21,10 @@ import { collectInvokeTargets } from "./gv-requests";
 // feeds live workspace-module data into, since the provider is a monaco-global singleton and
 // cannot call a hook itself.
 import { setAutoImportContext } from "./module-auto-import";
+// Side-effect import for the same reason: the `@/…` / `#/…` specifier completion provider is a
+// monaco global, and it reads the context set below.
+import "./module-specifier-complete";
+import { requireTypesDts } from "./require-types";
 import { workspaceModulePaths, workspaceModuleUri } from "./workspace-modules";
 
 // Editor.tsx registers the per-method `file:///grpcview/request/request-message.d.ts` alias; it
@@ -28,6 +32,7 @@ import { workspaceModulePaths, workspaceModuleUri } from "./workspace-modules";
 // resolves its relative "./gen/…" import against the modules registered here.
 const GEN_PREFIX = "file:///grpcview/request/gen/";
 const MAP_PATH = "file:///grpcview/request/gv-requests.d.ts";
+const MODULES_PATH = "file:///grpcview/request/gv-modules.d.ts";
 
 export function useGvInvokeTypes(): void {
   const { workspace, services } = useActiveWorkspace();
@@ -88,6 +93,22 @@ export function useWorkspaceModuleTypes(): void {
       libs.current = [];
     };
   }, [modules]);
+
+  // The `require("#/scripts/ids")` lookup table, in its own effect: its `#/` keys move with the
+  // active collection, while the module libs above do not.
+  const requireLib = useRef<Monaco.IDisposable | undefined>(undefined);
+  useEffect(() => {
+    const dts = requireTypesDts(modules, collection);
+    if (!dts) return;
+    requireLib.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+      dts,
+      MODULES_PATH
+    );
+    return () => {
+      requireLib.current?.dispose();
+      requireLib.current = undefined;
+    };
+  }, [modules, collection]);
 
   useEffect(() => {
     setAutoImportContext({ modules, collectionId: collection });

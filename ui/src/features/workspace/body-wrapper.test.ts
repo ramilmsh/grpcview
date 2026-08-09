@@ -4,6 +4,7 @@ import {
   hiddenLineRanges,
   isCanonical,
   migrateBodyToTs,
+  PREFIX_LINES,
   wrap,
   WRAP_PREFIX,
   WRAP_SUFFIX,
@@ -19,10 +20,9 @@ const MODULE_WITH_IMPORTS = [
 
 const MODULE_NO_IMPORTS = ["export default async () => ({", "  ok: true,", "});"].join("\n");
 
-// The regression fixture: example/tree/workspace/runscript-generators/request.json's draftBody
-// (16 lines on disk) — a module whose own `export default async (): Promise<RequestMessage> =>
-// (` line happens to start with the same text as WRAP_PREFIX, just not at column 1, which is
-// exactly what made the naive `startsWith` check in isCanonical wrap it a second time.
+// The regression fixture: example/tree/workspace/runscript-generators/body.ts — a module whose
+// own `export default async (): Promise<RequestMessage> => (` line reads like the wrapper's, and
+// whose imports are NOT the wrapper's two, so it must be left entirely alone.
 const RUNSCRIPT_GENERATORS_BODY = [
   'import { requestId } from "#/scripts/ids";',
   'import { stamp } from "#/scripts/stamp";',
@@ -87,6 +87,17 @@ describe("migrateBodyToTs", () => {
   it('still wraps "{}" as the empty-body seed', () => {
     const migrated = migrateBodyToTs("{}");
     expect(isCanonical(migrated)).toBe(true);
+  });
+
+  it("leaves a bare expression that does not lead with `{` alone", () => {
+    expect(migrateBodyToTs("[1, 2, 3]")).toBe("[1, 2, 3]");
+    expect(migrateBodyToTs("makeBody()")).toBe("makeBody()");
+  });
+
+  it("carries invoke and params in the hidden prefix", () => {
+    expect(WRAP_PREFIX).toContain('import { invoke } from "grpcview:invoke";');
+    expect(WRAP_PREFIX).toContain('import { params } from "grpcview:request";');
+    expect(WRAP_PREFIX.split("\n").length - 1).toBe(PREFIX_LINES);
   });
 
   it("does not treat a `// ` comment mentioning export default as a module", () => {
@@ -160,16 +171,16 @@ describe("hiddenLineRanges / bodyBounds", () => {
     const migrated = migrateBodyToTs(BARE_OBJECT);
     const ranges = hiddenLineRanges(migrated);
     expect(ranges.length).toBe(2);
-    expect(ranges[0]).toEqual({ startLine: 1, endLine: 1 });
+    expect(ranges[0]).toEqual({ startLine: 1, endLine: PREFIX_LINES });
     const total = migrated.split("\n").length;
     expect(ranges[1]).toEqual({ startLine: total, endLine: total });
   });
 
-  it("hides exactly one line at each end for a store-normalized trailing newline", () => {
+  it("hides the whole import prefix and one suffix line for a store-normalized trailing newline", () => {
     const migrated = migrateBodyToTs(wrap(BARE_OBJECT.trim()) + "\n");
     const ranges = hiddenLineRanges(migrated);
     expect(ranges.length).toBe(2);
-    expect(ranges[0].endLine - ranges[0].startLine).toBe(0);
+    expect(ranges[0]).toEqual({ startLine: 1, endLine: PREFIX_LINES });
     expect(ranges[1].endLine - ranges[1].startLine).toBe(0);
     const bounds = bodyBounds(migrated);
     expect(bounds.first).toBeGreaterThan(1);

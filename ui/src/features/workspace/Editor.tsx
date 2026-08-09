@@ -12,6 +12,7 @@ import {
   bodyBounds as boundsOf,
   hiddenLineRanges,
 } from "./body-wrapper";
+import { isModule } from "./module-sniff";
 import { registerEditorForDebug } from "@/lib/editor-debug";
 
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
@@ -77,11 +78,24 @@ export function Editor({
   // @monaco-editor/react only suppresses onChange for its own controlled `value` prop.
   const suppressChange = useRef(false);
   const lastGood = useRef<string>("");
-  // Fixed for the lifetime of the loaded buffer (re-derived only when currentKey reloads it): a
-  // module has no wrapper, so the corruption-guard below must never fight an edit that merely
-  // keeps the buffer non-canonical, the way it would for a wrapped body's broken wrapper.
+  // Tracks the CURRENT form of the buffer, not the form it loaded in: an edit can promote a
+  // wrapped body to a plain module (see the guard below), and the gutter has to follow it without
+  // a reload. A module has no wrapper, so the guard must never fight an edit that merely keeps
+  // the buffer non-canonical, the way it would for a wrapped body's broken wrapper.
   const wrappedRef = useRef(true);
   const monaco = useMonaco();
+
+  const lineNumbersFor = (n: number) =>
+    !wrappedRef.current ? String(n) : n <= PREFIX_LINES ? "" : String(n - PREFIX_LINES);
+
+  // monaco skips an options update whose value compares equal, and lineNumbers compares by
+  // function identity — so the fresh closure is what forces the gutter to repaint on a flip.
+  const setWrapped = (editor: Monaco.editor.IStandaloneCodeEditor, next: boolean): boolean => {
+    if (wrappedRef.current === next) return false;
+    wrappedRef.current = next;
+    editor.updateOptions({ lineNumbers: (n: number) => lineNumbersFor(n) });
+    return true;
+  };
 
   useEffect(() => {
     const ed = editorRef.current;
@@ -92,7 +106,7 @@ export function Editor({
       suppressChange.current = false;
       lastGood.current = data;
     }
-    wrappedRef.current = isCanonical(data);
+    setWrapped(ed, isCanonical(data));
     // Forced: a remount has no hidden areas yet, and setValue may not change the geometry.
     applyHidden(ed, /* force */ true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,7 +190,7 @@ export function Editor({
     });
 
     lastGood.current = editor.getValue();
-    wrappedRef.current = isCanonical(editor.getValue());
+    setWrapped(editor, isCanonical(editor.getValue()));
     applyHidden(editor);
 
     // Hidden areas live on the editor's viewModel: the first real layout drops them.
@@ -221,14 +235,23 @@ export function Editor({
 
     // Fail-safe: undo an exotic edit (IME, drag-drop, replace-all) that broke the wrapper. A
     // module was never wrapped, so there is nothing for it to break — every edit is accepted.
+    //
+    // An edit that leaves the canonical form but still yields a module PROMOTES the body to the
+    // plain form instead of being reverted: that is the auto-import case, where the inserted
+    // import displaces the wrapper's prefix. The promotion is applied live — hidden areas drop,
+    // the gutter renumbers — because the alternative is the guard reverting the editor while the
+    // non-canonical text has already reached the draft, so the two only agree after a reload.
     editor.onDidChangeModelContent(() => {
       if (suppressChange.current) return;
       const model = editor.getModel();
       if (!model) return;
       const v = model.getValue();
-      if (!wrappedRef.current || isCanonical(v)) {
+      const canonical = isCanonical(v);
+      if (!wrappedRef.current || canonical || isModule(v)) {
         lastGood.current = v;
-        applyHidden(editor);
+        // Forced only on a flip: dropping the areas and re-setting them on every keystroke
+        // would repaint the whole view for nothing.
+        applyHidden(editor, /* force */ setWrapped(editor, canonical));
         return;
       }
       suppressChange.current = true;
@@ -257,8 +280,7 @@ export function Editor({
         formatOnType: false,
         formatOnPaste: false,
         folding: false,
-        lineNumbers: (n: number) =>
-          !wrappedRef.current ? String(n) : n <= PREFIX_LINES ? "" : String(n - PREFIX_LINES),
+        lineNumbers: (n: number) => lineNumbersFor(n),
         // monaco defaults quickSuggestions.strings=false (microsoft/monaco-editor#2883).
         quickSuggestions: { other: true, comments: false, strings: true },
         automaticLayout: true,

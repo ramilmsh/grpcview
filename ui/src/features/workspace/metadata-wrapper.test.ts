@@ -4,6 +4,7 @@ import {
   hiddenLineRanges,
   hostMetadataScript,
   isCanonical,
+  META_PREFIX_LINES,
   META_WRAP_PREFIX,
   META_WRAP_SUFFIX,
   metaBounds,
@@ -39,7 +40,7 @@ describe("metaBounds / hiddenLineRanges", () => {
     const canonical = defaultMetadataModule();
     const ranges = hiddenLineRanges(canonical);
     expect(ranges.length).toBe(2);
-    expect(ranges[0]).toEqual({ startLine: 1, endLine: 1 });
+    expect(ranges[0]).toEqual({ startLine: 1, endLine: META_PREFIX_LINES });
     const total = canonical.split("\n").length;
     expect(ranges[1]).toEqual({ startLine: total, endLine: total });
   });
@@ -96,11 +97,11 @@ describe("hostMetadataScript", () => {
     expect(isCanonical(hosted)).toBe(true);
   });
 
-  it("hides exactly one line at the start and end for the hosted text", () => {
+  it("hides the whole import prefix and one suffix line for the hosted text", () => {
     const hosted = hostMetadataScript(defaultMetadataModule() + "\n");
     const ranges = hiddenLineRanges(hosted);
     expect(ranges.length).toBe(2);
-    expect(ranges[0].endLine - ranges[0].startLine).toBe(0);
+    expect(ranges[0]).toEqual({ startLine: 1, endLine: META_PREFIX_LINES });
     expect(ranges[1].endLine - ranges[1].startLine).toBe(0);
   });
 
@@ -119,6 +120,30 @@ describe("hostMetadataScript", () => {
 
   it("returns an empty script unchanged", () => {
     expect(hostMetadataScript("")).toBe("");
+  });
+
+  it("wraps a hand-written JSON-like script, whose first token is `{`", () => {
+    const hosted = hostMetadataScript('{\n  "x-a": ["1"],\n}\n');
+    expect(isCanonical(hosted)).toBe(true);
+    expect(hosted).toBe(wrap('{\n  "x-a": ["1"],\n}'));
+  });
+
+  it("wraps a JSON-like script behind a leading comment", () => {
+    const hosted = hostMetadataScript('// headers\n{ "x-a": ["1"] }');
+    expect(isCanonical(hosted)).toBe(true);
+  });
+
+  it("leaves a module that never mentions export default alone", () => {
+    const helper = 'const md: Metadata = {};\nexport { md };';
+    expect(hostMetadataScript(helper)).toBe(helper);
+    expect(hiddenLineRanges(helper)).toEqual([]);
+  });
+
+  it("carries invoke and inherit in the hidden prefix", () => {
+    expect(META_WRAP_PREFIX).toContain('import { invoke } from "grpcview:invoke";');
+    expect(META_WRAP_PREFIX).toContain('import { inherit } from "grpcview:metadata";');
+    expect(META_WRAP_PREFIX).not.toContain("grpcview:request");
+    expect(META_WRAP_PREFIX.split("\n").length - 1).toBe(META_PREFIX_LINES);
   });
 
   it("is idempotent", () => {

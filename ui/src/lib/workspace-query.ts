@@ -105,6 +105,18 @@ function useCollectionsKey(): QueryKey {
   });
 }
 
+// Exported for the same reason as keyForCollection: a test pins it against connect-query's own
+// builder, because every write that touches a `.ts` on disk invalidates THIS key and a key that
+// drifted from useWorkspaceModules' would invalidate nothing.
+export function workspaceModulesKey(transport: Transport): QueryKey {
+  return createConnectQueryKey({
+    schema: listWorkspaceModules,
+    transport,
+    input: {},
+    cardinality: "finite",
+  });
+}
+
 // Every collection in the workspace, plus the workspace root's absolute path. Cheap by
 // construction (ListCollections reads manifests, never trees), so it is the one query
 // that runs before anything knows which collection to Get.
@@ -190,6 +202,8 @@ export function useCreateCollection() {
         create(GetResponseSchema, { collection: res.collection })
       );
       void qc.invalidateQueries({ queryKey: listKey });
+      // A collection can be created over a directory that already holds scripts.
+      void qc.invalidateQueries({ queryKey: workspaceModulesKey(transport) });
       setActiveCollection(id);
     },
   });
@@ -218,6 +232,8 @@ export function useUpdateCollection() {
         create(GetResponseSchema, { collection: res.collection })
       );
       void qc.invalidateQueries({ queryKey: listKey });
+      // A directory rename moves every script in it, so every module path changes with it.
+      void qc.invalidateQueries({ queryKey: workspaceModulesKey(transport) });
       const oldId = vars.collection ?? "";
       if (!oldId || oldId === id) return;
       // Remap BEFORE dropping the old entry: removeQueries notifies live observers, and one
@@ -300,6 +316,12 @@ function useSeedGetCache() {
   const transport = useTransport();
   return {
     onSuccess: (res: { collection?: Collection }) => {
+      // Any of these writes can add, move, delete or rewrite a `.ts` on disk — a script most
+      // directly. That listing is what Monaco registers as its extra libs, so left cached the
+      // editor keeps typechecking imports against the files as they were at page load: the
+      // specifier still resolves, but an export added since is "no exported member".
+      // Unconditional, and before the id check: a delete resolves with no collection.
+      void qc.invalidateQueries({ queryKey: workspaceModulesKey(transport) });
       const id = res.collection?.id;
       if (!id) return;
       qc.setQueryData(

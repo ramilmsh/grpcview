@@ -19,6 +19,18 @@ export function collectionModulePrefix(collectionId: string | null | undefined):
   return `${WS_PREFIX}/${collectionId}`;
 }
 
+// The same root, in PATH space rather than URI space: what `#/` resolves against as a prefix of
+// the workspace-relative paths the module listing is keyed by. Kept beside collectionModulePrefix
+// so the two cannot drift on the "." rule.
+export function collectionPathPrefix(collectionId: string | null | undefined): string {
+  return !collectionId || collectionId === "." ? "" : `${collectionId}/`;
+}
+
+// Modules are listed with their extension (`scripts/ids.ts`); a specifier carries none.
+export function stripModuleExtension(path: string): string {
+  return path.replace(/\.tsx?$/, "");
+}
+
 // `@/*` always resolves against the workspace root; `#/*` against the ACTIVE collection's root,
 // re-derived whenever it changes.
 export function workspaceModulePaths(

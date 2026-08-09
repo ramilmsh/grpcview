@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Transport } from "@connectrpc/connect";
 import { createQueryOptions } from "@connectrpc/connect-query";
-import { get } from "@grpcview/v1/service-WorkspaceService_connectquery";
-import { keyForCollection } from "./workspace-query";
+import {
+  get,
+  listWorkspaceModules,
+} from "@grpcview/v1/service-WorkspaceService_connectquery";
+import { keyForCollection, workspaceModulesKey } from "./workspace-query";
 
 // The one claim the collection tier rests on: useCollectionItems' per-collection Get shares a
 // cache entry with useWorkspace's, so the active collection is fetched once and a write RPC's
@@ -25,5 +28,17 @@ describe("keyForCollection", () => {
 
   it("is per collection, so two collections cannot clobber one entry", () => {
     expect(keyForCollection(transport, "a")).not.toEqual(keyForCollection(transport, "b"));
+  });
+});
+
+// Same claim, for the listing Monaco's extra libs are built from: a write invalidates this key,
+// useWorkspaceModules registers useQuery(listWorkspaceModules, {}), and if the two ever stopped
+// agreeing the invalidation would silently match nothing — leaving the editor typechecking
+// against the modules as they were when the page loaded.
+describe("workspaceModulesKey", () => {
+  it("is the key connect-query itself derives for ListWorkspaceModules", () => {
+    expect(workspaceModulesKey(transport)).toEqual(
+      createQueryOptions(listWorkspaceModules, {}, { transport }).queryKey
+    );
   });
 });

@@ -57,3 +57,31 @@ export function maskLiterals(source: string): string {
 // isModule reports whether `source` is already a module (carries its own default export) rather
 // than a bare expression that still needs wrapping.
 export const isModule = (source: string): boolean => EXPORT_DEFAULT_RE.test(maskLiterals(source));
+
+// leadsWithBrace reports whether the first token of `source` — skipping whitespace and leading
+// comments — is `{`. This, not isModule, is what decides whether a body/metadata script gets the
+// canonical wrapper: an object literal is the JSON-like form the wrapper exists for, and
+// EVERYTHING else is taken at face value as a module the author owns.
+//
+// maskLiterals is no help here: it blanks comment INTERIORS but leaves the `//` and `/*`
+// delimiters in place, so a file opening with a banner comment would read as leading with `/`.
+// This scans past whole comments instead.
+export const leadsWithBrace = (source: string): boolean => {
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+      i++;
+    } else if (c === "/" && source[i + 1] === "/") {
+      i += 2;
+      while (i < source.length && source[i] !== "\n") i++;
+    } else if (c === "/" && source[i + 1] === "*") {
+      i += 2;
+      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i++;
+      i += 2;
+    } else {
+      return c === "{";
+    }
+  }
+  return false;
+};

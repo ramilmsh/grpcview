@@ -52,6 +52,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 
 | Doc | What it plans |
 |---|---|
+| [`script-region.md`](./planned/script-region.md) | `// grpcview:script start` markers replace the constant hidden wrapper; the import block above them becomes machine-derived. Kills the corruption guard and the mode-promotion path. |
 | [`invoke-from-the-store.md`](./planned/invoke-from-the-store.md) | Send resolves the saved request server-side instead of shipping the editor buffer. The RPC now exists; the UI migration does not. |
 | [`descriptor-explorer-plan.md`](./planned/descriptor-explorer-plan.md) | A navigable read-only `.proto` browser — field numbers and comments the TS-shape view cannot recover. |
 | [`cross-collection-invoke.md`](./planned/cross-collection-invoke.md) | `gv.invoke("//identity:Auth/Login")` — Bazel-style labels over per-collection slugs, never paths. Sibling of `script-imports.md`. |

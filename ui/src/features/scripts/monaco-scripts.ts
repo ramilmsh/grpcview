@@ -172,6 +172,19 @@ type GvMiddlewareCtx = {
 type GvMiddleware = (ctx: GvMiddlewareCtx) => GvMiddlewareCtx | void | Promise<GvMiddlewareCtx | void>;
 
 /**
+ * What a specifier literal \`require()\`s to. The "grpcview:" capabilities are known statically;
+ * the workspace's own \`@/…\` and \`#/…\` modules are MERGED in by the generated
+ * \`gv-modules.d.ts\` (require-types.ts \`requireTypesDts\`), which \`gv-types.ts\` registers
+ * app-level and recomputes per collection — the same arrangement as GvRequestMap. A specifier
+ * absent from here still compiles; it just falls back to \`any\`.
+ */
+interface GvModules {
+  "grpcview:invoke": typeof import("grpcview:invoke");
+  "grpcview:assert": typeof import("grpcview:assert");
+  "grpcview:metadata": typeof import("grpcview:metadata");
+  "grpcview:request": typeof import("grpcview:request");
+}
+/**
  * The expression-position escape hatch. An \`import\` STATEMENT cannot stand where a request body
  * or a metadata object literal is written — that is a hard parse error, not a style choice — so
  * an expression form pulls a module in with \`require("#/scripts/ids").requestId()\` instead. The
@@ -179,12 +192,14 @@ type GvMiddleware = (ctx: GvMiddlewareCtx) => GvMiddlewareCtx | void | Promise<G
  * declaration every new request's metadata tab opens red.
  *
  * The specifier must be a string literal: a computed one is rejected before the bundle, because
- * esbuild neither errors nor warns on it and emits code that fails at run time.
- *
- * Returns \`any\` on purpose — resolving the specifier to a module type would need the checker to
- * follow \`paths\` from an expression, and a wrong-but-red answer is worse than untyped here.
+ * esbuild neither errors nor warns on it and emits code that fails at run time. That is also what
+ * makes the typed branch safe — a literal argument infers \`S\` as its own literal type, so a known
+ * specifier gets the module's real exports while a computed one widens to \`string\`, misses
+ * \`keyof GvModules\`, and stays \`any\` rather than going red.
  */
-declare function require(specifier: string): any;
+declare function require<S extends string>(
+  specifier: S
+): S extends keyof GvModules ? GvModules[S] : any;
 
 declare module "grpcview:invoke" {
   /**
