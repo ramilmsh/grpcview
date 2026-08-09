@@ -19,7 +19,7 @@ func TestResolveInvokeBody(t *testing.T) {
 
 	t.Run("typescript body evaluates to its returned object", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`}, nil)
+			[]string{`export default () => ({ message: "hi-" + (1 + 1) })`}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -30,7 +30,7 @@ func TestResolveInvokeBody(t *testing.T) {
 
 	t.Run("typescript evaluates every body (streaming shape)", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`export default () => ({ n: 1 })`, `export default () => ({ n: 2 })`}, nil)
+			[]string{`export default () => ({ n: 1 })`, `export default () => ({ n: 2 })`}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -48,7 +48,7 @@ func TestResolveInvokeBody(t *testing.T) {
 	} {
 		t.Run(c.name+" errors FailedPrecondition", func(t *testing.T) {
 			if _, err := w.resolveInvokeBody(ctx, testWorkspace,
-				[]string{c.body}, nil); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				[]string{c.body}, nil, ""); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 			}
 		})
@@ -68,7 +68,7 @@ func TestResolveInvokeBodyExpressionBody(t *testing.T) {
 		{"bare empty object", `{}`, `{}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{c.body}, nil)
+			out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{c.body}, nil, "")
 			if err != nil {
 				t.Fatalf("resolveInvokeBody(%q): %v", c.body, err)
 			}
@@ -85,7 +85,7 @@ func TestResolveInvokeBodyExpressionBody(t *testing.T) {
 	} {
 		t.Run(c.name+" errors FailedPrecondition", func(t *testing.T) {
 			if _, err := w.resolveInvokeBody(ctx, testWorkspace,
-				[]string{c.body}, nil); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				[]string{c.body}, nil, ""); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 			}
 		})
@@ -102,7 +102,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
 			"import mkid from \"#/scripts/mkid.ts\";\n" +
 				`export default () => ({ id: mkid(), n: 7 })`,
-		}, nil)
+		}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -113,7 +113,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 
 	t.Run("an expression body composes a saved script via require", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`{ "id": require("#/scripts/mkid.ts").default() }`}, nil)
+			[]string{`{ "id": require("#/scripts/mkid.ts").default() }`}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -127,7 +127,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
 			"import mkid from \"#/scripts/mkid.ts\";\n" +
 				`export default () => ({ id: mkid() })`,
-		}, nil)
+		}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (unreferenced broken script): %v", err)
 		}
@@ -149,7 +149,7 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
 			"import outer from \"#/scripts/outer.ts\";\n" +
 				`export default () => ({ v: outer() })`,
-		}, nil)
+		}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -163,7 +163,7 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
 			"import outer from \"#/scripts/outer.ts\";\n" +
 				`export default () => ({ v: outer() })`,
-		}, nil)
+		}, nil, "")
 		if err != nil {
 			t.Fatalf("resolveInvokeBody (unreachable broken script): %v", err)
 		}
@@ -196,7 +196,7 @@ func TestResolveInvokeBodyImportsAcrossCollections(t *testing.T) {
 	out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
 		"import shared from \"@/other/scripts/shared.ts\";\n" +
 			`export default () => ({ id: shared() })`,
-	}, nil)
+	}, nil, "")
 	if err != nil {
 		t.Fatalf("resolveInvokeBody (cross-collection @/ import): %v", err)
 	}

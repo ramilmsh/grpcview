@@ -4,7 +4,5 @@
   },
   "service":  "grpcview.v1.WorkspaceService",
   "method":  "RunScript",
-  "draftBody":  "import { requestId } from \"#/scripts/ids\";\nimport { stamp } from \"#/scripts/stamp\";\n\nexport default async (): Promise<RequestMessage> => (\n{\n  collection: \"example\",\n  // `requestId` and `stamp` are files in this collection, imported by path.\n  // Nothing is bound by name and nothing is pulled in implicitly: the import\n  // graph above is exactly what the sandbox bundles.\n  //\n  // JSON.stringify turns the generated text into a quoted string literal, so\n  // the scratchpad grpcview runs is a single expression and its value comes\n  // straight back in the response.\n  source: JSON.stringify(`${requestId(\"gv\")} at ${stamp()}`),\n}\n)",
-  "middleware":  [],
-  "draftMetadataScript":  "import { inherit } from \"grpcview:metadata\";\nimport { requestId } from \"#/scripts/ids\";\nimport { stamp } from \"#/scripts/stamp\";\n\nexport default async (): Promise<Metadata> => (\n{\n  // Metadata is the same language as the body, evaluated to a\n  // { [key: string]: string[] } map. Spread the folder chain first, then add\n  // the per-request headers — dropping the spread would discard them.\n  ...inherit(),\n  \"x-request-id\": [requestId()],\n  \"x-sent-at\": [stamp()],\n}\n)"
+  "middleware":  []
 }

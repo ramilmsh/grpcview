@@ -96,7 +96,7 @@ Two properties shape the implementation:
 - **One build, if every entry is a file.** esbuild accepts multiple `EntryPoints` in a
   single build and the metafile covers all of them. Bodies and metadata scripts live inside
   `request.json` today, so they would have to be fed through `Stdin` one at a time — N
-  builds. [VS Code phase 2](../active/vscode/phase-2-body-files.md) moving them to sibling
+  builds. [VS Code phase 2](../shipped/vscode/phase-2-body-files.md) moving them to sibling
   files collapses that to one, which is the concrete reason to sequence phase 2 first.
 
 `gv.invoke` paths are **not** in the graph — they are string arguments, not module

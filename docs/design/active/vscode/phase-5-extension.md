@@ -1,6 +1,6 @@
 # Phase 5 — the extension
 
-**Prereqs:** phases [1](../../shipped/vscode/phase-1-workspace.md), [2](./phase-2-body-files.md),
+**Prereqs:** phases [1](../../shipped/vscode/phase-1-workspace.md), [2](../../shipped/vscode/phase-2-body-files.md),
 [3](./phase-3-type-sinks.md), [4](./phase-4-request-management.md).
 See [`README.md`](./README.md) for the approach and the sink model.
 

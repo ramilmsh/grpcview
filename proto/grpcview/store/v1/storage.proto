@@ -53,17 +53,15 @@ message Folder {
   string draft_metadata_script = 3;
 }
 
-// request.json inside a request directory. The text fields are strings, not
-// bytes, so protojson keeps them readable instead of base64.
+// request.json inside a request directory. The body and the metadata script are
+// NOT here: they are sibling body.ts / metadata.ts files, so they diff by line and
+// work as esbuild entry points. See docs/design/shipped/vscode/phase-2-body-files.md.
 message Request {
   ItemMeta meta = 1;
   string service = 2;
   string method = 3;
-  string draft_body = 5;
   // Ordered display names of the MIDDLEWARE scripts run before the call.
   repeated string middleware = 6;
-  // TypeScript module returning {[key: string]: string[]}, evaluated on invoke.
-  string draft_metadata_script = 8;
   // Unset means "use the workspace's first reflection source" (resolveTarget).
   Target target = 9;
 }

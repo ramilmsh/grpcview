@@ -16,8 +16,21 @@ const (
 	WorkspaceFileName  = "grpcview.work.json"
 	CollectionFileName = "grpcview.json"
 	folderFileName     = "folder.json"
-	requestFileName    = "request.json"
-	historyFileName    = "history.json"
+
+	// RequestFileName, BodyFileName and MetadataFileName are exported for service/workspace's
+	// ListWorkspaceModules walk, which excludes a request's body.ts/metadata.ts from the
+	// module list by checking for the sibling request.json (the same reason
+	// NodeModulesDirName/BazelSymlinkPrefix below are exported).
+	RequestFileName  = "request.json"
+	BodyFileName     = "body.ts"
+	MetadataFileName = "metadata.ts"
+
+	historyFileName = "history.json"
+
+	// EmptyBody is what a request body with nothing in it means, and the seed a new
+	// request's body.ts gets. Exported so service/workspace's invoke path and the store
+	// cannot drift apart on it.
+	EmptyBody = "{}"
 
 	treeDir    = "tree"
 	scriptsDir = "scripts"
@@ -69,7 +82,9 @@ type slugNamed interface {
 var reservedSlugs = map[string]bool{
 	CollectionFileName: true,
 	folderFileName:     true,
-	requestFileName:    true,
+	RequestFileName:    true,
+	BodyFileName:       true,
+	MetadataFileName:   true,
 }
 
 func isReserved(slug string) bool {

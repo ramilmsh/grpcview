@@ -1,6 +1,6 @@
 # Phase 4 — request management
 
-**Prereqs:** [phase 2](./phase-2-body-files.md) (which forces the save-model decision).
+**Prereqs:** [phase 2](../../shipped/vscode/phase-2-body-files.md) (which forces the save-model decision).
 **Unblocks:** [phase 5](./phase-5-extension.md) becomes a mapping rather than a
 reimplementation. See [`README.md`](./README.md) for the track overview.
 

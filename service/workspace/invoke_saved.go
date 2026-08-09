@@ -47,13 +47,18 @@ func (w Workspace) resolveSavedRun(ctx context.Context, in savedInvoke) (savedRu
 	if err != nil {
 		return savedRun{}, err
 	}
-	saved, err := coll.ResolveRequest(ctx, in.parent, in.itemName)
+	saved, bodyFile, metadataFile, err := coll.ResolveRequestFiles(ctx, in.parent, in.itemName)
 	if err != nil {
 		return savedRun{}, toConnectError(err)
 	}
 
+	// bodyFile is only attributed when the body actually came from disk: a caller that
+	// supplies in.messages is evaluating its own bytes, not body.ts, and must not have an
+	// error blamed on a file that was never read.
+	fromDisk := len(in.messages) == 0
+
 	messages := in.messages
-	if len(messages) == 0 {
+	if fromDisk {
 		messages = []string{saved.GetDraftBody()}
 	}
 	messages = normalizeBodies(messages)
@@ -61,6 +66,10 @@ func (w Workspace) resolveSavedRun(ctx context.Context, in savedInvoke) (savedRu
 	target := saved.GetTarget()
 	if in.target != nil {
 		target = in.target
+	}
+
+	if !fromDisk {
+		bodyFile = ""
 	}
 
 	return savedRun{
@@ -75,6 +84,8 @@ func (w Workspace) resolveSavedRun(ctx context.Context, in savedInvoke) (savedRu
 			metadataScript: saved.GetDraftMetadataScript(),
 			params:         in.params,
 			recordHistory:  in.recordHistory,
+			bodyFile:       bodyFile,
+			metadataFile:   metadataFile,
 		},
 		messages: messages,
 	}, nil

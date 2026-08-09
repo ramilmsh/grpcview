@@ -40,7 +40,7 @@ This is how Volar serves virtual files to tsserver.
 
 **Payoff:** native tsserver IntelliSense on `body.ts` with **nothing written to disk** —
 it removes the need for `DiskSink` in the editor case entirely, and removes the
-"unresolved `RequestMessage`" wart from [phase 2](./phase-2-body-files.md).
+"unresolved `RequestMessage`" wart from [phase 2](../../shipped/vscode/phase-2-body-files.md).
 
 **Why a REST endpoint cannot do this instead:** TypeScript's host interface is
 **synchronous** — `readFile`, `fileExists`, `readDirectory` return values, not promises,

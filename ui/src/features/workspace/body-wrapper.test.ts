@@ -117,6 +117,29 @@ describe("migrateBodyToTs", () => {
       expect(twice).toBe(once);
     });
   }
+
+  // The store (service/store/codec.go's writeSourceFile) normalizes body.ts to exactly one
+  // trailing newline on write, so every persisted body arrives here as "<content>\n".
+  describe("a store-normalized trailing newline", () => {
+    it("is still recognized as canonical", () => {
+      const canonical = wrap(BARE_OBJECT.trim());
+      const migrated = migrateBodyToTs(canonical + "\n");
+      expect(migrated).toBe(canonical);
+      expect(isCanonical(migrated)).toBe(true);
+    });
+
+    it("leaves an author-written module unchanged apart from the stripped newline", () => {
+      const migrated = migrateBodyToTs(MODULE_WITH_IMPORTS + "\n");
+      expect(migrated).toBe(MODULE_WITH_IMPORTS);
+      expect(hiddenLineRanges(migrated)).toEqual([]);
+    });
+
+    it("hosting is idempotent", () => {
+      const once = migrateBodyToTs(wrap(BARE_OBJECT.trim()) + "\n");
+      const twice = migrateBodyToTs(once);
+      expect(twice).toBe(once);
+    });
+  });
 });
 
 describe("hiddenLineRanges / bodyBounds", () => {
@@ -140,6 +163,17 @@ describe("hiddenLineRanges / bodyBounds", () => {
     expect(ranges[0]).toEqual({ startLine: 1, endLine: 1 });
     const total = migrated.split("\n").length;
     expect(ranges[1]).toEqual({ startLine: total, endLine: total });
+  });
+
+  it("hides exactly one line at each end for a store-normalized trailing newline", () => {
+    const migrated = migrateBodyToTs(wrap(BARE_OBJECT.trim()) + "\n");
+    const ranges = hiddenLineRanges(migrated);
+    expect(ranges.length).toBe(2);
+    expect(ranges[0].endLine - ranges[0].startLine).toBe(0);
+    expect(ranges[1].endLine - ranges[1].startLine).toBe(0);
+    const bounds = bodyBounds(migrated);
+    expect(bounds.first).toBeGreaterThan(1);
+    expect(bounds.last).toBeLessThan(bounds.total);
   });
 });
 

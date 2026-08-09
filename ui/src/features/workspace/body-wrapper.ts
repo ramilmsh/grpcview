@@ -22,10 +22,17 @@ const EMPTY_BODY = "{\n  \n}";
 
 // migrateBodyToTs normalizes a body to the canonical module, or leaves an author-written module
 // (e.g. one reached via `import`) untouched, byte-for-byte. Idempotent.
+//
+// The store (service/store/codec.go's writeSourceFile) normalizes body.ts/metadata.ts to exactly
+// one trailing newline on write, so a persisted body arrives here as "<canonical>\n" — one byte
+// isCanonical never matched, since WRAP_SUFFIX ends in `)`, not `\n`. Stripping trailing newlines
+// before the canonical/module checks is what re-recognizes it; the store re-adds exactly one on
+// the next write, so the round trip is byte-identical and produces no spurious git diff.
 export const migrateBodyToTs = (body: string): string => {
-  if (isCanonical(body)) return body;
-  if (isModule(body)) return body;
-  const trimmed = body.trim();
+  const stripped = body.replace(/\n+$/, "");
+  if (isCanonical(stripped)) return stripped;
+  if (isModule(stripped)) return stripped;
+  const trimmed = stripped.trim();
   if (trimmed === "" || trimmed === "{}") return wrap(EMPTY_BODY);
   return wrap(trimmed);
 };

@@ -37,7 +37,7 @@ import (
 
 const historyLimit = 50
 
-const emptyBody = "{}"
+const emptyBody = store.EmptyBody
 
 const MaxFolderMetadataDepth = 16
 
@@ -53,6 +53,17 @@ type invokeSpec struct {
 	metadata       *structpb.Struct
 	params         map[string]any
 	recordHistory  bool
+
+	// bodyFile and metadataFile are the saved request's body.ts/metadata.ts paths (relative
+	// to the store root), set only when the spec was resolved from disk (resolveSavedRun).
+	// The wire Invoke/InvokeStreaming path leaves them empty, since there the body came from
+	// an editor buffer with no file behind it — error messages must stay unlabeled there.
+	// bodyFile is further blanked by resolveSavedRun when the caller passed explicit
+	// messages: the bytes being evaluated then came from the caller, not body.ts, and an
+	// error must not name a file it never read. metadataFile has no such case — it is
+	// always read from disk.
+	bodyFile     string
+	metadataFile string
 }
 
 func specFrom(in *grpcviewv1.InvokeSpec) invokeSpec {
@@ -94,7 +105,7 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 
 	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
 	if err := reqMsg.UnmarshalJSON([]byte(body)); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body for %s: %w", methodDesc.GetInputType().GetFullyQualifiedName(), err))
+		return nil, invalidBodyError(spec.bodyFile, methodDesc.GetInputType().GetFullyQualifiedName(), err)
 	}
 
 	reqMD := structToMetadata(resolvedMD)
@@ -149,11 +160,11 @@ func (w Workspace) invokeUnary(ctx context.Context, spec invokeSpec) (*grpcviewv
 func (w Workspace) resolvePreSend(ctx context.Context, spec invokeSpec, bodies []string) ([]string, *structpb.Struct, error) {
 	ctx = scripting.WithInvoker(ctx, w.scriptInvoker(spec.workspaceName))
 
-	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, bodies, spec.params)
+	evaluatedBodies, err := w.resolveInvokeBody(ctx, spec.workspaceName, bodies, spec.params, spec.bodyFile)
 	if err != nil {
 		return nil, nil, err
 	}
-	outgoingMD, err := w.resolveInvokeMetadata(ctx, spec.workspaceName, spec.path, spec.metadataScript, spec.metadata, spec.params)
+	outgoingMD, err := w.resolveInvokeMetadata(ctx, spec.workspaceName, spec.path, spec.metadataScript, spec.metadata, spec.params, spec.metadataFile)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -196,11 +207,11 @@ func (w Workspace) streamInvoke(ctx context.Context, spec invokeSpec, messages [
 	for i, body := range bodies {
 		body = strings.TrimSpace(body)
 		if body == "" {
-			body = "{}"
+			body = emptyBody
 		}
 		m := dynamic.NewMessage(methodDesc.GetInputType())
 		if err := m.UnmarshalJSON([]byte(body)); err != nil {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body [%d] for %s: %w", i, methodDesc.GetInputType().GetFullyQualifiedName(), err))
+			return invalidBodyErrorAt(i, spec.bodyFile, methodDesc.GetInputType().GetFullyQualifiedName(), err)
 		}
 		reqMsgs[i] = m
 	}
@@ -347,7 +358,7 @@ func (w Workspace) streamInvoke(ctx context.Context, spec invokeSpec, messages [
 	return nil
 }
 
-func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string, params map[string]any) ([]string, error) {
+func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, bodies []string, params map[string]any, label string) ([]string, error) {
 	if w.engine == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("a TypeScript request body requires the scripting engine, which is not available"))
@@ -363,10 +374,10 @@ func (w Workspace) resolveInvokeBody(ctx context.Context, workspaceName string, 
 			CollectionRoot: coll.Root(),
 		})
 		if err != nil {
-			return nil, bodyError(i, err.Error())
+			return nil, bodyError(i, label, err.Error())
 		}
 		if !isJSONObject(res.Value) {
-			return nil, bodyError(i, "expected the body to return an object")
+			return nil, bodyError(i, label, "expected the body to return an object")
 		}
 		out[i] = string(res.Value)
 	}
@@ -387,12 +398,30 @@ func isJSONObject(raw []byte) bool {
 	return len(raw) > 0 && raw[0] == '{'
 }
 
-func bodyError(index int, detail string) error {
+func bodyError(index int, label, detail string) error {
+	if label == "" {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("cannot evaluate TypeScript request body [%d]: %s", index, detail))
+	}
 	return connect.NewError(connect.CodeFailedPrecondition,
-		fmt.Errorf("cannot evaluate TypeScript request body [%d]: %s", index, detail))
+		fmt.Errorf("cannot evaluate TypeScript request body [%d] (%s): %s", index, label, detail))
 }
 
-func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName string, path []string, metadataScript string, fallback *structpb.Struct, params map[string]any) (*structpb.Struct, error) {
+func invalidBodyError(label, typeName string, err error) error {
+	if label == "" {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body for %s: %w", typeName, err))
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body for %s (%s): %w", typeName, label, err))
+}
+
+func invalidBodyErrorAt(index int, label, typeName string, err error) error {
+	if label == "" {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body [%d] for %s: %w", index, typeName, err))
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request body [%d] for %s (%s): %w", index, typeName, label, err))
+}
+
+func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName string, path []string, metadataScript string, fallback *structpb.Struct, params map[string]any, label string) (*structpb.Struct, error) {
 	if strings.TrimSpace(metadataScript) == "" {
 		return w.inheritedMetadataOnly(ctx, workspaceName, path, fallback, params)
 	}
@@ -414,12 +443,12 @@ func (w Workspace) resolveInvokeMetadata(ctx context.Context, workspaceName stri
 		CollectionRoot:    coll.Root(),
 	})
 	if err != nil {
-		return nil, metadataError(connect.CodeFailedPrecondition, err.Error())
+		return nil, metadataError(connect.CodeFailedPrecondition, label, err.Error())
 	}
 	if !isJSONObject(res.Value) {
-		return nil, metadataError(connect.CodeFailedPrecondition, "expected the metadata to return an object")
+		return nil, metadataError(connect.CodeFailedPrecondition, label, "expected the metadata to return an object")
 	}
-	lists, err := metadataListsFromJSON(res.Value)
+	lists, err := metadataListsFromJSON(res.Value, label)
 	if err != nil {
 		return nil, err
 	}
@@ -480,12 +509,12 @@ func (w Workspace) foldAncestorMetadata(ctx context.Context, workspaceName strin
 			CollectionRoot:    coll.Root(),
 		})
 		if rerr != nil {
-			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, rerr.Error()))
+			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, "", rerr.Error()))
 		}
 		if !isJSONObject(res.Value) {
-			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, "expected the folder metadata to return an object"))
+			return nil, wrapFolderError(folderPath, metadataError(connect.CodeFailedPrecondition, "", "expected the folder metadata to return an object"))
 		}
-		lists, lerr := metadataListsFromJSON(res.Value)
+		lists, lerr := metadataListsFromJSON(res.Value, "")
 		if lerr != nil {
 			return nil, wrapFolderError(folderPath, lerr)
 		}
@@ -499,14 +528,14 @@ func wrapFolderError(folderPath []string, err error) error {
 		fmt.Errorf("folder %q metadata: %w", strings.Join(folderPath, "/"), err))
 }
 
-func metadataListsFromJSON(raw []byte) (map[string][]string, error) {
+func metadataListsFromJSON(raw []byte, label string) (map[string][]string, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return nil, metadataError(connect.CodeFailedPrecondition, "metadata is not a JSON object: "+err.Error())
+		return nil, metadataError(connect.CodeFailedPrecondition, label, "metadata is not a JSON object: "+err.Error())
 	}
 	lists := make(map[string][]string, len(obj))
 	for key, rawVal := range obj {
-		values, err := metadataValueList(key, rawVal)
+		values, err := metadataValueList(key, rawVal, label)
 		if err != nil {
 			return nil, err
 		}
@@ -527,21 +556,21 @@ func structFromMetadataLists(lists map[string][]string) *structpb.Struct {
 	return &structpb.Struct{Fields: fields}
 }
 
-func metadataValueList(key string, raw json.RawMessage) ([]string, error) {
+func metadataValueList(key string, raw json.RawMessage, label string) ([]string, error) {
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
 		return []string{s}, nil
 	}
 	var arr []json.RawMessage
 	if err := json.Unmarshal(raw, &arr); err != nil {
-		return nil, metadataError(connect.CodeInvalidArgument,
+		return nil, metadataError(connect.CodeInvalidArgument, label,
 			fmt.Sprintf("metadata value for %q must be a string or string[]", key))
 	}
 	out := make([]string, len(arr))
 	for i, el := range arr {
 		var es string
 		if err := json.Unmarshal(el, &es); err != nil {
-			return nil, metadataError(connect.CodeInvalidArgument,
+			return nil, metadataError(connect.CodeInvalidArgument, label,
 				fmt.Sprintf("metadata value for %q must be a string or string[]; element %d is not a string", key, i))
 		}
 		out[i] = es
@@ -549,8 +578,11 @@ func metadataValueList(key string, raw json.RawMessage) ([]string, error) {
 	return out, nil
 }
 
-func metadataError(code connect.Code, detail string) error {
-	return connect.NewError(code, fmt.Errorf("cannot evaluate the request metadata: %s", detail))
+func metadataError(code connect.Code, label, detail string) error {
+	if label == "" {
+		return connect.NewError(code, fmt.Errorf("cannot evaluate the request metadata: %s", detail))
+	}
+	return connect.NewError(code, fmt.Errorf("cannot evaluate the request metadata (%s): %s", label, detail))
 }
 
 func (w Workspace) recordHistory(ctx context.Context, workspaceName string, path []string, itemName, service, method, body string, out *grpcviewv1.Request_Response) {

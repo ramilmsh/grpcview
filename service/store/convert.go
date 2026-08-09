@@ -5,13 +5,13 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 )
 
-func diskToWireRequest(name string, dr *grpcviewstorev1.Request) *grpcviewv1.Request {
+func diskToWireRequest(name string, dr *grpcviewstorev1.Request, body, metadataScript string) *grpcviewv1.Request {
 	return &grpcviewv1.Request{
 		Name:                name,
 		Service:             dr.GetService(),
 		Method:              dr.GetMethod(),
-		DraftBody:           dr.GetDraftBody(),
-		DraftMetadataScript: dr.GetDraftMetadataScript(),
+		DraftBody:           body,
+		DraftMetadataScript: metadataScript,
 		Middleware:          dr.GetMiddleware(),
 		Target:              targetToServer(dr.GetTarget()),
 	}

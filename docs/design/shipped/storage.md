@@ -76,8 +76,9 @@ my-collection/                 # opened by the user; own git repo OR nested in o
     Users/                     # a folder = a directory
       folder.json              # folder config: seq + optional auth/metadata/target/vars/scripts
       GetUser/                 # a request = a directory
-        request.json           # service, method, draft_body (JSON string), + optional target/auth/metadata/timeout/vars refs
-        metadata.json          # optional draft metadata (or inline in request.json)
+        request.json           # service, method, middleware, + optional target/auth/timeout/vars refs
+        body.ts                # the request body, verbatim (since VS Code phase 2)
+        metadata.ts            # the metadata script, verbatim (since VS Code phase 2)
       ListUsers/
         request.json
   environments/                # shared: named environments (non-secret values only)
@@ -113,6 +114,13 @@ Bruno-exact ergonomics; then reserved names become forbidden folder names.
   request config (rather than a separate `body.json` sidecar) keeps one file per
   request and a single read/write path; the trade-off is that a body edit shows as
   one escaped line in the diff rather than raw multi-line JSON.
+  **Reversed 2026-08-09**, and that trade-off is why: the body and the metadata script
+  are now sibling `body.ts` / `metadata.ts` files, written verbatim, so a body edit is a
+  line diff — the "diff-first" principle this document lists was violated in exactly one
+  place, and this was it. Being real files also makes them `tsc`-checkable, editable by
+  anything, and usable as esbuild entry points. See
+  [`shipped/vscode/phase-2-body-files.md`](./vscode/phase-2-body-files.md). Folder
+  metadata still lives inline in `folder.json`.
 - **Naming / identity (LOCKED — slug dir + display name in config):** each item's
   directory is named by a **stable slug**; the human display name lives in
   `meta.name` inside the item's config file. No separate mapping file — the dir name

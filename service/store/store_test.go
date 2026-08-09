@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,6 +75,15 @@ func mustRead(t *testing.T, path string, m proto.Message) {
 	}
 }
 
+func mustReadSource(t *testing.T, path string) string {
+	t.Helper()
+	src, err := readSourceFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return src
+}
+
 func TestCreateAndLoadRoundTrip(t *testing.T) {
 	coll, ctx := newTestCollection(t)
 
@@ -83,7 +93,9 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get User", "acme.v1.UserService", "GetUser"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
-	body := `{"id":"42"}`
+	// Already ends in exactly one newline, so writeSourceFile's trailing-newline
+	// normalization is a no-op and every comparison below can use body as-is.
+	body := "{\"id\":\"42\"}\n"
 	if err := coll.UpdateRequest(ctx, []string{"Users"}, "Get User", RequestPatch{DraftBody: &body}); err != nil {
 		t.Fatalf("UpdateRequest: %v", err)
 	}
@@ -106,12 +118,12 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 
 	tree := filepath.Join(coll.Root(), treeDir)
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(tree, "users", "get-user", requestFileName), rf)
+	mustRead(t, filepath.Join(tree, "users", "get-user", RequestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("request.json meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
-	if rf.GetDraftBody() != body {
-		t.Errorf("request.json draftBody = %q, want %q", rf.GetDraftBody(), body)
+	if got := mustReadSource(t, filepath.Join(tree, "users", "get-user", BodyFileName)); got != body {
+		t.Errorf("body.ts = %q, want %q", got, body)
 	}
 	col := &grpcviewstorev1.Collection{}
 	mustRead(t, coll.collectionFilePath(), col)
@@ -228,7 +240,7 @@ func TestUpdateRequestRename(t *testing.T) {
 		t.Errorf("slug dir should be stable across rename: %v", err)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
+	mustRead(t, filepath.Join(tree, "get-user", RequestFileName), rf)
 	if rf.GetMeta().GetName() != newName {
 		t.Errorf("meta.name = %q, want %q", rf.GetMeta().GetName(), newName)
 	}
@@ -244,7 +256,7 @@ func TestUpdateRequestRename(t *testing.T) {
 	if err := coll.UpdateRequest(ctx, nil, newName, RequestPatch{Name: &collide}); !errors.Is(err, ErrAlreadyExists) {
 		t.Errorf("rename collision = %v, want ErrAlreadyExists", err)
 	}
-	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
+	mustRead(t, filepath.Join(tree, "get-user", RequestFileName), rf)
 	if rf.GetMeta().GetName() != newName {
 		t.Errorf("failed rename must not mutate meta.name, got %q", rf.GetMeta().GetName())
 	}
@@ -253,9 +265,10 @@ func TestUpdateRequestRename(t *testing.T) {
 	if err := coll.UpdateRequest(ctx, nil, newName, RequestPatch{Name: &newName, DraftBody: &body}); err != nil {
 		t.Fatalf("no-op rename + body patch: %v", err)
 	}
-	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
-	if rf.GetMeta().GetName() != newName || rf.GetDraftBody() != body {
-		t.Errorf("after no-op rename + body: name=%q body=%q", rf.GetMeta().GetName(), rf.GetDraftBody())
+	mustRead(t, filepath.Join(tree, "get-user", RequestFileName), rf)
+	gotBody := mustReadSource(t, filepath.Join(tree, "get-user", BodyFileName))
+	if rf.GetMeta().GetName() != newName || gotBody != body+"\n" {
+		t.Errorf("after no-op rename + body: name=%q body=%q", rf.GetMeta().GetName(), gotBody)
 	}
 }
 
@@ -1026,7 +1039,7 @@ func TestAppendHistoryCapAndReload(t *testing.T) {
 		t.Fatalf("history sidecar missing at %s: %v", histFile, err)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(root, "test", treeDir, "get-user", requestFileName), rf)
+	mustRead(t, filepath.Join(root, "test", treeDir, "get-user", RequestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("request.json meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
@@ -1108,7 +1121,7 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 		t.Fatalf("middleware after set = %v, want [sign trace]", got)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", RequestFileName), rf)
 	if len(rf.GetMiddleware()) != 2 || rf.GetMiddleware()[0] != "sign" {
 		t.Fatalf("request.json middleware = %v, want [sign trace]", rf.GetMiddleware())
 	}
@@ -1175,7 +1188,7 @@ func TestUpdateRequestTarget(t *testing.T) {
 		t.Fatalf("target after set = %+v, want api.example.com:8443 tls", got)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", RequestFileName), rf)
 	if rf.GetTarget().GetAddress() != "api.example.com:8443" || !rf.GetTarget().GetTls() {
 		t.Fatalf("request.json target = %+v, want api.example.com:8443 tls", rf.GetTarget())
 	}
@@ -1389,7 +1402,7 @@ func TestResolveRequest(t *testing.T) {
 	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get User", "acme.v1.UserService", "GetUser"); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"id":"42"}`
+	body := "{\"id\":\"42\"}\n"
 	if err := coll.UpdateRequest(ctx, []string{"Users"}, "Get User", RequestPatch{DraftBody: &body}); err != nil {
 		t.Fatal(err)
 	}
@@ -1523,7 +1536,7 @@ func TestRenameMovesDirectoryAndState(t *testing.T) {
 		t.Errorf("manifest name after rename = %q, want %q", col.GetName(), "Payments")
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(root, "b", "c", treeDir, "get-user", requestFileName), rf)
+	mustRead(t, filepath.Join(root, "b", "c", treeDir, "get-user", RequestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("tree content after rename: request meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
@@ -1657,5 +1670,167 @@ func TestLocalStateStaysOutOfCollectionDir(t *testing.T) {
 	}
 	if _, err := os.Stat(histPath); err != nil {
 		t.Errorf("history file missing under the state root: %v", err)
+	}
+}
+
+func TestCreateRequestSeedsBodyAndMetadataFiles(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	dir := filepath.Join(coll.Root(), treeDir, "echo")
+
+	if got := mustReadSource(t, filepath.Join(dir, BodyFileName)); got != EmptyBody+"\n" {
+		t.Errorf("body.ts = %q, want %q", got, EmptyBody+"\n")
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, MetadataFileName))
+	if err != nil {
+		t.Fatalf("read metadata.ts: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("metadata.ts = %q, want a zero-byte file (an EmptyBody seed would break folder-metadata inheritance)", data)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, RequestFileName))
+	if err != nil {
+		t.Fatalf("read request.json: %v", err)
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		t.Fatalf("unmarshal request.json: %v", err)
+	}
+	for _, key := range []string{"draftBody", "draft_body", "draftMetadataScript", "draft_metadata_script"} {
+		if _, ok := top[key]; ok {
+			t.Errorf("request.json still carries the stale key %q", key)
+		}
+	}
+}
+
+func TestUpdateRequestBodyOnlyLeavesRequestJSONByteIdentical(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	p := filepath.Join(coll.Root(), treeDir, "echo", RequestFileName)
+	before, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read request.json: %v", err)
+	}
+
+	body := `{"id":"1"}`
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{DraftBody: &body}); err != nil {
+		t.Fatalf("UpdateRequest: %v", err)
+	}
+
+	after, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read request.json: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("request.json changed on a body-only patch:\nbefore: %s\nafter:  %s", before, after)
+	}
+	if got := mustReadSource(t, filepath.Join(coll.Root(), treeDir, "echo", BodyFileName)); got != body+"\n" {
+		t.Errorf("body.ts = %q, want %q", got, body+"\n")
+	}
+}
+
+func TestBareExpressionBodyRoundTripsByteIdentical(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	// Already ends in exactly one newline, so writeSourceFile's normalization is a no-op and
+	// the round trip below is truly byte-identical to what was patched in, not merely
+	// identical-up-to-the-one-allowed-newline.
+	body := "{ \"userId\": uuid(), \"n\": 1 + 1 }\n"
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{DraftBody: &body}); err != nil {
+		t.Fatalf("UpdateRequest: %v", err)
+	}
+
+	req := childByName(rootItems(t, coll, ctx), "Echo")
+	if req == nil || req.GetRequest() == nil {
+		t.Fatalf("expected an Echo request")
+	}
+	if got := req.GetRequest().GetDraftBody(); got != body {
+		t.Errorf("Load body = %q, want %q byte-identical", got, body)
+	}
+
+	resolved, err := coll.ResolveRequest(ctx, nil, "Echo")
+	if err != nil {
+		t.Fatalf("ResolveRequest: %v", err)
+	}
+	if got := resolved.GetDraftBody(); got != body {
+		t.Errorf("ResolveRequest body = %q, want %q byte-identical", got, body)
+	}
+}
+
+func TestStaleRequestJSONFailsLoud(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	p := filepath.Join(coll.Root(), treeDir, "echo", RequestFileName)
+	stale := []byte(`{
+  "meta": {"name": "Echo"},
+  "service": "s.S",
+  "method": "Unary",
+  "draftBody": "{\"a\":1}"
+}
+`)
+	if err := os.WriteFile(p, stale, 0o644); err != nil {
+		t.Fatalf("write stale request.json: %v", err)
+	}
+
+	_, err := coll.Load(ctx)
+	if err == nil {
+		t.Fatal("expected Load to fail loudly on a stale request.json carrying draftBody")
+	}
+	if !strings.Contains(err.Error(), p) {
+		t.Errorf("error = %v, want it to name the file %q", err, p)
+	}
+	if !strings.Contains(err.Error(), BodyFileName) {
+		t.Errorf("error = %v, want it to name the fix (%q)", err, BodyFileName)
+	}
+}
+
+func TestStaleRequestJSONDoesNotFalsePositiveOnAPayloadContainingTheSubstring(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
+		t.Fatalf("CreateRequest: %v", err)
+	}
+	// "draftBody" appears inside the request's own body payload, not as a top-level
+	// request.json key: this must NOT trip the stale-key detector, which checks top-level
+	// keys only, not a substring scan.
+	body := `{"note":"draftBody is not a top-level key here"}`
+	if err := coll.UpdateRequest(ctx, nil, "Echo", RequestPatch{DraftBody: &body}); err != nil {
+		t.Fatalf("UpdateRequest: %v", err)
+	}
+	if _, err := coll.Load(ctx); err != nil {
+		t.Fatalf("Load: %v (a body payload merely containing the substring must not fail)", err)
+	}
+}
+
+func TestBodyAndMetadataFileNamesAreReservedSlugs(t *testing.T) {
+	if !isReserved(BodyFileName) || !isReserved(MetadataFileName) {
+		t.Fatalf("BodyFileName (%q) and MetadataFileName (%q) must be reserved so no child directory can collide with them", BodyFileName, MetadataFileName)
+	}
+
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateRequest(ctx, nil, "body.ts", "s.S", "Unary"); err != nil {
+		t.Fatalf("CreateRequest named %q: %v", BodyFileName, err)
+	}
+	req := childByName(rootItems(t, coll, ctx), "body.ts")
+	if req == nil || req.GetRequest() == nil {
+		t.Fatalf("expected a request named %q", BodyFileName)
+	}
+	if req.GetSlug() == BodyFileName {
+		t.Errorf("slug = %q must not collide with the reserved body file name", req.GetSlug())
+	}
+
+	// The slug directory and the real body.ts sibling file it contains must not be confused
+	// with each other.
+	if got := mustReadSource(t, filepath.Join(coll.Root(), treeDir, req.GetSlug(), BodyFileName)); got != EmptyBody+"\n" {
+		t.Errorf("body.ts sibling file = %q, want %q", got, EmptyBody+"\n")
 	}
 }

@@ -19,7 +19,7 @@ import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
 import { TypesModal } from "./TypesModal";
 import { migrateBodyToTs } from "./body-wrapper";
-import { defaultMetadataModule, migrateMetadataToTs } from "./metadata-wrapper";
+import { defaultMetadataModule, hostMetadataScript, migrateMetadataToTs } from "./metadata-wrapper";
 
 const DEBOUNCE_MS = 400;
 
@@ -68,7 +68,7 @@ export function RequestWorkspace() {
       // Migrate a legacy JSON / token / old-TS body to the canonical hidden-wrapper
       // module the editor can host. Idempotent; persisted lazily, on the next edit.
       const primary = migrateBodyToTs(request.draftBody || "{}");
-      const metadata = request.draftMetadataScript || defaultMetadataModule();
+      const metadata = hostMetadataScript(request.draftMetadataScript) || defaultMetadataModule();
       seedDraft(activeKey, {
         body: primary,
         metadata,
@@ -101,7 +101,8 @@ export function RequestWorkspace() {
   // Fallbacks cover the first render, before the seed effect commits.
   const body = draft?.body ?? migrateBodyToTs(request.draftBody || "{}");
   const metadata =
-    draft?.metadata ?? (request.draftMetadataScript || defaultMetadataModule());
+    draft?.metadata ??
+    (hostMetadataScript(request.draftMetadataScript) || defaultMetadataModule());
   // Index 0 is always the current body, so the persisted message can't drift from it.
   const messages = draft?.messages ? [body, ...draft.messages.slice(1)] : [body];
   // Undefined means "follow the reflection source" — protobuf-es omits it and the

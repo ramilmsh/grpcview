@@ -129,6 +129,12 @@ protojson body that could not import a script would be `{{ }}` all over again.
   is what tells the two apart, over comment- and string-masked source for the same
   reason `maskLiterals` exists on the backend. Hiding the wrapper above a module would
   also put auto-import's insertion point inside a region the author cannot see.
+  Because `isCanonical` matches on `endsWith(")")` while the store normalizes every
+  `body.ts` / `metadata.ts` to exactly one trailing newline, a persisted body reaches the
+  UI as `"<canonical>\n"` and must be **hosted** before the canonical test — trailing
+  newlines are stripped by `migrateBodyToTs` and `hostMetadataScript`, and the store
+  re-adds one on write, so the round trip stays byte-identical. Skip that and the wrapper
+  silently stops being hidden and becomes editable.
   The `RequestMessage` type is generated
   **in the browser** by `@bufbuild/protoc-gen-es` from the workspace's reflected
   `FileDescriptorSet` (`proto-types.ts`), giving full IntelliSense and
@@ -139,6 +145,24 @@ protojson body that could not import a script would be `{{ }}` all over again.
 - Both body and metadata strings are **evaluated on the backend in QuickJS** at
   invoke time (same machinery as scripts), so they can import the collection's own
   scripts and npm packages.
+- **Both persist as files, not proto fields**: `body.ts` and `metadata.ts` sit beside
+  `request.json` in the request's directory, written **verbatim** (the only
+  normalization is exactly one trailing newline). So a body edit is a line diff, and a
+  body is `tsc`-checkable, hand-editable, and usable as an esbuild entry point. Always
+  `.ts`, never `.json` — valid JSON is valid TypeScript, so `.ts` is never *wrong*, and
+  esbuild picks its loader from the extension, which would make `require("@/…")` inside a
+  `body.json` entry a syntax error. **Do not normalize on read**: a `body.ts` holding
+  plain protojson that the user never edited must round-trip byte-identical, or the app
+  writes a git diff on a file nobody touched. An absent `body.ts` is legal and reads as
+  `{}`; an **empty `metadata.ts` is not the same as `"{}"`** — empty means "inherit the
+  folder chain" (`resolveInvokeMetadata` treats any non-empty script as authoritative and
+  skips the inherit fold), which is why a new request is seeded with `EmptyBody` for the
+  body and a zero-byte metadata file. A `request.json` still carrying `draftBody` or
+  `draftMetadataScript` **fails the load loudly**, naming the file and the fix: `DiscardUnknown`
+  would otherwise load it fine with an empty body and the next write would delete the
+  body silently. **Folder** metadata is the exception — still inline in `folder.json`.
+  Neither file reaches `ListWorkspaceModules`: a body is an entry point, never an
+  importable module. Plan: [`docs/design/shipped/vscode/phase-2-body-files.md`](docs/design/shipped/vscode/phase-2-body-files.md).
 - **Plain protojson is equally valid** for both, because **valid JSON is valid
   TypeScript** — a JSON object is a TS object literal in expression position, so it is
   not a second case and gets no second code path. There are two forms: a **module**
@@ -794,6 +818,13 @@ is shipped.
   `"name": "smoke"`, and that drift is **intended**: the slug is what UI state,
   `Item.slug` and every on-disk reference are keyed by, and re-slugging would churn git
   history on every rename. Do not "fix" it.
+  **A request directory holds three files** — `request.json` (identity, service, method,
+  middleware, target), `body.ts` and `metadata.ts` — and all three move together on a
+  rename or a move, because the directory is what moves. `body.ts`/`metadata.ts` are
+  reserved slugs, so no child directory can collide with them, and a body-only patch does
+  **not** rewrite `request.json`: a keystroke in the body editor must not touch a file it
+  has nothing to do with. `readChildren` is an ordering pass and deliberately does not
+  read either file — only `readItem` and `ResolveRequest` do.
   **Scripts are the deliberate exception**: a script has no display name at all, its path
   *is* its identity, and renaming one moves the file (`store/scripts.go`). That is what
   makes it importable — an import specifier has to name something stable on disk.
@@ -831,7 +862,7 @@ is shipped.
   writer that is not grpcview. There is no cheap fingerprint of "the set of
   `grpcview.json` files": computing one *is* the scan, which costs ~130ms on a
   5k-directory monorepo. A warm in-memory listing invalidated by filesystem events
-  is [the daemon's](docs/design/planned/daemon.md) to hold; a one-shot CLI process
+  is [the daemon's](docs/design/shipped/daemon.md) to hold; a one-shot CLI process
   can neither keep it nor watch for changes.
 - **go-git supplies only the ignore matcher.** `gitignore.ParsePattern` +
   `NewMatcher`, accumulated per directory as the scan enters it. Its

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultMetadataModule,
   hiddenLineRanges,
+  hostMetadataScript,
   isCanonical,
   META_WRAP_PREFIX,
   META_WRAP_SUFFIX,
@@ -82,5 +83,47 @@ describe("migrateMetadataToTs", () => {
 describe("wrap", () => {
   it("round-trips through isCanonical", () => {
     expect(isCanonical(wrap("{}"))).toBe(true);
+  });
+});
+
+// The store (service/store/codec.go's writeSourceFile) normalizes metadata.ts to exactly one
+// trailing newline on write, so every persisted script arrives here as "<content>\n".
+describe("hostMetadataScript", () => {
+  it("recognizes a canonical script + trailing newline as canonical after hosting", () => {
+    const canonical = defaultMetadataModule();
+    const hosted = hostMetadataScript(canonical + "\n");
+    expect(hosted).toBe(canonical);
+    expect(isCanonical(hosted)).toBe(true);
+  });
+
+  it("hides exactly one line at the start and end for the hosted text", () => {
+    const hosted = hostMetadataScript(defaultMetadataModule() + "\n");
+    const ranges = hiddenLineRanges(hosted);
+    expect(ranges.length).toBe(2);
+    expect(ranges[0].endLine - ranges[0].startLine).toBe(0);
+    expect(ranges[1].endLine - ranges[1].startLine).toBe(0);
+  });
+
+  it("puts the editable region strictly inside the wrapper for the hosted text", () => {
+    const hosted = hostMetadataScript(defaultMetadataModule() + "\n");
+    const bounds = metaBounds(hosted);
+    expect(bounds.first).toBeGreaterThan(1);
+    expect(bounds.last).toBeLessThan(bounds.total);
+  });
+
+  it("leaves an author-written module unchanged apart from the stripped newline", () => {
+    const hosted = hostMetadataScript(MODULE_WITH_IMPORTS + "\n");
+    expect(hosted).toBe(MODULE_WITH_IMPORTS);
+    expect(hiddenLineRanges(hosted)).toEqual([]);
+  });
+
+  it("returns an empty script unchanged", () => {
+    expect(hostMetadataScript("")).toBe("");
+  });
+
+  it("is idempotent", () => {
+    const once = hostMetadataScript(defaultMetadataModule() + "\n");
+    const twice = hostMetadataScript(once);
+    expect(twice).toBe(once);
   });
 });

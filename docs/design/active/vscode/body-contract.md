@@ -1,8 +1,10 @@
 # Enforcing the body/metadata export contract
 
-Cross-cutting: layer 4 ships with [phase 2](./phase-2-body-files.md); layers 2 and 3
-depend on `DiskSink` and land in [phase 5](./phase-5-extension.md) or
-[6](./phase-6-optional.md).
+Cross-cutting: **layer 4 shipped** with [phase 2](../../shipped/vscode/phase-2-body-files.md) —
+the failure now names the store-root-relative `body.ts` whenever the body was read from
+disk, and keeps its unlabeled wording on the wire `Invoke` path, where the body came from
+an editor buffer with no file behind it. Layers 2 and 3 depend on `DiskSink` and land in
+[phase 5](./phase-5-extension.md) or [6](./phase-6-optional.md).
 
 > **Scope.** This doc is about *editor enforcement of the module form*, which is one of
 > the two accepted body forms. The authoritative cross-surface contract is
@@ -100,7 +102,7 @@ supplies the wrapper; a user who pastes an object gets a clean runtime error nam
 file and field.
 
 This is also why the file extension must not gate anything (see
-[phase 2](./phase-2-body-files.md)): `body.json` and `body.ts` differ in what VS Code
+[phase 2](../../shipped/vscode/phase-2-body-files.md)): `body.json` and `body.ts` differ in what VS Code
 does *for the author*, never in what the backend accepts.
 
 ## The conclusion that matters

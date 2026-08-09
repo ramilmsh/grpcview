@@ -167,13 +167,23 @@ func (c *Collection) CreateFolder(_ context.Context, parent []string, name strin
 	})
 }
 
+// Always writes all three files, so "file absent" is never a state a reader has to
+// interpret. metadata.ts is seeded EMPTY, never EmptyBody: resolveInvokeMetadata treats any
+// non-empty script as authoritative and skips the folder-metadata inherit fold, so a "{}"
+// seed would silently break folder-metadata inheritance for every new request.
 func (c *Collection) CreateRequest(_ context.Context, parent []string, name, service, method string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
-		return writeMessage(filepath.Join(itemDir, requestFileName), &grpcviewstorev1.Request{
+		if err := writeMessage(filepath.Join(itemDir, RequestFileName), &grpcviewstorev1.Request{
 			Meta:    &grpcviewstorev1.ItemMeta{Name: name},
 			Service: service,
 			Method:  method,
-		})
+		}); err != nil {
+			return err
+		}
+		if err := writeSourceFile(requestBodyPath(itemDir), EmptyBody); err != nil {
+			return err
+		}
+		return writeSourceFile(requestMetadataPath(itemDir), "")
 	})
 }
 
@@ -236,7 +246,9 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	if patch.Name == nil && patch.Service == nil && patch.Method == nil && patch.DraftBody == nil && patch.DraftMetadataScript == nil && !patch.SetMiddleware && !patch.SetTarget {
 		return nil
 	}
-	p := filepath.Join(itemDir, requestFileName)
+
+	// Validate (and mutate the in-memory copy) before any write, so a rejected rename never
+	// leaves a body/metadata write applied with nothing on request.json to match it.
 	dr := ch.request
 	if patch.Name != nil && *patch.Name != name {
 		if _, exists := findByName(present, *patch.Name); exists {
@@ -253,19 +265,30 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	if patch.Method != nil {
 		dr.Method = *patch.Method
 	}
-	if patch.DraftBody != nil {
-		dr.DraftBody = *patch.DraftBody
-	}
-	if patch.DraftMetadataScript != nil {
-		dr.DraftMetadataScript = *patch.DraftMetadataScript
-	}
 	if patch.SetMiddleware {
 		dr.Middleware = patch.Middleware
 	}
 	if patch.SetTarget {
 		dr.Target = serverToTarget(patch.Target)
 	}
-	return writeMessage(p, dr)
+
+	if patch.DraftBody != nil {
+		if err := writeSourceFile(requestBodyPath(itemDir), *patch.DraftBody); err != nil {
+			return err
+		}
+	}
+	if patch.DraftMetadataScript != nil {
+		if err := writeSourceFile(requestMetadataPath(itemDir), *patch.DraftMetadataScript); err != nil {
+			return err
+		}
+	}
+
+	// A body/metadata-only patch must not rewrite request.json: a body keystroke would
+	// otherwise touch a file it has nothing to do with.
+	if patch.Name == nil && patch.Service == nil && patch.Method == nil && !patch.SetMiddleware && !patch.SetTarget {
+		return nil
+	}
+	return writeMessage(filepath.Join(itemDir, RequestFileName), dr)
 }
 
 func (c *Collection) UpdateFolder(_ context.Context, parent []string, name string, patch FolderPatch) error {
@@ -364,17 +387,51 @@ func (c *Collection) resolveRequestChild(parent []string, name string) (parentDi
 	return parentDir, ch, nil
 }
 
-func (c *Collection) ResolveRequest(_ context.Context, parent []string, name string) (*grpcviewv1.Request, error) {
+func (c *Collection) ResolveRequest(ctx context.Context, parent []string, name string) (*grpcviewv1.Request, error) {
+	req, _, _, err := c.ResolveRequestFiles(ctx, parent, name)
+	return req, err
+}
+
+// ResolveRequestFiles is what ResolveRequest delegates to, plus the two source paths made
+// relative to the STORE ROOT (not the collection root), so an error naming them reads like
+// "example/tree/workspace/listcollections/body.ts" and leaks no home directory.
+func (c *Collection) ResolveRequestFiles(_ context.Context, parent []string, name string) (req *grpcviewv1.Request, bodyPath, metadataPath string, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.ensureExists(); err != nil {
-		return nil, err
+	if err = c.ensureExists(); err != nil {
+		return nil, "", "", err
 	}
-	_, ch, err := c.resolveRequestChild(parent, name)
+	parentDir, ch, err := c.resolveRequestChild(parent, name)
 	if err != nil {
-		return nil, err
+		return nil, "", "", err
 	}
-	return diskToWireRequest(ch.name, ch.request), nil
+	itemDir := filepath.Join(parentDir, ch.slug)
+
+	body, err := readSourceFile(requestBodyPath(itemDir))
+	if err != nil {
+		return nil, "", "", err
+	}
+	metadataScript, err := readSourceFile(requestMetadataPath(itemDir))
+	if err != nil {
+		return nil, "", "", err
+	}
+	bodyPath, err = c.storeRelPath(requestBodyPath(itemDir))
+	if err != nil {
+		return nil, "", "", err
+	}
+	metadataPath, err = c.storeRelPath(requestMetadataPath(itemDir))
+	if err != nil {
+		return nil, "", "", err
+	}
+	return diskToWireRequest(ch.name, ch.request, body, metadataScript), bodyPath, metadataPath, nil
+}
+
+func (c *Collection) storeRelPath(p string) (string, error) {
+	rel, err := filepath.Rel(c.store.Root(), p)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 func (c *Collection) RequestMiddleware(_ context.Context, parent []string, name string) ([]string, error) {
@@ -662,9 +719,9 @@ func (c *Collection) readChildren(dir string) ([]childEntry, error) {
 				return nil, err
 			}
 			children = append(children, childEntry{slug: slug, name: cmp.Or(ff.GetMeta().GetName(), slug), kind: kindFolder, folder: ff})
-		case fileExists(filepath.Join(sub, requestFileName)):
+		case fileExists(filepath.Join(sub, RequestFileName)):
 			rf := &grpcviewstorev1.Request{}
-			if err := readMessage(filepath.Join(sub, requestFileName), rf); err != nil {
+			if err := readRequestMessage(filepath.Join(sub, RequestFileName), rf); err != nil {
 				return nil, err
 			}
 			children = append(children, childEntry{slug: slug, name: cmp.Or(rf.GetMeta().GetName(), slug), kind: kindRequest, request: rf})
@@ -715,7 +772,15 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 			}},
 		}, nil
 	case kindRequest:
-		req := diskToWireRequest(ch.name, ch.request)
+		body, err := readSourceFile(requestBodyPath(dir))
+		if err != nil {
+			return nil, err
+		}
+		metadataScript, err := readSourceFile(requestMetadataPath(dir))
+		if err != nil {
+			return nil, err
+		}
+		req := diskToWireRequest(ch.name, ch.request, body, metadataScript)
 		req.History = c.readHistory(dir)
 		return &grpcviewv1.Item{
 			Name:    ch.name,

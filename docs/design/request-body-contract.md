@@ -160,9 +160,10 @@ hand-written or model-written body is where it will bite.
 **Do not rewrite a body the user did not edit.** Normalization on the way *in* to an
 editor must not be persisted on its own. If the CLI writes `{"userId":"u_1"}` and the
 user later opens that request in the web UI, displaying it inside the hidden wrapper is
-fine; **saving** it back as `export default async () => ({ … })` is not. In a
-file-backed world ([VS Code phase 2](./active/vscode/phase-2-body-files.md)) that silent
-conversion is a spurious git diff on a file the user never touched. Persist the form the
+fine; **saving** it back as `export default async () => ({ … })` is not. Bodies are
+files now ([VS Code phase 2](./shipped/vscode/phase-2-body-files.md)), so that silent
+conversion *is* a spurious git diff on a file the user never touched — the store writes
+body bytes verbatim and normalizes nothing but the trailing newline. Persist the form the
 user authored; convert only on a real edit.
 
 ## What each surface does with this
@@ -170,7 +171,7 @@ user authored; convert only on a real edit.
 | Surface | Sends | Notes |
 |---|---|---|
 | Web UI | form 1 | Hidden wrapper is view-only; the return annotation is what enables excess-property checking, so authoring stays module-shaped |
-| VS Code | either | `body.ts` or `body.json` on disk; the extension drives editor tooling, **not** the sniff |
+| VS Code | either | Always `body.ts` on disk (phase 2 settled the extension: valid JSON is valid TS, so `.ts` is never *wrong*, and only a `.ts` entry point survives esbuild's loader choice). The extension drives editor tooling, **not** the sniff |
 | CLI | either | `-f body.json`, `-f body.ts`, or stdin; bytes passed through unchanged |
 | MCP | form 2 | An agent is told "a JSON object", with the module form as the escape hatch for generated values |
 

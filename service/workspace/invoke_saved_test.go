@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -534,4 +535,48 @@ func TestInvokeSavedEmptyBodyRuns(t *testing.T) {
 	if msg := decodeEchoMessage(t, got.GetResponse().GetResponse()); msg != "echo: " {
 		t.Fatalf("echoed message = %q, want %q", msg, "echo: ")
 	}
+}
+
+// A caller supplying explicit Messages is evaluating its own bytes, not the saved request's
+// body.ts — so an evaluation error must not point at a file that was never read.
+func TestInvokeSavedBodyAttributionOnlyWhenReadFromDisk(t *testing.T) {
+	w := newTestWorkspaceWithEngine(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	port := echoTarget(t, w, ctx, startEchoServer)
+
+	saveRequest(t, w, ctx, nil, "Echo", "Unary",
+		`export default () => { unterminated`, loopback(port))
+
+	t.Run("body read from disk names body.ts", func(t *testing.T) {
+		_, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
+			Spec: &grpcviewv1.SavedInvokeSpec{
+				Collection: testWorkspace,
+				ItemName:   "Echo",
+			},
+		})
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Fatalf("code = %v (%v), want FailedPrecondition", connect.CodeOf(err), err)
+		}
+		if !strings.Contains(err.Error(), "body.ts") {
+			t.Fatalf("error = %v, want it to name body.ts", err)
+		}
+	})
+
+	t.Run("explicit messages do not name body.ts", func(t *testing.T) {
+		_, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{
+			Spec: &grpcviewv1.SavedInvokeSpec{
+				Collection: testWorkspace,
+				ItemName:   "Echo",
+				Messages:   []string{`export default () => { also unterminated`},
+			},
+		})
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Fatalf("code = %v (%v), want FailedPrecondition", connect.CodeOf(err), err)
+		}
+		if strings.Contains(err.Error(), "body.ts") {
+			t.Fatalf("error = %v, must not name body.ts: the bytes came from the caller's "+
+				"explicit messages, not the file on disk", err)
+		}
+	})
 }

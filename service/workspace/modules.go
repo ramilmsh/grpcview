@@ -81,6 +81,11 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 		if !strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".d.ts") {
 			return nil
 		}
+		if name == store.BodyFileName || name == store.MetadataFileName {
+			if _, err := os.Stat(filepath.Join(filepath.Dir(path), store.RequestFileName)); err == nil {
+				return nil
+			}
+		}
 
 		info, err := d.Info()
 		if err != nil {

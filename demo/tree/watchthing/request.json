@@ -4,9 +4,7 @@
   },
   "service": "grpcview.v1.WorkspaceService",
   "method": "DescribeMethod",
-  "draftBody": "",
   "middleware": [],
-  "draftMetadataScript": "",
   "target": {
     "address": "127.0.0.1:10000",
     "tls": false

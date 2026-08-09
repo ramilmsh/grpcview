@@ -4,9 +4,7 @@
   },
   "service":  "grpcview.v1.WorkspaceService",
   "method":  "RunScript",
-  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  collection: \"example\",\n  // The middleware attached to this request is a specifier, not a name:\n  // `#/scripts/trace-headers.ts`. It runs after this body is evaluated, wraps\n  // this expression so the scratchpad grpcview actually runs returns a prefixed\n  // string, and stamps two extra headers.\n  source: '\"before middleware\"',\n}\n)",
   "middleware":  [
     "#/scripts/trace-headers.ts"
-  ],
-  "draftMetadataScript":  ""
+  ]
 }

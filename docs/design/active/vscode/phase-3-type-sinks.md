@@ -1,6 +1,6 @@
 # Phase 3 — extract the type producer/sink seam
 
-**Prereqs:** none strictly (independent of [phase 2](./phase-2-body-files.md)).
+**Prereqs:** none strictly (independent of [phase 2](../../shipped/vscode/phase-2-body-files.md)).
 **Unblocks:** `DiskSink` (phase 5), tsserver-plugin and tsgo-IPC sinks (phase 6).
 See [`README.md`](./README.md) for the producer/sink model and the write-only
 invariant.

@@ -1,12 +1,17 @@
 package store
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 )
 
 const schemaVersion = 1
@@ -37,6 +42,62 @@ func readMessage(path string, m proto.Message) error {
 		return err
 	}
 	if err := unmarshalOpts.Unmarshal(data, m); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", path, err)
+	}
+	return nil
+}
+
+func requestBodyPath(itemDir string) string { return filepath.Join(itemDir, BodyFileName) }
+
+func requestMetadataPath(itemDir string) string { return filepath.Join(itemDir, MetadataFileName) }
+
+// An absent file is legal: the request-body contract reads it as EmptyBody.
+func readSourceFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// Bytes are preserved verbatim; the only normalization is ensuring exactly one trailing
+// newline on non-empty content, so a hand-authored body.ts/metadata.ts never gets a
+// spurious git diff from re-wrapping or reformatting. An empty src stays a zero-byte file.
+func writeSourceFile(path, src string) error {
+	data := []byte(src)
+	if len(data) > 0 {
+		data = append(bytes.TrimRight(data, "\n"), '\n')
+	}
+	return writeFileAtomic(path, data, 0o644)
+}
+
+// The loud hard break for the request.json -> body.ts/metadata.ts migration: unmarshalOpts
+// discards unknown fields, so a stale request.json with draftBody/draftMetadataScript would
+// otherwise load "successfully" with an empty body and the next write would silently drop
+// it. Checked as top-level JSON keys, not a substring scan: a request body legitimately
+// contains the string "draftBody" inside its own payload.
+func readRequestMessage(path string, rf *grpcviewstorev1.Request) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(data, &top); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", path, err)
+	}
+	for _, stale := range []string{"draftBody", "draft_body", "draftMetadataScript", "draft_metadata_script"} {
+		if _, ok := top[stale]; ok {
+			return fmt.Errorf(
+				"%s: stale key %q — request bodies and metadata scripts now live in sibling %s / %s files; "+
+					"move the value into the matching file in this directory and delete this key",
+				path, stale, BodyFileName, MetadataFileName,
+			)
+		}
+	}
+	if err := unmarshalOpts.Unmarshal(data, rf); err != nil {
 		return fmt.Errorf("unmarshal %s: %w", path, err)
 	}
 	return nil

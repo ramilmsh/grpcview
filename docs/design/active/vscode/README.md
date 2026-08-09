@@ -1,11 +1,11 @@
 # grpcview — VS Code compatibility track
 
-**Status:** Phase 1 is **shipped** — sub-phases 1a through 1e are all on trunk and their
-behavior is documented in `AGENTS.md`. Phases 2–6 are planning only.
+**Status:** Phases 1 and 2 are **shipped** — on trunk, behavior documented in `AGENTS.md`.
+Phases 3–6 are planning only.
 
-**The track spans folders**, sorted per doc rather than as a block: phase 1 sits in
-[`shipped/vscode/`](../../shipped/vscode/) and the daemon it spun off shipped too
-([`shipped/daemon.md`](../../shipped/daemon.md)), while this README and phases 2–6 stay in `active/`.
+**The track spans folders**, sorted per doc rather than as a block: phases 1 and 2 sit in
+[`shipped/vscode/`](../../shipped/vscode/) and the daemon phase 1 spun off shipped too
+([`shipped/daemon.md`](../../shipped/daemon.md)), while this README and phases 3–6 stay in `active/`.
 The table below is the map; every link works from here.
 
 Every phase doc, phase 1 included, is written in the present tense about the code as it
@@ -22,7 +22,7 @@ two architecture decisions every phase depends on.
 | Phase | Doc | Summary |
 |---|---|---|
 | 1 | [`phase-1-workspace.md`](../../shipped/vscode/phase-1-workspace.md) | The workspace is the repo; collections are what's in it — **shipped (1a–1e)** |
-| 2 | [`phase-2-body-files.md`](./phase-2-body-files.md) | Body + metadata become real `.ts` files on disk |
+| 2 | [`phase-2-body-files.md`](../../shipped/vscode/phase-2-body-files.md) | Body + metadata become real `.ts` files on disk — **shipped** |
 | 3 | [`phase-3-type-sinks.md`](./phase-3-type-sinks.md) | Extract the type producer/sink seam |
 | 4 | [`phase-4-request-management.md`](./phase-4-request-management.md) | Document identity, dirty state, preview tabs, commands |
 | 5 | [`phase-5-extension.md`](./phase-5-extension.md) | The extension itself |

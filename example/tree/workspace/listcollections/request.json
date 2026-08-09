@@ -4,7 +4,5 @@
   },
   "service":  "grpcview.v1.WorkspaceService",
   "method":  "ListCollections",
-  "draftBody":  "export default async (): Promise<RequestMessage> => (\n{\n  // ListCollectionsRequest has no fields: grpcview listing its own collections\n  // needs no arguments. The empty object is still a whole TypeScript module —\n  // the `export default` wrapper above is the part you normally never write.\n  //\n  // No target either. The request falls back to the collection's first\n  // reflection source, localhost:10000, which is grpcview's own workspace\n  // server reflecting grpcview.v1.WorkspaceService.\n}\n)",
-  "middleware":  [],
-  "draftMetadataScript":  ""
+  "middleware":  []
 }

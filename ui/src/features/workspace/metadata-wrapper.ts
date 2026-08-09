@@ -17,6 +17,15 @@ export const wrap = (obj: string): string => META_WRAP_PREFIX + obj + META_WRAP_
 export const isCanonical = (text: string): boolean =>
   text.startsWith(META_WRAP_PREFIX) && text.endsWith(META_WRAP_SUFFIX);
 
+// hostMetadataScript is the read-seam counterpart of body-wrapper.ts's migrateBodyToTs, needed
+// because metadata has no migration step of its own (RequestWorkspace.tsx reads
+// request.draftMetadataScript raw). The store (service/store/codec.go's writeSourceFile)
+// normalizes metadata.ts to exactly one trailing newline on write, so a persisted script arrives
+// here as "<canonical>\n" — one byte isCanonical never matched. Stripping it before hosting is
+// what re-recognizes the canonical wrapper; the store re-adds exactly one on the next write, so
+// the round trip is byte-identical and produces no spurious git diff. An empty script stays "".
+export const hostMetadataScript = (script: string): string => script.replace(/\n+$/, "");
+
 // Never `wrap("")`, which serializes to `=> ()` — a JS syntax error.
 const EMPTY_METADATA = "{\n  \n}";
 
