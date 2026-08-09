@@ -39,7 +39,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`mcp.md`](./shipped/mcp.md) | `grpcview mcp` — the `WorkspaceService` as MCP tools over stdio (2026-08-06). Kept for the three things the four-phase plan got wrong; the plan itself is deleted. |
 | [`example-collection-fixes.md`](./shipped/example-collection-fixes.md) | Five defects an agent-only author hit building the `example` collection — all five fixed (2026-08-07). Kept for the measurements and for why the obvious fix to each was wrong. |
 | [`daemon.md`](./shipped/daemon.md) | One daemon per workspace — registration file, connect-or-spawn, idle exit (2026-08-08). Kept for the naming/token/unix-socket calls it closes and the two deferrals it names. |
-| [`script-imports/`](./shipped/script-imports) | A script is a `.ts` file imported as `@/path` or `~/path`; `script.json`, `ScriptKind`, the generator prelude and the `gv` global are gone (2026-08-08). Kept for the rejected alternatives, the esbuild measurements, and the two defects only the browser pass found. |
+| [`script-imports/`](./shipped/script-imports) | A script is a `.ts` file imported as `@/path` or `#/path`; `script.json`, `ScriptKind`, the generator prelude and the `gv` global are gone (2026-08-08). Kept for the rejected alternatives, the esbuild measurements, and the two defects only the browser pass found. |
 
 ## active/
 

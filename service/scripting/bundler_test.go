@@ -230,7 +230,7 @@ func TestPathSigilResolution(t *testing.T) {
 	in := Input{CollectionRoot: collRoot}
 
 	res, err := e.RunScenario(context.Background(),
-		`import { x } from "@/lib/x"; import { y } from "~/scripts/y"; x + y`, Grant{}, in)
+		`import { x } from "@/lib/x"; import { y } from "#/scripts/y"; x + y`, Grant{}, in)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestPathSigilContainmentGuard(t *testing.T) {
 	})
 
 	t.Run("collection-escape", func(t *testing.T) {
-		_, err := e.RunScenario(context.Background(), `import x from "~/../../outside"; x`,
+		_, err := e.RunScenario(context.Background(), `import x from "#/../../outside"; x`,
 			Grant{}, Input{CollectionRoot: collRoot})
 		if err == nil || !strings.Contains(err.Error(), "resolves outside the collection") {
 			t.Fatalf("got %v, want a collection containment error", err)
@@ -276,7 +276,7 @@ func TestPathSigilNoCollectionRoot(t *testing.T) {
 	wsRoot := t.TempDir()
 	e := newEngine(t, WithWorkspaceRoot(wsRoot))
 
-	_, err := e.RunScenario(context.Background(), `import x from "~/scripts/y"; x`, Grant{}, Input{})
+	_, err := e.RunScenario(context.Background(), `import x from "#/scripts/y"; x`, Grant{}, Input{})
 	if err == nil || !strings.Contains(err.Error(), "no collection root for this run") {
 		t.Fatalf("got %v, want a clear no-collection-root error", err)
 	}

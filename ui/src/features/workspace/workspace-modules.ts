@@ -11,7 +11,7 @@ export function workspaceModuleUri(path: string): string {
   return `${WS_PREFIX}/${path}`;
 }
 
-// The collection root segment `~/*` resolves against. "." (the workspace-root collection,
+// The collection root segment `#/*` resolves against. "." (the workspace-root collection,
 // decisions.md §8) maps to the workspace prefix itself — NOT `${WS_PREFIX}/.`, which Monaco's
 // resolver would treat as a literal "." path segment rather than the root.
 export function collectionModulePrefix(collectionId: string | null | undefined): string {
@@ -19,13 +19,13 @@ export function collectionModulePrefix(collectionId: string | null | undefined):
   return `${WS_PREFIX}/${collectionId}`;
 }
 
-// `@/*` always resolves against the workspace root; `~/*` against the ACTIVE collection's root,
+// `@/*` always resolves against the workspace root; `#/*` against the ACTIVE collection's root,
 // re-derived whenever it changes.
 export function workspaceModulePaths(
   collectionId: string | null | undefined
 ): NonNullable<Monaco.languages.typescript.CompilerOptions["paths"]> {
   return {
     "@/*": [`${WS_PREFIX}/*`],
-    "~/*": [`${collectionModulePrefix(collectionId)}/*`],
+    "#/*": [`${collectionModulePrefix(collectionId)}/*`],
   };
 }

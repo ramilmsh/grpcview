@@ -100,7 +100,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 
 	t.Run("typescript body imports and calls a saved script", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
-			"import mkid from \"~/scripts/mkid.ts\";\n" +
+			"import mkid from \"#/scripts/mkid.ts\";\n" +
 				`export default () => ({ id: mkid(), n: 7 })`,
 		}, nil)
 		if err != nil {
@@ -113,7 +113,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 
 	t.Run("an expression body composes a saved script via require", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace,
-			[]string{`{ "id": require("~/scripts/mkid.ts").default() }`}, nil)
+			[]string{`{ "id": require("#/scripts/mkid.ts").default() }`}, nil)
 		if err != nil {
 			t.Fatalf("resolveInvokeBody: %v", err)
 		}
@@ -125,7 +125,7 @@ func TestResolveInvokeBodyComposition(t *testing.T) {
 	t.Run("an unreferenced broken script does not break the body", func(t *testing.T) {
 		writeScript(t, w, ctx, "scripts/broken.ts", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
-			"import mkid from \"~/scripts/mkid.ts\";\n" +
+			"import mkid from \"#/scripts/mkid.ts\";\n" +
 				`export default () => ({ id: mkid() })`,
 		}, nil)
 		if err != nil {
@@ -143,11 +143,11 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	writeScript(t, w, ctx, "scripts/inner.ts", `export default () => "in"`)
 	writeScript(t, w, ctx, "scripts/outer.ts",
-		"import inner from \"~/scripts/inner.ts\";\n"+`export default () => inner()`)
+		"import inner from \"#/scripts/inner.ts\";\n"+`export default () => inner()`)
 
 	t.Run("body importing outer resolves the transitive import chain", func(t *testing.T) {
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
-			"import outer from \"~/scripts/outer.ts\";\n" +
+			"import outer from \"#/scripts/outer.ts\";\n" +
 				`export default () => ({ v: outer() })`,
 		}, nil)
 		if err != nil {
@@ -161,7 +161,7 @@ func TestResolveInvokeBodyTransitiveComposition(t *testing.T) {
 	t.Run("an unrelated broken script not reachable does not break the body", func(t *testing.T) {
 		writeScript(t, w, ctx, "scripts/broken.ts", `export default () => "unterminated`)
 		out, err := w.resolveInvokeBody(ctx, testWorkspace, []string{
-			"import outer from \"~/scripts/outer.ts\";\n" +
+			"import outer from \"#/scripts/outer.ts\";\n" +
 				`export default () => ({ v: outer() })`,
 		}, nil)
 		if err != nil {

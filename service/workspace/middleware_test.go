@@ -15,7 +15,7 @@ import (
 
 // createMiddleware writes a script at a collection-relative path, e.g. "scripts/inject.ts".
 // Middleware has no kind any more — a request attaches it by specifier (middleware_test.go's own
-// callers use "~/scripts/...", against the collection this helper always writes into).
+// callers use "#/scripts/...", against the collection this helper always writes into).
 func createMiddleware(t *testing.T, w Workspace, ctx context.Context, path, source string) {
 	t.Helper()
 	writeScript(t, w, ctx, path, source)
@@ -72,7 +72,7 @@ func TestInvokeMiddlewareInjectsMetadata(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 	createMiddleware(t, w, ctx, "scripts/inject.ts", `export function handle(ctx){ ctx.metadata["x-injected"] = "yes"; return ctx }`)
-	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"~/scripts/inject.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"#/scripts/inject.ts"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"hi"}`)
@@ -89,7 +89,7 @@ func TestInvokeMiddlewareRewritesBody(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 	createMiddleware(t, w, ctx, "scripts/rewrite.ts", `export function handle(ctx){ ctx.body.message = "rewritten"; return ctx }`)
-	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"~/scripts/rewrite.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"#/scripts/rewrite.ts"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"orig"}`)
@@ -104,7 +104,7 @@ func TestInvokeMiddlewareChainOrdered(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	createMiddleware(t, w, ctx, "scripts/first.ts", `export function handle(ctx){ ctx.body.message = "A"; return ctx }`)
 	createMiddleware(t, w, ctx, "scripts/second.ts", `export function handle(ctx){ ctx.body.message = ctx.body.message + "B"; return ctx }`)
-	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"~/scripts/first.ts", "~/scripts/second.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"#/scripts/first.ts", "#/scripts/second.ts"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"orig"}`)
@@ -134,9 +134,9 @@ func TestInvokeMiddlewareErrors(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	createMiddleware(t, w, ctx, "scripts/boom.ts", `export function handle(ctx){ throw new Error("nope") }`)
 	createMiddleware(t, w, ctx, "scripts/malformed.ts", `export function handle(ctx){ return 42 }`)
-	saveRequestWithMiddleware(t, w, ctx, "Boom", []string{"~/scripts/boom.ts"})
-	saveRequestWithMiddleware(t, w, ctx, "Malformed", []string{"~/scripts/malformed.ts"})
-	saveRequestWithMiddleware(t, w, ctx, "Missing", []string{"~/scripts/ghost.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Boom", []string{"#/scripts/boom.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Malformed", []string{"#/scripts/malformed.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Missing", []string{"#/scripts/ghost.ts"})
 	saveRequestWithMiddleware(t, w, ctx, "BadGrammar", []string{"ghost"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
@@ -161,7 +161,7 @@ func TestInvokeMiddlewareSpecifierEscapingItsRootIsRejected(t *testing.T) {
 	w := newTestWorkspaceWithEngine(t)
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
-	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"~/../../etc/passwd"})
+	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"#/../../etc/passwd"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	_, err := w.Invoke(ctx, connect.NewRequest(&grpcviewv1.InvokeRequest{
@@ -177,7 +177,7 @@ func TestInvokeMiddlewareSpecifierEscapingItsRootIsRejected(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition (err=%v)", connect.CodeOf(err), err)
 	}
-	if !strings.Contains(err.Error(), "~/../../etc/passwd") {
+	if !strings.Contains(err.Error(), "#/../../etc/passwd") {
 		t.Fatalf("error = %v, want it to name the offending specifier", err)
 	}
 }
@@ -218,7 +218,7 @@ func TestStreamInvokeRunsMiddleware(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 	createMiddleware(t, w, ctx, "scripts/streamrewrite.ts", `export function handle(ctx){ ctx.body.message = "streamed"; return ctx }`)
-	saveRequestWithMiddleware(t, w, ctx, "Stream", []string{"~/scripts/streamrewrite.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Stream", []string{"#/scripts/streamrewrite.ts"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	msg := echoStreamReq(port, "ServerStream", `{"message":"orig","count":2}`)
@@ -255,9 +255,9 @@ func TestInvokeMiddlewareCallsAnImportedScript(t *testing.T) {
 	ensureWorkspace(t, w, ctx)
 	writeScript(t, w, ctx, "scripts/traceId.ts", `export default () => "t-42"`)
 	createMiddleware(t, w, ctx, "scripts/stamp.ts",
-		"import traceId from \"~/scripts/traceId.ts\";\n"+
+		"import traceId from \"#/scripts/traceId.ts\";\n"+
 			`export function handle(ctx){ ctx.metadata["x-trace"] = traceId(); return ctx }`)
-	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"~/scripts/stamp.ts"})
+	saveRequestWithMiddleware(t, w, ctx, "Echo", []string{"#/scripts/stamp.ts"})
 
 	port := echoTarget(t, w, ctx, startEchoServer)
 	resp := echoInvoke(t, w, ctx, port, "Echo", `{"message":"hi"}`)

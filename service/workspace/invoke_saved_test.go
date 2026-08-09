@@ -199,7 +199,7 @@ func TestInvokeSavedParamsReachTheBody(t *testing.T) {
 
 	writeScript(t, w, ctx, "scripts/prefix.ts", `export default () => "p:"`)
 	saveRequest(t, w, ctx, nil, "Echo", "Unary",
-		"import prefix from \"~/scripts/prefix.ts\";\n"+requestParamsImport+
+		"import prefix from \"#/scripts/prefix.ts\";\n"+requestParamsImport+
 			`export default () => ({ message: prefix() + params.who })`, loopback(port))
 
 	got, err := invokeSaved(t, w, ctx, &grpcviewv1.InvokeSavedRequest{

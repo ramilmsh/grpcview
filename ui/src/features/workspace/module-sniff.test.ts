@@ -8,7 +8,7 @@ describe("isModule", () => {
 
   it("is true for a module with a leading import", () => {
     expect(
-      isModule('import { x } from "~/scripts/x";\nexport default async () => x();')
+      isModule('import { x } from "#/scripts/x";\nexport default async () => x();')
     ).toBe(true);
   });
 

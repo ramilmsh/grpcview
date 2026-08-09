@@ -245,11 +245,11 @@ Two sigils, both resolving to real files:
 | specifier | resolves against |
 | --- | --- |
 | `@/…` | the **workspace root** — anything, including another collection's scripts |
-| `~/…` | the **collection root** of the script being compiled |
+| `#/…` | the **collection root** of the script being compiled |
 
 Facts that are load bearing:
 
-- **One plugin, `pathResolverPlugin` (`bundler.go`), filter `^[@~]/`, and its position in
+- **One plugin, `pathResolverPlugin` (`bundler.go`), filter `^[@#]/`, and its position in
   the plugin list is a contract**: it must claim these before `registryResolverPlugin`'s
   `^[^./]` filter, which would otherwise take them for npm packages. `grpcviewModulesPlugin`
   sits ahead of both for the same reason.
@@ -268,7 +268,7 @@ Facts that are load bearing:
 - **Computed specifiers are rejected before the build** (`rejectComputedImports`). esbuild
   reports neither an error nor a warning for `require(p)`, and emits code that fails at run
   time. A conservative regex is correct here: we are forbidding, not resolving.
-- **`Request.middleware` holds specifiers, not names** — `~/scripts/trace-headers.ts` or
+- **`Request.middleware` holds specifiers, not names** — `#/scripts/trace-headers.ts` or
   `@/lib/mw/auth.ts`, stored exactly as written, with no canonicalization. The source is read
   from **disk** at the resolved path (`resolveMiddlewareSpecifier` in
   `service/workspace/middleware.go`, which mirrors the plugin's two sigils and containment
@@ -281,7 +281,7 @@ Facts that are load bearing:
   that offers each workspace module's exports (parsed in `auto-import.ts`) with an
   `additionalTextEdits` that writes the `import`, skipping names already in scope so it never
   duplicates the built-in provider. It computes the specifier itself, so the inserted form is
-  always `~/` or `@/` and never relative.
+  always `#/` or `@/` and never relative.
 - **The bundle cache is keyed over the whole graph.** `Metafile: true` on every build,
   `cacheKey` covers `(cacheSalt, variant, grant, collectionRoot, source)`, and the resolved
   input list is stored *with* the compiled output and re-hashed on every hit — a hit whose

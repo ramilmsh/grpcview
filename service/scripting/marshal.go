@@ -13,7 +13,7 @@ type Input struct {
 	Args              []any
 	Params            map[string]any
 	InheritedMetadata map[string][]string
-	// Absolute path of the compiling script's collection; empty disables `~/` imports.
+	// Absolute path of the compiling script's collection; empty disables `#/` imports.
 	CollectionRoot string
 }
 

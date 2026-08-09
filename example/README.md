@@ -61,7 +61,7 @@ Workspace/                 folder metadata: two headers everything below inherit
   DescribeMethod (JSON)    a plain protojson body — valid JSON is valid TypeScript
   RunScript (params)       `params` from grpcview:request, with a default for the one param
   RunScript (generators)   body and metadata both import scripts from this collection
-  RunScript (middleware)   ~/scripts/trace-headers.ts rewrites the body and stamps two headers
+  RunScript (middleware)   #/scripts/trace-headers.ts rewrites the body and stamps two headers
   Invoke (chained)         a body built by invoke(), asking grpcview to call itself
   Streaming/               folder metadata in expression form, spreading its parent's
     InvokeStreaming        grpcview streaming grpcview: two frames and a result
@@ -69,7 +69,7 @@ Workspace/                 folder metadata: two headers everything below inherit
 scripts/
   ids.ts                   exports requestId — imported by two bodies and the middleware
   stamp.ts                 imports dayjs, bundled from the embedded allowlist
-  trace-headers.ts         middleware, attached to one request by its `~/` specifier
+  trace-headers.ts         middleware, attached to one request by its `#/` specifier
   smoke.ts                 the scenario — 13 assert checks over the saved requests
 ```
 
@@ -82,8 +82,8 @@ second service to bounce it off.
 ## Imports, and the two grammars
 
 A script has no name and no kind: it is a `.ts` file, and it is reached by
-importing its path. `~/` resolves against the collection root, `@/` against the
-workspace root, so `~/scripts/ids` and `@/example/scripts/ids` are the same file
+importing its path. `#/` resolves against the collection root, `@/` against the
+workspace root, so `#/scripts/ids` and `@/example/scripts/ids` are the same file
 named from two places. Nothing grpcview-specific is a global; `invoke`, `assert`,
 `inherit` and `params` come from `grpcview:` modules.
 
@@ -106,8 +106,8 @@ rejected before the bundle.
 | Target fallback | no request carries a target; each falls back to the collection's first *reflection* source, which is grpcview itself |
 | protojson body | `Workspace/DescribeMethod (JSON)` — no wrapper, no `{{ }}`, just JSON |
 | TypeScript body | every other request — a bare object literal under a hidden `export default` wrapper |
-| Collection-relative import (`~/`) | `Workspace/RunScript (generators)` imports `~/scripts/ids` and `~/scripts/stamp` |
-| Import from a middleware | `scripts/trace-headers.ts` imports `~/scripts/ids` — a middleware is an ordinary module |
+| Collection-relative import (`#/`) | `Workspace/RunScript (generators)` imports `#/scripts/ids` and `#/scripts/stamp` |
+| Import from a middleware | `scripts/trace-headers.ts` imports `#/scripts/ids` — a middleware is an ordinary module |
 | `require(…)` in expression position | `Workspace/Streaming/` folder metadata |
 | npm dependency | `scripts/stamp.ts` imports `dayjs`, bundled by esbuild from the embedded allowlist — no `node_modules`, no network |
 | A deterministic sandbox | the clock starts pinned at `2022-01-01T00:00:00Z` and `Math.random()` is seeded per instance, so two runs of `--dry-run` print the same body |

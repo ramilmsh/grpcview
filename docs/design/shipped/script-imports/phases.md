@@ -9,7 +9,7 @@ commit once the orchestrator has re-run its gates.
 | phase | scope | status |
 |---|---|---|
 | P0 | protos + store: `.ts` files replace `script.json`, `ScriptKind` deleted | landed |
-| P1 | scripting: `@/` + `~/` resolver plugin, metafile-keyed cache, computed-specifier rejection | landed |
+| P1 | scripting: `@/` + `#/` resolver plugin, metafile-keyed cache, computed-specifier rejection | landed |
 | P2 | scripting: `grpcview:` modules replace the `gv` global; prelude and `compose.go` delete | landed |
 | P3 | workspace: generator machinery deleted, middleware by path, `RunScript` without kind | landed |
 | P4 | CLI + MCP surfaces | landed |
@@ -35,7 +35,7 @@ commit once the orchestrator has re-run its gates.
 
 - `service/scripting/bundler.go`: `Roots{Workspace, Collection}` threaded through
   `compile` / `compileEntry` / `esbuildBundle`; `pathResolverPlugin` with filter
-  `^[@~]/` in the `extra` slot; `withinDir` guard on both roots.
+  `^[@#]/` in the `extra` slot; `withinDir` guard on both roots.
 - `Metafile: true` on every build; cache key over every resolved input's path + digest.
 - Reject computed `require(…)` / `import(…)` before the build.
 - `service/scripting/profiles.go`: `WithWorkspaceRoot`.
@@ -72,7 +72,7 @@ commit once the orchestrator has re-run its gates.
 ## P5 — frontend
 
 - New RPC listing workspace `.ts` sources as `{path, content}[]`.
-- Monaco `compilerOptions.paths` for `@/*` and `~/*`; app-level registration.
+- Monaco `compilerOptions.paths` for `@/*` and `#/*`; app-level registration.
 - `gv.d.ts` becomes four `declare module "grpcview:…"` blocks plus `GvMiddleware`.
 - Scripts view without kinds; middleware picker by path.
 - Delete `generator-libs.ts`, `script-kinds.ts`.

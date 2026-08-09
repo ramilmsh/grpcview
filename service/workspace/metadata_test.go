@@ -68,7 +68,7 @@ func TestResolveInvokeMetadataComposition(t *testing.T) {
 	writeScript(t, w, ctx, "scripts/apiToken.ts", `export default () => "tok-42"`)
 
 	md, err := w.resolveInvokeMetadata(ctx, testWorkspace, nil,
-		"import apiToken from \"~/scripts/apiToken.ts\";\n"+
+		"import apiToken from \"#/scripts/apiToken.ts\";\n"+
 			`export default () => ({ authorization: ["Bearer " + apiToken()] })`, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveInvokeMetadata: %v", err)
@@ -90,7 +90,7 @@ func TestInvokeMetadataScript(t *testing.T) {
 			Collection: testWorkspace,
 			Service:    echoService,
 			Method:     "Unary",
-			MetadataScript: "import bearer from \"~/scripts/bearer.ts\";\n" +
+			MetadataScript: "import bearer from \"#/scripts/bearer.ts\";\n" +
 				`export default () => ({ authorization: [bearer()], "x-scope": ["read", "write"] })`,
 			Target: &grpcviewv1.Server{Address: fmt.Sprintf("127.0.0.1:%d", port)},
 		},

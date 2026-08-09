@@ -15,13 +15,13 @@ import { useActiveWorkspace } from "@/lib/workspace-query";
 import type { Script } from "@grpcview/v1/workspace_pb";
 
 // `Request.middleware` holds specifiers (script-imports/decisions.md §6), not display names:
-// `~/scripts/x.ts` resolves against this request's own collection, `@/lib/mw/y.ts` against the
-// workspace root. Only `~/` specifiers are checkable here — `workspace.scripts` is scoped to
+// `#/scripts/x.ts` resolves against this request's own collection, `@/lib/mw/y.ts` against the
+// workspace root. Only `#/` specifiers are checkable here — `workspace.scripts` is scoped to
 // the active collection; a `@/` one may point anywhere else in the workspace, which there is no
 // listing for yet (that RPC is the next frontend phase), so it is trusted rather than flagged.
-const SPECIFIER_RE = /^[@~]\/.+\.ts$/;
+const SPECIFIER_RE = /^[@#]\/.+\.ts$/;
 
-const ownSpecifier = (script: Script): string => `~/${script.path}`;
+const ownSpecifier = (script: Script): string => `#/${script.path}`;
 
 function describe(script: Script): string {
   const firstLine = script.source
@@ -68,7 +68,7 @@ export function MiddlewareTab({
     <div style={{ flex: 1, overflow: "auto", padding: "14px" }}>
       <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
         Middleware runs in order before invoke — each can rewrite body &amp; metadata.
-        Attached by specifier: <span className="font-mono">~/…</span> for a script in this
+        Attached by specifier: <span className="font-mono">#/…</span> for a script in this
         collection, <span className="font-mono">@/…</span> for one anywhere in the workspace.
       </p>
 
@@ -137,7 +137,7 @@ function MiddlewareRow({
   onDetach: () => void;
 }) {
   // `@/` specifiers are never resolvable here (no cross-collection listing yet), so only a
-  // `~/` one absent from this collection's own script list counts as missing.
+  // `#/` one absent from this collection's own script list counts as missing.
   const external = specifier.startsWith("@/");
   const missing = !external && !script;
   return (
@@ -319,7 +319,7 @@ function AttachMiddlewareDialog({
         {customError && (
           <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--err-fg)" }}>
             Must start with <span className="font-mono">@/</span> or{" "}
-            <span className="font-mono">~/</span> and end in{" "}
+            <span className="font-mono">#/</span> and end in{" "}
             <span className="font-mono">.ts</span>.
           </p>
         )}

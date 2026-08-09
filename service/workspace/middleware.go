@@ -85,7 +85,7 @@ func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName str
 	return out, stringMapToStruct(mdMap), nil
 }
 
-// name is the specifier as the author wrote it (`~/...` or `@/...`), which is what
+// name is the specifier as the author wrote it (`#/...` or `@/...`), which is what
 // middlewareError reports — a better error subject than a display name ever was.
 type middlewareScript struct {
 	name   string
@@ -108,7 +108,7 @@ func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName str
 }
 
 // resolveMiddlewareSpecifier mirrors decisions.md §2's two sigils: `@/` resolves against the
-// workspace root, `~/` against the collection root, each guarded against escaping its root.
+// workspace root, `#/` against the collection root, each guarded against escaping its root.
 func resolveMiddlewareSpecifier(specifier, workspaceRoot, collectionRoot string) (string, error) {
 	switch {
 	case strings.HasPrefix(specifier, "@/"):
@@ -120,14 +120,14 @@ func resolveMiddlewareSpecifier(specifier, workspaceRoot, collectionRoot string)
 			return "", specifierError(specifier, "resolves outside the workspace")
 		}
 		return abs, nil
-	case strings.HasPrefix(specifier, "~/"):
-		abs := filepath.Join(collectionRoot, filepath.FromSlash(strings.TrimPrefix(specifier, "~/")))
+	case strings.HasPrefix(specifier, "#/"):
+		abs := filepath.Join(collectionRoot, filepath.FromSlash(strings.TrimPrefix(specifier, "#/")))
 		if !withinMiddlewareRoot(collectionRoot, abs) {
 			return "", specifierError(specifier, "resolves outside the collection")
 		}
 		return abs, nil
 	default:
-		return "", specifierError(specifier, `must start with "@/" or "~/"`)
+		return "", specifierError(specifier, `must start with "@/" or "#/"`)
 	}
 }
 

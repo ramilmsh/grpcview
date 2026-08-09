@@ -11,7 +11,7 @@
 // ForModuleExports` would need to ride in on, so the TS compiler's own auto-import machinery is
 // unreachable through this worker version — confirmed by reading the file, not assumed. The
 // functions below reimplement just enough of it, working off data the app already has (the
-// workspace's module list and the `~/` / `@/` path-sigil mapping), rather than the compiler's.
+// workspace's module list and the `#/` / `@/` path-sigil mapping), rather than the compiler's.
 import { maskLiterals } from "./module-sniff";
 
 // Declarations that create a name in a module's OWN scope: found lines are scanned regardless of
@@ -89,10 +89,10 @@ export function namesAlreadyInScope(source: string): Set<string> {
 }
 
 // importSpecifierFor computes the specifier an inserted `import` statement should use — always
-// path-mapped (`~/` against the active collection, `@/` against the workspace root), NEVER a
+// path-mapped (`#/` against the active collection, `@/` against the workspace root), NEVER a
 // relative path: unlike the compiler's own import-specifier chooser (which can pick either), this
 // is the only chooser in play here, so there is no relative-vs-mapped ambiguity to resolve.
-// `~/` is preferred when the module lives inside the active collection; `@/` (workspace-relative)
+// `#/` is preferred when the module lives inside the active collection; `@/` (workspace-relative)
 // is the fallback, including for a workspace-root collection where the two are identical.
 export function importSpecifierFor(
   modulePath: string,
@@ -101,7 +101,7 @@ export function importSpecifierFor(
   const withoutExt = modulePath.replace(/\.tsx?$/, "");
   const prefix = !collectionId || collectionId === "." ? "" : `${collectionId}/`;
   if (prefix === "" || withoutExt.startsWith(prefix)) {
-    return `~/${withoutExt.slice(prefix.length)}`;
+    return `#/${withoutExt.slice(prefix.length)}`;
   }
   return `@/${withoutExt}`;
 }

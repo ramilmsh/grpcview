@@ -16,7 +16,7 @@ const IDS_SOURCE = [
   "",
 ].join("\n");
 
-const TRACE_HEADERS_SOURCE = `import { requestId } from "~/scripts/ids";
+const TRACE_HEADERS_SOURCE = `import { requestId } from "#/scripts/ids";
 
 export const handle: GvMiddleware = (ctx) => ({
   ...ctx,
@@ -58,14 +58,14 @@ describe("extractExportedNames", () => {
 
 describe("namesAlreadyInScope", () => {
   it("includes a named import's local binding, following an alias", () => {
-    expect(namesAlreadyInScope('import { requestId as reqId } from "~/scripts/ids";')).toEqual(
+    expect(namesAlreadyInScope('import { requestId as reqId } from "#/scripts/ids";')).toEqual(
       new Set(["reqId"])
     );
   });
 
   it("includes a default and a namespace import", () => {
     const names = namesAlreadyInScope(
-      'import Foo from "~/scripts/x";\nimport * as ns from "~/scripts/y";'
+      'import Foo from "#/scripts/x";\nimport * as ns from "#/scripts/y";'
     );
     expect(names).toEqual(new Set(["Foo", "ns"]));
   });
@@ -84,9 +84,9 @@ describe("namesAlreadyInScope", () => {
 });
 
 describe("importSpecifierFor", () => {
-  it("maps a module inside the active collection to a ~/-relative specifier", () => {
+  it("maps a module inside the active collection to a #/-relative specifier", () => {
     expect(importSpecifierFor("example/scripts/trace-headers.ts", "example")).toBe(
-      "~/scripts/trace-headers"
+      "#/scripts/trace-headers"
     );
   });
 
@@ -94,40 +94,40 @@ describe("importSpecifierFor", () => {
     expect(importSpecifierFor("other/scripts/x.ts", "example")).toBe("@/other/scripts/x");
   });
 
-  it('maps every module to ~/ for the "." root collection', () => {
-    expect(importSpecifierFor("scripts/foo.ts", ".")).toBe("~/scripts/foo");
+  it('maps every module to #/ for the "." root collection', () => {
+    expect(importSpecifierFor("scripts/foo.ts", ".")).toBe("#/scripts/foo");
   });
 
-  it("falls back to ~/ (== @/) when there is no active collection", () => {
-    expect(importSpecifierFor("scripts/foo.ts", null)).toBe("~/scripts/foo");
-    expect(importSpecifierFor("scripts/foo.ts", undefined)).toBe("~/scripts/foo");
+  it("falls back to #/ (== @/) when there is no active collection", () => {
+    expect(importSpecifierFor("scripts/foo.ts", null)).toBe("#/scripts/foo");
+    expect(importSpecifierFor("scripts/foo.ts", undefined)).toBe("#/scripts/foo");
   });
 
   it("strips a .ts or .tsx extension", () => {
-    expect(importSpecifierFor("example/scripts/x.tsx", "example")).toBe("~/scripts/x");
+    expect(importSpecifierFor("example/scripts/x.tsx", "example")).toBe("#/scripts/x");
   });
 });
 
 describe("insertImportEdit", () => {
   it("inserts at the top of the file when there is no existing import", () => {
-    const edit = insertImportEdit('export default { ok: true };\n', "requestId", "~/scripts/ids");
+    const edit = insertImportEdit('export default { ok: true };\n', "requestId", "#/scripts/ids");
     expect(edit.offset).toBe(0);
-    expect(edit.insertText).toBe('import { requestId } from "~/scripts/ids";\n');
+    expect(edit.insertText).toBe('import { requestId } from "#/scripts/ids";\n');
   });
 
   it("inserts right after the last existing import statement", () => {
-    const source = 'import { requestId } from "~/scripts/ids";\nimport { stamp } from "~/scripts/stamp";\n\nexport default 1;\n';
-    const edit = insertImportEdit(source, "handle", "~/scripts/trace-headers");
+    const source = 'import { requestId } from "#/scripts/ids";\nimport { stamp } from "#/scripts/stamp";\n\nexport default 1;\n';
+    const edit = insertImportEdit(source, "handle", "#/scripts/trace-headers");
     const before = source.slice(0, edit.offset);
     const after = source.slice(edit.offset);
-    expect(before).toBe('import { requestId } from "~/scripts/ids";\nimport { stamp } from "~/scripts/stamp";\n');
-    expect(edit.insertText).toBe('import { handle } from "~/scripts/trace-headers";\n');
+    expect(before).toBe('import { requestId } from "#/scripts/ids";\nimport { stamp } from "#/scripts/stamp";\n');
+    expect(edit.insertText).toBe('import { handle } from "#/scripts/trace-headers";\n');
     expect(after).toBe("\nexport default 1;\n");
   });
 
   it("is not confused by the word import inside a comment or string", () => {
     const source = '// import { fake } from "x";\nconst s = "import y from \'z\';";\nexport default 1;\n';
-    const edit = insertImportEdit(source, "requestId", "~/scripts/ids");
+    const edit = insertImportEdit(source, "requestId", "#/scripts/ids");
     expect(edit.offset).toBe(0);
   });
 });

@@ -364,7 +364,7 @@ var capModules = map[string]capModule{
 
 // esbuild takes the first plugin whose OnResolve returns a path, so the order is a CONTRACT:
 // pathResolverPlugin and grpcviewModulesPlugin must be claimed before the registry plugin's
-// `^[^./]` filter, which also matches `@/`/`~/`/`grpcview:*`.
+// `^[^./]` filter, which also matches `@/`/`#/`/`grpcview:*`.
 func (b *bundler) plugins(g Grant, collRoot string) []api.Plugin {
 	ps := []api.Plugin{capabilityPlugin(g), grpcviewModulesPlugin(), pathResolverPlugin(b.wsRoot, collRoot)}
 	if b.registryDir != "" {
@@ -374,7 +374,7 @@ func (b *bundler) plugins(g Grant, collRoot string) []api.Plugin {
 }
 
 // The workspace root is fixed at engine construction; the collection root rides each compile call
-// and is empty whenever a run has none, which `~/` then reports as unresolvable.
+// and is empty whenever a run has none, which `#/` then reports as unresolvable.
 //
 // Both roots are canonicalized once here, up front: esbuild resolves through symlinks (macOS puts
 // both /tmp and /var behind one), so an un-resolved root would never satisfy withinDir against its
@@ -385,10 +385,10 @@ func pathResolverPlugin(wsRoot, collRoot string) api.Plugin {
 	return api.Plugin{
 		Name: "grpcview-path-sigils",
 		Setup: func(build api.PluginBuild) {
-			build.OnResolve(api.OnResolveOptions{Filter: `^[@~]/`},
+			build.OnResolve(api.OnResolveOptions{Filter: `^[@#]/`},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					root, which := wsRoot, "workspace"
-					if args.Path[0] == '~' {
+					if args.Path[0] == '#' {
 						root, which = collRoot, "collection"
 					}
 					if root == "" {

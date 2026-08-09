@@ -28,20 +28,24 @@ doc is **not** part of this track.
 | specifier | resolves against | use |
 |---|---|---|
 | `@/…` | the **workspace root** | anything, including another collection's scripts |
-| `~/…` | the **collection root** of the script being compiled | this collection's own files |
+| `#/…` | the **collection root** of the script being compiled | this collection's own files |
 
-Both are handled by one esbuild plugin whose `OnResolve` filter is `^[@~]/`, installed
+Both are handled by one esbuild plugin whose `OnResolve` filter is `^[@#]/`, installed
 in the `extra` slot of `bundler.plugins(g, extra...)`. The slot matters: it places the
 plugin after the capability plugin and **before** the registry plugin, whose `^[^./]`
 filter would otherwise claim both forms.
 
 Each resolves to a real file on disk, then passes the same containment guard the
-registry plugin uses (`withinDir`). `@/x` outside the workspace root, or `~/x` outside
+registry plugin uses (`withinDir`). `@/x` outside the workspace root, or `#/x` outside
 the collection root, is an error reading `resolves outside the workspace` /
 `resolves outside the collection`.
 
-`~/` is not a home directory here and never reaches the OS. `@/` can never be a real
-npm package (`@scope/name` needs a scope segment), and `~/` cannot either.
+`@/` can never be a real npm package (`@scope/name` needs a scope segment), and `#/`
+cannot either. `#…` is Node's own subpath-imports prefix, read out of a package's
+`imports` map — a resolution we never want and never reach, because a plugin `OnResolve`
+runs before every built-in path in esbuild, and Monaco's TS worker is configured
+`moduleResolution: NodeJs` (node10), which has no subpath-imports step at all. Both
+sigils are therefore claimed by us in both resolvers.
 
 **A collection root is per-compile, not per-engine.** The workspace root is fixed at
 engine construction; the collection root rides each compile call. Both therefore enter
@@ -90,7 +94,7 @@ Unchanged from the doc, restated because it is the ergonomic every reviewer will
 // request body / metadata, expression form — what the Monaco hidden wrapper produces
 {
   ...require("grpcview:metadata").inherit(),
-  "x-request-id": [require("~/scripts/ids").requestId()],
+  "x-request-id": [require("#/scripts/ids").requestId()],
 }
 ```
 
@@ -132,8 +136,8 @@ separately covered. Middleware is not run through `RunScript`; it runs on the in
 ## 6. `Request.middleware` holds specifiers, in either grammar
 
 `Request.middleware` stops being display names and becomes a list of **specifiers**, each
-either `@/…` or `~/…`, resolved by the same rules as an import — so a request can attach a
-middleware from its own collection (`~/scripts/trace-headers.ts`) or from anywhere in the
+either `@/…` or `#/…`, resolved by the same rules as an import — so a request can attach a
+middleware from its own collection (`#/scripts/trace-headers.ts`) or from anywhere in the
 workspace (`@/lib/mw/auth.ts`). Whichever the author wrote is what is stored; there is no
 canonicalization pass.
 
@@ -163,7 +167,7 @@ A new RPC lists the workspace's TypeScript sources as `{path, content}[]` — co
 declarations, because these are TS files whose inferred types are the point.
 
 - Registered at `file:///grpcview/ws/<workspace-relative path>`.
-- `compilerOptions.paths`: `"@/*"` → `["file:///grpcview/ws/*"]`, and `"~/*"` →
+- `compilerOptions.paths`: `"@/*"` → `["file:///grpcview/ws/*"]`, and `"#/*"` →
   `["file:///grpcview/ws/<active collection id>/*"]`, rewritten when the active collection
   changes.
 - **App-level registration, not per-editor** — same reasoning that moved `gv-requests.d.ts`
@@ -185,7 +189,7 @@ that offers each workspace module's exported names — parsed from the source in
 `auto-import.ts`, over the same literal-masking the module sniff uses — with an
 `additionalTextEdits` that writes the `import` line. It offers only names not already in
 scope, which is also what keeps it from duplicating the built-in provider's suggestions. The
-specifier is computed rather than chosen by TypeScript, so it is always the sigil form (`~/`
+specifier is computed rather than chosen by TypeScript, so it is always the sigil form (`#/`
 inside the active collection, `@/` outside it) and can never come out relative.
 
 `registerGeneratorLibs`, `isEmittableName` and its reserved-word list are deleted.

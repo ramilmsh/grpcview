@@ -174,7 +174,7 @@ type GvMiddleware = (ctx: GvMiddlewareCtx) => GvMiddlewareCtx | void | Promise<G
 /**
  * The expression-position escape hatch. An \`import\` STATEMENT cannot stand where a request body
  * or a metadata object literal is written — that is a hard parse error, not a style choice — so
- * an expression form pulls a module in with \`require("~/scripts/ids").requestId()\` instead. The
+ * an expression form pulls a module in with \`require("#/scripts/ids").requestId()\` instead. The
  * default metadata buffer (\`metadata-wrapper.ts\`) is exactly this shape, so without this
  * declaration every new request's metadata tab opens red.
  *

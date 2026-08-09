@@ -1787,7 +1787,7 @@ export declare const WorkspaceService: GenService<{
   },
   /**
    * Every importable `.ts` under the workspace root, so the editor's module resolution
-   * (Monaco `compilerOptions.paths`) can mirror what the bundler's `@/` / `~/` plugin
+   * (Monaco `compilerOptions.paths`) can mirror what the bundler's `@/` / `#/` plugin
    * actually resolves at compile time.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.ListWorkspaceModules

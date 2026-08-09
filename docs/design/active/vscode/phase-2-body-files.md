@@ -4,19 +4,28 @@
 CI type-checking, `import`s from shared modules. See [`README.md`](./README.md) for the
 track overview.
 
+**Build this before [`script-imports.md`](../../planned/script-imports.md).** That track
+wants the whole workspace import graph from one `Write: false` esbuild build, which
+requires every entry to be a real file on disk; while bodies live inside `request.json`
+they have to be fed through `Stdin`, one build per body. This phase is what makes bodies
+ordinary entry points. Nothing here is invalidated by that track — it keeps the hidden
+wrapper — so the order is strictly one-way.
+
 ## Goal
 
 Move `draft_body` and `draft_metadata_script` out of `request.json` into sibling
-`body.{ts,json}` and `metadata.{ts,json}` files.
+`body.ts` and `metadata.ts` files.
 
 This is the highest-value phase and it is close to `writeFile(dir/body.ts, draftBody)`.
-It is no longer *quite* free, though, and the reason matters: this phase was originally
-scoped on the assumption that `isCanonical`/`migrateBodyToTs` (`body-wrapper.ts`)
-guarantee every persisted body is a complete canonical module. Under
+One assumption it was originally scoped on is gone, and the reason matters: it read
+`isCanonical`/`migrateBodyToTs` (`body-wrapper.ts`) as guaranteeing every persisted body
+is a complete canonical module. Under
 [the body contract](../../request-body-contract.md) that guarantee is gone by design — a
 persisted body may be a module or a bare expression (which includes plain protojson,
 since valid JSON is valid TS), and this phase is exactly what makes a hand-written one
-easy to produce. So the split must carry the form along rather than assume it.
+easy to produce. The split must therefore preserve the bytes rather than normalize them;
+it does *not* have to record which form they are, because both forms live in the same
+`.ts` file and the backend already accepts either.
 
 ## Why
 
@@ -31,55 +40,74 @@ easy to produce. So the split must carry the form along rather than assume it.
 
 ## Changes
 
-- **`proto/grpcview/store/v1/storage.proto:72,82`** — delete `draft_body` and
+- **`proto/grpcview/store/v1/storage.proto:78,82`** — delete `draft_body` and
   `draft_metadata_script` from the on-disk `Request`. No `reserved` markers (project
   stage). The **wire** `grpcview.v1.Request.draft_body` stays a `string` — this whole
   phase lives below the wire API, so `ui/` is untouched.
-- **`service/store/layout.go:17`** — add `bodyFileName = "body.ts"` and
-  `metadataFileName = "metadata.ts"` next to `requestFileName`, **plus their `.json`
-  counterparts**. Add all four to `reservedSlugs` so no child item can collide with them.
-- **The extension is an editor hint; it does not decide behavior.** Write `.json` when the
-  body is valid JSON and `.ts` otherwise, so the file opens with the right language
-  service and diffs as what it is. On read, whichever of the pair exists wins (`.ts` if
-  both somehow exist, and log it) — the bytes then go through the same backend wrap as
-  every other surface. Never branch invoke behavior on the extension: a `.ts` holding
-  plain protojson and a `.json` holding a module must both work.
-- **Switch extension only on a form change.** A body that stops being valid JSON becomes
-  `body.ts`; that is a rename plus a write, and the old file must be removed or the pair
-  goes stale. This is the one genuinely new piece of work the contract adds to this phase
-  — and it is worth confirming it is wanted at all, since the alternative is *always*
-  `body.ts` (valid JSON is valid TS, so it is never the wrong extension, only a less
-  informative one).
-- **`service/store/fs.go:265-269`** — patch application writes the two files instead
+- **`service/store/layout.go:15-21`** — add `bodyFileName = "body.ts"` and
+  `metadataFileName = "metadata.ts"` next to `requestFileName`, and add both to
+  `reservedSlugs` (`layout.go:68-72`) so no child directory can collide with them.
+- **Always `.ts`, never `.json`.** Valid JSON is valid TypeScript, so `.ts` is never the
+  wrong extension for a body — only a less informative one when the content happens to be
+  plain protojson. That small loss buys three things: no rename-on-form-change (a body
+  that stops being valid JSON is just a write), no read-time ambiguity about which of a
+  pair wins, and — decisively — bodies that work as esbuild entry points, because esbuild
+  picks a loader from the extension and a `body.json` entry would be parsed by the JSON
+  loader, so a `require("@/…")` inside it is a syntax error. Overriding the workspace-wide
+  `.json` loader to TypeScript to dodge that would break real JSON imports. See
+  [`script-imports.md`](../../planned/script-imports.md).
+- **The extension is still not a behavior switch.** Whatever the bytes are, they go
+  through the same backend wrap as every other surface. A `.ts` holding plain protojson
+  and a `.ts` holding a module must both work — that is
+  [the body contract](../../request-body-contract.md), unchanged.
+- **`service/store/fs.go:261-266`** — patch application writes the two files instead
   of setting proto fields.
-- **`service/store/convert.go:25`** — store→wire reads them back into the wire
-  `Request`.
-- **Always write both files on request creation**, seeded with the canonical
-  `EMPTY_BODY` shape (`body-wrapper.ts`), so "file absent" is never a state anyone has
-  to interpret. (An absent body is nonetheless *legal* now — the contract reads it as
-  `{}` — so this is a diff-hygiene choice, not a correctness one.)
+- **`service/store/convert.go:8-18`** (`diskToWireRequest`) — store→wire reads them back
+  into the wire `Request`.
+- **Always write both files on request creation**, so "file absent" is never a state
+  anyone has to interpret. (An absent body is nonetheless *legal* now — the contract
+  reads it as `{}` — so this is a diff-hygiene choice, not a correctness one.) Seed them
+  with the backend's `emptyBody` (`service/workspace/invoke.go:41`, `"{}"`), **not** the
+  UI's `EMPTY_BODY` (`body-wrapper.ts:16`) — that one is a module-private const on the
+  editor side, and creation happens in the store.
 - **Keep `WRAP_PREFIX`/`WRAP_SUFFIX`/`PREFIX_LINES` unchanged.** The per-method
   `declare global { type RequestMessage = … }` alias keeps working because only one
   method is active per editor. The generated `import type … as RequestMessage` line is
   a `DiskSink` concern ([phase 5](./phase-5-extension.md)), *not* a split concern —
   introducing it here would be premature.
+- **Hard break, migrated by hand. No converter.** Every `request.json` on disk today
+  carries the two fields, but only two collections exist — the in-repo `example/` one and
+  the author's local workspace — so both are converted manually and the loader only ever
+  understands the new layout. Read-both is rejected for the same reason
+  [`script-imports.md`](../../planned/script-imports.md) rejects it: two resolution models
+  is what this deletes.
+- **The hard break must be loud, and by default it is silent.** `unmarshalOpts` is
+  `protojson.UnmarshalOptions{DiscardUnknown: true}` (`service/store/codec.go:16`), so an
+  un-migrated `request.json` loads *successfully* with an empty body, and the next write
+  drops `draftBody` from the file — the body is gone with no error anywhere. Detect the
+  two stale keys when reading a `request.json` and fail with a message naming the file
+  and the fix. This is the only real work the hard break costs.
 - **Tighten the runtime contract** — see [`body-contract.md`](./body-contract.md) for the
   editor layers and [`request-body-contract.md`](../../request-body-contract.md) for what
   is accepted. Layer 4 (wrap unless it already default-exports → evaluate → `protojson`
   unmarshal, with an error that names the file and the field) is the only real enforcement
   and should land with this phase, since bodies are now hand-editable by anything.
-- **Do not normalize on read.** A `body.json` the user never edited must round-trip
-  byte-identical; rewriting it as a wrapped TS module on load is a spurious git diff on a
-  file the user never touched, and it discards the form they deliberately authored.
+- **Do not normalize on read.** A `body.ts` holding plain protojson that the user never
+  edited must round-trip byte-identical; rewriting it as a wrapped module on load is a
+  spurious git diff on a file the user never touched, and it discards the form they
+  deliberately authored.
 
 ## Watch out
 
-- **`readChildren` reads configs for *ordering* only** (slug, name, kind — see the
-  `childEntry` cache comment at `layout.go:42-52`). Do not make it read bodies; only
-  `readItem`/`Load` need them.
-- **Accepted wart:** a `body.ts` opened in a plain text editor shows one unresolved
-  type name (`RequestMessage`). Cover it with a generated header comment; phase 6
-  removes it properly.
+- **`readChildren` (`fs.go:644`) already unmarshals every `request.json` it walks**, and
+  caches the whole message on `childEntry` (`layout.go:51-58`), but it needs only slug,
+  name and kind — it is an ordering pass. Do not give it a second read per child for the
+  body and metadata files; only `readItem`/`Load` need those.
+- **Accepted wart:** a `body.ts` opened outside the app — plain VS Code, `tsc` — shows
+  one unresolved type name, `RequestMessage`, because the app supplies it per-editor as a
+  `declare global` alias for the selected method's input.
+  [Phase 5's `DiskSink`](./phase-5-extension.md) fixes it with a real import; until then
+  it stands as-is.
 
 ## Verify
 
@@ -87,18 +115,21 @@ easy to produce. So the split must carry the form along rather than assume it.
 - Browser (prod binary reflecting itself on `:10000`): the body and metadata editors,
   IntelliSense, and invoke all behave identically to before. The hidden wrapper still
   hides exactly one line at each end.
-- **Dogfood:** create a `requests/` collection in this repo, author a couple of real
-  requests against grpcview's own reflection, and **commit the request files**. Then
-  edit a body and confirm `git diff` shows a line diff rather than one mutated JSON
-  string.
+- **Dogfood:** `example/` already targets grpcview's own API and is committed, so the
+  migration lands there as a real diff. Confirm the converted bodies are byte-faithful,
+  then edit one and check `git diff` shows a line diff rather than one mutated JSON
+  string. Re-run its requests through MCP `invoke_saved` / `invoke_saved_streaming` and
+  the smoke scenario, which is how `example/` is verified today.
 - Hand-edit a `body.ts` outside the app, then invoke: the change is picked up (the
   store re-reads on every RPC).
 
-## Open questions
+## Settled
 
-- Extension for the metadata file: `metadata.ts` reads well but is a second TS file
-  per request directory. Alternative is folding metadata back into `request.json` and
-  splitting only the body — cheaper diffs, but then the two authoring surfaces behave
-  differently for no good reason. Lean: split both.
-- Does a body get a generated header comment (`// grpcview: edit via the app or as
-  TypeScript…`), and if so does the app preserve it across writes?
+- **Extension: always `.ts`**, never `.json` — see Changes. The rename-on-form-change
+  work the alternative implied is not built.
+- **Metadata splits too.** It is TypeScript, so it is a file, on the same reasoning as the
+  body. Two `.ts` files per request directory is the accepted cost; the alternative left
+  the two halves of one authoring surface persisting differently.
+- **Migration is a hard break, done by hand** — see Changes.
+- **Generated files carry no header comment.** A write is the body bytes and nothing
+  else, so it never depends on what the file already contains.

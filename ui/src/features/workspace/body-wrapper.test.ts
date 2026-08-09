@@ -10,7 +10,7 @@ import {
 } from "./body-wrapper";
 
 const MODULE_WITH_IMPORTS = [
-  'import { requestId } from "~/scripts/ids";',
+  'import { requestId } from "#/scripts/ids";',
   "",
   "export default async (): Promise<RequestMessage> => ({",
   "  id: requestId(),",
@@ -24,8 +24,8 @@ const MODULE_NO_IMPORTS = ["export default async () => ({", "  ok: true,", "});"
 // (` line happens to start with the same text as WRAP_PREFIX, just not at column 1, which is
 // exactly what made the naive `startsWith` check in isCanonical wrap it a second time.
 const RUNSCRIPT_GENERATORS_BODY = [
-  'import { requestId } from "~/scripts/ids";',
-  'import { stamp } from "~/scripts/stamp";',
+  'import { requestId } from "#/scripts/ids";',
+  'import { stamp } from "#/scripts/stamp";',
   "",
   "export default async (): Promise<RequestMessage> => (",
   "{",

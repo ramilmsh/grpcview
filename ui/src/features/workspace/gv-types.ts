@@ -68,7 +68,7 @@ export function useGvInvokeTypes(): void {
 }
 
 // Registers every importable `.ts` in the workspace as a Monaco extra lib, and points
-// `compilerOptions.paths` at the active collection — the frontend half of the `@/` / `~/`
+// `compilerOptions.paths` at the active collection — the frontend half of the `@/` / `#/`
 // resolver plugin (script-imports/decisions.md §8). App-level for the same reason as
 // useGvInvokeTypes: an import is legal from every script surface, including the Scripts view,
 // which mounts no body editor. registerGeneratorLibs (the old ambient-globals mechanism) is

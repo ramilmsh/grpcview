@@ -2,10 +2,10 @@
 // binds it to a global: a body, a metadata script, another script or a
 // middleware reaches it by importing it.
 //
-//   import { requestId } from "~/scripts/ids";   // from inside this collection
+//   import { requestId } from "#/scripts/ids";   // from inside this collection
 //   import { requestId } from "@/example/scripts/ids";  // from anywhere in the workspace
 //
-// `~/` resolves against the collection root, `@/` against the workspace root.
+// `#/` resolves against the collection root, `@/` against the workspace root.
 // Both are resolved by the same esbuild pass that resolves npm packages, and
 // both are guarded against escaping their root.
 //

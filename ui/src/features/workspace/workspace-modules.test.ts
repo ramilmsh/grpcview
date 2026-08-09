@@ -25,17 +25,17 @@ describe("collectionModulePrefix", () => {
 });
 
 describe("workspaceModulePaths", () => {
-  it("maps @/* to the workspace root and ~/* to a nested collection", () => {
+  it("maps @/* to the workspace root and #/* to a nested collection", () => {
     expect(workspaceModulePaths("example")).toEqual({
       "@/*": ["file:///grpcview/ws/*"],
-      "~/*": ["file:///grpcview/ws/example/*"],
+      "#/*": ["file:///grpcview/ws/example/*"],
     });
   });
 
-  it('maps ~/* to the workspace root for a "." (root) collection, with no "./" segment', () => {
+  it('maps #/* to the workspace root for a "." (root) collection, with no "./" segment', () => {
     expect(workspaceModulePaths(".")).toEqual({
       "@/*": ["file:///grpcview/ws/*"],
-      "~/*": ["file:///grpcview/ws/*"],
+      "#/*": ["file:///grpcview/ws/*"],
     });
   });
 });

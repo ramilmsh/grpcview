@@ -35,7 +35,7 @@ function CurrentView() {
   // Above the early returns and outside the view switch: the Scripts view can import
   // "grpcview:invoke" too, so these types cannot be owned by the body editor.
   useGvInvokeTypes();
-  // Same reasoning: an import ("@/…" or "~/…") is legal from any script surface too.
+  // Same reasoning: an import ("@/…" or "#/…") is legal from any script surface too.
   useWorkspaceModuleTypes();
   // Nothing at all until the listing resolves: a flash of "No collection here" over a
   // workspace that has one reads as data loss.

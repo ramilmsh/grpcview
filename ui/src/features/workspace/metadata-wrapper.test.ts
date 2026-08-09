@@ -13,7 +13,7 @@ import {
 // example's `RunScript (generators)` metadata script: a module reached via `import`, the same
 // shape that exposed the double-wrap bug in body-wrapper.ts.
 const MODULE_WITH_IMPORTS = [
-  'import { traceId } from "~/scripts/ids";',
+  'import { traceId } from "#/scripts/ids";',
   "",
   "export default async (): Promise<Metadata> => ({",
   '  "x-trace-id": [traceId()],',
