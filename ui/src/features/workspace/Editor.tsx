@@ -173,7 +173,7 @@ export function Editor({
       return true;
     }
     if (outcome.kind === "bail") {
-      editor.executeEdits("grpcview.resolve-bail", unwrapEdits(region));
+      editor.executeEdits("grpcview.resolve-bail", unwrapEdits(before, region));
       applyHidden(editor, setRegion(editor, findRegion(model.getValue())));
       return true;
     }
@@ -390,7 +390,7 @@ export function Editor({
       const switchTo = modeSwitchFor(v);
       if (switchTo !== "none") {
         const edits =
-          switchTo === "toPlain" ? unwrapEdits(findRegion(v)!) : wrapEdits(v, BODY_SKELETON);
+          switchTo === "toPlain" ? unwrapEdits(v, findRegion(v)!) : wrapEdits(v, BODY_SKELETON);
         // Merge with the keystroke so one Cmd-Z restores the prior state. If monaco refuses, one
         // extra Cmd-Z still leaves a consistent state — text without markers, mode recomputed as
         // plain from that text — never corruption.

@@ -2,7 +2,7 @@
 // executeEdits accepts IRange literals, so nothing here needs the monaco namespace, and the pure
 // shape is what makes this testable without mounting an editor (mirrors module-specifier.ts).
 import { END_MARKER, START_MARKER, findRegion, regionText, type Region } from "./script-region";
-import { leadsWithBrace } from "./module-sniff";
+import { leadsWithBrace, maskLiterals } from "./module-sniff";
 
 export interface LineEdit {
   range: {
@@ -14,11 +14,58 @@ export interface LineEdit {
   text: string;
 }
 
-// wrapped -> plain: delete exactly the two marker lines (including each one's trailing newline),
-// as two separate non-overlapping edits rather than a full-range replace. Two edits let monaco
-// compute the composite transform itself and adjust the cursor/selection accordingly; a full
-// replace would reset the cursor to the top and lose the selection.
-export function unwrapEdits(region: Region): LineEdit[] {
+const IMPORT_LINE_RE = /^[ \t]*import\b/m;
+
+// Whether the shim can go away entirely on the way to plain, leaving only the author's own text.
+// Two conditions, both necessary:
+//
+//   - the header holds no import block. An import cannot stand in the expression position the
+//     region occupies, so a plain body carrying imports has to keep `export default … => (` around
+//     it to stay a valid module.
+//   - the region does not lead with `{`. If it did, the plain text would immediately re-wrap
+//     (modeSwitchFor reads "toWrapped"), which would silently undo a resolve-or-bail unwrap.
+//
+// When neither applies the shim is dead weight, and leaving it behind is boilerplate the author
+// then has to delete by hand.
+function shimIsDisposable(text: string, region: Region): boolean {
+  const header = text.split("\n").slice(0, region.startLine - 1).join("\n");
+  if (IMPORT_LINE_RE.test(maskLiterals(header))) return false;
+  return !leadsWithBrace(regionText(text) ?? "");
+}
+
+// wrapped -> plain: delete the two marker lines (including each one's trailing newline), plus the
+// whole shim when nothing depends on it — see shimIsDisposable. Always two separate
+// non-overlapping edits rather than a full-range replace: two edits let monaco compute the
+// composite transform itself and adjust the cursor/selection accordingly, where a full replace
+// would reset the cursor to the top and lose the selection.
+export function unwrapEdits(text: string, region: Region): LineEdit[] {
+  if (shimIsDisposable(text, region)) {
+    const lines = text.split("\n");
+    const beforeEnd = region.endLine - 1;
+    return [
+      // Line 1 through the start marker: any blank lines and the `export default` line.
+      {
+        range: {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: region.startLine + 1,
+          endColumn: 1,
+        },
+        text: "",
+      },
+      // The end marker, the closing `)` and anything after it — taken from the END of the last
+      // region line, so the region keeps no trailing newline of its own.
+      {
+        range: {
+          startLineNumber: beforeEnd,
+          startColumn: lines[beforeEnd - 1].length + 1,
+          endLineNumber: region.total,
+          endColumn: lines[region.total - 1].length + 1,
+        },
+        text: "",
+      },
+    ];
+  }
   return [
     {
       range: {

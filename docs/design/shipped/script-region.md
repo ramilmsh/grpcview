@@ -112,6 +112,23 @@ keypress, never corruption.
 avoids the undo problem, but it means a shim the author edited while plain gets re-hidden
 with their edits inside it, which is the hazard the whole design exists to avoid.
 
+**Shipped correction (2026-08-10).** "The skeleton and imports stay" was wrong as a
+default. Leaving `export default async (): Promise<RequestMessage> => (` and its `)`
+behind is boilerplate the author did not write and now has to delete by hand, and the
+typed contract it was meant to preserve is not needed for the value to invoke — the
+backend wraps a bare expression itself (`resolveInvokeBody`, see
+`../request-body-contract.md`). `unwrapEdits` now takes the whole shim with it, and keeps
+it only where it is load-bearing (`shimIsDisposable` in `region-edits.ts`):
+
+- the header holds an **import block** — `import` cannot stand in the expression position
+  the plain text would then occupy, so the module form has to survive;
+- the region **leads with `{`** — only resolve-or-bail can unwrap such a region, and a bare
+  object left plain re-wraps on the next `onDidChangeModelContent`, silently undoing the
+  bail.
+
+`unwrapToPlain` in `script-region.ts`, the pure counterpart with the old semantics, had no
+callers and was deleted rather than kept in two shapes.
+
 ### D5. Auto-import inserts on completion accept, in both modes
 
 Wrapped: the import lands above the start marker, invisible. Plain: it lands in the
@@ -119,6 +136,13 @@ visible import block, and the author watches it appear.
 
 This is what `module-auto-import.ts` already does via `additionalTextEdits`. Under D1 it
 is no longer destructive.
+
+**Shipped correction (2026-08-10).** D2 makes `invoke`, `params`, `assert` and `inherit`
+"ordinary auto-import candidates", but the provider only ever walked the workspace module
+list, so none of the four was ever suggested while typing — the TS worker's own quick fix,
+which needs the unresolved name already written, was the only way to get the import. The
+provider now iterates `candidatesFrom` (`resolve-imports.ts`), the same index resolve-or-
+bail uses, so the virtuals are offered from the first keystroke and in an empty workspace.
 
 ### D6. Resolve-or-bail runs on paste, drop and programmatic replacement — never on typing
 

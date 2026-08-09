@@ -154,15 +154,3 @@ export function normalizeSkeleton(text: string, skeleton: string): string {
     region: lines.slice(region.startLine, region.endLine - 1).join("\n"),
   });
 }
-
-// D4 wrapped -> plain: delete exactly the two marker lines, keep everything else (the skeleton,
-// the import block and the closing `)` all stay, now visible and author-owned). undefined when
-// there is no region to unwrap.
-export function unwrapToPlain(text: string): string | undefined {
-  const region = findRegion(text);
-  if (!region) return undefined;
-  const lines = text.split("\n");
-  lines.splice(region.endLine - 1, 1);
-  lines.splice(region.startLine - 1, 1);
-  return lines.join("\n");
-}

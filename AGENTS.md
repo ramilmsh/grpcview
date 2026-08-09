@@ -161,8 +161,14 @@ protojson body that could not import a script would be `{{ }}` all over again.
   **The region's first token decides the mode, not the file's** (`region-edits.ts`,
   `leadsWithBrace` in `module-sniff.ts`, which skips leading whitespace and whole
   comments). A region whose first token is `{` stays wrapped; anything else deletes the
-  two marker lines and the document becomes plain, with the skeleton and the imports left
-  behind, now visible and author-owned. A plain document gets wrapped only when the
+  two marker lines and the document becomes plain. **The shim goes with them whenever
+  nothing depends on it** — no import block to host and a region that does not lead with
+  `{` — so switching modes leaves the author's own text and no boilerplate to delete by
+  hand; the backend wraps a bare expression anyway (`resolveInvokeBody`). It survives, now
+  visible and author-owned, in the two cases where it is load-bearing: an import block
+  above it cannot stand in expression position without it, and a `{`-leading region (which
+  only the resolve-or-bail path can unwrap) would otherwise re-wrap on the spot and undo
+  the bail. A plain document gets wrapped only when the
   *whole file's* first token is `{`. An **empty region holds the current mode**, so
   deleting the last `}` of `{}` does not rip the shim out and put it back as you retype.
   The switch is a pair of text edits pushed as one undo stop, and it reaches the draft —
@@ -364,10 +370,14 @@ Facts that are load bearing:
   `getCompletionsAtPosition` with no options and drops the import-inserting `codeActions`, so
   `includeCompletionsForModuleExports` can't be reached and TS-native auto-import is
   unavailable at any configuration. `module-auto-import.ts` registers a completion provider
-  that offers each workspace module's exports (parsed in `auto-import.ts`) with an
-  `additionalTextEdits` that writes the `import`, skipping names already in scope so it never
-  duplicates the built-in provider. It computes the specifier itself, so the inserted form is
-  always `#/` or `@/` and never relative.
+  that offers the same candidate index resolve-or-bail works off (`candidatesFrom` in
+  `resolve-imports.ts`) — every other workspace module's exports (parsed in `auto-import.ts`)
+  **plus the `grpcview:*` virtuals** — with an `additionalTextEdits` that writes the `import`,
+  skipping names already in scope so it never duplicates the built-in provider. It computes the
+  specifier itself, so the inserted form is always `#/` or `@/` and never relative. The virtuals
+  have to be listed there explicitly: the TS worker knows their ambient `declare module` blocks
+  and so offers `invoke` through its own quick fix, but a quick fix only appears once the name is
+  already written and flagged unresolved — nothing suggests it while you type.
 - **The bundle cache is keyed over the whole graph.** `Metafile: true` on every build,
   `cacheKey` covers `(cacheSalt, variant, grant, collectionRoot, source)`, and the resolved
   input list is stored *with* the compiled output and re-hashed on every hit — a hit whose

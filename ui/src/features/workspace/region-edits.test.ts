@@ -70,22 +70,39 @@ describe("modeSwitchFor", () => {
 });
 
 describe("unwrapEdits", () => {
-  it("removes the marker lines and re-parses as a plain script", () => {
+  it("takes the whole shim with it when nothing depends on it", () => {
     const text = wrapped("[1, 2, 3]");
     const region = findRegion(text)!;
-    const result = applyEdits(text, unwrapEdits(region));
+    const result = applyEdits(text, unwrapEdits(text, region));
     expect(findRegion(result)).toBeUndefined();
-    expect(result).toBe(`${SKELETON}\n[1, 2, 3]\n)`);
+    expect(result).toBe("[1, 2, 3]");
   });
 
-  it("keeps the import block, skeleton and trailing ) as visible/author-owned text", () => {
+  it("leaves no trailing newline behind when the document has one", () => {
+    const text = `${wrapped("[1, 2, 3]")}\n`;
+    const region = findRegion(text)!;
+    expect(applyEdits(text, unwrapEdits(text, region))).toBe("[1, 2, 3]");
+  });
+
+  it("keeps the import block, skeleton and trailing ) when the header imports", () => {
     const text = wrapped("makeBody()", ['import { makeBody } from "#/scripts/x";']);
     const region = findRegion(text)!;
-    const result = applyEdits(text, unwrapEdits(region));
+    const result = applyEdits(text, unwrapEdits(text, region));
     expect(findRegion(result)).toBeUndefined();
     expect(result).toBe(
       ['import { makeBody } from "#/scripts/x";', "", SKELETON, "makeBody()", ")"].join("\n")
     );
+  });
+
+  // The resolve-or-bail path unwraps a region that may well still lead with `{`. Dropping the
+  // shim there would hand modeSwitchFor a bare object, which re-wraps on the spot and undoes the
+  // bail.
+  it("keeps the shim when the region leads with { , so the text cannot re-wrap", () => {
+    const text = wrapped("{\n  id: 1,\n}");
+    const region = findRegion(text)!;
+    const result = applyEdits(text, unwrapEdits(text, region));
+    expect(result).toBe([SKELETON, "{", "  id: 1,", "}", ")"].join("\n"));
+    expect(modeSwitchFor(result)).toBe("none");
   });
 });
 
@@ -109,7 +126,7 @@ describe("unwrap-then-wrap stability", () => {
   it("is stable on a bare object", () => {
     const original = wrapped("{\n  id: 1,\n}");
     const region = findRegion(original)!;
-    const unwrapped = applyEdits(original, unwrapEdits(region));
+    const unwrapped = applyEdits(original, unwrapEdits(original, region));
     // Unwrapped text starts with the (now-visible) skeleton's `export default`, so modeSwitchFor
     // reads it as already-settled plain text, not something to immediately re-wrap.
     expect(modeSwitchFor(unwrapped)).toBe("none");

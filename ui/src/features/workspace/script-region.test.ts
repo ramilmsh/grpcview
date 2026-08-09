@@ -9,7 +9,6 @@ import {
   regionHiddenRanges,
   regionText,
   START_MARKER,
-  unwrapToPlain,
 } from "./script-region";
 
 const SKELETON = "export default async (): Promise<RequestMessage> => (";
@@ -227,16 +226,5 @@ describe("regionHeader", () => {
   it("is a prefix of the original text", () => {
     const header = regionHeader(WRAPPED_WITH_IMPORTS);
     expect(WRAPPED_WITH_IMPORTS.startsWith(header)).toBe(true);
-  });
-});
-
-describe("unwrapToPlain", () => {
-  it("drops exactly the two marker lines", () => {
-    const plain = unwrapToPlain(WRAPPED);
-    expect(plain).toBe([SKELETON, "{", "  id: 1,", "}", ")"].join("\n"));
-  });
-
-  it("returns undefined when there is no region", () => {
-    expect(unwrapToPlain("export default async () => ({ ok: true });")).toBeUndefined();
   });
 });
