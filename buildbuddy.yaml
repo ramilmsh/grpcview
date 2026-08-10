@@ -14,8 +14,8 @@ actions:
       # anyone reads the workflow log.
       - run: "bazel test --config=ci --test_output=errors //..."
 
-  # Publishes the GitHub release that .github/workflows/release.yml used to, and
-  # runs here rather than on a GitHub runner for three reasons:
+  # Publishes the GitHub release. This used to be a GitHub Actions workflow and
+  # runs here instead for three reasons:
   #
   #   * No BuildBuddy API key. The CI runner writes its own
   #     --remote_header=x-buildbuddy-api-key into a bazelrc, so --config=ci is
@@ -46,19 +46,14 @@ actions:
         # into a no-op before anything is built.
         tags:
           - "v*"
-    env:
-      # Cleared once a run has proved the darwin artifacts build on linux. Until
-      # then this stages the whole release and prints what it staged without
-      # publishing anything.
-      DRY_RUN: "1"
     steps:
       - run: |
           set -euo pipefail
 
-          # The remote URL carries the installation token as basic-auth
-          # credentials, so strip them rather than print them.
-          # Tolerant of failure so that neither line can exit the step before the
-          # failure report below is armed; the check comes after.
+          # The remote URL can carry the installation token as basic-auth
+          # credentials, so strip those rather than print them. Both lines tolerate
+          # failure so that neither can exit the step before the failure report
+          # below is armed; the check for them comes after.
           repo=$(git remote get-url origin 2>/dev/null | sed -E 's#^https://[^@]*@#https://#; s#^.*github\.com[:/]##; s#\.git$##' || true)
           sha=$(git rev-parse HEAD 2>/dev/null || true)
 
@@ -143,9 +138,9 @@ actions:
             --bazel-config ci
 
           ls -l dist
-          # Leading magic per artifact, since cross-compiling the darwin pair from
-          # linux is the one thing about this host that the Actions workflow never
-          # exercised: cffaedfe is 64-bit Mach-O, 7f454c46 is ELF.
+          # Leading magic per artifact: cffaedfe is 64-bit Mach-O and 7f454c46 is
+          # ELF, so this says out loud that the darwin pair really did cross-compile
+          # on a linux host rather than quietly coming out as something else.
           for artifact in dist/grpcview_*; do
             printf '%s %s\n' "$artifact" "$(od -An -t x1 -N4 "$artifact" | tr -d ' ')"
           done

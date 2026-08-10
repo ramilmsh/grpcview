@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds the multi-arch grpcview binaries and stages a complete release into a
-# directory. Shared by tools/release.sh (Google Cloud Storage) and
-# .github/workflows/release.yml (GitHub releases): the two differ only in where
-# the staged tree is uploaded, and in the URL shape their installer fetches from.
+# directory. Shared by tools/release.sh (Google Cloud Storage) and the Release
+# action in buildbuddy.yaml (GitHub releases): the two differ only in where the
+# staged tree is uploaded, and in the URL shape their installer fetches from.
 #
 #   tools/stage_release.sh --dest DIR --base-url https://host/path [--bazel-config NAME]
 #

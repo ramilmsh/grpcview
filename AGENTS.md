@@ -1512,37 +1512,48 @@ and `install.sh`/`uninstall.sh` with their `@BASE_URL@` substituted for
 `--base-url`. The version comes from `tools/version.sh` and is the script's only
 stdout; everything else goes to stderr, so a caller can capture it.
 
-**GitHub releases are the primary channel**, cut by
-`.github/workflows/release.yml` on **every push to `trunk`** — plus a pushed
-`vX.Y.Z` tag, or `workflow_dispatch` on any ref. It stages with
-`--base-url https://github.com/OWNER/REPO/releases/download` and publishes every
-staged file as a release asset via `gh release create --generate-notes`. Things
-to know before editing it:
+**GitHub releases are the primary channel**, cut by the `Release` action in
+`buildbuddy.yaml` on **every push to `trunk`** — plus a pushed `v*` tag. It
+stages with `--base-url https://github.com/OWNER/REPO/releases/download` and
+publishes every staged file as a release asset via
+`gh release create --generate-notes`. Things to know before editing it:
 
 - **The release is named by `tools/version.sh`, whatever that gives.** An
   ordinary trunk commit therefore ships as a pseudo-version
   (`v0.0.0-<time>-<sha>`), and a `vX.Y.Z` tag push ships under the tag. No such
-  tag exists for a pseudo-version, so `--target $GITHUB_SHA` has `gh` create one
-  at the built commit. Those generated tags carry a `-<time>-<sha>` suffix and so
-  never match the workflow's own `vX.Y.Z` tag filter — and a tag created with
-  `GITHUB_TOKEN` does not trigger workflows regardless, so there is no loop.
-- It runs on **macOS**, not Linux, because one host builds all four artifacts
-  and only a mac can build the darwin pair — `hermetic_cc_toolchain` (zig) has
-  no macOS SDK and cannot target darwin at all, though it does cross-compile the
-  linux pair from a mac. An ubuntu runner could only ship half a release. It is
-  also why a per-commit release is expensive: macOS minutes bill at 10×.
-  `$BUILDBUDDY_API_KEY` is optional but carries most of the wall clock — with the
-  secret the build reuses CI's remote cache, without it every run is cold.
+  tag exists for a pseudo-version, so `--target` has `gh` create one at the built
+  commit.
+- **It needs no secrets.** The CI runner writes its own
+  `--remote_header=x-buildbuddy-api-key` into a bazelrc, so `--bazel-config ci`
+  reaches RBE with nothing stored anywhere, and `$REPO_TOKEN` is the
+  `buildbuddy-io` app's installation token — short-lived, and its installation
+  holds `contents: write`, which is all that creating the tag, the release and the
+  assets needs. No PAT, no `BUILDBUDDY_API_KEY`.
+- It runs on **linux**, and can, because **nothing in the binary uses cgo**:
+  rules_go builds every `go_cross_binary` pure, so the darwin pair
+  cross-compiles with no macOS SDK and no C toolchain. (`hermetic_cc_toolchain`
+  really cannot target darwin, but that only matters to a build that needs a C
+  toolchain, and this one does not.) It used to run on a GitHub macOS runner,
+  which billed at 10×.
+- **A failure comments its log onto the commit.** Reading a BuildBuddy
+  invocation needs a browser session, so the step tees its own output and posts
+  the tail through the API, with `$REPO_TOKEN` scrubbed out.
 - **An already-published version is skipped, not failed**, and the check runs
-  before the build so it costs nothing. Re-running a commit and pushing a branch
-  with its tag together both arrive with a version that already has a release;
-  GitHub enforces asset immutability regardless, so failing those adds nothing.
+  before the build so it costs nothing. Re-running a commit, pushing a branch
+  with its tag together, and the pseudo-version tag the action creates for itself
+  all arrive with a version that already has a release. That last one matters:
+  trigger patterns are restricted globs, so the tag filter can only say `v*` and
+  every release re-triggers the action once.
 - `--latest` is passed explicitly, because the installer resolves `latest`
   through `/releases/latest/download/` and a pseudo-version's name is
   prerelease-shaped — that inference is not worth leaving to GitHub.
-- Runs are **serialized**, not superseded (`cancel-in-progress: false`): `gh`
-  uploads assets into a draft release before publishing it, so a cancelled run
-  can leave that draft behind.
+- Runs on `trunk` are **concurrent, not cancelled**: the runner cancels
+  superseded runs per branch but exempts the default branch, which `trunk` is.
+  Two runs can therefore claim one version, which is the other thing the
+  already-published check is for.
+- `gh` is **not in the image** and the step cannot write `/usr/local`, so it
+  installs under `$HOME/.local/bin`, which is inside the workspace the executor
+  keeps warm.
 
 The **tag filter is GitHub's filter-pattern dialect, not a regex** —
 `v[0-9]+.[0-9]+.[0-9]+` works because `+` there means one or more of the

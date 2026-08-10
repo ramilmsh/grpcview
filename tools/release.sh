@@ -16,8 +16,9 @@
 # <version> comes from tools/version.sh. Version directories are immutable: the
 # script refuses to overwrite one unless --force is passed.
 #
-# The build and the staged tree come from tools/stage_release.sh, which
-# .github/workflows/release.yml uses too; only the upload below is bucket-specific.
+# The build and the staged tree come from tools/stage_release.sh, which the
+# Release action in buildbuddy.yaml uses too; only the upload below is
+# bucket-specific.
 set -euo pipefail
 
 BUCKET=${GRPCVIEW_RELEASE_BUCKET:-}
