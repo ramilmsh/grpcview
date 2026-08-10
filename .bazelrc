@@ -20,6 +20,16 @@ common --host_per_file_copt=external/.*grpc.*/src/.*@--GRPC_WAS_NOT_SUPPOSED_TO_
 # (the TypeScript path got comments anyway, which is why the gap went unnoticed).
 common --protocopt=--include_source_info
 
+# hermetic_cc_toolchain's `zig cc` turns UBSan on by default, so the cgo C in the Go SDK
+# (runtime/cgo, net) gets calls to __ubsan_handle_*. Their runtime lives in zig's
+# compiler_rt, which only a zig link pulls in — Go links cgo objects with its own internal
+# linker and dies with "relocation target __ubsan_handle_type_mismatch_v1 not defined".
+# Only bites where zig is the cc toolchain, i.e. every linux build: the target config when
+# cross-compiling from macOS, and the exec config on CI, where the protoc plugins link the
+# same way. Apple clang takes the flag as a no-op, so it can stay unconditional.
+common --copt=-fno-sanitize=undefined
+common --host_copt=-fno-sanitize=undefined
+
 build --workspace_status_command=$(pwd)/tools/workspace_status.sh
 
 # .envrc exports GOPROXY=off, which stops `go mod tidy` hanging on the bazel-generated
