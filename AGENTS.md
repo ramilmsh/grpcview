@@ -1566,16 +1566,43 @@ if they already exist, unless `--force`. A modified worktree is refused unless
 under either layout:
 
 ```bash
-curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh
+gh release download --repo OWNER/REPO -p install.sh -O - | sh        # any GitHub release
+curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh  # public only
 curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/install.sh | sh
 ```
 
+**A GitHub release is downloaded with `gh` by default, and while the repository
+is private that is the only thing that works.** Assets of a private or internal
+repository are reachable only through the release asset API, which is keyed by
+numeric asset id; the `/releases/download/` URLs return **404 for everyone**, and
+a valid token does not help because they want a browser session, not an
+`Authorization` header. So the transport is not a preference — measured on this
+repo:
+
+```
+GET /releases/latest/download/latest   anonymous                  -> 404
+GET /releases/latest/download/latest   + valid org token           -> 404
+GET /repos/OWNER/REPO/releases/assets/<id>  Accept: octet-stream   -> works
+```
+
+`gh` speaks that API and holds the credentials, so the installer shells out to
+`gh release download` rather than reimplementing asset-id lookup in POSIX `sh`.
+Missing `gh`, and `gh` present but unauthenticated, are both detected up front —
+the auth check exists so that failure doesn't read as a missing asset — and each
+prints install instructions plus `gh auth login`. `--no-gh` (or
+`GRPCVIEW_INSTALL_USE_GH=0`) forces plain HTTP, which is what a **public**
+repository or a bucket wants; nothing else has to change when this repo goes
+public. The bucket layout never involves `gh`: `$GH_REPO` is set only when the
+base URL matches `https://github.com/OWNER/REPO/releases/download`.
+
 Per-version asset URLs are `<base-url>/<version>/<asset>` under both layouts, so
-only the *root* — where `latest` and the two scripts live — differs, and the
-script derives it in one `case`. A bucket has a real root next to the version
-directories. GitHub has none, since every object is an asset of some tag, but it
-serves the newest release's assets at a fixed `/releases/latest/download/`, so
-the `latest` file published as an asset is readable there.
+for the HTTP transport only the *root* — where `latest` and the two scripts live
+— differs, and the script derives it in one `case`. A bucket has a real root next
+to the version directories. GitHub has none, since every object is an asset of
+some tag, but it serves the newest release's assets at a fixed
+`/releases/latest/download/`, so the `latest` file published as an asset is
+readable there. Over `gh` that file isn't needed at all — `gh release view
+--json tagName` names the release marked Latest directly.
 
 It resolves `latest` (or `--version vX.Y.Z`), picks `grpcview_<goos>_<goarch>`
 from `uname`, verifies the download against the published `SHA256SUMS`, and
@@ -1597,6 +1624,7 @@ binaries — every `grpcview` it finds in `$GRPCVIEW_BIN_DIR`, `/usr/local/bin`,
 grpcview` resolves to. `--purge` also deletes the state directory:
 
 ```bash
+gh release download --repo OWNER/REPO -p uninstall.sh -O - | sh
 curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/uninstall.sh | sh
 tools/uninstall.sh --purge --dry-run     # show what a purge would delete
 ```
@@ -1621,6 +1649,12 @@ the target machine has. Guards worth keeping:
   compares `$BASE_URL` against the placeholder text: that substitution is
   global, so a guard naming the placeholder would itself be rewritten into one
   matching the real URL. It checks for an `http(s)://` scheme instead.
+- `use_gh` is set in an `if`, not an `&&` chain. Under `set -eu` a
+  short-circuited AND-list at top level exits the script with the status of its
+  failed first test, so `[ -n "$GH_REPO" ] && ... && use_gh=true` would abort the
+  installer outright for every bucket install.
+- Only `gh` is required when it is the chosen transport: the `need curl or wget`
+  check is skipped, since nothing on the `gh` path fetches a URL.
 - Deletions are confirmed from `/dev/tty`, not stdin, since stdin is the curl
   pipe. The open is tested in a subshell first: `/dev/tty` can pass `[ -r ]` and
   still fail to open, and a failed redirection on the main shell would kill the

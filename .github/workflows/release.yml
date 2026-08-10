@@ -145,8 +145,10 @@ jobs:
           ls -l dist
           repo="${{ github.repository }}"
           # --notes is *prepended* to the generated changelog; --notes-file is not,
-          # so the install command goes here.
-          notes=$(printf '## Install\n\n```sh\ncurl -fsSL https://github.com/%s/releases/download/%s/install.sh | sh\n```\n' "$repo" "$VERSION")
+          # so the install command goes here. Both forms are shown because only
+          # `gh` can reach the assets while the repository is private — the plain
+          # URL 404s for everyone, token or not.
+          notes=$(printf '## Install\n\n```sh\ngh release download --repo %s -p install.sh -O - | sh\n```\n\nOr, once this repository is public:\n\n```sh\ncurl -fsSL https://github.com/%s/releases/latest/download/install.sh | sh\n```\n' "$repo" "$repo")
           # --target creates the tag at the built commit, which is what a
           # pseudo-version needs — no such tag exists yet. For a vX.Y.Z tag push
           # the tag is already there and this is a no-op.

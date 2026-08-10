@@ -1,11 +1,14 @@
 #!/bin/sh
 # Removes the grpcview binary, and with --purge its local state directory too.
 #
+#   gh release download --repo OWNER/REPO -p uninstall.sh -O - | sh
 #   curl -fsSL @BASE_URL@/uninstall.sh | sh
 #
-# tools/release.sh substitutes @BASE_URL@ above at upload time, the same as it
-# does for install.sh. Nothing here fetches anything, so an unsubstituted copy
-# still runs fine.
+# tools/stage_release.sh substitutes @BASE_URL@ above at publish time, the same as
+# it does for install.sh. Nothing here fetches anything, so an unsubstituted copy
+# still runs fine. The curl form wants a release root that serves plain URLs — a
+# bucket, or a public GitHub repository, where it resolves through
+# /releases/latest/download/; the gh form is the one that works either way.
 #
 # Without --purge this only deletes binaries. The state directory is
 # $XDG_CONFIG_HOME/grpcview (Linux) or ~/Library/Application Support/grpcview
