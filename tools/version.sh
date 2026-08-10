@@ -35,6 +35,12 @@ if [[ -z "$version" ]]; then
     fi
 fi
 
+# diff-index compares the index against HEAD and trusts the index's stat data, so
+# a file whose mtime or inode changed without its content changing reads as a
+# modification. A fresh CI checkout hits this routinely — the tree it stats was
+# written by a different process than the one asking — and calls a clean worktree
+# dirty. Refreshing re-stats the tree first, which is what `git status` does.
+git update-index -q --refresh || true
 if ! git diff-index --quiet HEAD --; then
     version="${version}+dirty"
 fi
