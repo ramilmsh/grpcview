@@ -9,4 +9,7 @@ actions:
         branches:
           - "*"
     steps:
-      - run: "bazel test --config=ci //..."
+      # --test_output=errors, because a failing test otherwise prints only the path
+      # of a test.log inside the workflow container, which is gone by the time
+      # anyone reads the workflow log.
+      - run: "bazel test --config=ci --test_output=errors //..."
