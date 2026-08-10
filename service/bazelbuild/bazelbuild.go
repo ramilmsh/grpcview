@@ -278,6 +278,10 @@ func (b Builder) run(parent, ctx context.Context, timeout time.Duration, subject
 	cmd.Dir = b.Root
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	// Killing bazel on the timeout kills only bazel itself; anything it spawned
+	// keeps the captured stdout/stderr pipes open, and Wait blocks on those until
+	// the last one exits. Without a delay the timeout bounds nothing.
+	cmd.WaitDelay = 2 * time.Second
 
 	err := cmd.Run()
 	out := stdout.String()

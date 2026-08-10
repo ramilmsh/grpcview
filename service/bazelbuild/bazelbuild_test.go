@@ -389,7 +389,10 @@ exit 1
 
 func TestDescriptorSetsTimeout(t *testing.T) {
 	root := t.TempDir()
-	binary := fakeBazel(t, "sleep 30\n")
+	// `sleep` in the background, not as the script's last command: a shell that
+	// execs the last command leaves nothing holding the output pipe once the
+	// context kills it, which hides the case this test is about.
+	binary := fakeBazel(t, "sleep 30 &\nwait\n")
 	start := time.Now()
 	_, err := Builder{Binary: binary, Root: root, Timeout: 100 * time.Millisecond}.
 		DescriptorSets(context.Background(), "//pkg:target")
