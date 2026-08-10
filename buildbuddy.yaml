@@ -101,18 +101,22 @@ actions:
           # the whole vX.Y.Z tag list to name an untagged commit.
           git fetch --tags --force origin
 
-          # ubuntu-22.04 has no gh, in its archives or its image. The executor keeps
-          # the container it warmed, so this usually only downloads once. The version
+          # ubuntu-22.04 has no gh, in its archives or its image, and the step cannot
+          # write to /usr/local. $HOME is inside the workspace the executor keeps
+          # warm, so it is both writable and the copy a later run finds — hence the
+          # PATH entry before the check rather than inside the branch. The version
           # comes out of the /releases/latest redirect rather than api.github.com, so
           # it needs no token and no rate-limited API call.
+          export PATH="$HOME/.local/bin:$PATH"
           if ! command -v gh >/dev/null 2>&1; then
             arch=$(dpkg --print-architecture)
             gh_version=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
               https://github.com/cli/cli/releases/latest | sed -n 's|.*/tag/v||p')
             [ -n "$gh_version" ] || { echo "error: could not resolve the latest gh release" >&2; exit 1; }
             echo "==> installing gh $gh_version"
+            mkdir -p "$HOME/.local/bin"
             curl -fsSL "https://github.com/cli/cli/releases/download/v${gh_version}/gh_${gh_version}_linux_${arch}.tar.gz" |
-              tar -xz -C /usr/local --strip-components=1 "gh_${gh_version}_linux_${arch}/bin/gh"
+              tar -xz -C "$HOME/.local" --strip-components=1 "gh_${gh_version}_linux_${arch}/bin/gh"
           fi
           export GH_TOKEN="$REPO_TOKEN"
 
