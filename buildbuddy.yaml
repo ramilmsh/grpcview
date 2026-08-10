@@ -64,16 +64,9 @@ actions:
           repo=$(git remote get-url origin | sed -E 's#^https://[^@]*@#https://#; s#^.*github\.com[:/]##; s#\.git$##')
           [ -n "$repo" ] || { echo "error: could not read the repository from origin" >&2; exit 1; }
 
-          version=$(tools/version.sh)
-          # A checkout is clean, so +dirty means something modified the worktree
-          # before this step and the version no longer names the commit.
-          case "$version" in
-          *+dirty) echo "error: worktree is modified; version.sh gave $version" >&2; exit 1 ;;
-          esac
-          echo "==> $repo $version"
-
           # ubuntu-22.04 has no gh, in its archives or its image. The executor
           # keeps the container it warmed, so this usually only downloads once.
+          # First, because the failure report below goes out through gh.
           if ! command -v gh >/dev/null 2>&1; then
             arch=$(dpkg --print-architecture)
             gh_version=$(curl -fsSL -H "Authorization: Bearer $REPO_TOKEN" \
@@ -85,6 +78,34 @@ actions:
               tar -xz -C /usr/local --strip-components=1 "gh_${gh_version}_linux_${arch}/bin/gh"
           fi
           export GH_TOKEN="$REPO_TOKEN"
+
+          # Reading a BuildBuddy invocation needs a session, which nothing outside a
+          # browser has, so this step keeps its own copy of the log and comments the
+          # tail onto the commit when it fails. The copy has $REPO_TOKEN scrubbed
+          # out of it: xtrace prints expansions, and the runner's own redaction does
+          # not reach a file the step wrote.
+          log=$(mktemp)
+          exec > >(tee "$log") 2>&1
+          report_failure() {
+            code=$?
+            set +x
+            if [ "$code" = 0 ]; then
+              return 0
+            fi
+            body=$(printf 'Release action failed (exit %s).\n\n```\n%s\n```\n' "$code" \
+              "$(tail -n 250 "$log" | sed "s|$REPO_TOKEN|REDACTED|g")")
+            gh api "repos/$repo/commits/$(git rev-parse HEAD)/comments" -f body="$body" >/dev/null || true
+          }
+          trap report_failure EXIT
+          set -x
+
+          version=$(tools/version.sh)
+          # A checkout is clean, so +dirty means something modified the worktree
+          # before this step and the version no longer names the commit.
+          case "$version" in
+          *+dirty) echo "error: worktree is modified; version.sh gave $version" >&2; exit 1 ;;
+          esac
+          echo "==> $repo $version"
 
           # Before the build, so a version that is already published costs
           # nothing. Re-running a commit, pushing a branch and its tag together,
