@@ -4,7 +4,7 @@
 # .github/workflows/release.yml (GitHub releases): the two differ only in where
 # the staged tree is uploaded, and in the URL shape their installer fetches from.
 #
-#   tools/stage_release.sh --dest DIR --base-url https://host/path
+#   tools/stage_release.sh --dest DIR --base-url https://host/path [--bazel-config NAME]
 #
 # Written into DIR:
 #
@@ -20,13 +20,15 @@ set -euo pipefail
 
 dest=
 base_url=
+bazel_config=
 
 usage() {
     cat >&2 <<'EOF'
-usage: tools/stage_release.sh --dest DIR --base-url URL
+usage: tools/stage_release.sh --dest DIR --base-url URL [--bazel-config NAME]
 
-  --dest DIR       directory to stage into (created if absent)
-  --base-url URL   release root the published install.sh will fetch from
+  --dest DIR           directory to stage into (created if absent)
+  --base-url URL       release root the published install.sh will fetch from
+  --bazel-config NAME  --config to pass to bazel, e.g. `ci` for remote execution
 EOF
     exit 2
 }
@@ -39,6 +41,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     --base-url)
         base_url=${2:-}
+        shift 2
+        ;;
+    --bazel-config)
+        bazel_config=${2:-}
         shift 2
         ;;
     -h | --help) usage ;;
@@ -69,9 +75,13 @@ dest=$(cd "$dest" && pwd)
 version=$(tools/version.sh)
 
 echo "==> building $version" >&2
-bazel build --stamp -c opt //service/cmd:release
+# One word or none, so an unquoted expansion is safe and an empty config adds no
+# argument. The same config has to reach the cquery: it selects the target
+# platform, and with it the output paths the artifacts are read back from.
+config=${bazel_config:+--config=$bazel_config}
+bazel build $config --stamp -c opt //service/cmd:release
 
-for artifact in $(bazel cquery --stamp -c opt --output=files //service/cmd:release 2>/dev/null); do
+for artifact in $(bazel cquery $config --stamp -c opt --output=files //service/cmd:release 2>/dev/null); do
     install -m 0755 "$artifact" "$dest/$(basename "$artifact")"
 done
 

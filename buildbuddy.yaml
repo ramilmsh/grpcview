@@ -13,3 +13,123 @@ actions:
       # of a test.log inside the workflow container, which is gone by the time
       # anyone reads the workflow log.
       - run: "bazel test --config=ci --test_output=errors //..."
+
+  # Publishes the GitHub release that .github/workflows/release.yml used to, and
+  # runs here rather than on a GitHub runner for three reasons:
+  #
+  #   * No BuildBuddy API key. The CI runner writes its own
+  #     --remote_header=x-buildbuddy-api-key into a bazelrc, so --config=ci is
+  #     authenticated with nothing stored in a secret.
+  #   * No release token. $REPO_TOKEN is the buildbuddy-io app's installation
+  #     token, short-lived like Actions' GITHUB_TOKEN, and the app's installation
+  #     holds contents:write — enough to create the tag, the release and the
+  #     assets. It also means no PAT to rotate.
+  #   * No macOS host. Nothing in the binary uses cgo, so rules_go builds every
+  #     go_cross_binary pure and the darwin pair cross-compiles from linux with
+  #     no macOS SDK and no C toolchain. A GitHub macOS runner bills at 10x.
+  #
+  # Runs are not serialized the way the Actions workflow was, but they are also
+  # not cancelled: trunk is this repository's default branch, and the runner
+  # allows concurrent runs on the default branch. Two runs claiming one version
+  # is still possible (a branch push and a tag push for the same commit), which
+  # is what the already-published check below is for.
+  - name: "Release"
+    container_image: "ubuntu-22.04"
+    triggers:
+      push:
+        branches:
+          - "trunk"
+        # Trigger patterns are restricted globs — one `*`, no character classes —
+        # so this cannot say vX.Y.Z and instead catches every v* tag, including
+        # the pseudo-version tags a release creates for itself. Those re-trigger
+        # the action, and the already-published check below turns the re-trigger
+        # into a no-op before anything is built.
+        tags:
+          - "v*"
+    env:
+      # Cleared once a run has proved the darwin artifacts build on linux. Until
+      # then this stages the whole release and prints what it staged without
+      # publishing anything.
+      DRY_RUN: "1"
+    steps:
+      - run: |
+          set -euo pipefail
+
+          # The runner fetches the pushed commit alone, and tools/version.sh reads
+          # the whole vX.Y.Z tag list to name an untagged commit.
+          git fetch --tags --force origin
+
+          # The remote URL carries the installation token as basic-auth
+          # credentials, so strip them rather than print them.
+          repo=$(git remote get-url origin | sed -E 's#^https://[^@]*@#https://#; s#^.*github\.com[:/]##; s#\.git$##')
+          [ -n "$repo" ] || { echo "error: could not read the repository from origin" >&2; exit 1; }
+
+          version=$(tools/version.sh)
+          # A checkout is clean, so +dirty means something modified the worktree
+          # before this step and the version no longer names the commit.
+          case "$version" in
+          *+dirty) echo "error: worktree is modified; version.sh gave $version" >&2; exit 1 ;;
+          esac
+          echo "==> $repo $version"
+
+          # ubuntu-22.04 has no gh, in its archives or its image. The executor
+          # keeps the container it warmed, so this usually only downloads once.
+          if ! command -v gh >/dev/null 2>&1; then
+            arch=$(dpkg --print-architecture)
+            gh_version=$(curl -fsSL -H "Authorization: Bearer $REPO_TOKEN" \
+              https://api.github.com/repos/cli/cli/releases/latest |
+              sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -n1)
+            [ -n "$gh_version" ] || { echo "error: could not resolve the latest gh release" >&2; exit 1; }
+            echo "==> installing gh $gh_version"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${gh_version}/gh_${gh_version}_linux_${arch}.tar.gz" |
+              tar -xz -C /usr/local --strip-components=1 "gh_${gh_version}_linux_${arch}/bin/gh"
+          fi
+          export GH_TOKEN="$REPO_TOKEN"
+
+          # Before the build, so a version that is already published costs
+          # nothing. Re-running a commit, pushing a branch and its tag together,
+          # and the tag this action creates for itself all arrive here with a
+          # version that already has a release.
+          if gh release view "$version" --repo "$repo" >/dev/null 2>&1; then
+            echo "$version is already published; nothing to do"
+            exit 0
+          fi
+
+          tools/stage_release.sh \
+            --dest dist \
+            --base-url "https://github.com/$repo/releases/download" \
+            --bazel-config ci
+
+          ls -l dist
+          # Leading magic per artifact, since cross-compiling the darwin pair from
+          # linux is the one thing about this host that the Actions workflow never
+          # exercised: cffaedfe is 64-bit Mach-O, 7f454c46 is ELF.
+          for artifact in dist/grpcview_*; do
+            printf '%s %s\n' "$artifact" "$(od -An -t x1 -N4 "$artifact" | tr -d ' ')"
+          done
+
+          if [ "${DRY_RUN:-}" = 1 ]; then
+            echo "dry run: staged $version without publishing it"
+            exit 0
+          fi
+
+          # --notes is prepended to the generated changelog; --notes-file is not,
+          # so the install command goes here. Both forms are shown because only
+          # `gh` can reach the assets while the repository is private — the plain
+          # URL 404s for everyone, token or not.
+          notes=$(printf '## Install\n\n```sh\ngh release download --repo %s -p install.sh -O - | sh\n```\n\nOr, once this repository is public:\n\n```sh\ncurl -fsSL https://github.com/%s/releases/latest/download/install.sh | sh\n```\n' "$repo" "$repo")
+          # --target creates the tag at the built commit, which is what a
+          # pseudo-version needs — no such tag exists yet. For a vX.Y.Z tag push
+          # the tag is already there and this is a no-op.
+          #
+          # --latest is explicit because the installer resolves `latest` through
+          # /releases/latest/download/, and leaving GitHub to infer it from a
+          # pseudo-version's prerelease-shaped name is not worth the risk.
+          gh release create "$version" \
+            --repo "$repo" \
+            --target "$(git rev-parse HEAD)" \
+            --title "$version" \
+            --latest \
+            --generate-notes \
+            --notes "$notes" \
+            dist/grpcview_* dist/SHA256SUMS dist/latest dist/install.sh dist/uninstall.sh
