@@ -1513,22 +1513,41 @@ and `install.sh`/`uninstall.sh` with their `@BASE_URL@` substituted for
 stdout; everything else goes to stderr, so a caller can capture it.
 
 **GitHub releases are the primary channel**, cut by
-`.github/workflows/release.yml` on a pushed `vX.Y.Z` tag (or `workflow_dispatch`
-with an existing tag). It stages with
+`.github/workflows/release.yml` on **every push to `trunk`** — plus a pushed
+`vX.Y.Z` tag, or `workflow_dispatch` on any ref. It stages with
 `--base-url https://github.com/OWNER/REPO/releases/download` and publishes every
-staged file as a release asset via `gh release create --verify-tag
---generate-notes`. Two things to know before editing it:
+staged file as a release asset via `gh release create --generate-notes`. Things
+to know before editing it:
 
+- **The release is named by `tools/version.sh`, whatever that gives.** An
+  ordinary trunk commit therefore ships as a pseudo-version
+  (`v0.0.0-<time>-<sha>`), and a `vX.Y.Z` tag push ships under the tag. No such
+  tag exists for a pseudo-version, so `--target $GITHUB_SHA` has `gh` create one
+  at the built commit. Those generated tags carry a `-<time>-<sha>` suffix and so
+  never match the workflow's own `vX.Y.Z` tag filter — and a tag created with
+  `GITHUB_TOKEN` does not trigger workflows regardless, so there is no loop.
 - It runs on **macOS**, not Linux, because one host builds all four artifacts
   and only a mac can build the darwin pair — `hermetic_cc_toolchain` (zig) has
   no macOS SDK and cannot target darwin at all, though it does cross-compile the
-  linux pair from a mac. An ubuntu runner could only ship half a release.
-- A release is immutable the same way a bucket version directory is: `gh release
-  create` fails on an existing release, and `--verify-tag` stops it inventing a
-  tag. A commit with no exact `vX.Y.Z` tag is rejected up front, since
-  `tools/version.sh` would otherwise name the release after a pseudo-version
-  nobody can ask for by tag. `$BUILDBUDDY_API_KEY` is optional: with the secret
-  set the build reuses CI's remote cache, without it the build just runs locally.
+  linux pair from a mac. An ubuntu runner could only ship half a release. It is
+  also why a per-commit release is expensive: macOS minutes bill at 10×.
+  `$BUILDBUDDY_API_KEY` is optional but carries most of the wall clock — with the
+  secret the build reuses CI's remote cache, without it every run is cold.
+- **An already-published version is skipped, not failed**, and the check runs
+  before the build so it costs nothing. Re-running a commit and pushing a branch
+  with its tag together both arrive with a version that already has a release;
+  GitHub enforces asset immutability regardless, so failing those adds nothing.
+- `--latest` is passed explicitly, because the installer resolves `latest`
+  through `/releases/latest/download/` and a pseudo-version's name is
+  prerelease-shaped — that inference is not worth leaving to GitHub.
+- Runs are **serialized**, not superseded (`cancel-in-progress: false`): `gh`
+  uploads assets into a draft release before publishing it, so a cancelled run
+  can leave that draft behind.
+
+The **tag filter is GitHub's filter-pattern dialect, not a regex** —
+`v[0-9]+.[0-9]+.[0-9]+` works because `+` there means one or more of the
+preceding character and `.` is literal. Reading it as a regex, or rewriting it as
+a plain glob, both silently change what it matches.
 
 **The bucket is the other channel**, for a private or self-hosted mirror:
 

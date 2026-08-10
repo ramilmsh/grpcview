@@ -1,5 +1,11 @@
-# Builds the multi-arch grpcview binaries for a vX.Y.Z tag and publishes them as
-# a GitHub release, using the same staging step as tools/release.sh.
+# Builds the multi-arch grpcview binaries on every push to trunk and publishes
+# them as a GitHub release, using the same staging step as tools/release.sh.
+#
+# The release is named by tools/version.sh, so an ordinary trunk commit ships as
+# a Go pseudo-version — `v0.0.0-<commit-time>-<sha>`, or `v0.1.1-0.<time>-<sha>`
+# once v0.1.0 exists — and a pushed vX.Y.Z tag ships under that tag instead. The
+# tag for a pseudo-version does not exist yet, so `gh release create` makes it at
+# the built commit.
 #
 # Assets on every release:
 #
@@ -17,16 +23,27 @@ name: release
 
 on:
   push:
+    branches:
+      - trunk
+    # GitHub's filter-pattern dialect, not a regex: `+` means one or more of the
+    # preceding character and `.` is literal, so this is vX.Y.Z and nothing else.
+    # It deliberately excludes the pseudo-version tags this workflow creates
+    # itself, which all carry a `-<time>-<sha>` suffix — belt and braces, since a
+    # tag created with GITHUB_TOKEN does not trigger workflows anyway.
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing vX.Y.Z tag to build and publish"
-        required: true
 
 permissions:
   contents: write
+
+# Releases are serialized rather than superseded: a cancelled run can leave the
+# draft release `gh` uploads assets into behind, and two concurrent runs on
+# neighbouring commits would race to claim the same version when one of them is a
+# tag push for a commit the other is already building.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -35,6 +52,7 @@ jobs:
     # and cannot target darwin at all (see the comment in .bazelrc), while it does
     # cross-compile the linux pair from here. An ubuntu runner could ship half a
     # release. This is also exactly what tools/release.sh does on a developer mac.
+    # It is also why this workflow is expensive: macOS minutes bill at 10x.
     runs-on: macos-15
     timeout-minutes: 90
     # Job level, not step level: a step's own `env` block is not reliably visible
@@ -45,7 +63,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
           # tools/version.sh reads `git tag --points-at HEAD` and compares against
           # the full vX.Y.Z tag list, so shallow history is not enough.
           fetch-depth: 0
@@ -55,12 +72,24 @@ jobs:
         run: |
           set -euo pipefail
           version=$(tools/version.sh)
-          # A pseudo-version means no vX.Y.Z tag points at this commit, so the
-          # release would be named something no user could ask for by tag.
-          if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "error: HEAD has no exact vX.Y.Z tag; tools/version.sh gave $version" >&2
+          [ -n "$version" ] || {
+            echo "error: tools/version.sh printed nothing" >&2
+            exit 1
+          }
+          # The version becomes a git tag and a set of asset names, so anything
+          # outside this set would either fail to tag or need quoting downstream.
+          if printf '%s' "$version" | grep -q '[^A-Za-z0-9._+-]'; then
+            echo "error: version $version has characters that cannot be a tag" >&2
             exit 1
           fi
+          # A runner checkout is clean, so +dirty means the build modified the
+          # worktree before this step and the version no longer names the commit.
+          case "$version" in
+          *+dirty)
+            echo "error: worktree is modified; version.sh gave $version" >&2
+            exit 1
+            ;;
+          esac
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
       # Optional: the release build is heavy and its actions are the same ones CI
@@ -77,7 +106,27 @@ jobs:
             echo "build --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY"
           } >>"$HOME/.bazelrc"
 
+      # Before the build, so a version that is already published costs nothing.
+      - name: Skip an already-published version
+        id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Re-running a commit, or pushing a branch and its tag together, both
+          # arrive here with a version that already has a release. GitHub enforces
+          # asset immutability regardless, so this only keeps that case from
+          # failing a build that did nothing wrong.
+          if gh release view "$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::notice::$VERSION is already published; nothing to do"
+            echo "exists=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >>"$GITHUB_OUTPUT"
+          fi
+
       - name: Build and stage
+        if: ${{ steps.published.outputs.exists == 'false' }}
         run: |
           set -euo pipefail
           # .bazelversion pins the version bazelisk fetches; the macOS runner image
@@ -87,6 +136,7 @@ jobs:
             --base-url "https://github.com/${{ github.repository }}/releases/download"
 
       - name: Publish the release
+        if: ${{ steps.published.outputs.exists == 'false' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -97,14 +147,18 @@ jobs:
           # --notes is *prepended* to the generated changelog; --notes-file is not,
           # so the install command goes here.
           notes=$(printf '## Install\n\n```sh\ncurl -fsSL https://github.com/%s/releases/download/%s/install.sh | sh\n```\n' "$repo" "$VERSION")
-          # --verify-tag refuses to invent a tag when the dispatch input named one
-          # that does not exist, and `create` fails outright on an existing
-          # release, so a published version is immutable the same way a bucket
-          # version directory is.
+          # --target creates the tag at the built commit, which is what a
+          # pseudo-version needs — no such tag exists yet. For a vX.Y.Z tag push
+          # the tag is already there and this is a no-op.
+          #
+          # --latest is explicit because the installer resolves `latest` through
+          # /releases/latest/download/, and leaving GitHub to infer it from a
+          # pseudo-version's prerelease-shaped name is not worth the risk.
           gh release create "$VERSION" \
             --repo "$repo" \
+            --target "$GITHUB_SHA" \
             --title "$VERSION" \
-            --verify-tag \
+            --latest \
             --generate-notes \
             --notes "$notes" \
             dist/grpcview_* dist/SHA256SUMS dist/latest dist/install.sh dist/uninstall.sh
