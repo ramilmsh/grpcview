@@ -15,6 +15,9 @@
 #
 # <version> comes from tools/version.sh. Version directories are immutable: the
 # script refuses to overwrite one unless --force is passed.
+#
+# The build and the staged tree come from tools/stage_release.sh, which
+# .github/workflows/release.yml uses too; only the upload below is bucket-specific.
 set -euo pipefail
 
 BUCKET=${GRPCVIEW_RELEASE_BUCKET:-}
@@ -94,37 +97,15 @@ if [[ "$force" != true ]] && gcloud storage ls "$dest" >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "==> building $version"
-bazel build --stamp -c opt //service/cmd:release
-
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT
-
-for artifact in $(bazel cquery --stamp -c opt --output=files //service/cmd:release 2>/dev/null); do
-    install -m 0755 "$artifact" "$staging/$(basename "$artifact")"
-done
-
-# `sha256sum` on Linux, `shasum` on macOS; both write the same format.
-if command -v sha256sum >/dev/null; then
-    sha256=(sha256sum)
-else
-    sha256=(shasum -a 256)
-fi
-(cd "$staging" && "${sha256[@]}" grpcview_* >SHA256SUMS)
-printf '%s\n' "$version" >"$staging/latest"
 
 # The uploaded installer has to know its own release root, and the bucket is
 # only known here. `gs://name/prefix` is public over the storage.googleapis.com
 # path form, so this is the same objects under a fetchable URL.
 base_url="https://storage.googleapis.com/${BUCKET#gs://}/$PREFIX"
-for script in install.sh uninstall.sh; do
-    sed "s|@BASE_URL@|$base_url|g" "tools/$script" >"$staging/$script"
-    chmod 0755 "$staging/$script"
-    if grep -q '@BASE_URL@' "$staging/$script"; then
-        echo "error: $script still has an unsubstituted @BASE_URL@" >&2
-        exit 1
-    fi
-done
+
+tools/stage_release.sh --dest "$staging" --base-url "$base_url" >/dev/null
 
 echo
 echo "version:     $version"

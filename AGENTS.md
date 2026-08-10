@@ -1499,23 +1499,64 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 
 ### Releasing
 
+There are two publishing targets and one staging step. **`tools/stage_release.sh`
+builds and stages; it is the shared half.**
+
+```bash
+tools/stage_release.sh --dest DIR --base-url https://host/path
+```
+
+It builds `//service/cmd:release` with `--stamp -c opt` and writes into `DIR`
+the four binaries, a `SHA256SUMS`, a `latest` file holding the version string,
+and `install.sh`/`uninstall.sh` with their `@BASE_URL@` substituted for
+`--base-url`. The version comes from `tools/version.sh` and is the script's only
+stdout; everything else goes to stderr, so a caller can capture it.
+
+**GitHub releases are the primary channel**, cut by
+`.github/workflows/release.yml` on a pushed `vX.Y.Z` tag (or `workflow_dispatch`
+with an existing tag). It stages with
+`--base-url https://github.com/OWNER/REPO/releases/download` and publishes every
+staged file as a release asset via `gh release create --verify-tag
+--generate-notes`. Two things to know before editing it:
+
+- It runs on **macOS**, not Linux, because one host builds all four artifacts
+  and only a mac can build the darwin pair — `hermetic_cc_toolchain` (zig) has
+  no macOS SDK and cannot target darwin at all, though it does cross-compile the
+  linux pair from a mac. An ubuntu runner could only ship half a release.
+- A release is immutable the same way a bucket version directory is: `gh release
+  create` fails on an existing release, and `--verify-tag` stops it inventing a
+  tag. A commit with no exact `vX.Y.Z` tag is rejected up front, since
+  `tools/version.sh` would otherwise name the release after a pseudo-version
+  nobody can ask for by tag. `$BUILDBUDDY_API_KEY` is optional: with the secret
+  set the build reuses CI's remote cache, without it the build just runs locally.
+
+**The bucket is the other channel**, for a private or self-hosted mirror:
+
 ```bash
 tools/release.sh --bucket gs://BUCKET            # or set GRPCVIEW_RELEASE_BUCKET
 tools/release.sh --bucket gs://BUCKET --dry-run  # build and stage, upload nothing
 ```
 
-It builds `//service/cmd:release` with `--stamp -c opt`, stages the four
-binaries with a `SHA256SUMS`, and uploads them to
-`gs://BUCKET/grpcview/<version>/`, then rewrites `gs://BUCKET/grpcview/latest`
-to hold the version string. Version directories are treated as immutable —
-uploaded with a one-year `Cache-Control` and refused if they already exist,
-unless `--force`. A modified worktree is refused unless `--allow-dirty`.
+It stages, then uploads to `gs://BUCKET/grpcview/<version>/` and rewrites
+`gs://BUCKET/grpcview/latest` to hold the version string. Version directories
+are treated as immutable — uploaded with a one-year `Cache-Control` and refused
+if they already exist, unless `--force`. A modified worktree is refused unless
+`--allow-dirty`.
 
-**`tools/install.sh` is the public installer**, published to the same bucket:
+**`tools/install.sh` is the public installer**, published alongside the binaries
+under either layout:
 
 ```bash
+curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh
 curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/install.sh | sh
 ```
+
+Per-version asset URLs are `<base-url>/<version>/<asset>` under both layouts, so
+only the *root* — where `latest` and the two scripts live — differs, and the
+script derives it in one `case`. A bucket has a real root next to the version
+directories. GitHub has none, since every object is an asset of some tag, but it
+serves the newest release's assets at a fixed `/releases/latest/download/`, so
+the `latest` file published as an asset is readable there.
 
 It resolves `latest` (or `--version vX.Y.Z`), picks `grpcview_<goos>_<goarch>`
 from `uname`, verifies the download against the published `SHA256SUMS`, and
@@ -1554,10 +1595,10 @@ directories that clean themselves up.
 Both scripts are POSIX `sh`, not bash, because they run under whatever `/bin/sh`
 the target machine has. Guards worth keeping:
 
-- The installer's release root is a `@BASE_URL@` placeholder that `release.sh`
-  substitutes at upload time — the bucket is only known there — so the
+- The installer's release root is a `@BASE_URL@` placeholder that
+  `stage_release.sh` substitutes — the destination is only known there — so the
   checked-in copy needs `--base-url` or `$GRPCVIEW_INSTALL_BASE_URL` to run, and
-  `release.sh` fails the upload if a placeholder survives. The installer never
+  staging fails if a placeholder survives. The installer never
   compares `$BASE_URL` against the placeholder text: that substitution is
   global, so a guard naming the placeholder would itself be rewritten into one
   matching the real URL. It checks for an `http(s)://` scheme instead.
@@ -1571,11 +1612,13 @@ the target machine has. Guards worth keeping:
   `workspaces/` — otherwise it takes `--force`. Symlinked binaries are skipped
   by default too, since a symlink is how Homebrew or Bazel owns a name in `bin`.
 
-Each release directory keeps an immutable copy of both scripts as they shipped;
-the top-level copies are the URLs users curl and, like `latest`, are uploaded
-`no-cache`. They also get `text/plain` rather than the guessed
-`application/x-sh`, so they can be read in a browser before being piped to a
-shell.
+In the bucket layout, each release directory keeps an immutable copy of both
+scripts as they shipped; the top-level copies are the URLs users curl and, like
+`latest`, are uploaded `no-cache`. They also get `text/plain` rather than the
+guessed `application/x-sh`, so they can be read in a browser before being piped
+to a shell. GitHub needs none of that: an asset only ever belongs to its own
+tag, and `/releases/latest/download/` is the redirect that stands in for the
+mutable top-level copy.
 
 **Versions come from `tools/version.sh`**, which `tools/workspace_status.sh`
 stamps into `STABLE_VERSION_TAG` and thence into `cli.version` — what both

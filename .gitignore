@@ -1,2 +1,4 @@
 bazel-*
 node_modules/
+# Where tools/stage_release.sh stages a release in CI.
+dist/

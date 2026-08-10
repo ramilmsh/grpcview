@@ -1,0 +1,110 @@
+# Builds the multi-arch grpcview binaries for a vX.Y.Z tag and publishes them as
+# a GitHub release, using the same staging step as tools/release.sh.
+#
+# Assets on every release:
+#
+#   grpcview_{darwin,linux}_{amd64,arm64}
+#   SHA256SUMS
+#   latest         a text file holding the version, so the installer can resolve
+#                  `latest` through /releases/latest/download/latest
+#   install.sh     with its @BASE_URL@ substituted for this repository
+#   uninstall.sh
+#
+# Install command for a published release:
+#
+#   curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing vX.Y.Z tag to build and publish"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # macOS, not Linux, because one host builds all four artifacts and only this
+    # one can build the darwin pair: hermetic_cc_toolchain (zig) has no macOS SDK
+    # and cannot target darwin at all (see the comment in .bazelrc), while it does
+    # cross-compile the linux pair from here. An ubuntu runner could ship half a
+    # release. This is also exactly what tools/release.sh does on a developer mac.
+    runs-on: macos-15
+    timeout-minutes: 90
+    # Job level, not step level: a step's own `env` block is not reliably visible
+    # to that same step's `if`, and the cache step has to be skipped when the
+    # secret is absent (a fork) rather than authenticate with an empty key.
+    env:
+      BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # tools/version.sh reads `git tag --points-at HEAD` and compares against
+          # the full vX.Y.Z tag list, so shallow history is not enough.
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(tools/version.sh)
+          # A pseudo-version means no vX.Y.Z tag points at this commit, so the
+          # release would be named something no user could ask for by tag.
+          if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "error: HEAD has no exact vX.Y.Z tag; tools/version.sh gave $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      # Optional: the release build is heavy and its actions are the same ones CI
+      # already ran, so a cache hit is most of the wall clock. Absent the secret
+      # (a fork, say) the build just runs locally.
+      - name: Enable the remote cache
+        if: ${{ env.BUILDBUDDY_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          {
+            echo "build --remote_cache=grpcs://grpcview.buildbuddy.io"
+            echo "build --remote_timeout=10m"
+            echo "build --remote_cache_compression"
+            echo "build --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY"
+          } >>"$HOME/.bazelrc"
+
+      - name: Build and stage
+        run: |
+          set -euo pipefail
+          # .bazelversion pins the version bazelisk fetches; the macOS runner image
+          # ships bazelisk as `bazel`, so no toolchain setup step is needed.
+          tools/stage_release.sh \
+            --dest dist \
+            --base-url "https://github.com/${{ github.repository }}/releases/download"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ls -l dist
+          repo="${{ github.repository }}"
+          # --notes is *prepended* to the generated changelog; --notes-file is not,
+          # so the install command goes here.
+          notes=$(printf '## Install\n\n```sh\ncurl -fsSL https://github.com/%s/releases/download/%s/install.sh | sh\n```\n' "$repo" "$VERSION")
+          # --verify-tag refuses to invent a tag when the dispatch input named one
+          # that does not exist, and `create` fails outright on an existing
+          # release, so a published version is immutable the same way a bucket
+          # version directory is.
+          gh release create "$VERSION" \
+            --repo "$repo" \
+            --title "$VERSION" \
+            --verify-tag \
+            --generate-notes \
+            --notes "$notes" \
+            dist/grpcview_* dist/SHA256SUMS dist/latest dist/install.sh dist/uninstall.sh

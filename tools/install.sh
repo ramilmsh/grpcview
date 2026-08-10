@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs the grpcview binary from the public release bucket.
+# Installs the grpcview binary from a published grpcview release.
 #
 #   curl -fsSL @BASE_URL@/install.sh | sh
 #
@@ -25,7 +25,7 @@ usage: install.sh [options]
 
   --version VERSION   version to install (default: whatever <base-url>/latest names)
   --bin-dir DIR       install into DIR instead of the first writable default
-  --base-url URL      release root, e.g. https://storage.googleapis.com/BUCKET/grpcview
+  --base-url URL      release root, e.g. https://github.com/OWNER/REPO/releases/download
   --list              print the resolved version and asset, install nothing
 EOF
     exit 2
@@ -73,6 +73,17 @@ http://* | https://*) ;;
 esac
 BASE_URL=${BASE_URL%/}
 
+# Where the version pointer and the sibling scripts live. A bucket keeps them at
+# the release root next to the version directories. GitHub has no release root —
+# every object is an asset of some tag — but it serves the newest release's
+# assets under a fixed /releases/latest/download/ path, so the same `latest`,
+# `install.sh` and `uninstall.sh` are readable there. Per-version asset URLs are
+# `<base>/<tag>/<asset>` under either layout, so only this root differs.
+case "$BASE_URL" in
+*/releases/download) ROOT_URL="${BASE_URL%/download}/latest/download" ;;
+*) ROOT_URL=$BASE_URL ;;
+esac
+
 if command -v curl >/dev/null 2>&1; then
     fetch() { curl -fsSL "$1" -o "$2"; }
 elif command -v wget >/dev/null 2>&1; then
@@ -107,10 +118,10 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 if [ "$VERSION" = latest ]; then
-    fetch "$BASE_URL/latest" "$tmp/latest" ||
-        die "cannot read $BASE_URL/latest"
+    fetch "$ROOT_URL/latest" "$tmp/latest" ||
+        die "cannot read $ROOT_URL/latest"
     VERSION=$(tr -d ' \t\r\n' <"$tmp/latest")
-    [ -n "$VERSION" ] || die "$BASE_URL/latest is empty"
+    [ -n "$VERSION" ] || die "$ROOT_URL/latest is empty"
 fi
 
 if [ "$list_only" = true ]; then
@@ -156,7 +167,7 @@ chmod 0755 "$staged"
 mv -f "$staged" "$BIN_DIR/grpcview"
 
 echo "installed $BIN_DIR/grpcview"
-echo "uninstall: curl -fsSL $BASE_URL/uninstall.sh | sh"
+echo "uninstall: curl -fsSL $ROOT_URL/uninstall.sh | sh"
 
 # $SHELL is the user's login shell, which is what needs the PATH entry — not
 # whatever /bin/sh is running this script. fish does not understand `export
