@@ -1,0 +1,37 @@
+{
+  "name": "grpcview",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers-community/features/bazel:1": {},
+    "ghcr.io/devcontainers-extra/features/direnv:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "waitFor": "postCreateCommand",
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-bazel-cache,target=/home/vscode/.cache/bazel,type=volume",
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume",
+    "source=gh-cli-config-${devcontainerId},target=/home/vscode/.config/gh,type=volume",
+    "source=${localWorkspaceFolderBasename}-bashhistory,target=/home/vscode/.history,type=volume"
+  ],
+  "containerEnv": {
+    "HISTFILE": "/home/vscode/.history/.bash_history"
+  },
+  "forwardPorts": [
+    10000
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "EditorConfig.EditorConfig",
+        "esbenp.prettier-vscode",
+        "BazelBuild.vscode-bazel",
+        "golang.go",
+        "mkhl.direnv",
+      ]
+    }
+  },
+  "remoteUser": "vscode"
+}

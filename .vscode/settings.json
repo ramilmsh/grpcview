@@ -15,10 +15,6 @@
   "bazel.buildifierExecutable": "@buildifier_prebuilt//:buildifier",
   "bazel.lsp.command": "starpls",
   "bazel.queriesShareServer": false,
-  "protobuf.protoSrcsDir": "${workspaceFolder}/proto",
-  "protobuf.completion.includeGoogleTypes": false,
-  "protobuf.protoc.useAbsolutePath": true,
-  "protobuf.includes": ["bazel-grpcview/external/googleapis+"],
   "go.toolsEnvVars": {
     "GOPACKAGESDRIVER": "${workspaceFolder}/tools/gopackagesdriver.sh"
   },
@@ -26,7 +22,10 @@
     "runtest": false
   },
   "gopls": {
-    "build.workspaceFiles": ["**/BUILD", "**/*.{bzl,bazel}"],
+    "build.workspaceFiles": [
+      "**/BUILD",
+      "**/*.{bzl,bazel}"
+    ],
     "build.directoryFilters": [
       "-bazel-bin",
       "-bazel-out",
@@ -56,9 +55,6 @@
   },
   "[go]": {
     "editor.defaultFormatter": "golang.go"
-  },
-  "[proto]": {
-    "editor.defaultFormatter": "DrBlury.protobuf-vsc"
   },
   "[jsonc]": {
     "editor.defaultFormatter": "vscode.json-language-features"

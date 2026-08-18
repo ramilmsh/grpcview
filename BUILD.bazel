@@ -1,5 +1,6 @@
 load("@bazel_env.bzl", "bazel_env")
 load("@gazelle//:def.bzl", "gazelle")
+load("@multitool//:tools.bzl", "TOOLS")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 
 npm_link_all_packages(name = "node_modules")
@@ -15,7 +16,7 @@ bazel_env(
         "pnpm": "@pnpm//:pnpm",
         "go": "@rules_go//go",
         "gazelle": "//:gazelle",
-        "starpls": "@multitool//tools/starpls",
+        "starpls": TOOLS["starpls"],
     },
 )
 
