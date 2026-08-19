@@ -18,8 +18,8 @@ importers:
         specifier: ^1.7.0
         version: 1.7.0(@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1))
       '@connectrpc/protoc-gen-connect-query':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1))
+        specifier: ^2.3.1
+        version: 2.3.1(@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1))
 
   ui:
     dependencies:
@@ -195,6 +195,9 @@ packages:
   '@bufbuild/protobuf@2.12.1':
     resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
 
+  '@bufbuild/protobuf@2.14.0':
+    resolution: {integrity: sha512-C3UGsiCwSprE2NKIIFA3hCDlpXTMCAXRZuEVp88L1GY36Y41+rYL5fryE+nOFhp4p4JPQvdV8PQ4DWgHgeTE+w==}
+
   '@bufbuild/protoc-gen-es@2.12.1':
     resolution: {integrity: sha512-SWa7XvRYRouMo+vBQmpNFZ+ZEqQ8AC0LpL4QWAo1gvstLhFh/Y7Nf/a+MK7ZxDq5LZSThwfk974L1sFxO3OaGw==}
     engines: {node: '>=20'}
@@ -210,6 +213,9 @@ packages:
 
   '@bufbuild/protoplugin@2.12.1':
     resolution: {integrity: sha512-PY58KxQVAD1BnnKtStOctsMoegEVGfBnY5AOqVQOIu711nA13oYtTqJM8df5lUQg2J1DR3XxUXptE+fWX5oLdA==}
+
+  '@bufbuild/protoplugin@2.14.0':
+    resolution: {integrity: sha512-S0TvZhVtTEkZQRj2JsXBCXiib/b0+bLQtJCcn+hj9O/usgbcgxHn4D+ii22Ao3qj0/kKxVYeo7BtAI2dMk+iig==}
 
   '@connectrpc/connect-query-core@2.2.0':
     resolution: {integrity: sha512-t/CuxW/vP84y2iyS+PnbAnBwgOTYMzHXTSoBUKC1vIn706aNiZP40Y6mGJybglyH63RhAPcOdUgzG7DjzaAHCw==}
@@ -251,8 +257,8 @@ packages:
       '@connectrpc/connect':
         optional: true
 
-  '@connectrpc/protoc-gen-connect-query@2.2.0':
-    resolution: {integrity: sha512-MC+Yn3GjqfmdXnmzixylbnAF6viX5y30PTj9gBXTPwyvA5s9iarWV3FKdjT4IcfQYQIJv11e7LrJ2eFZ6vGAUA==}
+  '@connectrpc/protoc-gen-connect-query@2.3.1':
+    resolution: {integrity: sha512-PFI6WINAUok7lLgIlXL+2hPZ2EsRxyeYfwaebjkZLHALUynO4lfRu9YFPdD3rW8xBAxS8JJMAwhWnUIOYlbJ8g==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -1381,6 +1387,8 @@ snapshots:
 
   '@bufbuild/protobuf@2.12.1': {}
 
+  '@bufbuild/protobuf@2.14.0': {}
+
   '@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1)':
     dependencies:
       '@bufbuild/protoplugin': 2.12.1
@@ -1400,6 +1408,14 @@ snapshots:
   '@bufbuild/protoplugin@2.12.1':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
+      '@typescript/vfs': 1.6.4(typescript@5.4.5)
+      typescript: 5.4.5
+    transitivePeerDependencies:
+      - supports-color
+
+  '@bufbuild/protoplugin@2.14.0':
+    dependencies:
+      '@bufbuild/protobuf': 2.14.0
       '@typescript/vfs': 1.6.4(typescript@5.4.5)
       typescript: 5.4.5
     transitivePeerDependencies:
@@ -1440,10 +1456,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@connectrpc/protoc-gen-connect-query@2.2.0(@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1))':
+  '@connectrpc/protoc-gen-connect-query@2.3.1(@bufbuild/protoc-gen-es@2.12.1(@bufbuild/protobuf@2.12.1))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
-      '@bufbuild/protoplugin': 2.12.1
+      '@bufbuild/protobuf': 2.14.0
+      '@bufbuild/protoplugin': 2.14.0
     optionalDependencies:
       '@bufbuild/protoc-gen-es': 2.12.1(@bufbuild/protobuf@2.12.1)
     transitivePeerDependencies:
