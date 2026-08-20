@@ -1624,9 +1624,9 @@ stamps into `STABLE_VERSION_TAG` and thence into `cli.version` — what both
 setting `root.Version` is the only thing that makes cobra accept `--version` at
 all; its version template is overridden to drop cobra's `grpcview version `
 prefix so the flag and the verb emit the same single line. An exact `vX.Y.Z` tag on HEAD wins; otherwise it emits a Go
-pseudo-version — `v0.0.0-20260806152233-1a2b3c4d5e6f` with no tags in the repo,
-or `v0.1.1-0.<timestamp>-<sha>` once `v0.1.0` exists. That is the canonical
-date-based version for an untagged commit: the timestamp is the commit time in
+pseudo-version — `v0.0.0-20260806-1a2b3c4d5e6f` with no tags in the repo,
+or `v0.1.1-0.<date>-<sha>` once `v0.1.0` exists. That is the canonical
+date-based version for an untagged commit: the date is the commit date in
 UTC, so the strings sort chronologically, and they compare as semver
 prereleases below the tag they build on, which keeps `go get` and any semver
 range check honest. A dirty worktree gets a `+dirty` suffix.

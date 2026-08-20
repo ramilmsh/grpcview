@@ -5,8 +5,8 @@
 # pseudo-version (https://go.dev/ref/mod#pseudo-versions) — the canonical way to
 # name an untagged commit by date:
 #
-#   v0.0.0-20260806152233-1a2b3c4d5e6f      (no vX.Y.Z tag exists yet)
-#   v0.1.1-0.20260806152233-1a2b3c4d5e6f    (latest tag is v0.1.0)
+#   v0.0.0-20260806-1a2b3c4d5e6f      (no vX.Y.Z tag exists yet)
+#   v0.1.1-0.20260806-1a2b3c4d5e6f    (latest tag is v0.1.0)
 #
 # The timestamp is the commit time in UTC, so the strings sort chronologically
 # and compare as semver prereleases below the tag they build on. A dirty
@@ -21,7 +21,7 @@ release_tags() {
 version=$(git tag --points-at HEAD -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n1 || true)
 
 if [[ -z "$version" ]]; then
-    commit_time=$(TZ=UTC0 git show -s --format=%cd --date=format-local:%Y%m%d%H%M%S HEAD)
+    commit_time=$(TZ=UTC0 git show -s --format=%cd --date=format-local:%Y%m%d HEAD)
     short_sha=$(git rev-parse --short=12 HEAD)
     latest_tag=$(release_tags | tail -n1)
 
