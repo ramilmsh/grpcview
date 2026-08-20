@@ -1,23 +1,4 @@
 #!/bin/sh
-# Removes the grpcview binary, and with --purge its local state directory too.
-#
-#   gh release download --repo OWNER/REPO -p uninstall.sh -O - | sh
-#   curl -fsSL @BASE_URL@/uninstall.sh | sh
-#
-# tools/stage_release.sh substitutes @BASE_URL@ above at publish time, the same as
-# it does for install.sh. Nothing here fetches anything, so an unsubstituted copy
-# still runs fine. The curl form wants a release root that serves plain URLs — a
-# bucket, or a public GitHub repository, where it resolves through
-# /releases/latest/download/; the gh form is the one that works either way.
-#
-# Without --purge this only deletes binaries. The state directory is
-# $XDG_CONFIG_HOME/grpcview (Linux) or ~/Library/Application Support/grpcview
-# (macOS) — the same os.UserConfigDir the binary itself uses. It holds the
-# workspace trust list, cached descriptor blobs, and run history. Collections,
-# requests, and scripts live in your repositories, not there, so they survive a
-# purge; run history does not.
-#
-# POSIX sh, like install.sh: this runs under whatever /bin/sh is on the machine.
 set -eu
 
 BIN_DIR=${GRPCVIEW_BIN_DIR:-}
@@ -76,8 +57,6 @@ die() {
     exit 1
 }
 
-# Newline-separated, because the paths may contain spaces and POSIX sh has no
-# arrays. Every loop over these sets IFS to a newline.
 NL='
 '
 targets=
@@ -97,9 +76,6 @@ add_skipped() {
 consider() {
     candidate=$1
     [ -e "$candidate" ] || [ -L "$candidate" ] || return 0
-    # A symlink is how another tool — Homebrew, Bazel, a dotfile manager — owns
-    # a name in bin. Removing it would break something this script did not
-    # install, so it takes --force.
     if [ -L "$candidate" ] && [ "$force" != true ]; then
         add_skipped "$candidate (symlink; --force to remove)"
         return 0
@@ -117,8 +93,6 @@ else
     for dir in /usr/local/bin "$HOME/.local/bin" /opt/homebrew/bin "$HOME/bin"; do
         consider "$dir/grpcview"
     done
-    # Whatever the shell would actually run, which is the copy the user cares
-    # about even if it lives somewhere this script would not have guessed.
     on_path=$(command -v grpcview 2>/dev/null || true)
     case "$on_path" in
     /*) consider "$on_path" ;;
@@ -137,9 +111,6 @@ if [ "$purge" = true ]; then
     esac
 
     candidate="$config_dir/grpcview"
-    # Guards against a purge widening to something catastrophic if HOME or
-    # XDG_CONFIG_HOME is empty or odd. The path must be a *nested* directory
-    # literally named grpcview, and must not be the home directory itself.
     case "$candidate" in
     */grpcview) ;;
     *) die "refusing to delete $candidate: not a grpcview state directory" ;;
@@ -195,12 +166,6 @@ if [ "$dry_run" = true ]; then
 fi
 
 if [ "$assume_yes" != true ]; then
-    # stdin is the curl pipe when this script is piped to sh, so the prompt has
-    # to come from the terminal. With no terminal there is nobody to confirm to,
-    # and this deletes things, so it stops rather than assuming yes. The open is
-    # tested in a subshell because /dev/tty can pass `[ -r ]` and still fail to
-    # open ("Device not configured"), and a failed redirection on the main shell
-    # would kill the script with a raw error instead of this message.
     if ! (: </dev/tty) 2>/dev/null; then
         die "not interactive; re-run with --yes to confirm"
     fi

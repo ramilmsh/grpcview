@@ -10,8 +10,8 @@
 #
 # The timestamp is the commit time in UTC, so the strings sort chronologically
 # and compare as semver prereleases below the tag they build on. A dirty
-# worktree gets a `+dirty` build-metadata suffix; tools/release.sh refuses to
-# publish one.
+# worktree gets a `+dirty` build-metadata suffix; the Release action in
+# buildbuddy.yaml refuses to publish one.
 set -euo pipefail
 
 release_tags() {

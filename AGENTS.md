@@ -1499,11 +1499,12 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 
 ### Releasing
 
-There are two publishing targets and one staging step. **`tools/stage_release.sh`
-builds and stages; it is the shared half.**
+**GitHub releases are the only channel**, cut by the `Release` action in
+`buildbuddy.yaml` on **every push to `trunk`**, plus a pushed `v*` tag.
+`tools/stage_release.sh` builds and stages; the action publishes what it stages.
 
 ```bash
-tools/stage_release.sh --dest DIR --base-url https://host/path
+tools/stage_release.sh --dest DIR --base-url https://github.com/OWNER/REPO/releases/download
 ```
 
 It builds `//service/cmd:release` with `--stamp -c opt` and writes into `DIR`
@@ -1512,10 +1513,7 @@ and `install.sh`/`uninstall.sh` with their `@BASE_URL@` substituted for
 `--base-url`. The version comes from `tools/version.sh` and is the script's only
 stdout; everything else goes to stderr, so a caller can capture it.
 
-**GitHub releases are the primary channel**, cut by the `Release` action in
-`buildbuddy.yaml` on **every push to `trunk`** — plus a pushed `v*` tag. It
-stages with `--base-url https://github.com/OWNER/REPO/releases/download` and
-publishes every staged file as a release asset via
+The action publishes every staged file as a release asset via
 `gh release create --generate-notes`. Things to know before editing it:
 
 - **The release is named by `tools/version.sh`, whatever that gives.** An
@@ -1531,89 +1529,40 @@ publishes every staged file as a release asset via
   assets needs. No PAT, no `BUILDBUDDY_API_KEY`.
 - It runs on **linux**, and can, because **nothing in the binary uses cgo**:
   rules_go builds every `go_cross_binary` pure, so the darwin pair
-  cross-compiles with no macOS SDK and no C toolchain. (`hermetic_cc_toolchain`
-  really cannot target darwin, but that only matters to a build that needs a C
-  toolchain, and this one does not.) It used to run on a GitHub macOS runner,
-  which billed at 10×.
+  cross-compiles with no macOS SDK and no C toolchain.
 - **A failure comments its log onto the commit.** Reading a BuildBuddy
   invocation needs a browser session, so the step tees its own output and posts
   the tail through the API, with `$REPO_TOKEN` scrubbed out.
 - **An already-published version is skipped, not failed**, and the check runs
   before the build so it costs nothing. Re-running a commit, pushing a branch
   with its tag together, and the pseudo-version tag the action creates for itself
-  all arrive with a version that already has a release. That last one matters:
-  trigger patterns are restricted globs, so the tag filter can only say `v*` and
-  every release re-triggers the action once.
+  all arrive with a version that already has a release.
 - `--latest` is passed explicitly, because the installer resolves `latest`
   through `/releases/latest/download/` and a pseudo-version's name is
   prerelease-shaped — that inference is not worth leaving to GitHub.
 - Runs on `trunk` are **concurrent, not cancelled**: the runner cancels
-  superseded runs per branch but exempts the default branch, which `trunk` is.
-  Two runs can therefore claim one version, which is the other thing the
-  already-published check is for.
-- `gh` is **not in the image** and the step cannot write `/usr/local`, so it
-  installs under `$HOME/.local/bin`, which is inside the workspace the executor
-  keeps warm.
+  superseded runs per branch but exempts the default branch, which `trunk` is —
+  the other reason for the already-published check.
+- `gh` publishes the release from CI and is **not in the image**; the step
+  installs it under `$HOME/.local/bin`, since it can't write `/usr/local`.
 
 The **tag filter is GitHub's filter-pattern dialect, not a regex** —
 `v[0-9]+.[0-9]+.[0-9]+` works because `+` there means one or more of the
 preceding character and `.` is literal. Reading it as a regex, or rewriting it as
 a plain glob, both silently change what it matches.
 
-**The bucket is the other channel**, for a private or self-hosted mirror:
+**`tools/install.sh` is the installer**, published alongside the binaries:
 
 ```bash
-tools/release.sh --bucket gs://BUCKET            # or set GRPCVIEW_RELEASE_BUCKET
-tools/release.sh --bucket gs://BUCKET --dry-run  # build and stage, upload nothing
+curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh
 ```
 
-It stages, then uploads to `gs://BUCKET/grpcview/<version>/` and rewrites
-`gs://BUCKET/grpcview/latest` to hold the version string. Version directories
-are treated as immutable — uploaded with a one-year `Cache-Control` and refused
-if they already exist, unless `--force`. A modified worktree is refused unless
-`--allow-dirty`.
-
-**`tools/install.sh` is the public installer**, published alongside the binaries
-under either layout:
-
-```bash
-gh release download --repo OWNER/REPO -p install.sh -O - | sh        # any GitHub release
-curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh  # public only
-curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/install.sh | sh
-```
-
-**A GitHub release is downloaded with `gh` by default, and while the repository
-is private that is the only thing that works.** Assets of a private or internal
-repository are reachable only through the release asset API, which is keyed by
-numeric asset id; the `/releases/download/` URLs return **404 for everyone**, and
-a valid token does not help because they want a browser session, not an
-`Authorization` header. So the transport is not a preference — measured on this
-repo:
-
-```
-GET /releases/latest/download/latest   anonymous                  -> 404
-GET /releases/latest/download/latest   + valid org token           -> 404
-GET /repos/OWNER/REPO/releases/assets/<id>  Accept: octet-stream   -> works
-```
-
-`gh` speaks that API and holds the credentials, so the installer shells out to
-`gh release download` rather than reimplementing asset-id lookup in POSIX `sh`.
-Missing `gh`, and `gh` present but unauthenticated, are both detected up front —
-the auth check exists so that failure doesn't read as a missing asset — and each
-prints install instructions plus `gh auth login`. `--no-gh` (or
-`GRPCVIEW_INSTALL_USE_GH=0`) forces plain HTTP, which is what a **public**
-repository or a bucket wants; nothing else has to change when this repo goes
-public. The bucket layout never involves `gh`: `$GH_REPO` is set only when the
-base URL matches `https://github.com/OWNER/REPO/releases/download`.
-
-Per-version asset URLs are `<base-url>/<version>/<asset>` under both layouts, so
-for the HTTP transport only the *root* — where `latest` and the two scripts live
-— differs, and the script derives it in one `case`. A bucket has a real root next
-to the version directories. GitHub has none, since every object is an asset of
-some tag, but it serves the newest release's assets at a fixed
-`/releases/latest/download/`, so the `latest` file published as an asset is
-readable there. Over `gh` that file isn't needed at all — `gh release view
---json tagName` names the release marked Latest directly.
+Per-version asset URLs are `<base-url>/<version>/<asset>`; the root — where
+`latest` and the two scripts live — is derived from the same base URL. GitHub
+has no release root of its own, since every object is an asset of some tag, but
+it serves the newest release's assets under a fixed
+`/releases/latest/download/`, which is what `latest`, `install.sh` and
+`uninstall.sh` resolve through.
 
 It resolves `latest` (or `--version vX.Y.Z`), picks `grpcview_<goos>_<goarch>`
 from `uname`, verifies the download against the published `SHA256SUMS`, and
@@ -1635,8 +1584,7 @@ binaries — every `grpcview` it finds in `$GRPCVIEW_BIN_DIR`, `/usr/local/bin`,
 grpcview` resolves to. `--purge` also deletes the state directory:
 
 ```bash
-gh release download --repo OWNER/REPO -p uninstall.sh -O - | sh
-curl -fsSL https://storage.googleapis.com/BUCKET/grpcview/uninstall.sh | sh
+curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/uninstall.sh | sh
 tools/uninstall.sh --purge --dry-run     # show what a purge would delete
 ```
 
@@ -1660,12 +1608,6 @@ the target machine has. Guards worth keeping:
   compares `$BASE_URL` against the placeholder text: that substitution is
   global, so a guard naming the placeholder would itself be rewritten into one
   matching the real URL. It checks for an `http(s)://` scheme instead.
-- `use_gh` is set in an `if`, not an `&&` chain. Under `set -eu` a
-  short-circuited AND-list at top level exits the script with the status of its
-  failed first test, so `[ -n "$GH_REPO" ] && ... && use_gh=true` would abort the
-  installer outright for every bucket install.
-- Only `gh` is required when it is the chosen transport: the `need curl or wget`
-  check is skipped, since nothing on the `gh` path fetches a URL.
 - Deletions are confirmed from `/dev/tty`, not stdin, since stdin is the curl
   pipe. The open is tested in a subshell first: `/dev/tty` can pass `[ -r ]` and
   still fail to open, and a failed redirection on the main shell would kill the
@@ -1675,14 +1617,6 @@ the target machine has. Guards worth keeping:
   neither `$HOME` nor `/grpcview`, and must hold a `trust.json` or a
   `workspaces/` — otherwise it takes `--force`. Symlinked binaries are skipped
   by default too, since a symlink is how Homebrew or Bazel owns a name in `bin`.
-
-In the bucket layout, each release directory keeps an immutable copy of both
-scripts as they shipped; the top-level copies are the URLs users curl and, like
-`latest`, are uploaded `no-cache`. They also get `text/plain` rather than the
-guessed `application/x-sh`, so they can be read in a browser before being piped
-to a shell. GitHub needs none of that: an asset only ever belongs to its own
-tag, and `/releases/latest/download/` is the redirect that stands in for the
-mutable top-level copy.
 
 **Versions come from `tools/version.sh`**, which `tools/workspace_status.sh`
 stamps into `STABLE_VERSION_TAG` and thence into `cli.version` — what both

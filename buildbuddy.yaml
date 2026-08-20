@@ -14,56 +14,21 @@ actions:
       # anyone reads the workflow log.
       - run: "bazel test --config=ci --test_output=errors //..."
 
-  # Publishes the GitHub release. This used to be a GitHub Actions workflow and
-  # runs here instead for three reasons:
-  #
-  #   * No BuildBuddy API key. The CI runner writes its own
-  #     --remote_header=x-buildbuddy-api-key into a bazelrc, so --config=ci is
-  #     authenticated with nothing stored in a secret.
-  #   * No release token. $REPO_TOKEN is the buildbuddy-io app's installation
-  #     token, short-lived like Actions' GITHUB_TOKEN, and the app's installation
-  #     holds contents:write — enough to create the tag, the release and the
-  #     assets. It also means no PAT to rotate.
-  #   * No macOS host. Nothing in the binary uses cgo, so rules_go builds every
-  #     go_cross_binary pure and the darwin pair cross-compiles from linux with
-  #     no macOS SDK and no C toolchain. A GitHub macOS runner bills at 10x.
-  #
-  # Runs are not serialized the way the Actions workflow was, but they are also
-  # not cancelled: trunk is this repository's default branch, and the runner
-  # allows concurrent runs on the default branch. Two runs claiming one version
-  # is still possible (a branch push and a tag push for the same commit), which
-  # is what the already-published check below is for.
   - name: "Release"
     container_image: "ubuntu-22.04"
     triggers:
       push:
         branches:
           - "trunk"
-        # Trigger patterns are restricted globs — one `*`, no character classes —
-        # so this cannot say vX.Y.Z and instead catches every v* tag, including
-        # the pseudo-version tags a release creates for itself. Those re-trigger
-        # the action, and the already-published check below turns the re-trigger
-        # into a no-op before anything is built.
         tags:
           - "v*"
     steps:
       - run: |
           set -euo pipefail
 
-          # The remote URL can carry the installation token as basic-auth
-          # credentials, so strip those rather than print them. Both lines tolerate
-          # failure so that neither can exit the step before the failure report
-          # below is armed; the check for them comes after.
           repo=$(git remote get-url origin 2>/dev/null | sed -E 's#^https://[^@]*@#https://#; s#^.*github\.com[:/]##; s#\.git$##' || true)
           sha=$(git rev-parse HEAD 2>/dev/null || true)
 
-          # Reading a BuildBuddy invocation needs a session, which nothing outside a
-          # browser has, so this step keeps its own copy of its output and posts the
-          # tail as a commit comment when it fails. First in the step, and over curl
-          # rather than gh, so that it also covers the lines that install gh.
-          #
-          # $REPO_TOKEN is scrubbed from the copy: xtrace prints expansions, and the
-          # runner's own redaction covers its log, not a file a step wrote.
           log=$(mktemp)
           exec > >(tee "$log") 2>&1
           report_failure() {
@@ -72,8 +37,6 @@ actions:
             if [ "$code" = 0 ]; then
               return 0
             fi
-            # A raw tab or carriage return is not legal inside a JSON string, and
-            # build output has plenty of both.
             body=$(tail -n 250 "$log" |
               sed "s|$REPO_TOKEN|REDACTED|g" |
               tr '\t' ' ' | tr -d '\000-\010\013-\037' |
@@ -92,16 +55,8 @@ actions:
 
           [ -n "$repo" ] && [ -n "$sha" ] || { echo "error: could not read the repository from origin" >&2; exit 1; }
 
-          # The runner fetches the pushed commit alone, and tools/version.sh reads
-          # the whole vX.Y.Z tag list to name an untagged commit.
           git fetch --tags --force origin
 
-          # ubuntu-22.04 has no gh, in its archives or its image, and the step cannot
-          # write to /usr/local. $HOME is inside the workspace the executor keeps
-          # warm, so it is both writable and the copy a later run finds — hence the
-          # PATH entry before the check rather than inside the branch. The version
-          # comes out of the /releases/latest redirect rather than api.github.com, so
-          # it needs no token and no rate-limited API call.
           export PATH="$HOME/.local/bin:$PATH"
           if ! command -v gh >/dev/null 2>&1; then
             arch=$(dpkg --print-architecture)
@@ -116,17 +71,11 @@ actions:
           export GH_TOKEN="$REPO_TOKEN"
 
           version=$(tools/version.sh)
-          # A checkout is clean, so +dirty means something modified the worktree
-          # before this step and the version no longer names the commit.
           case "$version" in
           *+dirty) echo "error: worktree is modified; version.sh gave $version" >&2; exit 1 ;;
           esac
           echo "==> $repo $version"
 
-          # Before the build, so a version that is already published costs
-          # nothing. Re-running a commit, pushing a branch and its tag together,
-          # and the tag this action creates for itself all arrive here with a
-          # version that already has a release.
           if gh release view "$version" --repo "$repo" >/dev/null 2>&1; then
             echo "$version is already published; nothing to do"
             exit 0
@@ -138,9 +87,6 @@ actions:
             --bazel-config ci
 
           ls -l dist
-          # Leading magic per artifact: cffaedfe is 64-bit Mach-O and 7f454c46 is
-          # ELF, so this says out loud that the darwin pair really did cross-compile
-          # on a linux host rather than quietly coming out as something else.
           for artifact in dist/grpcview_*; do
             printf '%s %s\n' "$artifact" "$(od -An -t x1 -N4 "$artifact" | tr -d ' ')"
           done
@@ -150,18 +96,7 @@ actions:
             exit 0
           fi
 
-          # --notes is prepended to the generated changelog; --notes-file is not,
-          # so the install command goes here. Both forms are shown because only
-          # `gh` can reach the assets while the repository is private — the plain
-          # URL 404s for everyone, token or not.
-          notes=$(printf '## Install\n\n```sh\ngh release download --repo %s -p install.sh -O - | sh\n```\n\nOr, once this repository is public:\n\n```sh\ncurl -fsSL https://github.com/%s/releases/latest/download/install.sh | sh\n```\n' "$repo" "$repo")
-          # --target creates the tag at the built commit, which is what a
-          # pseudo-version needs — no such tag exists yet. For a vX.Y.Z tag push
-          # the tag is already there and this is a no-op.
-          #
-          # --latest is explicit because the installer resolves `latest` through
-          # /releases/latest/download/, and leaving GitHub to infer it from a
-          # pseudo-version's prerelease-shaped name is not worth the risk.
+          notes=$(printf '## Install\n\n```sh\ncurl -fsSL https://github.com/%s/releases/latest/download/install.sh | sh\n```\n' "$repo")
           gh release create "$version" \
             --repo "$repo" \
             --target "$(git rev-parse HEAD)" \

@@ -1,21 +1,4 @@
 #!/usr/bin/env bash
-# Builds the multi-arch grpcview binaries and stages a complete release into a
-# directory. Shared by tools/release.sh (Google Cloud Storage) and the Release
-# action in buildbuddy.yaml (GitHub releases): the two differ only in where the
-# staged tree is uploaded, and in the URL shape their installer fetches from.
-#
-#   tools/stage_release.sh --dest DIR --base-url https://host/path [--bazel-config NAME]
-#
-# Written into DIR:
-#
-#   grpcview_<goos>_<goarch>   one per //service/cmd:release platform
-#   SHA256SUMS
-#   latest                     a text file holding <version>
-#   install.sh                 with @BASE_URL@ substituted
-#   uninstall.sh
-#
-# The version comes from tools/version.sh and is printed on stdout; everything
-# else this script says goes to stderr, so a caller can capture it.
 set -euo pipefail
 
 dest=
@@ -59,8 +42,6 @@ done
     echo "error: --dest is required" >&2
     exit 2
 }
-# The staged install.sh is useless without a root to fetch from, and this script
-# is the only place that knows how to substitute one, so it is not optional.
 [[ -n "$base_url" ]] || {
     echo "error: --base-url is required" >&2
     exit 2
@@ -75,9 +56,6 @@ dest=$(cd "$dest" && pwd)
 version=$(tools/version.sh)
 
 echo "==> building $version" >&2
-# One word or none, so an unquoted expansion is safe and an empty config adds no
-# argument. The same config has to reach the cquery: it selects the target
-# platform, and with it the output paths the artifacts are read back from.
 config=${bazel_config:+--config=$bazel_config}
 bazel build $config --stamp -c opt //service/cmd:release
 
@@ -85,7 +63,6 @@ for artifact in $(bazel cquery $config --stamp -c opt --output=files //service/c
     install -m 0755 "$artifact" "$dest/$(basename "$artifact")"
 done
 
-# `sha256sum` on Linux, `shasum` on macOS; both write the same format.
 if command -v sha256sum >/dev/null; then
     sha256=(sha256sum)
 else
