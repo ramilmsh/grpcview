@@ -1,4 +1,16 @@
+load("@multitool//:tools.bzl", "TOOLS")
 load("@rules_go//proto:compiler.bzl", "go_proto_compiler")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+sh_binary(
+    name = "release",
+    srcs = ["release.sh"],
+    data = [
+        TOOLS["gh"],
+        "//service/cmd:release",
+    ],
+    deps = ["@rules_shell//shell/runfiles"],
+)
 
 go_proto_compiler(
     name = "connect_go_proto_compiler",

@@ -1500,21 +1500,35 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 ### Releasing
 
 **GitHub releases are the only channel**, cut by the `Release` action in
-`buildbuddy.yaml` on **every push to `trunk`**, plus a pushed `v*` tag.
-`tools/stage_release.sh` builds and stages; the action publishes what it stages.
+`buildbuddy.yaml` on **every push to `trunk`**, plus a pushed `v*` tag. The
+entire step is one line:
 
 ```bash
-tools/stage_release.sh --dest DIR --base-url https://github.com/OWNER/REPO/releases/download
+bazel run --config=ci --stamp -c opt //tools:release -- --dest dist
 ```
 
-It builds `//service/cmd:release` with `--stamp -c opt` and writes into `DIR`
-the four binaries, a `SHA256SUMS`, a `latest` file holding the version string,
-and `install.sh`/`uninstall.sh` with their `@BASE_URL@` substituted for
-`--base-url`. The version comes from `tools/version.sh` and is the script's only
-stdout; everything else goes to stderr, so a caller can capture it.
+**`//tools:release` is a `sh_binary`** (`tools/release.sh`), not a loose
+script: `--stamp -c opt` on this outer invocation is what makes its data
+dependency `//service/cmd:release` — the four `grpcview_<goos>_<goarch>`
+cross-binaries — build as optimized, version-stamped release binaries. The
+script never invokes `bazel` itself; it reads those binaries straight out of
+its own runfiles (`$RUNFILES_DIR`, with a `$RUNFILES_MANIFEST_FILE` fallback
+for manifest-mode runfiles), so there is no nested build to keep in sync with
+the outer one. `gh` is a second data dependency, resolved the same way —
+pinned in `tools/multitool.lock.json` for linux/darwin × amd64/arm64, fetched
+and checksummed by Bazel like any other dependency, never shelled out to
+install. Both lookups go through the standard Bazel Bash runfiles library
+(`@rules_shell//shell/runfiles`), which is also why the script is bash, not
+POSIX `sh` like the installer pair.
 
-The action publishes every staged file as a release asset via
-`gh release create --generate-notes`. Things to know before editing it:
+`tools/release.sh` writes into `--dest` (default `dist`) the four binaries,
+a `SHA256SUMS`, and `install.sh` rendered from `tools/install.sh.tmpl` with
+`@BASE_URL@`, `@VERSION@`, and a lone
+`@SHA256SUMS@` line substituted for the GitHub release root it derives from
+`git remote get-url origin`, the version from `tools/version.sh`, and the
+just-generated `SHA256SUMS`. It then publishes every staged file as a
+release asset via `gh release create --generate-notes`. Things to know
+before editing it:
 
 - **The release is named by `tools/version.sh`, whatever that gives.** An
   ordinary trunk commit therefore ships as a pseudo-version
@@ -1522,7 +1536,7 @@ The action publishes every staged file as a release asset via
   tag exists for a pseudo-version, so `--target` has `gh` create one at the built
   commit.
 - **It needs no secrets.** The CI runner writes its own
-  `--remote_header=x-buildbuddy-api-key` into a bazelrc, so `--bazel-config ci`
+  `--remote_header=x-buildbuddy-api-key` into a bazelrc, so `--config=ci`
   reaches RBE with nothing stored anywhere, and `$REPO_TOKEN` is the
   `buildbuddy-io` app's installation token — short-lived, and its installation
   holds `contents: write`, which is all that creating the tag, the release and the
@@ -1531,46 +1545,52 @@ The action publishes every staged file as a release asset via
   rules_go builds every `go_cross_binary` pure, so the darwin pair
   cross-compiles with no macOS SDK and no C toolchain.
 - **A failure comments its log onto the commit.** Reading a BuildBuddy
-  invocation needs a browser session, so the step tees its own output and posts
-  the tail through the API, with `$REPO_TOKEN` scrubbed out.
-- **An already-published version is skipped, not failed**, and the check runs
-  before the build so it costs nothing. Re-running a commit, pushing a branch
-  with its tag together, and the pseudo-version tag the action creates for itself
-  all arrive with a version that already has a release.
-- `--latest` is passed explicitly, because the installer resolves `latest`
-  through `/releases/latest/download/` and a pseudo-version's name is
-  prerelease-shaped — that inference is not worth leaving to GitHub.
+  invocation needs a browser session, so the script tees its own output and
+  posts the tail through the GitHub API, with `$REPO_TOKEN` scrubbed out —
+  both only fire when `$REPO_TOKEN` is set, so a local `bazel run` degrades
+  to just printing rather than failing outright.
+- **An already-published version is skipped, not failed.** Re-running a
+  commit, pushing a branch with its tag together, and the pseudo-version tag
+  the action creates for itself all arrive here with a version that already
+  has a release; unlike before this was a `sh_binary`, the check can no
+  longer run before the build, since `//service/cmd:release` is now a
+  dependency of `//tools:release` itself and builds regardless — a cost
+  RBE's cache mostly absorbs, since nothing changed.
+- `--latest` is passed explicitly, because the documented one-liner curls
+  `/releases/latest/download/install.sh` — GitHub's own newest-release
+  pointer, unrelated to anything the installer resolves itself — and a
+  pseudo-version's name is prerelease-shaped, so that inference is not
+  worth leaving to GitHub.
 - Runs on `trunk` are **concurrent, not cancelled**: the runner cancels
   superseded runs per branch but exempts the default branch, which `trunk` is —
   the other reason for the already-published check.
-- `gh` publishes the release from CI and is **not in the image**; the step
-  installs it under `$HOME/.local/bin`, since it can't write `/usr/local`.
 
 The **tag filter is GitHub's filter-pattern dialect, not a regex** —
 `v[0-9]+.[0-9]+.[0-9]+` works because `+` there means one or more of the
 preceding character and `.` is literal. Reading it as a regex, or rewriting it as
 a plain glob, both silently change what it matches.
 
-**`tools/install.sh` is the installer**, published alongside the binaries:
+**`tools/install.sh.tmpl` is the installer template**, rendered to
+`install.sh` and published alongside the binaries:
 
 ```bash
 curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/install.sh | sh
 ```
 
-Per-version asset URLs are `<base-url>/<version>/<asset>`; the root — where
-`latest` and the two scripts live — is derived from the same base URL. GitHub
-has no release root of its own, since every object is an asset of some tag, but
-it serves the newest release's assets under a fixed
-`/releases/latest/download/`, which is what `latest`, `install.sh` and
-`uninstall.sh` resolve through.
+The asset URL is `<base-url>/<version>/<asset>`.
 
-It resolves `latest` (or `--version vX.Y.Z`), picks `grpcview_<goos>_<goarch>`
-from `uname`, verifies the download against the published `SHA256SUMS`, and
-installs it as `grpcview` in the first writable directory of
-`$GRPCVIEW_BIN_DIR`, `/usr/local/bin`, `~/.local/bin` — `--bin-dir` overrides.
-It writes to a temporary name in that directory and renames, so upgrading a
-running binary can't hit `ETXTBSY`. `--list` resolves and prints without
-installing.
+**It never resolves "latest" or fetches `SHA256SUMS` over the network.**
+Version, base URL, and sums are all baked in at render time — `--version`
+and `--base-url` don't exist as flags — so it installs exactly the release
+it was published for: picks `grpcview_<goos>_<goarch>` from `uname`,
+downloads it from the baked-in URL, and verifies it against the baked-in
+sums, which can't be served something that doesn't match this exact
+script. Installing a different version means getting that version's own
+published `install.sh`, not overriding this one. It installs the verified
+binary as `grpcview` in the first writable directory of
+`/usr/local/bin`, `~/.local/bin` — `--bin-dir` overrides. It writes to a
+temporary name in that directory and renames, so upgrading a running binary
+can't hit `ETXTBSY`. `--list` resolves and prints without installing.
 
 When the chosen directory is not on `PATH`, the hint it prints is keyed off
 `${SHELL##*/}`, the user's **login** shell rather than the `/bin/sh` running the
@@ -1578,45 +1598,56 @@ script: fish gets `fish_add_path`, csh/tcsh get `setenv`, and only unrecognized
 shells get a bare `export PATH=`. Printing POSIX syntax to a fish user is advice
 that silently does nothing.
 
-**`tools/uninstall.sh` is the counterpart.** By default it only deletes
-binaries — every `grpcview` it finds in `$GRPCVIEW_BIN_DIR`, `/usr/local/bin`,
-`~/.local/bin`, `/opt/homebrew/bin`, `~/bin`, plus whatever `command -v
-grpcview` resolves to. `--purge` also deletes the state directory:
+**`grpcview uninstall` is the counterpart**, a CLI subcommand
+(`service/cli/uninstall.go`) rather than a second published script. By
+default it only deletes binaries — every `grpcview` it finds in
+`/usr/local/bin`, `~/.local/bin`, `/opt/homebrew/bin`, `~/bin`, whatever
+`grpcview` resolves to on `PATH`, and `os.Executable()`, the copy actually
+running (`--bin-dir` narrows the search to one directory). `--purge` also
+deletes **both** directories grpcview owns:
 
 ```bash
-curl -fsSL https://github.com/OWNER/REPO/releases/latest/download/uninstall.sh | sh
-tools/uninstall.sh --purge --dry-run     # show what a purge would delete
+grpcview uninstall --purge --dry-run     # show what a purge would delete
 ```
 
-The state root is `os.UserConfigDir()/grpcview`, which the script recomputes
-from `$XDG_CONFIG_HOME` / `~/Library/Application Support` rather than asking the
-binary — the binary may already be gone. **It is not a cache** (see the comment
-at `service/wsroot/wsroot.go:59`): a purge loses the workspace trust list,
-cached descriptor blobs, and run history. Collections, requests, and scripts
-live in the user's repositories, so a purge never touches them. A state root
-moved with `GRPCVIEW_CONFIG_DIR` is deliberately **not** purged: the guard here
-demands a path ending in `/grpcview`, and the override exists for throwaway
-directories that clean themselves up.
+- `wsroot.ConfigRoot()` — the workspace trust list, cached descriptor blobs,
+  and run history. **It is not a cache** (see the comment at
+  `service/wsroot/wsroot.go:96`): losing it loses real state, though never
+  anything in the user's repositories, which is where collections, requests,
+  and scripts actually live.
+- `wsroot.CacheRoot()` — daemon registrations (`service/daemon/registration.go`),
+  recording which server serves which workspace. Genuinely disposable: a
+  client that finds none just spawns a fresh server.
 
-Both scripts are POSIX `sh`, not bash, because they run under whatever `/bin/sh`
-the target machine has. Guards worth keeping:
+Both calls are the same ones the rest of the binary uses to place that state,
+so uninstall can't drift from where things actually get written the way a
+shell script reimplementing `$XDG_CONFIG_HOME` / `~/Library/Application
+Support` / `$XDG_CACHE_HOME` by hand could. Both also honor
+`GRPCVIEW_CONFIG_DIR` and collapse onto the same single directory when it's
+set, so an isolated run has one location to report and delete, not two —
+`tools/uninstall.sh` never looked at that variable at all, so a moved config
+root used to survive an uninstall unpurged.
 
-- The installer's release root is a `@BASE_URL@` placeholder that
-  `stage_release.sh` substitutes — the destination is only known there — so the
-  checked-in copy needs `--base-url` or `$GRPCVIEW_INSTALL_BASE_URL` to run, and
-  staging fails if a placeholder survives. The installer never
-  compares `$BASE_URL` against the placeholder text: that substitution is
-  global, so a guard naming the placeholder would itself be rewritten into one
-  matching the real URL. It checks for an `http(s)://` scheme instead.
-- Deletions are confirmed from `/dev/tty`, not stdin, since stdin is the curl
-  pipe. The open is tested in a subshell first: `/dev/tty` can pass `[ -r ]` and
-  still fail to open, and a failed redirection on the main shell would kill the
-  script with a raw error. No terminal and no `--yes` means refuse, never
-  assume yes.
-- A purge target must be a nested directory literally named `grpcview` that is
-  neither `$HOME` nor `/grpcview`, and must hold a `trust.json` or a
-  `workspaces/` — otherwise it takes `--force`. Symlinked binaries are skipped
-  by default too, since a symlink is how Homebrew or Bazel owns a name in `bin`.
+Being a subcommand rather than a downloaded script also means the
+confirmation prompt reads from real stdin — no `/dev/tty` workaround for a
+stdin consumed by a curl pipe, since there is no curl pipe.
+
+Guards worth keeping:
+
+- The installer's release root, version, and sums are `@BASE_URL@`,
+  `@VERSION@`, and `@SHA256SUMS@` placeholders that `tools/release.sh`
+  substitutes when it renders `install.sh.tmpl` — it derives all three
+  itself (from `git remote get-url origin`, `tools/version.sh`, and the
+  build it just staged), and none of the three are runtime flags. Staging
+  fails if a placeholder survives. The installer never compares `$BASE_URL`
+  against the placeholder text: that substitution is global, so a guard
+  naming the placeholder would itself be rewritten into one matching the
+  real URL. It checks for an `http(s)://` scheme instead.
+- Each purge target must be a nested directory literally named `grpcview` that
+  is neither `$HOME` nor `/grpcview`, and must look like grpcview's own — a
+  `trust.json` or `workspaces/` for the state root, a `servers/` for the cache
+  root — otherwise it takes `--force`. Symlinked binaries are skipped by
+  default too, since a symlink is how Homebrew or Bazel owns a name in `bin`.
 
 **Versions come from `tools/version.sh`**, which `tools/workspace_status.sh`
 stamps into `STABLE_VERSION_TAG` and thence into `cli.version` — what both

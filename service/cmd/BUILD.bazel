@@ -4,7 +4,7 @@ load("@rules_go//go:def.bzl", "go_binary", "go_cross_binary", "go_library")
 
 # The platforms //service/cmd:release publishes. Each name is both a
 # @rules_go//go/toolchain platform and the artifact's `grpcview_<goos>_<goarch>`
-# suffix, so tools/stage_release.sh needs no separate table.
+# suffix, so tools/release.sh needs no separate table.
 RELEASE_PLATFORMS = [
     "darwin_amd64",
     "darwin_arm64",
@@ -51,7 +51,7 @@ go_binary(
     # .bazelrc deliberately does not set --stamp (it would cost a remote-cache hit
     # on every stamped target on every commit), and an unstamped build omits the
     # -X flag rather than embedding the placeholder, so cli.version keeps its
-    # "dev" default. tools/stage_release.sh passes --stamp.
+    # "dev" default. tools/release.sh passes --stamp.
     x_defs = {"codeberg.org/ramilmsh/grpcview/service/cli.version": "{STABLE_VERSION_TAG}"},
 )
 

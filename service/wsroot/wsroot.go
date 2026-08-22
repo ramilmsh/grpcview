@@ -78,7 +78,11 @@ func Discover(override, cwd string) (root string, warn string, err error) {
 // to, which is not the same request at all.
 const ConfigDirEnv = "GRPCVIEW_CONFIG_DIR"
 
-func configRoot() (string, error) {
+// ConfigRoot is where every durable thing grpcview owns lives: the trust list directly, and
+// per-workspace state dirs under workspaces/. Exported so callers that manage that directory
+// itself — `grpcview uninstall --purge` — resolve it exactly as the rest of the binary does,
+// instead of recomputing $XDG_CONFIG_HOME / ~/Library/Application Support by hand.
+func ConfigRoot() (string, error) {
 	if dir := os.Getenv(ConfigDirEnv); dir != "" {
 		return dir, nil
 	}
@@ -87,6 +91,22 @@ func configRoot() (string, error) {
 		return "", fmt.Errorf("failed to get user config dir: %w", err)
 	}
 	return filepath.Join(configDir, "grpcview"), nil
+}
+
+// CacheRoot is where grpcview's disposable, machine-local state lives: today, just the daemon
+// registration files (server/registration.go) recording which server serves which workspace —
+// safe to lose, since a client that finds none just spawns a fresh one. Collapsed onto
+// ConfigRoot under ConfigDirEnv, same as the rest of the durable state, so an isolated run has
+// exactly one directory to clean up rather than two.
+func CacheRoot() (string, error) {
+	if dir := os.Getenv(ConfigDirEnv); dir != "" {
+		return dir, nil
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user cache dir: %w", err)
+	}
+	return filepath.Join(cacheDir, "grpcview"), nil
 }
 
 // os.UserConfigDir, not os.UserCacheDir: run history and other local state are user data, not
@@ -100,7 +120,7 @@ func StateDir(root string) (string, error) {
 	}
 	absRoot = filepath.Clean(absRoot)
 
-	configDir, err := configRoot()
+	configDir, err := ConfigRoot()
 	if err != nil {
 		return "", err
 	}

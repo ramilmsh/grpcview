@@ -1,6 +1,6 @@
 bazel-*
 node_modules/
-# Where tools/stage_release.sh stages a release in CI.
+# Where tools/release.sh stages a release in CI.
 dist/
 # Personal, per-user Claude Code overrides.
 .claude/settings.local.json

@@ -173,6 +173,7 @@ func newRootCmd(
 	root.AddCommand(newShutdownCmd(s, globals))
 	root.AddCommand(newMcpCmd(globals, open))
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newUninstallCmd(s))
 
 	root.SetIn(s.In)
 	root.SetOut(s.Out)

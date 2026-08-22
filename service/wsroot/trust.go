@@ -16,7 +16,7 @@ type trustFile struct {
 }
 
 func trustPath() (string, error) {
-	configDir, err := configRoot()
+	configDir, err := ConfigRoot()
 	if err != nil {
 		return "", err
 	}

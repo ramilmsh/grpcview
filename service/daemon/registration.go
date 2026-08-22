@@ -61,17 +61,15 @@ func (r Registration) URL() string {
 }
 
 // Not the workspace, which may be read-only or network-mounted, and not bare /tmp, which is
-// mode 1777 and shared between users. GRPCVIEW_CONFIG_DIR wins where it is set so a throwaway
-// run (CI, `example:up --isolated`) cannot adopt the developer's real daemon.
+// mode 1777 and shared between users. wsroot.CacheRoot collapses onto GRPCVIEW_CONFIG_DIR where
+// that is set, so a throwaway run (CI, `example:up --isolated`) cannot adopt the developer's
+// real daemon.
 func dir() (string, error) {
-	if override := os.Getenv(wsroot.ConfigDirEnv); override != "" {
-		return filepath.Join(override, "servers"), nil
-	}
-	cache, err := os.UserCacheDir()
+	cache, err := wsroot.CacheRoot()
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve the user cache dir: %w", err)
+		return "", err
 	}
-	return filepath.Join(cache, "grpcview", "servers"), nil
+	return filepath.Join(cache, "servers"), nil
 }
 
 func key(root string) (string, error) {

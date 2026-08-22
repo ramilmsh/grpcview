@@ -17,6 +17,7 @@ go_library(
         "root.go",
         "sources.go",
         "trust.go",
+        "uninstall.go",
         "write.go",
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/cli",

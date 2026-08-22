@@ -1,18 +1,23 @@
 #!/bin/sh
 set -eu
 
-BASE_URL=${GRPCVIEW_INSTALL_BASE_URL:-@BASE_URL@}
-VERSION=${GRPCVIEW_VERSION:-latest}
-BIN_DIR=${GRPCVIEW_BIN_DIR:-}
+VERSION=@VERSION@
+BASE_URL=@BASE_URL@
+BIN_DIR=
+
+SHA256SUMS=$(cat <<'GRPCVIEW_SHA256SUMS_EOF'
+@SHA256SUMS@
+GRPCVIEW_SHA256SUMS_EOF
+)
 
 usage() {
-    cat >&2 <<'EOF'
+    cat >&2 <<EOF
 usage: install.sh [options]
 
-  --version VERSION   version to install (default: the newest published one)
-  --bin-dir DIR       install into DIR instead of the first writable default
-  --base-url URL      release root, e.g. https://github.com/OWNER/REPO/releases/download
-  --list              print the resolved version and asset, install nothing
+  pinned to grpcview $VERSION from $BASE_URL
+
+  --bin-dir DIR   install into DIR instead of the first writable default
+  --list          print the resolved asset, install nothing
 EOF
     exit 2
 }
@@ -21,16 +26,8 @@ list_only=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
-    --version)
-        VERSION=${2:-}
-        shift 2
-        ;;
     --bin-dir)
         BIN_DIR=${2:-}
-        shift 2
-        ;;
-    --base-url)
-        BASE_URL=${2:-}
         shift 2
         ;;
     --list)
@@ -52,14 +49,9 @@ die() {
 
 case "$BASE_URL" in
 http://* | https://*) ;;
-*) die "no release URL; pass --base-url or set GRPCVIEW_INSTALL_BASE_URL" ;;
+*) die "tools/install.sh.tmpl is a template; render it with tools/release.sh, or use a published install.sh" ;;
 esac
 BASE_URL=${BASE_URL%/}
-
-case "$BASE_URL" in
-*/releases/download) ROOT_URL="${BASE_URL%/download}/latest/download" ;;
-*) ROOT_URL=$BASE_URL ;;
-esac
 
 if command -v curl >/dev/null 2>&1; then
     fetch() { curl -fsSL "$1" -o "$2"; }
@@ -68,10 +60,6 @@ elif command -v wget >/dev/null 2>&1; then
 else
     die "need curl or wget"
 fi
-
-get() {
-    fetch "$BASE_URL/$VERSION/$1" "$2"
-}
 
 if command -v sha256sum >/dev/null 2>&1; then
     sha256() { sha256sum "$1" | cut -d' ' -f1; }
@@ -95,16 +83,6 @@ esac
 
 asset="grpcview_${os}_${arch}"
 
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT INT TERM
-
-if [ "$VERSION" = latest ]; then
-    fetch "$ROOT_URL/latest" "$tmp/latest" ||
-        die "cannot read $ROOT_URL/latest"
-    VERSION=$(tr -d ' \t\r\n' <"$tmp/latest")
-    [ -n "$VERSION" ] || die "no latest version published"
-fi
-
 if [ "$list_only" = true ]; then
     echo "version: $VERSION"
     echo "asset:   $BASE_URL/$VERSION/$asset"
@@ -123,12 +101,13 @@ fi
 
 echo "==> grpcview $VERSION ($os/$arch) -> $BIN_DIR/grpcview"
 
-get "$asset" "$tmp/$asset" ||
-    die "cannot download $asset of $VERSION"
-get SHA256SUMS "$tmp/SHA256SUMS" ||
-    die "cannot download SHA256SUMS of $VERSION"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT INT TERM
 
-expected=$(awk -v a="$asset" '$2 == a || $2 == "*" a {print $1}' "$tmp/SHA256SUMS")
+fetch "$BASE_URL/$VERSION/$asset" "$tmp/$asset" ||
+    die "cannot download $asset of $VERSION"
+
+expected=$(printf '%s\n' "$SHA256SUMS" | awk -v a="$asset" '$2 == a || $2 == "*" a {print $1}')
 [ -n "$expected" ] || die "SHA256SUMS has no entry for $asset"
 
 actual=$(sha256 "$tmp/$asset")
@@ -144,7 +123,7 @@ chmod 0755 "$staged"
 mv -f "$staged" "$BIN_DIR/grpcview"
 
 echo "installed $BIN_DIR/grpcview"
-echo "uninstall: curl -fsSL $ROOT_URL/uninstall.sh | sh"
+echo "uninstall: $BIN_DIR/grpcview uninstall"
 
 path_hint() {
     echo "note: $BIN_DIR is not on PATH; add it with" >&2
