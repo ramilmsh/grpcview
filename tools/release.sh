@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
-set -uo pipefail
-set +e
-f=bazel_tools/tools/bash/runfiles/runfiles.bash
+
+# --- begin runfiles.bash initialization v3 ---
+# Copy-pasted from the Bazel Bash runfiles library v3.
+set -uo pipefail; set +e; f=bazel_tools/tools/bash/runfiles/runfiles.bash
 # shellcheck disable=SC1090
-source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null ||
-    source "$(grep -sm1 "^$f " "${RUNFILES_MANIFEST_FILE:-/dev/null}" | cut -f2- -d' ')" 2>/dev/null ||
-    source "$0.runfiles/$f" 2>/dev/null ||
-    source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null ||
-    source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null ||
-    {
-        echo >&2 "error: cannot find $f"
-        exit 1
-    }
-f=
-set -euo pipefail
+source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "${RUNFILES_MANIFEST_FILE:-/dev/null}" | cut -f2- -d' ')" 2>/dev/null || \
+  source "$0.runfiles/$f" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "$0.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \
+  source "$(grep -sm1 "^$f " "$0.exe.runfiles_manifest" | cut -f2- -d' ')" 2>/dev/null || \
+  { echo>&2 "ERROR: cannot find $f"; exit 1; }; f=; set -e
+# --- end runfiles.bash initialization v3 ---
+
+runfiles_export_envvars
 
 gh=$(rlocation multitool/tools/gh/gh)
 
 release_platform_binaries=()
 if [ -n "${RUNFILES_DIR:-}" ]; then
-    release_platform_binaries=("$RUNFILES_DIR"/grpcview/service/cmd/grpcview_*)
+    for f in "$RUNFILES_DIR"/_main/service/cmd/grpcview_*; do
+        [ -f "$f" ] && release_platform_binaries+=("$f")
+    done
 else
     while IFS=' ' read -r _ path; do
         release_platform_binaries+=("$path")
-    done < <(grep '^grpcview/service/cmd/grpcview_' "$RUNFILES_MANIFEST_FILE")
+    done < <(grep -E '^_main/service/cmd/grpcview_[^/[:space:]]+ ' "$RUNFILES_MANIFEST_FILE" || true)
 fi
 
 dest=dist
