@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func (c *Collection) readScripts() ([]*grpcviewv1.Script, error) {

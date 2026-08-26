@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	echov1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/echo/v1"
+	echov1 "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1"
 )
 
 const streamDelay = 120 * time.Millisecond

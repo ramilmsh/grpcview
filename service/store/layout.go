@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
 )
 
 const (

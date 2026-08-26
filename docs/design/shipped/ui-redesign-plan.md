@@ -99,7 +99,7 @@ Bazel only — this is a Bazel workspace; never `go build`/`go test`/`npm`.
 
 - **Frontend dev:** `bazel run //ui:dev` (Vite; backend expected at
   `:10000`). Must go through Bazel — the generated proto *runtime* JS comes from the
-  `//proto/grpcview/v1:grpcviewv1_ts_proto` dep (only the `.d.ts` are committed), so
+  `//grpcview/v1:grpcviewv1_ts_proto` dep (only the `.d.ts` are committed), so
   a bare `pnpm vite` can't resolve `@grpcview/*`.
 - **Backend dev (no embed):** `bazel run //service/cmd/dev`.
 - **Release/embedded binary:** `bazel build //service/cmd` — run it

@@ -24,7 +24,7 @@ go_proto_library(
         "@rules_go//proto:go_proto",
         "//tools:connect_go_proto_compiler",
     ],
-    importpath = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1",
+    importpath = "codeberg.org/ramilmsh/grpcview/grpcview/v1",
     proto = ":grpcviewv1_proto",
     visibility = ["//visibility:public"],
 )
@@ -33,7 +33,7 @@ go_library(
     name = "grpcview",
     srcs = ["service.go"],
     embed = [":grpcviewv1_go_proto"],
-    importpath = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1",
+    importpath = "codeberg.org/ramilmsh/grpcview/grpcview/v1",
     visibility = ["//visibility:public"],
 )
 
@@ -41,7 +41,10 @@ ts_proto_library(
     name = "grpcviewv1_ts_proto",
     gen_connect_query = True,
     gen_connect_query_service_mapping = {
-        "service.proto": ["WorkspaceService", "ServerService"],
+        "service.proto": [
+            "WorkspaceService",
+            "ServerService",
+        ],
     },
     node_modules = "//:node_modules",
     proto = ":grpcviewv1_proto",

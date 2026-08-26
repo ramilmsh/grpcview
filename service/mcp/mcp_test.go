@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/workspace"
 )
 
@@ -238,12 +238,12 @@ func TestHoistedOneofMembersReachTheHandler(t *testing.T) {
 
 	if err := call(map[string]any{
 		"collection": "example",
-		"bazel":      map[string]any{"label": "//proto/grpcview/v1:grpcviewv1_proto"},
+		"bazel":      map[string]any{"label": "//grpcview/v1:grpcviewv1_proto"},
 	}); err != nil {
 		t.Fatalf("add_source with bazel: %v", err)
 	}
 	req := got.(*grpcviewv1.AddDescriptorSourceRequest)
-	if req.GetBazel().GetLabel() != "//proto/grpcview/v1:grpcviewv1_proto" {
+	if req.GetBazel().GetLabel() != "//grpcview/v1:grpcviewv1_proto" {
 		t.Fatalf("bazel did not reach the handler as the bazel oneof case: %+v", req)
 	}
 

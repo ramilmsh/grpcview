@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/wire"
 )
 

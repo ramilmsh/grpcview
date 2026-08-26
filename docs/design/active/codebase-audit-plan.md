@@ -422,7 +422,7 @@ Grouped by blast radius so conflicts are structural, not accidental:
   worktree isolation needed.
 - **W2 · Cross-module renames.** Serial. One agent per rename, each atomic
   across proto → Go → TS, including
-  `bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy`.
+  `bazel run //grpcview/v1:grpcviewv1_ts_proto.copy`.
 - **W3 · Extractions.** Serial, largest blast last.
 
 Gates after every wave, run by the main thread (agents cap their own verify loop

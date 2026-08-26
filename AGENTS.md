@@ -1491,7 +1491,7 @@ Bazel drives building, testing, proto generation (Go + TypeScript), and embeddin
 - **Regenerate TypeScript proto types** (run after editing any `.proto`):
 
   ```bash
-  bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy
+  bazel run //grpcview/v1:grpcviewv1_ts_proto.copy
   ```
 
   This copies the regenerated `.d.ts` declarations into the source tree. The
@@ -1690,11 +1690,11 @@ verified in a browser (see Browser verification hook above).
 ## Directory Structure
 
 ```
-proto/
-  grpcview/v1/      Wire API: service.proto (WorkspaceService + ServerService
+grpcview/
+  v1/               Wire API: service.proto (WorkspaceService + ServerService
                     Connect RPCs) + workspace.proto (messages)
-  grpcview/store/v1/ On-disk persistence schema (storage.proto)
-  grpcview/echo/v1/ A trivial echo service used for testing invoke end-to-end
+  store/v1/         On-disk persistence schema (storage.proto)
+  echo/v1/          A trivial echo service used for testing invoke end-to-end
 service/
   service.go        Serves and owns the server's lifecycle (bind, publish, drain);
                     idle.go and logging.go alongside

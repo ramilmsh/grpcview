@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 var (

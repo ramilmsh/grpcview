@@ -1,8 +1,8 @@
 package store
 
 import (
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func diskToWireRequest(name string, dr *grpcviewstorev1.Request, body, metadataScript string) *grpcviewv1.Request {

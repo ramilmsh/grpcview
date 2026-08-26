@@ -7,7 +7,7 @@ package grpcview.store.v1;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1;grpcviewstorev1";
+option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/store/v1;grpcviewstorev1";
 
 // grpcview.work.json at the workspace root. Optional; a non-empty collections
 // list wins over discovery.

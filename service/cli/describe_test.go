@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func (f *fakeClient) DescribeMethod(_ context.Context, r *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error) {
@@ -25,7 +25,7 @@ func (f *fakeClient) DescribeMethod(_ context.Context, r *connect.Request[grpcvi
 func describedEcho(t *testing.T) *grpcviewv1.DescribeMethodResponse {
 	t.Helper()
 	set := &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{{
-		Name:    proto.String("proto/grpcview/echo/v1/echo.proto"),
+		Name:    proto.String("grpcview/echo/v1/echo.proto"),
 		Package: proto.String("grpcview.echo.v1"),
 		Syntax:  proto.String("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{{
@@ -92,7 +92,7 @@ func TestDescribe(t *testing.T) {
 		if err := protojson.Unmarshal([]byte(out), &set); err != nil {
 			t.Fatalf("stdout does not parse as a FileDescriptorSet: %v (%q)", err, out)
 		}
-		if len(set.GetFile()) != 1 || set.GetFile()[0].GetName() != "proto/grpcview/echo/v1/echo.proto" {
+		if len(set.GetFile()) != 1 || set.GetFile()[0].GetName() != "grpcview/echo/v1/echo.proto" {
 			t.Errorf("parsed set = %v, want the one fixture file", set.GetFile())
 		}
 		if msgs := set.GetFile()[0].GetMessageType(); len(msgs) != 1 || msgs[0].GetName() != "EchoRequest" {

@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 type writeCalls struct {
@@ -240,10 +240,10 @@ func TestSourcesAdd(t *testing.T) {
 		},
 		{
 			name: "a full label is a bazel source",
-			arg:  "//proto/grpcview/echo/v1:grpcviewechov1_proto",
+			arg:  "//grpcview/echo/v1:grpcviewechov1_proto",
 			check: func(t *testing.T, fc *fakeClient) {
 				got := onlyAdd(t, fc)
-				if got.GetBazel().GetLabel() != "//proto/grpcview/echo/v1:grpcviewechov1_proto" {
+				if got.GetBazel().GetLabel() != "//grpcview/echo/v1:grpcviewechov1_proto" {
 					t.Errorf("bazel.label = %q, want the label passed through verbatim: the server canonicalizes",
 						got.GetBazel().GetLabel())
 				}
@@ -268,7 +268,7 @@ func TestSourcesAdd(t *testing.T) {
 		},
 		{
 			name:   "--commit-descriptors rides along on a bazel source: the fresh-clone-without-bazel answer",
-			arg:    "//proto/grpcview/echo/v1:grpcviewechov1_proto",
+			arg:    "//grpcview/echo/v1:grpcviewechov1_proto",
 			commit: true,
 			check: func(t *testing.T, fc *fakeClient) {
 				got := onlyAdd(t, fc)
@@ -282,7 +282,7 @@ func TestSourcesAdd(t *testing.T) {
 		},
 		{
 			name:       "--tls on a label is refused the same way it is on a file",
-			arg:        "//proto/grpcview/echo/v1:grpcviewechov1_proto",
+			arg:        "//grpcview/echo/v1:grpcviewechov1_proto",
 			tls:        true,
 			wantErrHas: "--tls does not apply",
 			wantCode:   2,
@@ -425,7 +425,7 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"sources", "add", file, "--tls"},
-		{"sources", "add", "//proto/grpcview/echo/v1:grpcviewechov1_proto", "--tls"},
+		{"sources", "add", "//grpcview/echo/v1:grpcviewechov1_proto", "--tls"},
 		{"sources", "add", dir},
 		{"sources", "add"},
 	} {
@@ -474,7 +474,7 @@ func TestSourcesRefresh(t *testing.T) {
 		want := []string{
 			"reflection:localhost:50055",
 			"upload:built.binpb",
-			"bazel://proto/grpcview/echo/v1:grpcviewechov1_proto",
+			"bazel://grpcview/echo/v1:grpcviewechov1_proto",
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("refreshed %v, want %v in that order", got, want)

@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func describeMethodCall(t *testing.T, w Workspace, ctx context.Context, service, method string) *grpcviewv1.DescribeMethodResponse {
@@ -185,7 +185,7 @@ func TestDescribeMethodPullsInReferencedTypes(t *testing.T) {
 	w := newTestWorkspace(t)
 	ensureWorkspace(t, w, ctx)
 
-	set := fileDescriptorSet(t, "proto/grpcview/v1/service.proto")
+	set := fileDescriptorSet(t, "grpcview/v1/service.proto")
 	addResp, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(set)))
 	if err != nil {
 		t.Fatalf("AddDescriptorSource (upload): %v", err)
@@ -222,7 +222,7 @@ func TestDescribeMethodSourceIsThePriorityWinner(t *testing.T) {
 	w := newTestWorkspace(t)
 	ensureWorkspace(t, w, ctx)
 
-	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(fileDescriptorSet(t, "proto/grpcview/echo/v1/echo.proto")))); err != nil {
+	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(fileDescriptorSet(t, "grpcview/echo/v1/echo.proto")))); err != nil {
 		t.Fatalf("AddDescriptorSource (upload): %v", err)
 	}
 	port := startEchoServer(t)

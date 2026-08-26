@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func TestNormalizeSourcesDropsAmbiguity(t *testing.T) {
@@ -115,10 +115,10 @@ func TestSourceIDAgreesAcrossShapes(t *testing.T) {
 			name: "bazel label",
 			wire: &grpcviewv1.DescriptorSource{
 				Source: &grpcviewv1.DescriptorSource_Bazel{
-					Bazel: &grpcviewv1.Bazel{Label: "//proto/grpcview/echo/v1:grpcviewechov1_proto"},
+					Bazel: &grpcviewv1.Bazel{Label: "//grpcview/echo/v1:grpcviewechov1_proto"},
 				},
 			},
-			want: "bazel://proto/grpcview/echo/v1:grpcviewechov1_proto",
+			want: "bazel://grpcview/echo/v1:grpcviewechov1_proto",
 		},
 		{
 			name: "upload with a path keeps the file name as its id",
@@ -320,7 +320,7 @@ func TestWorkspaceDefinitionRejectsAnUpload(t *testing.T) {
 
 func TestWorkspaceDefinitionAcceptsBazelNotUpload(t *testing.T) {
 	s := newTestStore(t)
-	const label = "//proto/grpcview/echo/v1:grpcviewechov1_proto"
+	const label = "//grpcview/echo/v1:grpcviewechov1_proto"
 	defs := s.definitionSet([]*grpcviewstorev1.DescriptorSource{
 		{Source: &grpcviewstorev1.DescriptorSource_Bazel{
 			Bazel: &grpcviewstorev1.Bazel{Label: label},
@@ -365,7 +365,7 @@ func TestUploadPathRoundTrips(t *testing.T) {
 }
 
 func TestBazelSourceRoundTrips(t *testing.T) {
-	const label = "//proto/grpcview/echo/v1:grpcviewechov1_proto"
+	const label = "//grpcview/echo/v1:grpcviewechov1_proto"
 	disk := &grpcviewstorev1.DescriptorSource{
 		Id:     "bazel:" + label,
 		Source: &grpcviewstorev1.DescriptorSource_Bazel{Bazel: &grpcviewstorev1.Bazel{Label: label}},
@@ -384,7 +384,7 @@ func TestBazelSourceRoundTrips(t *testing.T) {
 }
 
 func TestBazelSourceTheWorkspaceDefinesStaysABareReference(t *testing.T) {
-	const label = "//proto/grpcview/echo/v1:grpcviewechov1_proto"
+	const label = "//grpcview/echo/v1:grpcviewechov1_proto"
 	const id = "bazel:" + label
 	defs := map[string]*grpcviewstorev1.DescriptorSource{
 		id: {

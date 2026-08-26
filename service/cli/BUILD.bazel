@@ -23,7 +23,7 @@ go_library(
     importpath = "codeberg.org/ramilmsh/grpcview/service/cli",
     visibility = ["//visibility:public"],
     deps = [
-        "//proto/grpcview/v1:grpcview",
+        "//grpcview/v1:grpcview",
         "//service/daemon",
         "//service/mcp",
         "//service/store",
@@ -57,7 +57,7 @@ go_test(
     ],
     embed = [":cli"],
     deps = [
-        "//proto/grpcview/v1:grpcview",
+        "//grpcview/v1:grpcview",
         "//service/store",
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_cobra//:cobra",

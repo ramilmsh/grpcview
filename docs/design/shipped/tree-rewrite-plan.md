@@ -820,7 +820,7 @@ badge with the count.
 
 ## Backend gaps (block T4 and T6)
 
-Verified in `proto/grpcview/v1/service.proto`:
+Verified in `grpcview/v1/service.proto`:
 
 - **No reparent.** `UpdateRequestRequest` has `path` + `item_name` as *addressing* fields
   and `name` for rename — there is no `new_path`. Drag-to-reparent needs a new

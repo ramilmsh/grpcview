@@ -19,11 +19,11 @@ commit once the orchestrator has re-run its gates.
 
 ## P0 — protos and store
 
-- `proto/grpcview/store/v1/storage.proto`: delete `ScriptKind` and `Script`; delete
+- `grpcview/store/v1/storage.proto`: delete `ScriptKind` and `Script`; delete
   `Collection.scripts`.
-- `proto/grpcview/v1/workspace.proto`: delete `ScriptKind`; `Script` becomes
+- `grpcview/v1/workspace.proto`: delete `ScriptKind`; `Script` becomes
   `{ string path = 1; string source = 2; }`.
-- `proto/grpcview/v1/service.proto`: `CreateScriptRequest{collection, path}`,
+- `grpcview/v1/service.proto`: `CreateScriptRequest{collection, path}`,
   `UpdateScriptRequest{collection, path, source, new_path}`,
   `DeleteScriptRequest{collection, path}`, `RunScriptRequest` drops `kind`.
 - `service/store/scripts.go`: a recursive walk of `<collection>/scripts/**/*.ts`;

@@ -13,7 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func newSourcesCmd(s Streams, g *globalFlags, open clientFactory) *cobra.Command {

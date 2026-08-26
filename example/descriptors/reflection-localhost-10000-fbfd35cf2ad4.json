@@ -327,7 +327,7 @@
         "syntax": "proto3"
       },
       {
-        "name": "proto/grpcview/v1/workspace.proto",
+        "name": "grpcview/v1/workspace.proto",
         "package": "grpcview.v1",
         "dependency": [
           "google/protobuf/any.proto",
@@ -1154,18 +1154,18 @@
         "service": [],
         "extension": [],
         "options": {
-          "goPackage": "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1",
+          "goPackage": "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1",
           "uninterpretedOption": []
         },
         "syntax": "proto3"
       },
       {
-        "name": "proto/grpcview/v1/service.proto",
+        "name": "grpcview/v1/service.proto",
         "package": "grpcview.v1",
         "dependency": [
           "google/protobuf/duration.proto",
           "google/protobuf/struct.proto",
-          "proto/grpcview/v1/workspace.proto"
+          "grpcview/v1/workspace.proto"
         ],
         "publicDependency": [],
         "weakDependency": [],
@@ -3380,7 +3380,7 @@
         ],
         "extension": [],
         "options": {
-          "goPackage": "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1",
+          "goPackage": "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1",
           "uninterpretedOption": []
         },
         "syntax": "proto3"

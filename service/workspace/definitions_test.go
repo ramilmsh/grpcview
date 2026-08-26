@@ -14,9 +14,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	echov1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/echo/v1"
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	echov1 "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/echo"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
@@ -36,7 +36,7 @@ func startEchoServerWithoutReflection(t *testing.T) int {
 
 func addEchoUpload(t *testing.T, w Workspace, ctx context.Context) {
 	t.Helper()
-	req := descriptorSetAddReq(fileDescriptorSet(t, "proto/grpcview/echo/v1/echo.proto"))
+	req := descriptorSetAddReq(fileDescriptorSet(t, "grpcview/echo/v1/echo.proto"))
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(req)); err != nil {
 		t.Fatalf("AddDescriptorSource (echo upload): %v", err)
 	}
@@ -133,7 +133,7 @@ func TestDefinitionsMemoizesLinking(t *testing.T) {
 		t.Error("a second definitions() re-linked an unchanged descriptor set; the memo did not hit")
 	}
 
-	grown := descriptorSetAddReq(fileDescriptorSet(t, "proto/grpcview/v1/workspace.proto"))
+	grown := descriptorSetAddReq(fileDescriptorSet(t, "grpcview/v1/workspace.proto"))
 	grown.FileName = "workspace.binpb"
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(grown)); err != nil {
 		t.Fatalf("AddDescriptorSource (second upload): %v", err)

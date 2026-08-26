@@ -28,7 +28,7 @@ import (
 
 	connectcors "connectrpc.com/cors"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 type Options struct {

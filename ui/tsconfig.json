@@ -23,7 +23,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@grpcview/*": ["../proto/grpcview/*"]
+      "@grpcview/*": ["../grpcview/*"]
     }
   },
   "include": ["src"]

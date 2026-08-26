@@ -12,8 +12,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func (c *Collection) Load(ctx context.Context) (*grpcviewv1.Collection, error) {

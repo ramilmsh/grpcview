@@ -6,9 +6,9 @@
   ],
   "sources": [
     {
-      "id": "bazel://proto/grpcview/v1:grpcviewv1_proto",
+      "id": "bazel://grpcview/v1:grpcviewv1_proto",
       "bazel": {
-        "label": "//proto/grpcview/v1:grpcviewv1_proto"
+        "label": "//grpcview/v1:grpcviewv1_proto"
       },
       "commitDescriptors": false
     },

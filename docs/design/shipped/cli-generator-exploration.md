@@ -107,7 +107,7 @@ existing `gv.invoke` machinery given a public door.
 Two consequences that also can't come from a generated mirror:
 
 - **Exit codes.** `InvokeResponse` carries the target's gRPC status *inside*
-  `Request.Response.status` (verified `proto/grpcview/v1/workspace.proto:149-156`).
+  `Request.Response.status` (verified `grpcview/v1/workspace.proto:149-156`).
   Turning "status 13" into "exit 1" is hand-written mapping, and it is the single most
   important line in the feature.
 - **`params`.** `invokeSpec.params` exists (`invoke.go:66-78`) but `InvokeRequest` has no
@@ -473,7 +473,7 @@ it into `srcs` compiles locally and silently vanishes from the Bazel build, and 
 
 | Fact | Where | Consequence |
 |---|---|---|
-| 17 RPCs on `WorkspaceService`, 16 unary + `InvokeStreaming` | `proto/grpcview/v1/service.proto:354-399` | C1a makes it 19 |
+| 17 RPCs on `WorkspaceService`, 16 unary + `InvokeStreaming` | `grpcview/v1/service.proto:354-399` | C1a makes it 19 |
 | UI's Send sends the editor buffer, not the saved body | `RequestWorkspace.tsx:251-280` | §2 — the premise of C1a |
 | **The bare-object wrap is frontend-only**; `resolveInvokeBody` hands the body straight to an engine that needs `export default` | `ui/src/features/workspace/body-wrapper.ts:14-16`, `service/workspace/invoke.go:478`, `service/scripting/profiles.go:196` | **C0.2** — blocks C1a and C1 |
 | `flag.Parse()` inside `Run`; two callers | `service/service.go:34-36`, `service/cmd/main.go:20`, `service/cmd/dev/main.go:16` | C0 touches both; `dev` loses `-port` |
@@ -486,7 +486,7 @@ it into `srcs` compiles locally and silently vanishes from the Bazel build, and 
 | `messages` is `repeated`, composed up-front, no live interleave | `service.proto:240-244` | D13; `ResolvedRequest.body` must be repeated too |
 | `InvokeRequest` has no `params` field | `service.proto` | D4's premise |
 | `RunScript` takes inline `source`, not a saved script name | `RunScriptRequest`, `service.proto:314-318` | `script run <name>` must load the source first |
-| `Server.TLS` is an empty message | `proto/grpcview/v1/workspace.proto:20` | `--tls` is one bool mapped by hand |
+| `Server.TLS` is an empty message | `grpcview/v1/workspace.proto:20` | `--tls` is one bool mapped by hand |
 | `protoprint` ships in `jhump/protoreflect@v1.18.0` (already required) | `go.mod:9`; 83 files in the cached zip | C2b needs **no** new module |
 | `.bazelrc` has no `--include_source_info` | `.bazelrc` (whole file read) | C0.1 still open (not a blocker — D5) |
 | Test harness for a real gRPC target exists | `service/workspace/invoke_streaming_test.go:24` (`startEchoServer`) | C1a/C1 reuse it verbatim |
@@ -559,7 +559,7 @@ repo-level bug this track happened to find. Measurements in [Appendix A](#append
 2. Re-run the Appendix A probes: the descriptor set should grow from 9,257 B to ~36,983 B
    and `"returns the workspace snapshot"` should appear in `service.connect.go`.
 3. Re-check the TypeScript path, which already had comments:
-   `bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy` must produce **no** source-tree
+   `bazel run //grpcview/v1:grpcviewv1_ts_proto.copy` must produce **no** source-tree
    diff.
 
 **Verify.** `bazel test //...`; the probes above.
@@ -656,7 +656,7 @@ serves on :10000; `grpcview version` prints something other than `{STABLE_VERSIO
 **Prereqs.** C0.2 — otherwise a stored bare-object body misparses the first time this RPC
 reads one back.
 
-**Files.** `proto/grpcview/v1/service.proto`; new `service/workspace/invoke_saved.go` +
+**Files.** `grpcview/v1/service.proto`; new `service/workspace/invoke_saved.go` +
 `invoke_saved_test.go`; `service/workspace/invoke.go` (thread `params` through
 `streamInvoke`); `service/workspace/gvinvoke.go` (call the shared helper).
 
@@ -710,7 +710,7 @@ a client-streaming dry run.
 **Steps.**
 1. Write the messages and RPCs with verb-first, self-contained comments whose first line
    stays under ~100 chars (Appendix A.2).
-2. `bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy` (required after any `.proto`
+2. `bazel run //grpcview/v1:grpcviewv1_ts_proto.copy` (required after any `.proto`
    edit).
 3. Handler: `Collection.ResolveRequest` (`fs.go:427`) → `invokeUnary(invokeSpec{…})` with
    `params: req.GetParams().AsMap()` and `recordHistory` defaulting **true** (D7). This is
@@ -989,7 +989,7 @@ So `type DescriptorSource struct` has **no doc comment at all** in generated Go,
 grpcview.v1.WorkspaceService.Get.`
 
 **The TypeScript path is different, and that is why this went unnoticed.** The committed
-`proto/grpcview/v1/workspace_pb.d.ts` *does* carry the comments — `ts_proto_library` feeds
+`grpcview/v1/workspace_pb.d.ts` *does* carry the comments — `ts_proto_library` feeds
 protoc-gen-es source info while `go_proto_library` does not. (Verified by output; the
 mechanism is **unverified**.) Anyone checking "do our comments survive codegen?" by opening
 the `.d.ts` gets a false green.

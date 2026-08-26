@@ -46,7 +46,7 @@ DATA = BUILD_DEPS + [
     "postcss.config.js",
     "index.html",
     ":src",
-    "//proto/grpcview/v1:grpcviewv1_ts_proto",
+    "//grpcview/v1:grpcviewv1_ts_proto",
 ]
 
 vite_bin.vite(

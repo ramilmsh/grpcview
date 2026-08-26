@@ -154,7 +154,7 @@ a path that isn't there.
 Scale of the mechanical diff, so it is not underestimated: 36 occurrences of
 `workspace_name` in `service.proto` alone, ~15 `Workspace workspace = 1` response fields,
 every UI and CLI call site, and the **committed** generated declarations
-(`proto/grpcview/v1/*_pb.d.ts`) — see Verify.
+(`grpcview/v1/*_pb.d.ts`) — see Verify.
 
 Alternative considered: keep the names and accept the overload. Rejected — the cost is
 paid by every future reader, and *this* is the change that makes the two meanings
@@ -474,8 +474,8 @@ disk oneof (`storage.proto:169-193`), `SourceID` **and** `diskSourceID`
 
 Verified in this repo before writing this down:
 
-- **A plain `proto_library` is enough.** `bazel build //proto/grpcview/v1:grpcviewv1_proto`
-  writes `bazel-bin/proto/grpcview/v1/grpcviewv1_proto-descriptor-set.proto.bin`, and that
+- **A plain `proto_library` is enough.** `bazel build //grpcview/v1:grpcviewv1_proto`
+  writes `bazel-bin/grpcview/v1/grpcviewv1_proto-descriptor-set.proto.bin`, and that
   file is **transitive** (it carries `google/protobuf/{any,duration,struct}.proto`, i.e.
   protoc ran with `--include_imports`) and **carries `source_code_info`** — a known doc
   comment from `workspace.proto` is present in the bytes. So it links standalone, *and* it
@@ -776,7 +776,7 @@ Code extension is its second customer.
 
 - `bazel test //...` — not `//service/...`. The rename touches the UI, and the generated
   TypeScript declarations are committed.
-- **After any `.proto` edit:** `bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy`,
+- **After any `.proto` edit:** `bazel run //grpcview/v1:grpcviewv1_ts_proto.copy`,
   then the three frontend gates from `AGENTS.md` — `cd ui && ./node_modules/.bin/tsc
   --noEmit -p tsconfig.json`, `bazel test //ui:test`, `bazel build //ui:ui`.
 - Scratch dirs: traversal rejection (`..`, absolute), case-fold handle identity

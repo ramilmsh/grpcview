@@ -169,9 +169,9 @@ runs **only** when the request's own metadata script textually references
 path.
 
 ### Data-model changes
-- `proto/grpcview/v1/workspace.proto` — add `string draft_metadata_script = 2;` to
+- `grpcview/v1/workspace.proto` — add `string draft_metadata_script = 2;` to
   `message Folder`.
-- `proto/grpcview/store/v1/storage.proto` — add `string draft_metadata_script = 3;`
+- `grpcview/store/v1/storage.proto` — add `string draft_metadata_script = 3;`
   to on-disk `message Folder` (forward/backward tolerant; no `schema_version` bump).
 - `service/store/fs.go` — set `DraftMetadataScript` in `readItem`'s `kindFolder`
   branch (folders are assembled inline; no `convert.go` change).
@@ -189,7 +189,7 @@ path.
   `metadataStructFromJSON` into `metadataListsFromJSON` (map form, used by the
   fold) + `structFromMetadataLists` (Struct form, used by the final request) so
   fold and request share one normalizer.
-- `service/workspace/workspace.go` + `proto/grpcview/v1/service.proto` — add an
+- `service/workspace/workspace.go` + `grpcview/v1/service.proto` — add an
   `UpdateFolder(UpdateFolderRequest{workspace_name, repeated path, item_name,
   optional draft_metadata_script}) → UpdateFolderResponse{Workspace}` RPC and
   handler, mirroring `UpdateRequest`.
@@ -205,7 +205,7 @@ path.
   `draftMetadataScript` (or the default), persisted via a new `updateFolder`
   mutation (`ui/src/lib/workspace-query.ts`).
 - Regenerate TS stubs after the proto change:
-  `bazel run //proto/grpcview/v1:grpcviewv1_ts_proto.copy`.
+  `bazel run //grpcview/v1:grpcviewv1_ts_proto.copy`.
 
 ### Phases
 1. **Folder metadata field + store round-trip/chain.** Proto fields, `fs.go`

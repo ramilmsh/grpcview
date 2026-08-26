@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func loadScriptList(t *testing.T, coll *Collection, ctx context.Context) []*grpcviewv1.Script {

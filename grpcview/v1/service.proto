@@ -4,9 +4,9 @@ package grpcview.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
-import "proto/grpcview/v1/workspace.proto";
+import "grpcview/v1/workspace.proto";
 
-option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1;grpcviewv1";
+option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1";
 
 message AddDescriptorSourceRequest {
   string collection = 1;

@@ -100,7 +100,7 @@ rejected before the bundle.
 | Feature | Where to look |
 | --- | --- |
 | Reflection source | `grpcview.json` → `reflection:localhost:10000`, descriptors committed to `descriptors/` |
-| Bazel source (built from `.proto`) | `grpcview.json` → `bazel://proto/grpcview/v1:grpcviewv1_proto`, descriptors left uncommitted |
+| Bazel source (built from `.proto`) | `grpcview.json` → `bazel://grpcview/v1:grpcviewv1_proto`, descriptors left uncommitted |
 | Source priority | `grpcview sources ls --collection example` — each source's `serves`/`wins` counts; the bazel source is first, so it wins both services |
 | Doc comments survive the source | `Workspace/DescribeMethod (JSON)` returns `.proto` comments and `sourceId` names the bazel source; only its descriptor set carries `source_code_info`, reflection strips it |
 | Target fallback | no request carries a target; each falls back to the collection's first *reflection* source, which is grpcview itself |

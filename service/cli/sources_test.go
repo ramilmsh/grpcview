@@ -10,7 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func reflectionSource(address string, resolved *grpcviewv1.Resolved) *grpcviewv1.DescriptorSource {
@@ -78,7 +78,7 @@ func refreshableWorkspace() *grpcviewv1.Collection {
 		reflectionSource("localhost:50055", &grpcviewv1.Resolved{FileCount: 4}),
 		uploadSource("browser.binpb", &grpcviewv1.Resolved{FileCount: 3}),
 		uploadSourceWithPath("built.binpb", "proto/built.binpb", &grpcviewv1.Resolved{FileCount: 3}),
-		bazelSource("//proto/grpcview/echo/v1:grpcviewechov1_proto", &grpcviewv1.Resolved{FileCount: 2}),
+		bazelSource("//grpcview/echo/v1:grpcviewechov1_proto", &grpcviewv1.Resolved{FileCount: 2}),
 	}
 	return ws
 }
@@ -131,20 +131,20 @@ func TestSourcesLsTrust(t *testing.T) {
 	}{
 		{
 			name:     "an untrusted workspace with a bazel source says so, once, after the rows",
-			snapshot: bazelWorkspace("//proto/grpcview/echo/v1:grpcviewechov1_proto"),
+			snapshot: bazelWorkspace("//grpcview/echo/v1:grpcviewechov1_proto"),
 			wantNote: "! %s is not trusted: 1 bazel source above cannot build here — `grpcview trust` allows it",
 			wantList: 2,
 		},
 		{
 			name:     "the count is the number of rows that would build",
-			snapshot: bazelWorkspace("//proto/grpcview/echo/v1:grpcviewechov1_proto", "//proto/auth/v1:authv1_proto"),
+			snapshot: bazelWorkspace("//grpcview/echo/v1:grpcviewechov1_proto", "//proto/auth/v1:authv1_proto"),
 			wantNote: "! %s is not trusted: 2 bazel sources above cannot build here — `grpcview trust` allows it",
 			wantList: 2,
 		},
 		{
 			name:     "a trusted workspace says nothing at all",
 			trusted:  true,
-			snapshot: bazelWorkspace("//proto/grpcview/echo/v1:grpcviewechov1_proto"),
+			snapshot: bazelWorkspace("//grpcview/echo/v1:grpcviewechov1_proto"),
 			wantList: 2,
 		},
 		{
@@ -302,7 +302,7 @@ func TestSourcesLsEmptyAndFailing(t *testing.T) {
 }
 
 func TestTheBuildingVerbsGetALongerDefaultTimeout(t *testing.T) {
-	const label = "//proto/grpcview/echo/v1:grpcviewechov1_proto"
+	const label = "//grpcview/echo/v1:grpcviewechov1_proto"
 
 	for _, tc := range []struct {
 		name string

@@ -89,7 +89,7 @@ it does *not* have to record which form they are, because both forms live in the
 
 ## Changes
 
-- **`proto/grpcview/store/v1/storage.proto:78,82`** — delete `draft_body` and
+- **`grpcview/store/v1/storage.proto:78,82`** — delete `draft_body` and
   `draft_metadata_script` from the on-disk `Request`. No `reserved` markers (project
   stage). The **wire** `grpcview.v1.Request.draft_body` stays a `string` — this whole
   phase lives below the wire API, so `ui/` is untouched.

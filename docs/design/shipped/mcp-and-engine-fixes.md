@@ -79,7 +79,7 @@ and `{"code":"INVALID_ARGUMENT","message":"unknown source type: <<nil>> <nil>"}`
 workaround was to call `AddDescriptorSource` through the generic `invoke` tool instead,
 which works and is what the collection was built with.
 
-**Why.** `AddDescriptorSourceRequest` (`proto/grpcview/v1/service.proto`) carries
+**Why.** `AddDescriptorSourceRequest` (`grpcview/v1/service.proto`) carries
 `oneof source { bytes descriptor_set = 2; Server reflection = 3; Bazel bazel = 6; }`. In
 the plugin's standard schema mode (`pkg/gen/schema.go:85-135`) a non-synthetic oneof is
 emitted as a **message-level `anyOf` of `oneOf` groups** and its member fields are
@@ -116,7 +116,7 @@ error rather than silently picking one.
 **Tests.** In `service/mcp`: pin the post-processed schema for `AddDescriptorSource` —
 `properties` contains `descriptor_set`, `reflection` (with its nested `target`) and
 `bazel` (with its nested `label`), and the schema has no `anyOf`. Plus one dispatch test
-that `{"collection":"example","bazel":{"label":"//proto/grpcview/v1:grpcviewv1_proto"}}`
+that `{"collection":"example","bazel":{"label":"//grpcview/v1:grpcviewv1_proto"}}`
 reaches the handler as the right oneof case, and one that setting two members errors.
 
 **Verify.** Add a reflection source and a bazel source to a throwaway collection through
@@ -227,7 +227,7 @@ spilled to a file; reading it back cost a `jq` plus a base64 decode.
 `trimHeavyFields` / `clearHeavyFields` (`service/mcp/mcp.go`, pinned by
 `TestTrimHeavyFieldsStripsEveryShape`) strip `descriptor_set` from every proto response
 that has one — but here the descriptor set is base64 inside `DescribeMethodResponse`
-(`proto/grpcview/v1/service.proto:339`), which is itself JSON **text** inside
+(`grpcview/v1/service.proto:339`), which is itself JSON **text** inside
 `InvokeResponse.response.body`. A proto walk cannot see into a string.
 
 **Fix.** Add a generic size guard to the MCP layer, on `Request.Response.body` only: parse

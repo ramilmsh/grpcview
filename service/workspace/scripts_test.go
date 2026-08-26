@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 func TestScriptCRUDHandlers(t *testing.T) {

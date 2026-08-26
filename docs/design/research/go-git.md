@@ -92,7 +92,7 @@ watch + streaming `WatchStatus`. Ignore hygiene matters (ensure `bazel-*`,
 
 ## Proposed RPC surface — new `GitService`
 
-Separate service in `proto/grpcview/v1/git.proto`, registered next to
+Separate service in `grpcview/v1/git.proto`, registered next to
 `WorkspaceService` in `service/service.go`, implemented in `service/git/git.go`.
 Reuses the same addressing (`workspace_name` + `path` + `item_name`).
 
@@ -224,7 +224,7 @@ history (`tree.Patch().String()`).
 
 ## Implementation touch-list
 
-`proto/grpcview/v1/git.proto` (new) + regen; `service/git/git.go` (new;
+`grpcview/v1/git.proto` (new) + regen; `service/git/git.go` (new;
 `gitBackend` interface + `goGit` impl, `execGit` later) + `service/git/BUILD.bazel`;
 register handler in `service/service.go`; add go-git to `go.mod` + `bazel mod tidy`
 + gazelle; frontend `ui/src/lib/gitStore.ts` (new zustand slice) + badges in

@@ -13,7 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "@grpcview": fileURLToPath(new URL("../proto/grpcview", import.meta.url)),
+      "@grpcview": fileURLToPath(new URL("../grpcview", import.meta.url)),
     },
     // Needed the moment a test renders a real component tree (Tree.portable.test.tsx,
     // components/tree/'s T0 acceptance test) rather than just calling plain functions,

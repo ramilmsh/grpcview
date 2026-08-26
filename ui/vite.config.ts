@@ -9,7 +9,7 @@ export default defineConfig(({ command, mode }) => ({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "@grpcview": fileURLToPath(new URL("../proto/grpcview", import.meta.url)),
+      "@grpcview": fileURLToPath(new URL("../grpcview", import.meta.url)),
       // The in-browser proto type generator (proto-types.ts → @bufbuild/protoc-gen-es)
       // statically pulls @bufbuild/protoplugin, which imports the ~10MB `typescript`
       // package + `@typescript/vfs` (the only fs-touching module in the chain) for its

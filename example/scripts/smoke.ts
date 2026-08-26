@@ -34,7 +34,7 @@ const described = await invoke("Workspace/DescribeMethod (JSON)");
 assert("a plain protojson body invokes", described.ok);
 assert(
   "the bazel source wins over reflection",
-  described.body.sourceId === "bazel://proto/grpcview/v1:grpcviewv1_proto",
+  described.body.sourceId === "bazel://grpcview/v1:grpcviewv1_proto",
 );
 assert(
   "and its descriptor kept the .proto doc comments reflection strips",

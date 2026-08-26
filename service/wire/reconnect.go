@@ -5,7 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
 
 // One line per unary RPC, naming the generated client's method. The only thing that varies is

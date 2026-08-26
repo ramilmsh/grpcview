@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
 )
 
 func writeCollectionAt(t *testing.T, root, rel, name string, addresses ...string) {

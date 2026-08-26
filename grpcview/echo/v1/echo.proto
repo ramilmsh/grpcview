@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package grpcview.echo.v1;
 
-option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/echo/v1;grpcviewechov1";
+option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1;grpcviewechov1";
 
 message EchoRequest {
   string message = 1;

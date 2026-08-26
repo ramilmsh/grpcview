@@ -23,8 +23,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
-	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
+	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
+	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
@@ -799,7 +799,7 @@ func TestUploadsAreNotStoredInTheManifest(t *testing.T) {
 	ctx := context.Background()
 	ensureWorkspace(t, w, ctx)
 
-	set := fileDescriptorSet(t, "proto/grpcview/v1/service.proto")
+	set := fileDescriptorSet(t, "grpcview/v1/service.proto")
 	if len(set) < 10_000 {
 		t.Fatalf("test descriptor set is only %d bytes; it must be big enough to notice inline", len(set))
 	}

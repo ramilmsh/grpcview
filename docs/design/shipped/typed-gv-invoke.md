@@ -57,7 +57,7 @@ One generated artifact, per collection, registered next to the existing
 ```ts
 // file:///grpcview/request/gv-requests.d.ts   (regenerated, never hand-edited)
 import type { ListCollectionsResponseJson, DescribeMethodResponseJson }
-  from "./gen/proto/grpcview/v1/service_pb";
+  from "./gen/grpcview/v1/service_pb";
 
 declare global {
   interface GvRequestMap {
