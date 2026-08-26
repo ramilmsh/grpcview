@@ -1101,7 +1101,7 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 	if err := coll.Create(ctx, ""); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := coll.CreateRequest(ctx, nil, "Echo", "echo.v1.EchoService", "Unary"); err != nil {
+	if err := coll.CreateRequest(ctx, nil, "Echo", "grpcview.echo.v1.EchoService", "Unary"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
@@ -1168,7 +1168,7 @@ func TestUpdateRequestTarget(t *testing.T) {
 	if err := coll.Create(ctx, ""); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if err := coll.CreateRequest(ctx, nil, "Echo", "echo.v1.EchoService", "Unary"); err != nil {
+	if err := coll.CreateRequest(ctx, nil, "Echo", "grpcview.echo.v1.EchoService", "Unary"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 

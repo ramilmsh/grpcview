@@ -240,10 +240,10 @@ func TestSourcesAdd(t *testing.T) {
 		},
 		{
 			name: "a full label is a bazel source",
-			arg:  "//proto/echo/v1:echov1_proto",
+			arg:  "//proto/grpcview/echo/v1:grpcviewechov1_proto",
 			check: func(t *testing.T, fc *fakeClient) {
 				got := onlyAdd(t, fc)
-				if got.GetBazel().GetLabel() != "//proto/echo/v1:echov1_proto" {
+				if got.GetBazel().GetLabel() != "//proto/grpcview/echo/v1:grpcviewechov1_proto" {
 					t.Errorf("bazel.label = %q, want the label passed through verbatim: the server canonicalizes",
 						got.GetBazel().GetLabel())
 				}
@@ -268,7 +268,7 @@ func TestSourcesAdd(t *testing.T) {
 		},
 		{
 			name:   "--commit-descriptors rides along on a bazel source: the fresh-clone-without-bazel answer",
-			arg:    "//proto/echo/v1:echov1_proto",
+			arg:    "//proto/grpcview/echo/v1:grpcviewechov1_proto",
 			commit: true,
 			check: func(t *testing.T, fc *fakeClient) {
 				got := onlyAdd(t, fc)
@@ -282,7 +282,7 @@ func TestSourcesAdd(t *testing.T) {
 		},
 		{
 			name:       "--tls on a label is refused the same way it is on a file",
-			arg:        "//proto/echo/v1:echov1_proto",
+			arg:        "//proto/grpcview/echo/v1:grpcviewechov1_proto",
 			tls:        true,
 			wantErrHas: "--tls does not apply",
 			wantCode:   2,
@@ -425,7 +425,7 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"sources", "add", file, "--tls"},
-		{"sources", "add", "//proto/echo/v1:echov1_proto", "--tls"},
+		{"sources", "add", "//proto/grpcview/echo/v1:grpcviewechov1_proto", "--tls"},
 		{"sources", "add", dir},
 		{"sources", "add"},
 	} {
@@ -474,7 +474,7 @@ func TestSourcesRefresh(t *testing.T) {
 		want := []string{
 			"reflection:localhost:50055",
 			"upload:built.binpb",
-			"bazel://proto/echo/v1:echov1_proto",
+			"bazel://proto/grpcview/echo/v1:grpcviewechov1_proto",
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("refreshed %v, want %v in that order", got, want)
@@ -666,7 +666,7 @@ func TestRequestCreate(t *testing.T) {
 	t.Run("without a body it is one CreateRequest and no UpdateRequest", func(t *testing.T) {
 		fc := newFake()
 		out, errOut, code := runCLI(fc, "",
-			"request", "create", "A/B", "--service", "echo.v1.EchoService", "--method", "Unary")
+			"request", "create", "A/B", "--service", "grpcview.echo.v1.EchoService", "--method", "Unary")
 		assertSilent(t, out, errOut, code)
 
 		if len(fc.writes.createRequest) != 1 {
@@ -679,9 +679,9 @@ func TestRequestCreate(t *testing.T) {
 		if got.GetItemName() != "B" {
 			t.Errorf("item_name = %q, want %q", got.GetItemName(), "B")
 		}
-		if got.GetService() != "echo.v1.EchoService" || got.GetMethod() != "Unary" {
+		if got.GetService() != "grpcview.echo.v1.EchoService" || got.GetMethod() != "Unary" {
 			t.Errorf("service/method = %q/%q, want %q/%q",
-				got.GetService(), got.GetMethod(), "echo.v1.EchoService", "Unary")
+				got.GetService(), got.GetMethod(), "grpcview.echo.v1.EchoService", "Unary")
 		}
 		if len(fc.writes.updateRequest) != 0 {
 			t.Errorf("UpdateRequest called %d time(s), want 0 without -f", len(fc.writes.updateRequest))
@@ -697,7 +697,7 @@ func TestRequestCreate(t *testing.T) {
 
 		fc := newFake()
 		out, errOut, code := runCLI(fc, "",
-			"request", "create", "A/B", "--service", "echo.v1.EchoService", "--method", "Unary", "-f", file)
+			"request", "create", "A/B", "--service", "grpcview.echo.v1.EchoService", "--method", "Unary", "-f", file)
 		assertSilent(t, out, errOut, code)
 
 		if want := []string{"CreateRequest", "UpdateRequest"}; !slices.Equal(fc.writes.order, want) {
@@ -735,7 +735,7 @@ func TestRequestCreate(t *testing.T) {
 	t.Run("a missing required flag is exit 2 and creates nothing", func(t *testing.T) {
 		for _, args := range [][]string{
 			{"request", "create", "A/B", "--method", "Unary"},
-			{"request", "create", "A/B", "--service", "echo.v1.EchoService"},
+			{"request", "create", "A/B", "--service", "grpcview.echo.v1.EchoService"},
 			{"request", "create", "--service", "S", "--method", "M"},
 		} {
 			fc := newFake()

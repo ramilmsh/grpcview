@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package echo.v1;
+package grpcview.echo.v1;
 
-option go_package = "codeberg.org/ramilmsh/grpcview/proto/echo/v1;echov1";
+option go_package = "codeberg.org/ramilmsh/grpcview/proto/grpcview/echo/v1;grpcviewechov1";
 
 message EchoRequest {
   string message = 1;

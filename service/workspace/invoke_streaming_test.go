@@ -15,7 +15,7 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/echo"
 )
 
-const echoService = "echo.v1.EchoService"
+const echoService = "grpcview.echo.v1.EchoService"
 
 func startEchoServer(t *testing.T) int {
 	t.Helper()

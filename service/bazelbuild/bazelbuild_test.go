@@ -17,7 +17,7 @@ func TestCanonicalLabel(t *testing.T) {
 		{"//pkg/sub:target", "//pkg/sub:target"},
 		{"//pkg:target", "//pkg:target"},
 		{"//pkg", "//pkg:pkg"},
-		{"//proto/echo/v1", "//proto/echo/v1:v1"},
+		{"//proto/grpcview/echo/v1", "//proto/grpcview/echo/v1:v1"},
 		{"pkg:target", "//pkg:target"},
 		{"pkg/sub:target", "//pkg/sub:target"},
 		{"pkg", "//pkg:pkg"},

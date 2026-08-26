@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	echov1 "codeberg.org/ramilmsh/grpcview/proto/echo/v1"
+	echov1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/echo/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )

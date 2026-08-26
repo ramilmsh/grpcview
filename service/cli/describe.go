@@ -54,7 +54,7 @@ func runDescribe(ctx context.Context, s Streams, g *globalFlags, open clientFact
 	service, method := splitMethodPath(arg)
 	if service == "" || method == "" {
 		return fmt.Errorf(
-			"invalid method %q: describe takes <service>/<method>, e.g. echo.v1.EchoService/Unary", arg)
+			"invalid method %q: describe takes <service>/<method>, e.g. grpcview.echo.v1.EchoService/Unary", arg)
 	}
 
 	var described *grpcviewv1.DescribeMethodResponse

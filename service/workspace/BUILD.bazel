@@ -69,7 +69,7 @@ go_test(
     ],
     embed = [":workspace"],
     deps = [
-        "//proto/echo/v1:echo",
+        "//proto/grpcview/echo/v1:echo",
         "//proto/grpcview/store/v1:store",
         "//proto/grpcview/v1:grpcview",
         "//service/echo",

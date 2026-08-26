@@ -107,11 +107,11 @@ func TestDescribeMethodRendersEchoUnary(t *testing.T) {
 	}
 
 	files := linkDescribedSet(t, got.GetDescriptorSet())
-	input := findDescribedMessage(t, files, "echo.v1.EchoRequest")
+	input := findDescribedMessage(t, files, "grpcview.echo.v1.EchoRequest")
 	if names := fieldNames(input); strings.Join(names, ",") != "message,count" {
-		t.Errorf("echo.v1.EchoRequest fields = %v, want [message count]", names)
+		t.Errorf("grpcview.echo.v1.EchoRequest fields = %v, want [message count]", names)
 	}
-	findDescribedMessage(t, files, "echo.v1.EchoResponse")
+	findDescribedMessage(t, files, "grpcview.echo.v1.EchoResponse")
 
 	if want := wonBy(t, ws, echoService); got.GetSourceId() != want {
 		t.Errorf("source_id = %q, want %q (the source that won the service)", got.GetSourceId(), want)
@@ -222,7 +222,7 @@ func TestDescribeMethodSourceIsThePriorityWinner(t *testing.T) {
 	w := newTestWorkspace(t)
 	ensureWorkspace(t, w, ctx)
 
-	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(fileDescriptorSet(t, "proto/echo/v1/echo.proto")))); err != nil {
+	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(descriptorSetAddReq(fileDescriptorSet(t, "proto/grpcview/echo/v1/echo.proto")))); err != nil {
 		t.Fatalf("AddDescriptorSource (upload): %v", err)
 	}
 	port := startEchoServer(t)
@@ -250,7 +250,7 @@ func TestDescribeMethodNotFound(t *testing.T) {
 
 	_, err := w.DescribeMethod(ctx, connect.NewRequest(&grpcviewv1.DescribeMethodRequest{
 		Collection: testWorkspace,
-		Service:    "echo.v1.NoSuchService",
+		Service:    "grpcview.echo.v1.NoSuchService",
 		Method:     "Unary",
 	}))
 	if code := connect.CodeOf(err); code != connect.CodeNotFound {

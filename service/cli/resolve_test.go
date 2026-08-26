@@ -24,12 +24,12 @@ func TestResolveInvokeArg(t *testing.T) {
 		{
 			name: "a top-level saved request keeps an empty parent path",
 			arg:  "Stream",
-			want: invokeTarget{arg: "Stream", saved: true, parent: []string{}, itemName: "Stream", service: "echo.v1.EchoService", method: "ServerStream", kind: methodKind{server: true}},
+			want: invokeTarget{arg: "Stream", saved: true, parent: []string{}, itemName: "Stream", service: "grpcview.echo.v1.EchoService", method: "ServerStream", kind: methodKind{server: true}},
 		},
 		{
 			name: "a saved client-streaming request",
 			arg:  "Upload",
-			want: invokeTarget{arg: "Upload", saved: true, parent: []string{}, itemName: "Upload", service: "echo.v1.EchoService", method: "ClientStream", kind: methodKind{client: true}},
+			want: invokeTarget{arg: "Upload", saved: true, parent: []string{}, itemName: "Upload", service: "grpcview.echo.v1.EchoService", method: "ClientStream", kind: methodKind{client: true}},
 		},
 		{
 			name: "an ad-hoc method",
@@ -38,10 +38,10 @@ func TestResolveInvokeArg(t *testing.T) {
 		},
 		{
 			name: "an ad-hoc bidi method",
-			arg:  "echo.v1.EchoService/Bidi",
-			want: invokeTarget{arg: "echo.v1.EchoService/Bidi", service: "echo.v1.EchoService", method: "Bidi", kind: methodKind{client: true, server: true}},
+			arg:  "grpcview.echo.v1.EchoService/Bidi",
+			want: invokeTarget{arg: "grpcview.echo.v1.EchoService/Bidi", service: "grpcview.echo.v1.EchoService", method: "Bidi", kind: methodKind{client: true, server: true}},
 		},
-		{name: "both forms matching is refused", arg: "echo.v1.EchoService/Unary", wantErr: "ambiguous argument"},
+		{name: "both forms matching is refused", arg: "grpcview.echo.v1.EchoService/Unary", wantErr: "ambiguous argument"},
 		{name: "a folder is not a request", arg: "Auth", wantErr: "it is a folder, not a request"},
 		{name: "an unknown method on a known service", arg: "auth.v1.AuthService/Nope", wantErr: "unknown request or method"},
 		{name: "an unresolvable saved method", arg: "Broken", wantErr: "which no definition source in collection"},

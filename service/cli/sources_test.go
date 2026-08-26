@@ -58,12 +58,12 @@ func sourcesWorkspace() *grpcviewv1.Collection {
 	ws.Sources = []*grpcviewv1.DescriptorSource{
 		shared(reflectionSource("localhost:50055", &grpcviewv1.Resolved{
 			FileCount:       4,
-			ServiceNames:    []string{"auth.v1.AuthService", "echo.v1.EchoService"},
-			WonServiceNames: []string{"auth.v1.AuthService", "echo.v1.EchoService"},
+			ServiceNames:    []string{"auth.v1.AuthService", "grpcview.echo.v1.EchoService"},
+			WonServiceNames: []string{"auth.v1.AuthService", "grpcview.echo.v1.EchoService"},
 		})),
 		committed(uploadSource("echo.binpb", &grpcviewv1.Resolved{
 			FileCount:    3,
-			ServiceNames: []string{"echo.v1.EchoService"},
+			ServiceNames: []string{"grpcview.echo.v1.EchoService"},
 		})),
 		reflectionSource("gone.example:9999", &grpcviewv1.Resolved{
 			Error: "dial tcp 10.0.0.1:9999:\n  connect: connection refused",
@@ -78,7 +78,7 @@ func refreshableWorkspace() *grpcviewv1.Collection {
 		reflectionSource("localhost:50055", &grpcviewv1.Resolved{FileCount: 4}),
 		uploadSource("browser.binpb", &grpcviewv1.Resolved{FileCount: 3}),
 		uploadSourceWithPath("built.binpb", "proto/built.binpb", &grpcviewv1.Resolved{FileCount: 3}),
-		bazelSource("//proto/echo/v1:echov1_proto", &grpcviewv1.Resolved{FileCount: 2}),
+		bazelSource("//proto/grpcview/echo/v1:grpcviewechov1_proto", &grpcviewv1.Resolved{FileCount: 2}),
 	}
 	return ws
 }
@@ -131,20 +131,20 @@ func TestSourcesLsTrust(t *testing.T) {
 	}{
 		{
 			name:     "an untrusted workspace with a bazel source says so, once, after the rows",
-			snapshot: bazelWorkspace("//proto/echo/v1:echov1_proto"),
+			snapshot: bazelWorkspace("//proto/grpcview/echo/v1:grpcviewechov1_proto"),
 			wantNote: "! %s is not trusted: 1 bazel source above cannot build here — `grpcview trust` allows it",
 			wantList: 2,
 		},
 		{
 			name:     "the count is the number of rows that would build",
-			snapshot: bazelWorkspace("//proto/echo/v1:echov1_proto", "//proto/auth/v1:authv1_proto"),
+			snapshot: bazelWorkspace("//proto/grpcview/echo/v1:grpcviewechov1_proto", "//proto/auth/v1:authv1_proto"),
 			wantNote: "! %s is not trusted: 2 bazel sources above cannot build here — `grpcview trust` allows it",
 			wantList: 2,
 		},
 		{
 			name:     "a trusted workspace says nothing at all",
 			trusted:  true,
-			snapshot: bazelWorkspace("//proto/echo/v1:echov1_proto"),
+			snapshot: bazelWorkspace("//proto/grpcview/echo/v1:grpcviewechov1_proto"),
 			wantList: 2,
 		},
 		{
@@ -302,7 +302,7 @@ func TestSourcesLsEmptyAndFailing(t *testing.T) {
 }
 
 func TestTheBuildingVerbsGetALongerDefaultTimeout(t *testing.T) {
-	const label = "//proto/echo/v1:echov1_proto"
+	const label = "//proto/grpcview/echo/v1:grpcviewechov1_proto"
 
 	for _, tc := range []struct {
 		name string

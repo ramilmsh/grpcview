@@ -25,8 +25,8 @@ func (f *fakeClient) DescribeMethod(_ context.Context, r *connect.Request[grpcvi
 func describedEcho(t *testing.T) *grpcviewv1.DescribeMethodResponse {
 	t.Helper()
 	set := &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{{
-		Name:    proto.String("proto/echo/v1/echo.proto"),
-		Package: proto.String("echo.v1"),
+		Name:    proto.String("proto/grpcview/echo/v1/echo.proto"),
+		Package: proto.String("grpcview.echo.v1"),
 		Syntax:  proto.String("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{{
 			Name: proto.String("EchoRequest"),
@@ -54,7 +54,7 @@ func TestDescribe(t *testing.T) {
 		fc := newFake()
 		fc.described = describedEcho(t)
 
-		out, errOut, code := runCLI(fc, "", "describe", "echo.v1.EchoService/Unary")
+		out, errOut, code := runCLI(fc, "", "describe", "grpcview.echo.v1.EchoService/Unary")
 		if code != 0 {
 			t.Fatalf("exit code = %d, want 0 (stderr=%q)", code, errOut)
 		}
@@ -71,7 +71,7 @@ func TestDescribe(t *testing.T) {
 			t.Fatalf("DescribeMethod called %d time(s), want 1", len(fc.gotDescribe))
 		}
 		got := fc.gotDescribe[0]
-		if got.GetService() != "echo.v1.EchoService" || got.GetMethod() != "Unary" {
+		if got.GetService() != "grpcview.echo.v1.EchoService" || got.GetMethod() != "Unary" {
 			t.Errorf("service/method = %q/%q, want the argument split on the LAST slash",
 				got.GetService(), got.GetMethod())
 		}
@@ -84,7 +84,7 @@ func TestDescribe(t *testing.T) {
 		fc := newFake()
 		fc.described = describedEcho(t)
 
-		out, _, code := runCLI(fc, "", "describe", "echo.v1.EchoService/Unary", "-o", "json")
+		out, _, code := runCLI(fc, "", "describe", "grpcview.echo.v1.EchoService/Unary", "-o", "json")
 		if code != 0 {
 			t.Fatalf("exit code = %d, want 0", code)
 		}
@@ -92,7 +92,7 @@ func TestDescribe(t *testing.T) {
 		if err := protojson.Unmarshal([]byte(out), &set); err != nil {
 			t.Fatalf("stdout does not parse as a FileDescriptorSet: %v (%q)", err, out)
 		}
-		if len(set.GetFile()) != 1 || set.GetFile()[0].GetName() != "proto/echo/v1/echo.proto" {
+		if len(set.GetFile()) != 1 || set.GetFile()[0].GetName() != "proto/grpcview/echo/v1/echo.proto" {
 			t.Errorf("parsed set = %v, want the one fixture file", set.GetFile())
 		}
 		if msgs := set.GetFile()[0].GetMessageType(); len(msgs) != 1 || msgs[0].GetName() != "EchoRequest" {
@@ -115,15 +115,15 @@ func TestDescribe(t *testing.T) {
 			},
 			{
 				name:    "an invalid -o",
-				args:    []string{"describe", "echo.v1.EchoService/Unary", "-o", "text"},
+				args:    []string{"describe", "grpcview.echo.v1.EchoService/Unary", "-o", "text"},
 				wantErr: `invalid --output "text"`,
 			},
 			{
 				name: "a Connect error from the RPC",
-				args: []string{"describe", "echo.v1.EchoService/Nope"},
+				args: []string{"describe", "grpcview.echo.v1.EchoService/Nope"},
 				fake: func(fc *fakeClient) {
 					fc.describeErr = connect.NewError(connect.CodeNotFound,
-						errors.New(`method "Nope" is not in service "echo.v1.EchoService"`))
+						errors.New(`method "Nope" is not in service "grpcview.echo.v1.EchoService"`))
 				},
 				wantErr:  "failed to describe",
 				wantCall: true,

@@ -19,7 +19,7 @@ func lsWorkspace() *grpcviewv1.Collection {
 				testFolder("Admin",
 					withMiddleware(testRequest("Grant", "auth.v1.AuthService", "Grant"), "sign", "trace")),
 			),
-			testRequest("Ping", "echo.v1.EchoService", "Unary"),
+			testRequest("Ping", "grpcview.echo.v1.EchoService", "Unary"),
 		),
 	}
 }
@@ -33,8 +33,8 @@ const (
 	lsGoldenRoot = `Auth/             folder
 Auth/Login        auth.v1.AuthService/Login
 Auth/Admin/       folder
-Auth/Admin/Grant  auth.v1.AuthService/Grant  [2 middleware]
-Ping              echo.v1.EchoService/Unary
+Auth/Admin/Grant  auth.v1.AuthService/Grant           [2 middleware]
+Ping              grpcview.echo.v1.EchoService/Unary
 `
 	lsGoldenSubtree = `Auth/Login        auth.v1.AuthService/Login
 Auth/Admin/       folder
@@ -120,12 +120,12 @@ func TestLs(t *testing.T) {
 				fc.snapshot = &grpcviewv1.Collection{
 					Name: "default",
 					Item: testFolder("",
-						testRequest("Ping", "echo.v1.EchoService", "Unary"),
-						testRequest("Feed", "echo.v1.EchoService", "ServerStream"),
-						withMiddleware(testRequest("Chat", "echo.v1.EchoService", "BidiStream"), "sign"),
+						testRequest("Ping", "grpcview.echo.v1.EchoService", "Unary"),
+						testRequest("Feed", "grpcview.echo.v1.EchoService", "ServerStream"),
+						withMiddleware(testRequest("Chat", "grpcview.echo.v1.EchoService", "BidiStream"), "sign"),
 					),
 					Services: []*grpcviewv1.Service{{
-						Package: "echo.v1",
+						Package: "grpcview.echo.v1",
 						Name:    "EchoService",
 						Methods: []*grpcviewv1.Method{
 							{Name: "Unary"},
@@ -135,9 +135,9 @@ func TestLs(t *testing.T) {
 					}},
 				}
 			},
-			wantOut: "Ping  echo.v1.EchoService/Unary\n" +
-				"Feed  echo.v1.EchoService/ServerStream  [server-streaming]\n" +
-				"Chat  echo.v1.EchoService/BidiStream    [bidi-streaming] [1 middleware]\n",
+			wantOut: "Ping  grpcview.echo.v1.EchoService/Unary\n" +
+				"Feed  grpcview.echo.v1.EchoService/ServerStream  [server-streaming]\n" +
+				"Chat  grpcview.echo.v1.EchoService/BidiStream    [bidi-streaming] [1 middleware]\n",
 			wantCode: 0,
 		},
 		{

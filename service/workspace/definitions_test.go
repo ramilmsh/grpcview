@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	echov1 "codeberg.org/ramilmsh/grpcview/proto/echo/v1"
+	echov1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/echo/v1"
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/proto/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/echo"
@@ -36,7 +36,7 @@ func startEchoServerWithoutReflection(t *testing.T) int {
 
 func addEchoUpload(t *testing.T, w Workspace, ctx context.Context) {
 	t.Helper()
-	req := descriptorSetAddReq(fileDescriptorSet(t, "proto/echo/v1/echo.proto"))
+	req := descriptorSetAddReq(fileDescriptorSet(t, "proto/grpcview/echo/v1/echo.proto"))
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(req)); err != nil {
 		t.Fatalf("AddDescriptorSource (echo upload): %v", err)
 	}

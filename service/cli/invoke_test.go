@@ -147,14 +147,14 @@ func testWorkspace() *grpcviewv1.Collection {
 		Name: "default",
 		Item: testFolder("",
 			testFolder("Auth", testRequest("Login", "auth.v1.AuthService", "Login")),
-			testRequest("Stream", "echo.v1.EchoService", "ServerStream"),
-			testRequest("Upload", "echo.v1.EchoService", "ClientStream"),
+			testRequest("Stream", "grpcview.echo.v1.EchoService", "ServerStream"),
+			testRequest("Upload", "grpcview.echo.v1.EchoService", "ClientStream"),
 			testRequest("Broken", "gone.v1.GoneService", "Missing"),
-			testFolder("echo.v1.EchoService", testRequest("Unary", "echo.v1.EchoService", "Unary")),
+			testFolder("grpcview.echo.v1.EchoService", testRequest("Unary", "grpcview.echo.v1.EchoService", "Unary")),
 		),
 		Services: []*grpcviewv1.Service{
 			{Package: "auth.v1", Name: "AuthService", Methods: []*grpcviewv1.Method{{Name: "Login"}}},
-			{Package: "echo.v1", Name: "EchoService", Methods: []*grpcviewv1.Method{
+			{Package: "grpcview.echo.v1", Name: "EchoService", Methods: []*grpcviewv1.Method{
 				{Name: "Unary"},
 				{Name: "ServerStream", ServerStreaming: true},
 				{Name: "ClientStream", ClientStreaming: true},
@@ -275,8 +275,8 @@ func TestInvoke(t *testing.T) {
 		},
 		{
 			name:       "an ambiguous argument is exit 2 naming both interpretations",
-			args:       []string{"invoke", "echo.v1.EchoService/Unary"},
-			wantErrHas: "ambiguous argument \"echo.v1.EchoService/Unary\": it names both the saved request echo.v1.EchoService/Unary in collection \"default\" and the method echo.v1.EchoService/Unary in the schema",
+			args:       []string{"invoke", "grpcview.echo.v1.EchoService/Unary"},
+			wantErrHas: "ambiguous argument \"grpcview.echo.v1.EchoService/Unary\": it names both the saved request grpcview.echo.v1.EchoService/Unary in collection \"default\" and the method grpcview.echo.v1.EchoService/Unary in the schema",
 			wantCode:   2,
 			check:      wantNothingInvoked,
 		},
@@ -328,8 +328,8 @@ func TestInvoke(t *testing.T) {
 		},
 		{
 			name:       "--param on the ad-hoc form is exit 2",
-			args:       []string{"invoke", "echo.v1.EchoService/Bidi", "--param", "n=3"},
-			wantErrHas: "--param does not apply to the ad-hoc method echo.v1.EchoService/Bidi",
+			args:       []string{"invoke", "grpcview.echo.v1.EchoService/Bidi", "--param", "n=3"},
+			wantErrHas: "--param does not apply to the ad-hoc method grpcview.echo.v1.EchoService/Bidi",
 			wantCode:   2,
 			check:      wantNothingInvoked,
 		},
@@ -522,12 +522,12 @@ func TestInvoke(t *testing.T) {
 		},
 		{
 			name:  "an ad-hoc bidi call reads NDJSON and uses the streaming RPC",
-			args:  []string{"invoke", "echo.v1.EchoService/Bidi"},
+			args:  []string{"invoke", "grpcview.echo.v1.EchoService/Bidi"},
 			stdin: "{\"i\":1}\n{\"i\":2}\n",
 			fake: func(fc *fakeClient) {
 				fc.frames = []*grpcviewv1.InvokeStreamingResponse{resultFrame(okResponse(""))}
 			},
-			wantErr:  "echo.v1.EchoService/Bidi: OK   (12ms)\n",
+			wantErr:  "grpcview.echo.v1.EchoService/Bidi: OK   (12ms)\n",
 			wantCode: 0,
 			check: func(t *testing.T, fc *fakeClient) {
 				if len(fc.gotAdhocStream) != 1 {
@@ -682,7 +682,7 @@ func TestInvokeDryRun(t *testing.T) {
 
 func TestInvokeDryRunOnAStreamingMethod(t *testing.T) {
 	fc := newFake()
-	fc.resolved = &grpcviewv1.ResolvedRequest{Service: "echo.v1.EchoService", Method: "ServerStream"}
+	fc.resolved = &grpcviewv1.ResolvedRequest{Service: "grpcview.echo.v1.EchoService", Method: "ServerStream"}
 
 	_, errOut, code := runCLI(fc, "", "invoke", "Stream", "--dry-run")
 	if code != 0 {

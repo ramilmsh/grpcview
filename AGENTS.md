@@ -1694,7 +1694,7 @@ proto/
   grpcview/v1/      Wire API: service.proto (WorkspaceService + ServerService
                     Connect RPCs) + workspace.proto (messages)
   grpcview/store/v1/ On-disk persistence schema (storage.proto)
-  echo/v1/          A trivial echo service used for testing invoke end-to-end
+  grpcview/echo/v1/ A trivial echo service used for testing invoke end-to-end
 service/
   service.go        Serves and owns the server's lifecycle (bind, publish, drain);
                     idle.go and logging.go alongside
