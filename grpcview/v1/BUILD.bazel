@@ -1,3 +1,5 @@
+# gazelle:exclude service.go
+
 load("@aspect_rules_ts//ts:proto.bzl", "ts_proto_library")
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_go//go:def.bzl", "go_library")
@@ -31,7 +33,6 @@ go_proto_library(
 
 go_library(
     name = "grpcview",
-    srcs = ["service.go"],
     embed = [":grpcviewv1_go_proto"],
     importpath = "codeberg.org/ramilmsh/grpcview/grpcview/v1",
     visibility = ["//visibility:public"],
