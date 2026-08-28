@@ -6,7 +6,7 @@ go_library(
     importpath = "codeberg.org/ramilmsh/grpcview/service/echo",
     visibility = ["//visibility:public"],
     deps = [
-        "//grpcview/echo/v1:echo",
+        "//grpcview/echo/v1:grpcviewechov1_go_proto",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//reflection",
     ],

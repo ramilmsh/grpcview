@@ -20,7 +20,7 @@ go_library(
     importpath = "codeberg.org/ramilmsh/grpcview/service/mcp",
     visibility = ["//visibility:public"],
     deps = [
-        "//grpcview/v1:grpcview",
+        "//grpcview/v1:grpcviewv1_go_proto",
         "//service/wire",
         "@com_connectrpc_connect//:connect",
         "@com_github_modelcontextprotocol_go_sdk//mcp",
@@ -45,7 +45,7 @@ go_test(
     ],
     embed = [":mcp"],
     deps = [
-        "//grpcview/v1:grpcview",
+        "//grpcview/v1:grpcviewv1_go_proto",
         "//service/workspace",
         "@com_github_redpanda_data_protoc_gen_go_mcp//pkg/gen",
         "@com_github_redpanda_data_protoc_gen_go_mcp//pkg/runtime",

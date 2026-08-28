@@ -18,8 +18,8 @@ go_library(
     importpath = "codeberg.org/ramilmsh/grpcview/service/workspace",
     visibility = ["//visibility:public"],
     deps = [
-        "//grpcview/store/v1:store",
-        "//grpcview/v1:grpcview",
+        "//grpcview/store/v1:grpcviewstorev1_go_proto",
+        "//grpcview/v1:grpcviewv1_go_proto",
         "//service/bazelbuild",
         "//service/scripting",
         "//service/store",
@@ -69,9 +69,9 @@ go_test(
     ],
     embed = [":workspace"],
     deps = [
-        "//grpcview/echo/v1:echo",
-        "//grpcview/store/v1:store",
-        "//grpcview/v1:grpcview",
+        "//grpcview/echo/v1:grpcviewechov1_go_proto",
+        "//grpcview/store/v1:grpcviewstorev1_go_proto",
+        "//grpcview/v1:grpcviewv1_go_proto",
         "//service/echo",
         "//service/scripting",
         "//service/store",

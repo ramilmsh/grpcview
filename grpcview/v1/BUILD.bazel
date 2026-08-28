@@ -28,7 +28,6 @@ go_proto_library(
     visibility = ["//visibility:public"],
 )
 
-
 ts_proto_library(
     name = "grpcviewv1_ts_proto",
     gen_connect_query = True,
