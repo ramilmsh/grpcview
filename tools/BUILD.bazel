@@ -1,6 +1,18 @@
+load("@aspect_gazelle_prebuilt//:def.bzl", "aspect_gazelle")
 load("@multitool//:tools.bzl", "TOOLS")
 load("@rules_go//proto:compiler.bzl", "go_proto_compiler")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+aspect_gazelle(
+    name = "gazelle",
+    languages = [
+        "go",
+        "proto",
+        # "js",
+    ],
+    repo_config = "@bazel_gazelle_go_repository_config//:WORKSPACE",
+    with_check = True,
+)
 
 sh_binary(
     name = "release",

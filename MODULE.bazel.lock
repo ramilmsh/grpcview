@@ -35,6 +35,8 @@
     "https://bcr.bazel.build/modules/aspect_bazel_lib/2.22.5/source.json": "ac2c3213df8f985785f1d0aeb7f0f73d5324e6e67d593d9b9470fb74a25d4a9b",
     "https://bcr.bazel.build/modules/aspect_bazel_lib/2.7.7/MODULE.bazel": "491f8681205e31bb57892d67442ce448cda4f472a8e6b3dc062865e29a64f89c",
     "https://bcr.bazel.build/modules/aspect_bazel_lib/2.8.1/MODULE.bazel": "812d2dd42f65dca362152101fbec418029cc8fd34cbad1a2fde905383d705838",
+    "https://bcr.bazel.build/modules/aspect_gazelle_prebuilt/0.0.25/MODULE.bazel": "787658ddc5496fea762c54b2a575c0bb15ffcfd19f5a3df211e0a18f20307f89",
+    "https://bcr.bazel.build/modules/aspect_gazelle_prebuilt/0.0.25/source.json": "3c57c26cfd75a63f05c6c0b7a3b4ced9c88b7b49960c0ab6af72a60666befea7",
     "https://bcr.bazel.build/modules/aspect_rules_js/2.0.0/MODULE.bazel": "b45b507574aa60a92796e3e13c195cd5744b3b8aff516a9c0cb5ae6a048161c5",
     "https://bcr.bazel.build/modules/aspect_rules_js/3.2.3/MODULE.bazel": "3a0363a5b8ec4931488dc327c577a78c1f5a725293ebffaa5d2613283701aa8a",
     "https://bcr.bazel.build/modules/aspect_rules_js/3.2.3/source.json": "fa3187962f5fdeee0c6226792904aaafb2cf585717a264fa4393a767bffb99fe",
@@ -42,7 +44,8 @@
     "https://bcr.bazel.build/modules/aspect_rules_ts/3.9.1/source.json": "a9a585c7dc7140037ddf8f637ecf025ecb1dc0a6882d9abfc8d438f276f6b351",
     "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.3.3/MODULE.bazel": "37c764292861c2f70314efa9846bb6dbb44fc0308903b3285da6528305450183",
     "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.4.2/MODULE.bazel": "f31aa84151d31e98cffd43eb7217ccff5ec52bdd5f2d10db8f053aeb23342eca",
-    "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.4.2/source.json": "d027d264e6b6e7fc421e38189f4374fcd14a67e0bd6e0e705de8c2185c3787e1",
+    "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.5.1/MODULE.bazel": "9d94e5c22c0019995c0a3216a6abb1717dc3f35acccf4e6267a55d6df38367aa",
+    "https://bcr.bazel.build/modules/aspect_tools_telemetry/0.5.1/source.json": "dbe0a75bf1f741b18c7b72dd4d205fa5a45c8c135fee15f7fdd1a2b50ba0fdde",
     "https://bcr.bazel.build/modules/bazel_env.bzl/0.8.0/MODULE.bazel": "9adfd813f4ca6b575c13756fc7f91a17d643a73192aafae8970f82f73f65a0aa",
     "https://bcr.bazel.build/modules/bazel_env.bzl/0.8.0/source.json": "cd54dfb855bbc16b7cd61defe9c9ef56aca4afd716b95b3627498b1bf92d1bdc",
     "https://bcr.bazel.build/modules/bazel_features/1.1.0/MODULE.bazel": "cfd42ff3b815a5f39554d97182657f8c4b9719568eb7fded2b9135f084bf760b",
@@ -370,10 +373,61 @@
         }
       }
     },
+    "@@aspect_gazelle_prebuilt+//:extensions.bzl%prebuilt_extension": {
+      "general": {
+        "bzlTransitiveDigest": "qAzKlA7V+DvKhaDdTxvFluLqPEaoUA4+Eaie/GlwuTI=",
+        "usagesDigest": "7b3ZvtBpi8eY2ZWs+FPdYfOGVcy7B9H2nYCm6ilFFEw=",
+        "recordedInputs": [
+          "REPO_MAPPING:aspect_gazelle_prebuilt+,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "aspect_gazelle_prebuilt_linux_amd64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "2656ee9f9c466d6946f2f50b7a52cddd857ad8ad1ae4db758745e00758938e80",
+              "urls": [
+                "https://github.com/aspect-build/aspect-gazelle/releases/download/prebuilt-v0.0.25/aspect_gazelle-linux_amd64"
+              ]
+            }
+          },
+          "aspect_gazelle_prebuilt_linux_arm64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "640a319df61364f745561e6d849bf4a4cfef8883e7da0daef7a6b8859918fdc0",
+              "urls": [
+                "https://github.com/aspect-build/aspect-gazelle/releases/download/prebuilt-v0.0.25/aspect_gazelle-linux_arm64"
+              ]
+            }
+          },
+          "aspect_gazelle_prebuilt_darwin_amd64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "3fe07b196063562a54e361031171959707bc2612814f43bcdbcdfc7b6920d28c",
+              "urls": [
+                "https://github.com/aspect-build/aspect-gazelle/releases/download/prebuilt-v0.0.25/aspect_gazelle-darwin_amd64"
+              ]
+            }
+          },
+          "aspect_gazelle_prebuilt_darwin_arm64": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
+            "attributes": {
+              "executable": true,
+              "sha256": "df57590ce0cf518c2d5c4b6d49b8f7e56e1ddc146a0e6f584cd5f5292b821913",
+              "urls": [
+                "https://github.com/aspect-build/aspect-gazelle/releases/download/prebuilt-v0.0.25/aspect_gazelle-darwin_arm64"
+              ]
+            }
+          }
+        }
+      }
+    },
     "@@aspect_tools_telemetry+//:extension.bzl%telemetry": {
       "general": {
-        "bzlTransitiveDigest": "4w9RM0xjdKo1crk5zL20a/TuhqO0P1z1LsuXDneBXD4=",
-        "usagesDigest": "0DySKi5IqKOp+hSrKLyNsWZkhKG65SgwvVIJEwk9/gE=",
+        "bzlTransitiveDigest": "zFgbaCUuPzH6bIE7CBHBVCqjWSJ78/WNXisdzXaKSnU=",
+        "usagesDigest": "fsDVFmvdt/UuQgQgiga9kX/89k6J3zMcwmdmT6yn60E=",
         "recordedInputs": [
           "REPO_MAPPING:aspect_tools_telemetry+,bazel_lib bazel_lib+",
           "REPO_MAPPING:aspect_tools_telemetry+,bazel_skylib bazel_skylib+",
@@ -384,11 +438,12 @@
             "repoRuleId": "@@aspect_tools_telemetry+//:extension.bzl%tel_repository",
             "attributes": {
               "deps": {
+                "aspect_gazelle_prebuilt": "0.0.25",
                 "aspect_rules_ts": "3.9.1",
                 "aspect_rules_js": "3.2.3",
-                "aspect_tools_telemetry": "0.4.2"
+                "aspect_tools_telemetry": "0.5.1"
               },
-              "last_notice": 0
+              "last_notice": 1
             }
           }
         },
@@ -1167,7 +1222,7 @@
   },
   "facts": {
     "@@aspect_tools_telemetry+//:extension.bzl%telemetry": {
-      "notice_version": "1"
+      "notice_version": "2"
     },
     "@@rules_go+//go:extensions.bzl%go_sdk": {
       "1.22.4": {

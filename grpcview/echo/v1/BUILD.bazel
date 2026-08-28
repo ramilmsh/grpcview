@@ -2,7 +2,6 @@
 # gazelle:go_proto_compilers @rules_go//proto:go_proto
 
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
-load("@rules_go//go:def.bzl", "go_library")
 load("@rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
@@ -19,12 +18,5 @@ go_proto_library(
     ],
     importpath = "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1",
     proto = ":grpcviewechov1_proto",
-    visibility = ["//visibility:public"],
-)
-
-go_library(
-    name = "echo",
-    embed = [":grpcviewechov1_go_proto"],
-    importpath = "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1",
     visibility = ["//visibility:public"],
 )
