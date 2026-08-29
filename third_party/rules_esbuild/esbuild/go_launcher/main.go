@@ -25,13 +25,35 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	// Capture the execroot (this action's true working directory, matching the JS launcher's
+	// JS_BINARY__EXECROOT) before anything below changes cwd.
+	execroot, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, fmt.Errorf("determining execroot: %w", err))
+		os.Exit(1)
+	}
+
+	// esbuild.bzl's `_bin_relative_path` computes every path handed to this launcher --
+	// --esbuild_args=/--user_args=/--config_file=/--metafile=, plus entryPoints/tsconfig/outdir
+	// values inside the args JSON itself -- relative to BAZEL_BINDIR, not the execroot. The JS
+	// launcher only works because aspect_rules_js's js_binary.sh.tpl wrapper cd's into
+	// BAZEL_BINDIR before exec'ing node; esbuild.bzl's non-js_binary branch (this launcher's
+	// invocation path) sets BAZEL_BINDIR as an env var instead of cd'ing for it, so mirror that
+	// chdir here before reading any flag-referenced file.
+	if bindir := os.Getenv("BAZEL_BINDIR"); bindir != "" {
+		if err := os.Chdir(bindir); err != nil {
+			fmt.Fprintln(os.Stderr, fmt.Errorf("chdir to BAZEL_BINDIR %q: %w", bindir, err))
+			os.Exit(1)
+		}
+	}
+
+	if err := run(os.Args[1:], execroot); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(argv []string) error {
+func run(argv []string, execroot string) error {
 	esbuildArgsPath, ok := getFlag(argv, "--esbuild_args")
 	if !ok {
 		return fmt.Errorf("expected flag '--esbuild_args' passed to launcher, but not found")
@@ -79,7 +101,7 @@ func run(argv []string) error {
 		return fmt.Errorf("parsing esbuild args: %w", err)
 	}
 
-	plugins, err := buildPlugins()
+	plugins, err := buildPlugins(execroot)
 	if err != nil {
 		return err
 	}
@@ -118,13 +140,9 @@ func run(argv []string) error {
 // esbuild.bzl's `config` attribute, there is no way for a caller to append their own plugins here
 // (see rejectPlugins) -- the only plugin this launcher ever installs is its own sandbox guard, and
 // only when the rule asked for it via the same env var the JS launcher gates on.
-func buildPlugins() ([]api.Plugin, error) {
+func buildPlugins(execroot string) ([]api.Plugin, error) {
 	if os.Getenv("ESBUILD_BAZEL_SANDBOX_PLUGIN") == "" {
 		return nil, nil
-	}
-	execroot, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("determining execroot: %w", err)
 	}
 	// Analog of the JS plugin's BAZEL_BINDIR: esbuild.bzl sets this explicitly for a non-js_binary
 	// launcher (see esbuild.bzl's `else` branch, `env["BAZEL_BINDIR"] = ctx.bin_dir.path`) since

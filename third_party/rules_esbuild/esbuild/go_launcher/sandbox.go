@@ -36,7 +36,14 @@ var bazelOutBindirRE = regexp.MustCompile(`bazel-out[\\/][^\\/]+[\\/]bin[\\/]`)
 // prevents infinite recursion when resolveInExecroot calls build.Resolve() from inside its own
 // OnResolve handler, since the handler's filter (".") matches every resolution, including the
 // nested one it just triggered itself.
-type sandboxGuard struct{}
+//
+// It wraps (rather than replaces) whatever PluginData came in on the original OnResolveArgs, the
+// same way the JS original merges `executedSandboxPlugin: true` into the existing `pluginData`
+// object instead of overwriting it -- so a caller-supplied PluginData isn't silently dropped on
+// the nested resolve, even though nothing currently reads it back out.
+type sandboxGuard struct {
+	original interface{}
+}
 
 // bazelSandboxPlugin returns the Go equivalent of bazelSandboxPlugin() in bazel-sandbox.js.
 //
@@ -62,7 +69,7 @@ func bazelSandboxPlugin(execroot, bindir string) api.Plugin {
 						Namespace:  args.Namespace,
 						ResolveDir: args.ResolveDir,
 						Kind:       args.Kind,
-						PluginData: sandboxGuard{},
+						PluginData: sandboxGuard{original: args.PluginData},
 						With:       args.With,
 					})
 

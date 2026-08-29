@@ -415,6 +415,7 @@ func parseSourcemap(raw json.RawMessage) (api.SourceMap, error) {
 // Engines (any number of runtime engines).
 var esTargets = map[string]api.Target{
 	"es5":     api.ES5,
+	"es6":     api.ES2015,
 	"esnext":  api.ESNext,
 	"es2015":  api.ES2015,
 	"es2016":  api.ES2016,
@@ -464,18 +465,15 @@ func parseTargets(raw json.RawMessage) (api.Target, []api.Engine, error) {
 
 	target := api.DefaultTarget
 	var engines []api.Engine
-	sawES := false
 	for _, rawEntry := range entries {
 		s := strings.ToLower(strings.TrimSpace(rawEntry))
 		if s == "" {
 			continue
 		}
 		if t, ok := esTargets[s]; ok {
-			if sawES {
-				return 0, nil, fmt.Errorf("target: only one ECMAScript version target is allowed, found an additional one at %q", rawEntry)
-			}
+			// Matches esbuild's own canonical parser (pkg/cli/cli_impl.go's parseTargets): on
+			// multiple ES-version entries, the last one wins rather than erroring.
 			target = t
-			sawES = true
 			continue
 		}
 		if m := engineTargetRE.FindStringSubmatch(s); m != nil {
