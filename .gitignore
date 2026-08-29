@@ -4,3 +4,4 @@ node_modules/
 dist/
 # Personal, per-user Claude Code overrides.
 .claude/settings.local.json
+.pnpm-store

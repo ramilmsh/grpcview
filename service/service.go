@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -53,6 +54,42 @@ type Options struct {
 }
 
 const drainTimeout = 30 * time.Second
+
+// withETags precomputes a content-hash ETag for every file in dist and sets it, alongside a
+// must-revalidate Cache-Control, ahead of next on every request whose path matches a known
+// file. http.FileServer (next) honors an ETag the caller already set when checking
+// If-None-Match, so a repeat request for an unchanged asset gets a 304 instead of a full
+// re-send — dist's filenames are fixed and unhashed (see //ui/src:app), so there is no
+// far-future immutable caching to lean on instead.
+func withETags(dist fs.FS, next http.Handler) (http.Handler, error) {
+	etags := make(map[string]string)
+	err := fs.WalkDir(dist, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := fs.ReadFile(dist, path)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		etags["/"+path] = fmt.Sprintf(`"%x"`, sum[:8])
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if etag, ok := etags[r.URL.Path]; ok {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	}), nil
+}
 
 func Run(
 	ctx context.Context,
@@ -110,7 +147,17 @@ func Run(
 	// dist holds the built UI flat (index.html, main.js, tailwind.css, main.css, theme.css, the
 	// monaco worker bundles — see //service/cmd:dist) — http.FileServer serves index.html
 	// for "/" and every other file at its own root-relative path unchanged.
-	mux.Handle("/", http.FileServer(http.FS(dist)))
+	//
+	// embed.FS never carries mtimes (every FileInfo.ModTime() is the zero value), so
+	// http.FileServer emits neither Last-Modified nor a 304 path on its own — every asset
+	// would be re-sent in full on every request. withETags precomputes a content-hash ETag
+	// per file once at startup and sets it (plus a must-revalidate Cache-Control) ahead of
+	// http.FileServer, which honors a pre-set ETag for If-None-Match itself.
+	distHandler, err := withETags(dist, http.FileServer(http.FS(dist)))
+	if err != nil {
+		return fmt.Errorf("failed to index built UI assets: %w", err)
+	}
+	mux.Handle("/", distHandler)
 
 	var handler http.Handler = mux
 	if len(opts.DevOrigins) > 0 {

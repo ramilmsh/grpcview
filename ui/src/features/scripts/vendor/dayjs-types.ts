@@ -3,4 +3,484 @@
 // allow importing a .d.ts file as a value, and per-package ts_project compiles
 // need this as ordinary source (see //ui/src:app comment on cross-package deps)
 // rather than a bundler-specific raw-text loader.
-export default "// Vendored dayjs type definitions — pinned to dayjs@1.11.21 (the exact version a\n// separate backend workstream vendors as the scripting-engine runtime, see\n// service/scripting/testdata/npm/dayjs). This is the published package's\n// `index.d.ts` verbatim, with two deliberate edits so it resolves as a single\n// self-contained file inside Monaco's TypeScript worker (no filesystem, offline):\n//\n//   1. the leading triple-slash reference to ./locale/index.d.ts is dropped, and\n//   2. the global `ILocale` interface it pulled in (dayjs/locale/types.d.ts) is\n//      folded in at the end — used only by `locale()` / `Ls`. Locale and plugin\n//      sub-modules are intentionally NOT vendored; the core surface\n//      (`dayjs()`, `.add/.subtract/.format/.diff/.isValid`, …) types faithfully.\n//\n// Consumed as raw text (`?raw`) and registered via monaco addExtraLib at\n// file:///node_modules/dayjs/index.d.ts (see ../monaco-scripts.ts). Do not edit\n// by hand except to re-vendor from a new pinned dayjs version.\n\nexport = dayjs;\n\ndeclare function dayjs (date?: dayjs.ConfigType): dayjs.Dayjs\n\ndeclare function dayjs (date?: dayjs.ConfigType, format?: dayjs.OptionType, strict?: boolean): dayjs.Dayjs\n\ndeclare function dayjs (date?: dayjs.ConfigType, format?: dayjs.OptionType, locale?: string, strict?: boolean): dayjs.Dayjs\n\ndeclare namespace dayjs {\n  interface ConfigTypeMap {\n    default: string | number | Date | Dayjs | null | undefined\n  }\n\n  export type ConfigType = ConfigTypeMap[keyof ConfigTypeMap]\n\n  export interface FormatObject { locale?: string, format?: string, utc?: boolean }\n\n  export type OptionType = FormatObject | string | string[]\n\n  export type UnitTypeShort = 'd' | 'D' | 'M' | 'y' | 'h' | 'm' | 's' | 'ms'\n\n  export type UnitTypeLong = 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year' | 'date'\n\n  export type UnitTypeLongPlural = 'milliseconds' | 'seconds' | 'minutes' | 'hours' | 'days' | 'months' | 'years' | 'dates'\n  \n  export type UnitType = UnitTypeLong | UnitTypeLongPlural | UnitTypeShort;\n\n  export type OpUnitType = UnitType | \"week\" | \"weeks\" | 'w';\n  export type QUnitType = UnitType | \"quarter\" | \"quarters\" | 'Q';\n  export type ManipulateType = Exclude<OpUnitType, 'date' | 'dates'>;\n  class Dayjs {\n    constructor (config?: ConfigType)\n    /**\n     * All Day.js objects are immutable. Still, `dayjs#clone` can create a clone of the current object if you need one.\n     * ```\n     * dayjs().clone()// => Dayjs\n     * dayjs(dayjs('2019-01-25')) // passing a Dayjs object to a constructor will also clone it\n     * ```\n     * Docs: https://day.js.org/docs/en/parse/dayjs-clone\n     */\n    clone(): Dayjs\n    /**\n     * This returns a `boolean` indicating whether the Day.js object contains a valid date or not.\n     * ```\n     * dayjs().isValid()// => boolean\n     * ```\n     * Docs: https://day.js.org/docs/en/parse/is-valid\n     */\n    isValid(): boolean\n    /**\n     * Get the year.\n     * ```\n     * dayjs().year()// => 2020\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/year\n     */\n    year(): number\n    /**\n     * Set the year.\n     * ```\n     * dayjs().year(2000)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/year\n     */\n    year(value: number): Dayjs\n    /**\n     * Get the month.\n     *\n     * Months are zero indexed, so January is month 0.\n     * ```\n     * dayjs().month()// => 0-11\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/month\n     */\n    month(): number\n    /**\n     * Set the month.\n     *\n     * Months are zero indexed, so January is month 0.\n     *\n     * Accepts numbers from 0 to 11. If the range is exceeded, it will bubble up to the next year.\n     * ```\n     * dayjs().month(0)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/month\n     */\n    month(value: number): Dayjs\n    /**\n     * Get the date of the month.\n     * ```\n     * dayjs().date()// => 1-31\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/date\n     */\n    date(): number\n    /**\n     * Set the date of the month.\n     *\n     * Accepts numbers from 1 to 31. If the range is exceeded, it will bubble up to the next months.\n     * ```\n     * dayjs().date(1)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/date\n     */\n    date(value: number): Dayjs\n    /**\n     * Get the day of the week.\n     *\n     * Returns numbers from 0 (Sunday) to 6 (Saturday).\n     * ```\n     * dayjs().day()// 0-6\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/day\n     */\n    day(): 0 | 1 | 2 | 3 | 4 | 5 | 6\n    /**\n     * Set the day of the week.\n     *\n     * Accepts numbers from 0 (Sunday) to 6 (Saturday). If the range is exceeded, it will bubble up to next weeks.\n     * ```\n     * dayjs().day(0)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/day\n     */\n    day(value: number): Dayjs\n    /**\n     * Get the hour.\n     * ```\n     * dayjs().hour()// => 0-23\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/hour\n     */\n    hour(): number\n    /**\n     * Set the hour.\n     *\n     * Accepts numbers from 0 to 23. If the range is exceeded, it will bubble up to the next day.\n     * ```\n     * dayjs().hour(12)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/hour\n     */\n    hour(value: number): Dayjs\n    /**\n     * Get the minutes.\n     * ```\n     * dayjs().minute()// => 0-59\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/minute\n     */\n    minute(): number\n    /**\n     * Set the minutes.\n     *\n     * Accepts numbers from 0 to 59. If the range is exceeded, it will bubble up to the next hour.\n     * ```\n     * dayjs().minute(59)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/minute\n     */\n    minute(value: number): Dayjs\n    /**\n     * Get the seconds.\n     * ```\n     * dayjs().second()// => 0-59\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/second\n     */\n    second(): number\n    /**\n     * Set the seconds.\n     *\n     * Accepts numbers from 0 to 59. If the range is exceeded, it will bubble up to the next minutes.\n     * ```\n     * dayjs().second(1)// Dayjs\n     * ```\n     */\n    second(value: number): Dayjs\n    /**\n     * Get the milliseconds.\n     * ```\n     * dayjs().millisecond()// => 0-999\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/millisecond\n     */\n    millisecond(): number\n    /**\n     * Set the milliseconds.\n     *\n     * Accepts numbers from 0 to 999. If the range is exceeded, it will bubble up to the next seconds.\n     * ```\n     * dayjs().millisecond(1)// => Dayjs\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/millisecond\n     */\n    millisecond(value: number): Dayjs\n    /**\n     * Generic setter, accepting unit as first argument, and value as second, returns a new instance with the applied changes.\n     *\n     * In general:\n     * ```\n     * dayjs().set(unit, value) === dayjs()[unit](value)\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     * ```\n     * dayjs().set('date', 1)\n     * dayjs().set('month', 3) // April\n     * dayjs().set('second', 30)\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/set\n     */\n    set(unit: UnitType, value: number): Dayjs\n    /**\n     * String getter, returns the corresponding information getting from Day.js object.\n     *\n     * In general:\n     * ```\n     * dayjs().get(unit) === dayjs()[unit]()\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     * ```\n     * dayjs().get('year')\n     * dayjs().get('month') // start 0\n     * dayjs().get('date')\n     * ```\n     * Docs: https://day.js.org/docs/en/get-set/get\n     */\n    get(unit: UnitType): number\n    /**\n     * Returns a cloned Day.js object with a specified amount of time added.\n     * ```\n     * dayjs().add(7, 'day')// => Dayjs\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/manipulate/add\n     */\n    add(value: number, unit?: ManipulateType): Dayjs\n    /**\n     * Returns a cloned Day.js object with a specified amount of time subtracted.\n     * ```\n     * dayjs().subtract(7, 'year')// => Dayjs\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/manipulate/subtract\n     */\n    subtract(value: number, unit?: ManipulateType): Dayjs\n    /**\n     * Returns a cloned Day.js object and set it to the start of a unit of time.\n     * ```\n     * dayjs().startOf('year')// => Dayjs\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/manipulate/start-of\n     */\n    startOf(unit: OpUnitType): Dayjs\n    /**\n     * Returns a cloned Day.js object and set it to the end of a unit of time.\n     * ```\n     * dayjs().endOf('month')// => Dayjs\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/manipulate/end-of\n     */\n    endOf(unit: OpUnitType): Dayjs\n    /**\n     * Get the formatted date according to the string of tokens passed in.\n     *\n     * To escape characters, wrap them in square brackets (e.g. [MM]).\n     * ```\n     * dayjs().format()// => current date in ISO8601, without fraction seconds e.g. '2020-04-02T08:02:17-05:00'\n     * dayjs('2019-01-25').format('[YYYYescape] YYYY-MM-DDTHH:mm:ssZ[Z]')// 'YYYYescape 2019-01-25T00:00:00-02:00Z'\n     * dayjs('2019-01-25').format('DD/MM/YYYY') // '25/01/2019'\n     * ```\n     * Docs: https://day.js.org/docs/en/display/format\n     */\n    format(template?: string): string\n    /**\n     * This indicates the difference between two date-time in the specified unit.\n     *\n     * To get the difference in milliseconds, use `dayjs#diff`\n     * ```\n     * const date1 = dayjs('2019-01-25')\n     * const date2 = dayjs('2018-06-05')\n     * date1.diff(date2) // 20214000000 default milliseconds\n     * date1.diff() // milliseconds to current time\n     * ```\n     *\n     * To get the difference in another unit of measurement, pass that measurement as the second argument.\n     * ```\n     * const date1 = dayjs('2019-01-25')\n     * date1.diff('2018-06-05', 'month') // 7\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/display/difference\n     */\n    diff(date?: ConfigType, unit?: QUnitType | OpUnitType, float?: boolean): number\n    /**\n     * This returns the number of **milliseconds** since the Unix Epoch of the Day.js object.\n     * ```\n     * dayjs('2019-01-25').valueOf() // 1548381600000\n     * +dayjs(1548381600000) // 1548381600000\n     * ```\n     * To get a Unix timestamp (the number of seconds since the epoch) from a Day.js object, you should use Unix Timestamp `dayjs#unix()`.\n     *\n     * Docs: https://day.js.org/docs/en/display/unix-timestamp-milliseconds\n     */\n    valueOf(): number\n    /**\n     * This returns the Unix timestamp (the number of **seconds** since the Unix Epoch) of the Day.js object.\n     * ```\n     * dayjs('2019-01-25').unix() // 1548381600\n     * ```\n     * This value is floored to the nearest second, and does not include a milliseconds component.\n     *\n     * Docs: https://day.js.org/docs/en/display/unix-timestamp\n     */\n    unix(): number\n    /**\n     * Get the number of days in the current month.\n     * ```\n     * dayjs('2019-01-25').daysInMonth() // 31\n     * ```\n     * Docs: https://day.js.org/docs/en/display/days-in-month\n     */\n    daysInMonth(): number\n    /**\n     * To get a copy of the native `Date` object parsed from the Day.js object use `dayjs#toDate`.\n     * ```\n     * dayjs('2019-01-25').toDate()// => Date\n     * ```\n     */\n    toDate(): Date\n    /**\n     * To serialize as an ISO 8601 string.\n     * ```\n     * dayjs('2019-01-25').toJSON() // '2019-01-25T02:00:00.000Z'\n     * ```\n     * Docs: https://day.js.org/docs/en/display/as-json\n     */\n    toJSON(): string\n    /**\n     * To format as an ISO 8601 string.\n     * ```\n     * dayjs('2019-01-25').toISOString() // '2019-01-25T02:00:00.000Z'\n     * ```\n     * Docs: https://day.js.org/docs/en/display/as-iso-string\n     */\n    toISOString(): string\n    /**\n     * Returns a string representation of the date.\n     * ```\n     * dayjs('2019-01-25').toString() // 'Fri, 25 Jan 2019 02:00:00 GMT'\n     * ```\n     * Docs: https://day.js.org/docs/en/display/as-string\n     */\n    toString(): string\n    /**\n     * Get the UTC offset in minutes.\n     * ```\n     * dayjs().utcOffset()\n     * ```\n     * Docs: https://day.js.org/docs/en/manipulate/utc-offset\n     */\n    utcOffset(): number\n    /**\n     * This indicates whether the Day.js object is before the other supplied date-time.\n     * ```\n     * dayjs().isBefore(dayjs('2011-01-01')) // default milliseconds\n     * ```\n     * If you want to limit the granularity to a unit other than milliseconds, pass it as the second parameter.\n     * ```\n     * dayjs().isBefore('2011-01-01', 'year')// => boolean\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/query/is-before\n     */\n    isBefore(date?: ConfigType, unit?: OpUnitType): boolean\n    /**\n     * This indicates whether the Day.js object is the same as the other supplied date-time.\n     * ```\n     * dayjs().isSame(dayjs('2011-01-01')) // default milliseconds\n     * ```\n     * If you want to limit the granularity to a unit other than milliseconds, pass it as the second parameter.\n     * ```\n     * dayjs().isSame('2011-01-01', 'year')// => boolean\n     * ```\n     * Docs: https://day.js.org/docs/en/query/is-same\n     */\n    isSame(date?: ConfigType, unit?: OpUnitType): boolean\n    /**\n     * This indicates whether the Day.js object is after the other supplied date-time.\n     * ```\n     * dayjs().isAfter(dayjs('2011-01-01')) // default milliseconds\n     * ```\n     * If you want to limit the granularity to a unit other than milliseconds, pass it as the second parameter.\n     * ```\n     * dayjs().isAfter('2011-01-01', 'year')// => boolean\n     * ```\n     * Units are case insensitive, and support plural and short forms.\n     *\n     * Docs: https://day.js.org/docs/en/query/is-after\n     */\n    isAfter(date?: ConfigType, unit?: OpUnitType): boolean\n\n    locale(): string\n\n    locale(preset: string | ILocale, object?: Partial<ILocale>): Dayjs\n  }\n\n  export type PluginFunc<T = unknown> = (option: T, c: typeof Dayjs, d: typeof dayjs) => void\n\n  export function extend<T = unknown>(plugin: PluginFunc<T>, option?: T): Dayjs\n\n  export function locale(preset?: string | ILocale, object?: Partial<ILocale>, isLocal?: boolean): string\n\n  export function isDayjs(d: any): d is Dayjs\n\n  export function unix(t: number): Dayjs\n\n  const Ls : { [key: string] :  ILocale }\n}\n\n// ---- folded in from dayjs@1.11.21 `dayjs/locale/types.d.ts` (the global ILocale\n// this file's dropped triple-slash reference used to provide). Module-scoped here,\n// which is all `locale()` / `Ls` above need. ----\ninterface ILocale {\n  name: string\n  weekdays?: string[]\n  months?: string[]\n  weekStart?: number\n  weekdaysShort?: string[]\n  monthsShort?: string[]\n  weekdaysMin?: string[]\n  ordinal?: (n: number) => number | string\n  formats: Partial<{\n    LT: string\n    LTS: string\n    L: string\n    LL: string\n    LLL: string\n    LLLL: string\n  }>\n  relativeTime: Partial<{\n    future: string\n    past: string\n    s: string\n    m: string\n    mm: string\n    h: string\n    hh: string\n    d: string\n    dd: string\n    M: string\n    MM: string\n    y: string\n    yy: string\n  }>\n}\n";
+export default `// Vendored dayjs type definitions — pinned to dayjs@1.11.21 (the exact version a
+// separate backend workstream vendors as the scripting-engine runtime, see
+// service/scripting/testdata/npm/dayjs). This is the published package's
+// \`index.d.ts\` verbatim, with two deliberate edits so it resolves as a single
+// self-contained file inside Monaco's TypeScript worker (no filesystem, offline):
+//
+//   1. the leading triple-slash reference to ./locale/index.d.ts is dropped, and
+//   2. the global \`ILocale\` interface it pulled in (dayjs/locale/types.d.ts) is
+//      folded in at the end — used only by \`locale()\` / \`Ls\`. Locale and plugin
+//      sub-modules are intentionally NOT vendored; the core surface
+//      (\`dayjs()\`, \`.add/.subtract/.format/.diff/.isValid\`, …) types faithfully.
+//
+// Consumed as raw text (\`?raw\`) and registered via monaco addExtraLib at
+// file:///node_modules/dayjs/index.d.ts (see ../monaco-scripts.ts). Do not edit
+// by hand except to re-vendor from a new pinned dayjs version.
+
+export = dayjs;
+
+declare function dayjs (date?: dayjs.ConfigType): dayjs.Dayjs
+
+declare function dayjs (date?: dayjs.ConfigType, format?: dayjs.OptionType, strict?: boolean): dayjs.Dayjs
+
+declare function dayjs (date?: dayjs.ConfigType, format?: dayjs.OptionType, locale?: string, strict?: boolean): dayjs.Dayjs
+
+declare namespace dayjs {
+  interface ConfigTypeMap {
+    default: string | number | Date | Dayjs | null | undefined
+  }
+
+  export type ConfigType = ConfigTypeMap[keyof ConfigTypeMap]
+
+  export interface FormatObject { locale?: string, format?: string, utc?: boolean }
+
+  export type OptionType = FormatObject | string | string[]
+
+  export type UnitTypeShort = 'd' | 'D' | 'M' | 'y' | 'h' | 'm' | 's' | 'ms'
+
+  export type UnitTypeLong = 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year' | 'date'
+
+  export type UnitTypeLongPlural = 'milliseconds' | 'seconds' | 'minutes' | 'hours' | 'days' | 'months' | 'years' | 'dates'
+  
+  export type UnitType = UnitTypeLong | UnitTypeLongPlural | UnitTypeShort;
+
+  export type OpUnitType = UnitType | "week" | "weeks" | 'w';
+  export type QUnitType = UnitType | "quarter" | "quarters" | 'Q';
+  export type ManipulateType = Exclude<OpUnitType, 'date' | 'dates'>;
+  class Dayjs {
+    constructor (config?: ConfigType)
+    /**
+     * All Day.js objects are immutable. Still, \`dayjs#clone\` can create a clone of the current object if you need one.
+     * \`\`\`
+     * dayjs().clone()// => Dayjs
+     * dayjs(dayjs('2019-01-25')) // passing a Dayjs object to a constructor will also clone it
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/parse/dayjs-clone
+     */
+    clone(): Dayjs
+    /**
+     * This returns a \`boolean\` indicating whether the Day.js object contains a valid date or not.
+     * \`\`\`
+     * dayjs().isValid()// => boolean
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/parse/is-valid
+     */
+    isValid(): boolean
+    /**
+     * Get the year.
+     * \`\`\`
+     * dayjs().year()// => 2020
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/year
+     */
+    year(): number
+    /**
+     * Set the year.
+     * \`\`\`
+     * dayjs().year(2000)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/year
+     */
+    year(value: number): Dayjs
+    /**
+     * Get the month.
+     *
+     * Months are zero indexed, so January is month 0.
+     * \`\`\`
+     * dayjs().month()// => 0-11
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/month
+     */
+    month(): number
+    /**
+     * Set the month.
+     *
+     * Months are zero indexed, so January is month 0.
+     *
+     * Accepts numbers from 0 to 11. If the range is exceeded, it will bubble up to the next year.
+     * \`\`\`
+     * dayjs().month(0)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/month
+     */
+    month(value: number): Dayjs
+    /**
+     * Get the date of the month.
+     * \`\`\`
+     * dayjs().date()// => 1-31
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/date
+     */
+    date(): number
+    /**
+     * Set the date of the month.
+     *
+     * Accepts numbers from 1 to 31. If the range is exceeded, it will bubble up to the next months.
+     * \`\`\`
+     * dayjs().date(1)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/date
+     */
+    date(value: number): Dayjs
+    /**
+     * Get the day of the week.
+     *
+     * Returns numbers from 0 (Sunday) to 6 (Saturday).
+     * \`\`\`
+     * dayjs().day()// 0-6
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/day
+     */
+    day(): 0 | 1 | 2 | 3 | 4 | 5 | 6
+    /**
+     * Set the day of the week.
+     *
+     * Accepts numbers from 0 (Sunday) to 6 (Saturday). If the range is exceeded, it will bubble up to next weeks.
+     * \`\`\`
+     * dayjs().day(0)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/day
+     */
+    day(value: number): Dayjs
+    /**
+     * Get the hour.
+     * \`\`\`
+     * dayjs().hour()// => 0-23
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/hour
+     */
+    hour(): number
+    /**
+     * Set the hour.
+     *
+     * Accepts numbers from 0 to 23. If the range is exceeded, it will bubble up to the next day.
+     * \`\`\`
+     * dayjs().hour(12)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/hour
+     */
+    hour(value: number): Dayjs
+    /**
+     * Get the minutes.
+     * \`\`\`
+     * dayjs().minute()// => 0-59
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/minute
+     */
+    minute(): number
+    /**
+     * Set the minutes.
+     *
+     * Accepts numbers from 0 to 59. If the range is exceeded, it will bubble up to the next hour.
+     * \`\`\`
+     * dayjs().minute(59)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/minute
+     */
+    minute(value: number): Dayjs
+    /**
+     * Get the seconds.
+     * \`\`\`
+     * dayjs().second()// => 0-59
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/second
+     */
+    second(): number
+    /**
+     * Set the seconds.
+     *
+     * Accepts numbers from 0 to 59. If the range is exceeded, it will bubble up to the next minutes.
+     * \`\`\`
+     * dayjs().second(1)// Dayjs
+     * \`\`\`
+     */
+    second(value: number): Dayjs
+    /**
+     * Get the milliseconds.
+     * \`\`\`
+     * dayjs().millisecond()// => 0-999
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/millisecond
+     */
+    millisecond(): number
+    /**
+     * Set the milliseconds.
+     *
+     * Accepts numbers from 0 to 999. If the range is exceeded, it will bubble up to the next seconds.
+     * \`\`\`
+     * dayjs().millisecond(1)// => Dayjs
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/millisecond
+     */
+    millisecond(value: number): Dayjs
+    /**
+     * Generic setter, accepting unit as first argument, and value as second, returns a new instance with the applied changes.
+     *
+     * In general:
+     * \`\`\`
+     * dayjs().set(unit, value) === dayjs()[unit](value)
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     * \`\`\`
+     * dayjs().set('date', 1)
+     * dayjs().set('month', 3) // April
+     * dayjs().set('second', 30)
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/set
+     */
+    set(unit: UnitType, value: number): Dayjs
+    /**
+     * String getter, returns the corresponding information getting from Day.js object.
+     *
+     * In general:
+     * \`\`\`
+     * dayjs().get(unit) === dayjs()[unit]()
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     * \`\`\`
+     * dayjs().get('year')
+     * dayjs().get('month') // start 0
+     * dayjs().get('date')
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/get-set/get
+     */
+    get(unit: UnitType): number
+    /**
+     * Returns a cloned Day.js object with a specified amount of time added.
+     * \`\`\`
+     * dayjs().add(7, 'day')// => Dayjs
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/manipulate/add
+     */
+    add(value: number, unit?: ManipulateType): Dayjs
+    /**
+     * Returns a cloned Day.js object with a specified amount of time subtracted.
+     * \`\`\`
+     * dayjs().subtract(7, 'year')// => Dayjs
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/manipulate/subtract
+     */
+    subtract(value: number, unit?: ManipulateType): Dayjs
+    /**
+     * Returns a cloned Day.js object and set it to the start of a unit of time.
+     * \`\`\`
+     * dayjs().startOf('year')// => Dayjs
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/manipulate/start-of
+     */
+    startOf(unit: OpUnitType): Dayjs
+    /**
+     * Returns a cloned Day.js object and set it to the end of a unit of time.
+     * \`\`\`
+     * dayjs().endOf('month')// => Dayjs
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/manipulate/end-of
+     */
+    endOf(unit: OpUnitType): Dayjs
+    /**
+     * Get the formatted date according to the string of tokens passed in.
+     *
+     * To escape characters, wrap them in square brackets (e.g. [MM]).
+     * \`\`\`
+     * dayjs().format()// => current date in ISO8601, without fraction seconds e.g. '2020-04-02T08:02:17-05:00'
+     * dayjs('2019-01-25').format('[YYYYescape] YYYY-MM-DDTHH:mm:ssZ[Z]')// 'YYYYescape 2019-01-25T00:00:00-02:00Z'
+     * dayjs('2019-01-25').format('DD/MM/YYYY') // '25/01/2019'
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/display/format
+     */
+    format(template?: string): string
+    /**
+     * This indicates the difference between two date-time in the specified unit.
+     *
+     * To get the difference in milliseconds, use \`dayjs#diff\`
+     * \`\`\`
+     * const date1 = dayjs('2019-01-25')
+     * const date2 = dayjs('2018-06-05')
+     * date1.diff(date2) // 20214000000 default milliseconds
+     * date1.diff() // milliseconds to current time
+     * \`\`\`
+     *
+     * To get the difference in another unit of measurement, pass that measurement as the second argument.
+     * \`\`\`
+     * const date1 = dayjs('2019-01-25')
+     * date1.diff('2018-06-05', 'month') // 7
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/display/difference
+     */
+    diff(date?: ConfigType, unit?: QUnitType | OpUnitType, float?: boolean): number
+    /**
+     * This returns the number of **milliseconds** since the Unix Epoch of the Day.js object.
+     * \`\`\`
+     * dayjs('2019-01-25').valueOf() // 1548381600000
+     * +dayjs(1548381600000) // 1548381600000
+     * \`\`\`
+     * To get a Unix timestamp (the number of seconds since the epoch) from a Day.js object, you should use Unix Timestamp \`dayjs#unix()\`.
+     *
+     * Docs: https://day.js.org/docs/en/display/unix-timestamp-milliseconds
+     */
+    valueOf(): number
+    /**
+     * This returns the Unix timestamp (the number of **seconds** since the Unix Epoch) of the Day.js object.
+     * \`\`\`
+     * dayjs('2019-01-25').unix() // 1548381600
+     * \`\`\`
+     * This value is floored to the nearest second, and does not include a milliseconds component.
+     *
+     * Docs: https://day.js.org/docs/en/display/unix-timestamp
+     */
+    unix(): number
+    /**
+     * Get the number of days in the current month.
+     * \`\`\`
+     * dayjs('2019-01-25').daysInMonth() // 31
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/display/days-in-month
+     */
+    daysInMonth(): number
+    /**
+     * To get a copy of the native \`Date\` object parsed from the Day.js object use \`dayjs#toDate\`.
+     * \`\`\`
+     * dayjs('2019-01-25').toDate()// => Date
+     * \`\`\`
+     */
+    toDate(): Date
+    /**
+     * To serialize as an ISO 8601 string.
+     * \`\`\`
+     * dayjs('2019-01-25').toJSON() // '2019-01-25T02:00:00.000Z'
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/display/as-json
+     */
+    toJSON(): string
+    /**
+     * To format as an ISO 8601 string.
+     * \`\`\`
+     * dayjs('2019-01-25').toISOString() // '2019-01-25T02:00:00.000Z'
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/display/as-iso-string
+     */
+    toISOString(): string
+    /**
+     * Returns a string representation of the date.
+     * \`\`\`
+     * dayjs('2019-01-25').toString() // 'Fri, 25 Jan 2019 02:00:00 GMT'
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/display/as-string
+     */
+    toString(): string
+    /**
+     * Get the UTC offset in minutes.
+     * \`\`\`
+     * dayjs().utcOffset()
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/manipulate/utc-offset
+     */
+    utcOffset(): number
+    /**
+     * This indicates whether the Day.js object is before the other supplied date-time.
+     * \`\`\`
+     * dayjs().isBefore(dayjs('2011-01-01')) // default milliseconds
+     * \`\`\`
+     * If you want to limit the granularity to a unit other than milliseconds, pass it as the second parameter.
+     * \`\`\`
+     * dayjs().isBefore('2011-01-01', 'year')// => boolean
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/query/is-before
+     */
+    isBefore(date?: ConfigType, unit?: OpUnitType): boolean
+    /**
+     * This indicates whether the Day.js object is the same as the other supplied date-time.
+     * \`\`\`
+     * dayjs().isSame(dayjs('2011-01-01')) // default milliseconds
+     * \`\`\`
+     * If you want to limit the granularity to a unit other than milliseconds, pass it as the second parameter.
+     * \`\`\`
+     * dayjs().isSame('2011-01-01', 'year')// => boolean
+     * \`\`\`
+     * Docs: https://day.js.org/docs/en/query/is-same
+     */
+    isSame(date?: ConfigType, unit?: OpUnitType): boolean
+    /**
+     * This indicates whether the Day.js object is after the other supplied date-time.
+     * \`\`\`
+     * dayjs().isAfter(dayjs('2011-01-01')) // default milliseconds
+     * \`\`\`
+     * If you want to limit the granularity to a unit other than milliseconds, pass it as the second parameter.
+     * \`\`\`
+     * dayjs().isAfter('2011-01-01', 'year')// => boolean
+     * \`\`\`
+     * Units are case insensitive, and support plural and short forms.
+     *
+     * Docs: https://day.js.org/docs/en/query/is-after
+     */
+    isAfter(date?: ConfigType, unit?: OpUnitType): boolean
+
+    locale(): string
+
+    locale(preset: string | ILocale, object?: Partial<ILocale>): Dayjs
+  }
+
+  export type PluginFunc<T = unknown> = (option: T, c: typeof Dayjs, d: typeof dayjs) => void
+
+  export function extend<T = unknown>(plugin: PluginFunc<T>, option?: T): Dayjs
+
+  export function locale(preset?: string | ILocale, object?: Partial<ILocale>, isLocal?: boolean): string
+
+  export function isDayjs(d: any): d is Dayjs
+
+  export function unix(t: number): Dayjs
+
+  const Ls : { [key: string] :  ILocale }
+}
+
+// ---- folded in from dayjs@1.11.21 \`dayjs/locale/types.d.ts\` (the global ILocale
+// this file's dropped triple-slash reference used to provide). Module-scoped here,
+// which is all \`locale()\` / \`Ls\` above need. ----
+interface ILocale {
+  name: string
+  weekdays?: string[]
+  months?: string[]
+  weekStart?: number
+  weekdaysShort?: string[]
+  monthsShort?: string[]
+  weekdaysMin?: string[]
+  ordinal?: (n: number) => number | string
+  formats: Partial<{
+    LT: string
+    LTS: string
+    L: string
+    LL: string
+    LLL: string
+    LLLL: string
+  }>
+  relativeTime: Partial<{
+    future: string
+    past: string
+    s: string
+    m: string
+    mm: string
+    h: string
+    hh: string
+    d: string
+    dd: string
+    M: string
+    MM: string
+    y: string
+    yy: string
+  }>
+}
+`;

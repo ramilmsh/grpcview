@@ -1,18 +1,6 @@
 // Package bazelbuild turns a bazel label into the descriptor sets its default outputs name. It is the
 // mechanism, and knows nothing about grpcview's protos, store or RPCs.
-//
-// A label is untrusted text out of a committed grpcview.json, so nothing here builds a shell string:
-// bazel is exec'd with an argv slice and a "--" before the labels, and CanonicalLabel rejects anything
-// that is not a plain label — including every label bazel itself prints back.
-//
-// Two things this package deliberately does NOT do:
-//
-//   - It does not check trust. Building a label runs arbitrary build code, so THE CALLER MUST HAVE
-//     CHECKED that the workspace is trusted — see workspace.bazelBuilder, the only place a Builder is
-//     constructed.
-//   - It does not dedupe or link. THE CALLER dedupes by proto file name: a label resolves to its own
-//     descriptor set plus its deps' (see protoClosure), so one file name can appear in several
-//     returned sets, and desc.CreateFileDescriptorsFromSet REJECTS a duplicate file name.
+
 package bazelbuild
 
 import (
