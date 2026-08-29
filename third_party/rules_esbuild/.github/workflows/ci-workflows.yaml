@@ -1,0 +1,64 @@
+name: CI - Aspect Workflows
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    id-token: write
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+    cancel-in-progress: true
+
+jobs:
+    buildifier:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - uses: aspect-build/setup-aspect@c22a8f64fb38f82f59ce809cd7eb9f8ae096da44 # v2026.23.2
+              with:
+                aspect-api-token: ${{ secrets.ASPECT_API_TOKEN }}
+            - name: Buildifier
+              run: aspect buildifier --task-key=buildifier
+    test:
+        name: test (${{ matrix.workspace.path }}, ${{ matrix.bazel.id }})
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                workspace:
+                - { path: ".", slug: "root" }
+                - { path: "e2e/smoke", slug: "e2e-smoke" }
+                - { path: "e2e/bundle", slug: "e2e-bundle" }
+                - { path: "e2e/custom_version", slug: "e2e-custom_version" }
+                - { path: "e2e/npm-links", slug: "e2e-npm-links" }
+                - { path: "e2e/path_mapping", slug: "e2e-path_mapping" }
+                - { path: "e2e/sourcemaps", slug: "e2e-sourcemaps" }
+                - { path: "e2e/toolchain_from_source", slug: "e2e-toolchain_from_source" }
+                - { path: "e2e/tsconfig", slug: "e2e-tsconfig" }
+                bazel:
+                - { id: "bazel-7", version: "7.x", flags: "--bazel-flag=--test_tag_filters=-skip-on-bazel7" }
+                - { id: "bazel-8", version: "8.x", flags: "--bazel-flag=--test_tag_filters=-skip-on-bazel8" }
+                - { id: "bazel-9", version: "9.x", flags: "--bazel-flag=--test_tag_filters=-skip-on-bazel9" }
+        env:
+            USE_BAZEL_VERSION: ${{ matrix.bazel.version }}
+        steps:
+            - uses: actions/checkout@v6
+            - uses: aspect-build/setup-aspect@c22a8f64fb38f82f59ce809cd7eb9f8ae096da44 # v2026.23.2
+              with:
+                aspect-api-token: ${{ secrets.ASPECT_API_TOKEN }}
+            - name: Test
+              working-directory: ${{ matrix.workspace.path }}
+              run: aspect test --task-key=test-${{ matrix.workspace.slug }}-${{ matrix.bazel.id }} ${{ matrix.bazel.flags }} -- //...
+            - name: Optional ./test.sh
+              working-directory: ${{ matrix.workspace.path }}
+              run: |
+                  if [[ -f ./test.sh ]]; then
+                      ./test.sh
+                  else
+                      echo "No test.sh in ${PWD}; skipping"
+                  fi

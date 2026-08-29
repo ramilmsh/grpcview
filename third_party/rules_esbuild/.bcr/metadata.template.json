@@ -1,0 +1,13 @@
+{
+  "homepage": "https://docs.aspect.build/bazel/javascript",
+  "maintainers": [
+    {
+      "name": "Jason Bedard",
+      "email": "jason@aspect.build",
+      "github": "jbedard"
+    }
+  ],
+  "repository": ["github:aspect-build/rules_esbuild"],
+  "versions": [],
+  "yanked_versions": {}
+}
