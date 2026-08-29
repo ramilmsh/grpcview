@@ -1,0 +1,24 @@
+bazel_dep(name = "aspect_rules_esbuild", version = "0.0.0", dev_dependency = True)
+local_path_override(
+    module_name = "aspect_rules_esbuild",
+    path = "../..",
+)
+
+bazel_dep(name = "bazel_lib", version = "3.0.0", dev_dependency = True)
+
+esbuild = use_extension("@aspect_rules_esbuild//esbuild:extensions.bzl", "esbuild")
+esbuild.toolchain(
+    name = "esbuild",
+    esbuild_version = "0.25.10",
+    integrity = {
+        # curl --silent https://registry.npmjs.org/esbuild/0.25.10 | jq --raw-output .dist.integrity
+        "npm": "sha512-9RiGKvCwaqxO2owP61uQ4BgNborAQskMR6QusfWzQqv7AZOg5oGehdY2pRJMTKuwxd1IDBP4rSbI5lHzU7SMsQ==",
+        # curl --silent https://registry.npmjs.org/@esbuild/darwin-arm64/0.25.10 | jq --raw-output .dist.integrity
+        "darwin-arm64": "sha512-JC74bdXcQEpW9KkV326WpZZjLguSZ3DfS8wrrvPMHgQOIEIG/sPXEN/V8IssoJhbefLRcRqw6RQH2NnpdprtMA==",
+        # curl --silent https://registry.npmjs.org/@esbuild/linux-x64/0.25.10 | jq --raw-output .dist.integrity
+        "linux-x64": "sha512-QSX81KhFoZGwenVyPoberggdW1nrQZSvfVDAIUXr3WqLRZGZqWk/P4T8p2SP+de2Sr5HPcvjhcJzEiulKgnxtA==",
+    },
+)
+use_repo(esbuild, "esbuild_toolchains")
+
+register_toolchains("@esbuild_toolchains//:darwin-arm64_toolchain")
