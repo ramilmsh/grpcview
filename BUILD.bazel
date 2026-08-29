@@ -45,4 +45,9 @@ bazel_env(
 
 # gazelle:exclude demo/**
 
+# third_party/rules_esbuild is a vendored fork with its own MODULE.bazel/go.mod/BUILD files
+# (github.com/aspect-build/rules_esbuild); root gazelle must not rewrite them onto this repo's
+# own go module.
+# gazelle:exclude third_party/rules_esbuild/**
+
 # gazelle:js_visibility //visibility:public
