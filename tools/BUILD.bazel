@@ -11,6 +11,7 @@ aspect_gazelle(
         "js",
     ],
     repo_config = "@bazel_gazelle_go_repository_config//:WORKSPACE",
+    visibility = ["//:__pkg__"],
     with_check = True,
 )
 
