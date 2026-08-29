@@ -14,13 +14,17 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 export function flatten<T>(
   adapter: TreeAdapter<T>,
-  expanded: ReadonlySet<string>
+  expanded: ReadonlySet<string>,
 ): FlatTree<T> {
   const rows: TreeRowModel<T>[] = [];
   const indexById = new Map<string, number>();
   const defaultExpanded: string[] = [];
 
-  const visit = (parent: T | undefined, parentId: string | null, depth: number): void => {
+  const visit = (
+    parent: T | undefined,
+    parentId: string | null,
+    depth: number,
+  ): void => {
     const children = adapter.getChildren(parent);
     if (isThenable(children)) {
       throw new Error(
@@ -28,7 +32,7 @@ export function flatten<T>(
           "implements only the synchronous TreeDataProvider path. The promise " +
           'path is T8 ("Async children", docs/design/shipped/tree-rewrite-plan.md) and ' +
           "is not built yet — silently ignoring the promise would drop every " +
-          "async node's children rather than fail loudly."
+          "async node's children rather than fail loudly.",
       );
     }
 
@@ -42,7 +46,7 @@ export function flatten<T>(
             `"${adapter.getTypeaheadLabel(rows[seenAt].node)}" and ` +
             `"${adapter.getTypeaheadLabel(node)}" both resolve to it. Ids must be ` +
             "unique across an entire pass, not just among siblings: indexById and " +
-            "React keys are both flat over the whole tree."
+            "React keys are both flat over the whole tree.",
         );
       }
 
@@ -87,7 +91,7 @@ export const MAX_RESOLVE_PASSES = 1000;
 export function resolveExpansion<T>(
   adapter: TreeAdapter<T>,
   expanded: ReadonlySet<string>,
-  seen: ReadonlySet<string>
+  seen: ReadonlySet<string>,
 ): { flat: FlatTree<T>; seeded: string[] } {
   let working = expanded;
   let flat = flatten(adapter, working);

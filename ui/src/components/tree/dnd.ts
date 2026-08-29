@@ -8,8 +8,8 @@ import { descendantIds } from "./navigate";
 export type DropZone = "before" | "into" | "after";
 
 export interface DropResolution {
-  parentId: string | null;   // null = the collection root
-  beforeId: string | null;   // null = append to the end of that parent
+  parentId: string | null; // null = the collection root
+  beforeId: string | null; // null = append to the end of that parent
   // The depth the dropped rows would render at, i.e. the indent of a between-rows
   // indicator line — the only thing such a line can say about the parent.
   depth: number;
@@ -37,7 +37,10 @@ export function zoneForOffset(input: {
 
 // The next visible row sharing `index`'s parentId, or null if it is the last
 // visible child. Not `rows[index + 1]`: that is a child for an expanded folder.
-export function nextVisibleSiblingId<T>(flat: FlatTree<T>, index: number): string | null {
+export function nextVisibleSiblingId<T>(
+  flat: FlatTree<T>,
+  index: number,
+): string | null {
   const row = flat.rows[index];
   if (row === undefined) return null;
   for (let i = index + 1; i < flat.rows.length; i++) {
@@ -59,7 +62,7 @@ function depthUnder<T>(flat: FlatTree<T>, parentId: string | null): number {
 export function resolveDrop<T>(
   flat: FlatTree<T>,
   targetIndex: number,
-  zone: DropZone
+  zone: DropZone,
 ): DropResolution | null {
   const row = flat.rows[targetIndex];
   if (row === undefined) return null;
@@ -76,14 +79,15 @@ export function resolveDrop<T>(
   }
 
   const parentId = row.parentId;
-  const beforeId = zone === "before" ? row.id : nextVisibleSiblingId(flat, targetIndex);
+  const beforeId =
+    zone === "before" ? row.id : nextVisibleSiblingId(flat, targetIndex);
   return { parentId, beforeId, depth: depthUnder(flat, parentId) };
 }
 
 // Every id the dragged set owns — each dragged row plus its visible subtree.
 export function draggedSubtreeIds<T>(
   flat: FlatTree<T>,
-  draggedIds: readonly string[]
+  draggedIds: readonly string[],
 ): Set<string> {
   const owned = new Set<string>();
   for (const id of draggedIds) {
@@ -98,7 +102,7 @@ export function draggedSubtreeIds<T>(
 export function isNoOpDrop<T>(
   flat: FlatTree<T>,
   draggedIds: readonly string[],
-  res: DropResolution
+  res: DropResolution,
 ): boolean {
   if (draggedIds.length !== 1) return false;
   const index = flat.indexById.get(draggedIds[0]);
@@ -115,7 +119,7 @@ export function dropTargetAt<T>(
   flat: FlatTree<T>,
   targetIndex: number,
   zone: DropZone,
-  draggedIds: readonly string[]
+  draggedIds: readonly string[],
 ): DropResolution | null {
   if (draggedIds.length === 0) return null;
   const row = flat.rows[targetIndex];
@@ -133,7 +137,11 @@ export const AUTOSCROLL_MAX_STEP = 28;
 // How far to scroll (px; negative = up) for a pointer at `pointerY` in a
 // scrollport spanning `top`..`bottom`. Stepped per `dragover` rather than from an
 // rAF loop, which never fires in the automated browser harness.
-export function autoScrollDelta(pointerY: number, top: number, bottom: number): number {
+export function autoScrollDelta(
+  pointerY: number,
+  top: number,
+  bottom: number,
+): number {
   const diff = pointerY - top;
   const upperLimit = bottom - top - AUTOSCROLL_EDGE;
   if (diff < AUTOSCROLL_EDGE) {

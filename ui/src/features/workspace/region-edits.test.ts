@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import { expect } from "expect";
-import { modeSwitchFor, unwrapEdits, wrapEdits, type LineEdit } from "./region-edits";
+import {
+  modeSwitchFor,
+  unwrapEdits,
+  wrapEdits,
+  type LineEdit,
+} from "./region-edits";
 import { buildWrapped, findRegion, regionText } from "./script-region";
 
 const SKELETON = "export default async (): Promise<RequestMessage> => (";
@@ -62,7 +67,9 @@ describe("modeSwitchFor", () => {
   });
 
   it("is none for a plain document starting with export default", () => {
-    expect(modeSwitchFor("export default async () => ({ id: 1 })")).toBe("none");
+    expect(modeSwitchFor("export default async () => ({ id: 1 })")).toBe(
+      "none",
+    );
   });
 
   it("is toWrapped for a plain document starting with a comment then {", () => {
@@ -86,12 +93,20 @@ describe("unwrapEdits", () => {
   });
 
   it("keeps the import block, skeleton and trailing ) when the header imports", () => {
-    const text = wrapped("makeBody()", ['import { makeBody } from "#/scripts/x";']);
+    const text = wrapped("makeBody()", [
+      'import { makeBody } from "#/scripts/x";',
+    ]);
     const region = findRegion(text)!;
     const result = applyEdits(text, unwrapEdits(text, region));
     expect(findRegion(result)).toBeUndefined();
     expect(result).toBe(
-      ['import { makeBody } from "#/scripts/x";', "", SKELETON, "makeBody()", ")"].join("\n")
+      [
+        'import { makeBody } from "#/scripts/x";',
+        "",
+        SKELETON,
+        "makeBody()",
+        ")",
+      ].join("\n"),
     );
   });
 
@@ -119,7 +134,9 @@ describe("wrapEdits", () => {
     const original = "{ id: 1 }";
     const result = applyEdits(original, wrapEdits(original, SKELETON));
     expect(regionText(result)).toBe(original);
-    expect(result).toBe(`${SKELETON}\n// grpcview:script start\n{ id: 1 }\n// grpcview:script end\n)`);
+    expect(result).toBe(
+      `${SKELETON}\n// grpcview:script start\n{ id: 1 }\n// grpcview:script end\n)`,
+    );
   });
 });
 

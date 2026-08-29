@@ -7,7 +7,8 @@ import * as monaco from "monaco-editor";
 
 self.MonacoEnvironment = {
   getWorkerUrl(_moduleId: string, label: string) {
-    if (label === "typescript" || label === "javascript") return "/ts.worker.js";
+    if (label === "typescript" || label === "javascript")
+      return "/ts.worker.js";
     if (label === "json") return "/json.worker.js";
     return "/editor.worker.js";
   },
@@ -54,6 +55,6 @@ monaco.editor.defineTheme(NOCTURNE_MONACO_THEME, {
     "menu.background": "#232532",
     "menu.foreground": "#cfd3e5",
     "input.background": "#1f2130",
-    "focusBorder": "#00000000",
+    focusBorder: "#00000000",
   },
 });

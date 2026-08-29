@@ -1,7 +1,12 @@
 import { describe, it } from "node:test";
 import { expect } from "expect";
 import type { TreeRowModel } from "./types";
-import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./selection";
+import {
+  rangeSelection,
+  replaceSelection,
+  selectAll,
+  toggleSelection,
+} from "./selection";
 
 const row = (id: string): TreeRowModel<string> => ({
   node: id,

@@ -44,7 +44,12 @@ export function findRegion(text: string): Region | undefined {
       endLine = i + 1;
     }
   }
-  if (startCount !== 1 || endCount !== 1 || startLine === undefined || endLine === undefined) {
+  if (
+    startCount !== 1 ||
+    endCount !== 1 ||
+    startLine === undefined ||
+    endLine === undefined
+  ) {
     return undefined;
   }
   if (endLine <= startLine + 1) return undefined;
@@ -67,7 +72,11 @@ export function regionBounds(text: string): Bounds {
     const total = text.split("\n").length;
     return { first: 1, last: total, total };
   }
-  return { first: region.startLine + 1, last: region.endLine - 1, total: region.total };
+  return {
+    first: region.startLine + 1,
+    last: region.endLine - 1,
+    total: region.total,
+  };
 }
 
 // Everything above the start marker — the machine-owned header — or the whole text when there is
@@ -77,7 +86,10 @@ export function regionBounds(text: string): Bounds {
 export function regionHeader(text: string): string {
   const region = findRegion(text);
   if (!region) return text;
-  return text.split("\n").slice(0, region.startLine - 1).join("\n");
+  return text
+    .split("\n")
+    .slice(0, region.startLine - 1)
+    .join("\n");
 }
 
 export interface HiddenLineRange {
@@ -140,10 +152,14 @@ export function normalizeSkeleton(text: string, skeleton: string): string {
   const header = lines.slice(0, region.startLine - 1);
 
   const dropTrailingBlank = (): void => {
-    while (header.length > 0 && header[header.length - 1].trim() === "") header.pop();
+    while (header.length > 0 && header[header.length - 1].trim() === "")
+      header.pop();
   };
   dropTrailingBlank();
-  if (header.length > 0 && /^\s*export\s+default\b/.test(header[header.length - 1])) {
+  if (
+    header.length > 0 &&
+    /^\s*export\s+default\b/.test(header[header.length - 1])
+  ) {
     header.pop();
   }
   dropTrailingBlank();

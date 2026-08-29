@@ -36,7 +36,7 @@ export function MethodPickerModal({
       (s) =>
         s.name.toLowerCase().includes(q) ||
         s.package.toLowerCase().includes(q) ||
-        s.methods.some((m) => m.name.toLowerCase().includes(q))
+        s.methods.some((m) => m.name.toLowerCase().includes(q)),
     );
   }, [services, filter]);
 
@@ -62,7 +62,11 @@ export function MethodPickerModal({
       >
         <div
           className="flex items-center"
-          style={{ padding: "12px 14px", borderBottom: "1px solid var(--line)", gap: 8 }}
+          style={{
+            padding: "12px 14px",
+            borderBottom: "1px solid var(--line)",
+            gap: 8,
+          }}
         >
           <span className="dialog-title" style={{ flex: 1, fontSize: 17 }}>
             Select method
@@ -74,9 +78,15 @@ export function MethodPickerModal({
 
         <div
           className="flex items-center gap-[8px]"
-          style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}
+          style={{
+            padding: "10px 14px",
+            borderBottom: "1px solid var(--line)",
+          }}
         >
-          <MagnifyingGlass size={14} style={{ color: "var(--color-neutral-500)" }} />
+          <MagnifyingGlass
+            size={14}
+            style={{ color: "var(--color-neutral-500)" }}
+          />
           <input
             className="bare"
             style={{ fontSize: 13 }}
@@ -92,7 +102,13 @@ export function MethodPickerModal({
         </div>
 
         <div className="flex" style={{ flex: 1, minHeight: 0 }}>
-          <div style={{ width: "45%", overflowY: "auto", borderRight: "1px solid var(--line)" }}>
+          <div
+            style={{
+              width: "45%",
+              overflowY: "auto",
+              borderRight: "1px solid var(--line)",
+            }}
+          >
             {filtered.length === 0 && (
               <div
                 className="text-muted"
@@ -108,12 +124,16 @@ export function MethodPickerModal({
                 style={{
                   borderRadius: 0,
                   padding: "9px 14px",
-                  ...(selected === i ? { background: "var(--color-accent-900)" } : {}),
+                  ...(selected === i
+                    ? { background: "var(--color-accent-900)" }
+                    : {}),
                 }}
                 onClick={() => setSelected(i)}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: "var(--color-text)" }}>{s.name}</div>
+                  <div style={{ fontSize: 13, color: "var(--color-text)" }}>
+                    {s.name}
+                  </div>
                   <div
                     className="font-mono"
                     style={{ fontSize: 11, color: "var(--color-neutral-500)" }}
@@ -139,10 +159,15 @@ export function MethodPickerModal({
                 >
                   <MethodKindTag kind={methodKind(m)} />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "var(--color-text)" }}>{m.name}</div>
+                    <div style={{ fontSize: 13, color: "var(--color-text)" }}>
+                      {m.name}
+                    </div>
                     <div
                       className="font-mono"
-                      style={{ fontSize: 11, color: "var(--color-neutral-500)" }}
+                      style={{
+                        fontSize: 11,
+                        color: "var(--color-neutral-500)",
+                      }}
                     >
                       {m.input?.name}
                     </div>

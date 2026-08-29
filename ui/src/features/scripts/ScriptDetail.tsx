@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Editor as MonacoEditor, type OnMount } from "@monaco-editor/react";
-import { Code, FloppyDisk, Package, Play, Shield, Trash } from "@/components/ui/icons";
+import {
+  Code,
+  FloppyDisk,
+  Package,
+  Play,
+  Shield,
+  Trash,
+} from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Kbd } from "@/components/ui/Kbd";
@@ -97,7 +104,7 @@ function useScriptDraft(script: Script): ScriptDraft {
     setRenameError(null);
     updateScript.mutate(
       { collection, path: script.path, newPath: next },
-      { onSuccess: () => renameScript(script.path, next) }
+      { onSuccess: () => renameScript(script.path, next) },
     );
   };
   const doDelete = () => {
@@ -108,7 +115,7 @@ function useScriptDraft(script: Script): ScriptDraft {
           forgetScript(script.path);
           setConfirmDelete(false);
         },
-      }
+      },
     );
   };
 
@@ -119,8 +126,12 @@ function useScriptDraft(script: Script): ScriptDraft {
   saveRef.current = save;
 
   const onMount: OnMount = (editor, m) => {
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => testRunRef.current());
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => saveRef.current());
+    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () =>
+      testRunRef.current(),
+    );
+    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () =>
+      saveRef.current(),
+    );
   };
 
   return {
@@ -154,7 +165,10 @@ export function ScriptDetail({ script }: { script: Script }) {
   const draft = useScriptDraft(script);
 
   return (
-    <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+    <div
+      className="flex flex-col"
+      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+    >
       <div
         className="flex flex-col"
         style={{ flex: "none", borderBottom: "1px solid var(--line)" }}
@@ -163,7 +177,10 @@ export function ScriptDetail({ script }: { script: Script }) {
           className="flex items-center gap-[11px]"
           style={{ padding: "12px 18px 6px" }}
         >
-          <Code size={14} style={{ color: "var(--color-neutral-500)", flex: "none" }} />
+          <Code
+            size={14}
+            style={{ color: "var(--color-neutral-500)", flex: "none" }}
+          />
           <EditableName
             value={script.path}
             editing={editingName}
@@ -184,7 +201,11 @@ export function ScriptDetail({ script }: { script: Script }) {
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
-            inputStyle={{ fontSize: 15, color: "var(--color-text)", maxWidth: 360 }}
+            inputStyle={{
+              fontSize: 15,
+              color: "var(--color-text)",
+              maxWidth: 360,
+            }}
           />
           <span
             className="digest"
@@ -210,7 +231,9 @@ export function ScriptDetail({ script }: { script: Script }) {
               style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
               onClick={draft.save}
               disabled={!draft.dirty || draft.saving}
-              title={draft.dirty ? "Save the script's source" : "No unsaved changes"}
+              title={
+                draft.dirty ? "Save the script's source" : "No unsaved changes"
+              }
             >
               <FloppyDisk size={14} />
               {draft.saving ? "Saving…" : "Save"}
@@ -228,7 +251,13 @@ export function ScriptDetail({ script }: { script: Script }) {
           </div>
         </div>
         {draft.renameError && (
-          <p style={{ margin: "0 18px 8px", fontSize: 12, color: "var(--err-fg)" }}>
+          <p
+            style={{
+              margin: "0 18px 8px",
+              fontSize: 12,
+              color: "var(--err-fg)",
+            }}
+          >
             {draft.renameError}
           </p>
         )}
@@ -236,7 +265,12 @@ export function ScriptDetail({ script }: { script: Script }) {
 
       <div
         className="flex items-center"
-        style={{ flex: "none", padding: "0 10px", borderBottom: "1px solid var(--line)", background: "var(--color-bg)" }}
+        style={{
+          flex: "none",
+          padding: "0 10px",
+          borderBottom: "1px solid var(--line)",
+          background: "var(--color-bg)",
+        }}
       >
         <Subtab active={subtab === "code"} onClick={() => setSubtab("code")}>
           <Code size={14} />
@@ -245,7 +279,10 @@ export function ScriptDetail({ script }: { script: Script }) {
         <Subtab active={subtab === "deps"} onClick={() => setSubtab("deps")}>
           <Package size={14} />
           Dependencies
-          <span className="tag tag-neutral" style={{ padding: "0 6px", fontSize: 10 }}>
+          <span
+            className="tag tag-neutral"
+            style={{ padding: "0 6px", fontSize: 10 }}
+          >
             0
           </span>
         </Subtab>
@@ -255,7 +292,11 @@ export function ScriptDetail({ script }: { script: Script }) {
         </Subtab>
         <span
           className="font-mono ml-auto"
-          style={{ fontSize: 11, color: "var(--color-neutral-600)", paddingRight: 6 }}
+          style={{
+            fontSize: 11,
+            color: "var(--color-neutral-600)",
+            paddingRight: 6,
+          }}
         >
           TypeScript · esbuild → ES2022
         </span>
@@ -304,12 +345,16 @@ export function ScriptDetail({ script }: { script: Script }) {
         width={400}
       >
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-          Delete <strong className="font-mono">{script.path}</strong>? This removes it from
-          the collection.
+          Delete <strong className="font-mono">{script.path}</strong>? This
+          removes it from the collection.
         </p>
         <div className="dialog-actions">
           <Button onClick={() => draft.setConfirmDelete(false)}>Cancel</Button>
-          <Button variant="danger" onClick={draft.doDelete} disabled={draft.deleting}>
+          <Button
+            variant="danger"
+            onClick={draft.doDelete}
+            disabled={draft.deleting}
+          >
             {draft.deleting ? "Deleting…" : "Delete"}
           </Button>
         </div>
@@ -323,7 +368,12 @@ function NoDependencies() {
     <div style={{ flex: 1, overflow: "auto", padding: "16px 18px" }}>
       <div
         className="flex flex-col items-center"
-        style={{ maxWidth: 520, margin: "34px auto", textAlign: "center", gap: 12 }}
+        style={{
+          maxWidth: 520,
+          margin: "34px auto",
+          textAlign: "center",
+          gap: 12,
+        }}
       >
         <div
           className="flex items-center justify-center"
@@ -338,11 +388,16 @@ function NoDependencies() {
         >
           <Package size={22} />
         </div>
-        <div style={{ fontSize: 14, color: "var(--color-neutral-200)" }}>No dependencies</div>
-        <p className="text-muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>
+        <div style={{ fontSize: 14, color: "var(--color-neutral-200)" }}>
+          No dependencies
+        </div>
+        <p
+          className="text-muted"
+          style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0 }}
+        >
           This script runs on the built-in runtime and inert stdlib (
-          <span className="font-mono">node:path</span>, text codecs) — nothing is fetched,
-          pinned, or executed at install.
+          <span className="font-mono">node:path</span>, text codecs) — nothing
+          is fetched, pinned, or executed at install.
         </p>
       </div>
     </div>
@@ -354,7 +409,12 @@ function CapabilitiesPane() {
     <div style={{ flex: 1, overflow: "auto", padding: "16px 18px" }}>
       <div
         className="flex flex-col items-center"
-        style={{ maxWidth: 540, margin: "30px auto", textAlign: "center", gap: 12 }}
+        style={{
+          maxWidth: 540,
+          margin: "30px auto",
+          textAlign: "center",
+          gap: 12,
+        }}
       >
         <div
           className="flex items-center justify-center"
@@ -369,15 +429,21 @@ function CapabilitiesPane() {
         >
           <Shield size={24} />
         </div>
-        <div style={{ fontSize: 14, color: "var(--color-neutral-200)" }}>Bounded, network open</div>
-        <p className="text-muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>
-          QuickJS·WASM enforces hard memory + wall-clock bounds on every run — that part is
-          real today. Network is not gated: a browser-style global{" "}
-          <span className="font-mono">fetch</span> is there for every script, with no grant to
-          ask for and no way to withhold it. Filesystem (<span className="font-mono">node:fs</span>)
-          and process access are denied, because nothing can grant them yet. Per-capability
-          grants — and this pane asking for consent — are planned; there is nothing to approve
-          here now.
+        <div style={{ fontSize: 14, color: "var(--color-neutral-200)" }}>
+          Bounded, network open
+        </div>
+        <p
+          className="text-muted"
+          style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0 }}
+        >
+          QuickJS·WASM enforces hard memory + wall-clock bounds on every run —
+          that part is real today. Network is not gated: a browser-style global{" "}
+          <span className="font-mono">fetch</span> is there for every script,
+          with no grant to ask for and no way to withhold it. Filesystem (
+          <span className="font-mono">node:fs</span>) and process access are
+          denied, because nothing can grant them yet. Per-capability grants —
+          and this pane asking for consent — are planned; there is nothing to
+          approve here now.
         </p>
       </div>
     </div>

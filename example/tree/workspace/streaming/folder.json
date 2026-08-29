@@ -1,9 +1,7 @@
 {
-  "meta":  {
-    "name":  "Streaming"
+  "meta": {
+    "name": "Streaming"
   },
-  "items":  [
-    "invokestreaming"
-  ],
-  "draftMetadataScript":  "import { inherit } from \"grpcview:metadata\";\n\nexport default async (): Promise<Metadata> => (\n// grpcview:script start\n{\n  // A nested folder carries its ancestors forward only if it spreads them.\n  // Drop the spread and this folder becomes a deliberate barrier.\n  //\n  // `inherit` is not supplied for free: the import above the start marker is\n  // what binds it, and it is there because this region calls it. A folder\n  // whose headers come from another saved request imports `invoke` the same\n  // way, on a line the editor writes and maintains for you.\n  ...inherit(),\n  \"x-demo-folder\": [\"streaming\"],\n}\n// grpcview:script end\n)"
+  "items": ["invokestreaming"],
+  "draftMetadataScript": "import { inherit } from \"grpcview:metadata\";\n\nexport default async (): Promise<Metadata> => (\n// grpcview:script start\n{\n  // A nested folder carries its ancestors forward only if it spreads them.\n  // Drop the spread and this folder becomes a deliberate barrier.\n  //\n  // `inherit` is not supplied for free: the import above the start marker is\n  // what binds it, and it is there because this region calls it. A folder\n  // whose headers come from another saved request imports `invoke` the same\n  // way, on a line the editor writes and maintains for you.\n  ...inherit(),\n  \"x-demo-folder\": [\"streaming\"],\n}\n// grpcview:script end\n)"
 }

@@ -1,6 +1,7 @@
 import type { FlatTree } from "./flatten";
 
-export type MoveTarget = "up" | "down" | "first" | "last" | "pageUp" | "pageDown";
+export type MoveTarget =
+  "up" | "down" | "first" | "last" | "pageUp" | "pageDown";
 
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, value));
@@ -10,7 +11,11 @@ function pageStride(rowsPerPage: number): number {
   return Math.max(1, rowsPerPage);
 }
 
-function startIndex(fromIndex: number, direction: "down" | "up", rowCount: number): number {
+function startIndex(
+  fromIndex: number,
+  direction: "down" | "up",
+  rowCount: number,
+): number {
   if (fromIndex !== -1) return fromIndex;
   return direction === "down" ? -1 : rowCount;
 }
@@ -21,7 +26,7 @@ export function targetIndex<T>(
   flat: FlatTree<T>,
   fromId: string | null,
   to: MoveTarget,
-  rowsPerPage: number
+  rowsPerPage: number,
 ): number | null {
   const rowCount = flat.rows.length;
   if (rowCount === 0) return null;
@@ -38,9 +43,17 @@ export function targetIndex<T>(
     case "up":
       return clamp(startIndex(fromIndex, "up", rowCount) - 1, 0, lastIndex);
     case "pageDown":
-      return clamp(startIndex(fromIndex, "down", rowCount) + pageStride(rowsPerPage), 0, lastIndex);
+      return clamp(
+        startIndex(fromIndex, "down", rowCount) + pageStride(rowsPerPage),
+        0,
+        lastIndex,
+      );
     case "pageUp":
-      return clamp(startIndex(fromIndex, "up", rowCount) - pageStride(rowsPerPage), 0, lastIndex);
+      return clamp(
+        startIndex(fromIndex, "up", rowCount) - pageStride(rowsPerPage),
+        0,
+        lastIndex,
+      );
   }
 }
 
@@ -70,7 +83,10 @@ export function descendantIds<T>(flat: FlatTree<T>, id: string): string[] {
 }
 
 // The row after `id`, iff that row is its child.
-export function firstChildIndex<T>(flat: FlatTree<T>, id: string): number | null {
+export function firstChildIndex<T>(
+  flat: FlatTree<T>,
+  id: string,
+): number | null {
   const rowIndex = flat.indexById.get(id);
   if (rowIndex === undefined) return null;
   const nextRow = flat.rows[rowIndex + 1];

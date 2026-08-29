@@ -11,7 +11,11 @@ import { Input } from "./Input";
 //
 // Exported for its unit test, and because it is the whole behavior worth testing: the rest
 // of this file is focus and keyboard plumbing a node-environment test cannot exercise.
-export function filterOptions(options: readonly string[], query: string): string[] {
+// eslint-disable-next-line react-refresh/only-export-components
+export function filterOptions(
+  options: readonly string[],
+  query: string,
+): string[] {
   const q = query.trim().toLowerCase();
   if (q === "") return [...options];
   const terms = q.split(/\s+/);
@@ -77,7 +81,8 @@ export function Combobox({
   // An open popup always has something in it: options, the no-match note that stands in
   // for them, "Loading…", or the caller's hint. With none of those it stays shut rather
   // than flashing an empty card.
-  const showList = open && (loading === true || options.length > 0 || !!emptyHint);
+  const showList =
+    open && (loading === true || options.length > 0 || !!emptyHint);
 
   const pick = (index: number): void => {
     const option = visible[index];
@@ -93,7 +98,9 @@ export function Combobox({
     setOpen(true);
     setHighlighted((from) => {
       const start = from ?? (delta === 1 ? -1 : 0);
-      return (((start + delta) % visible.length) + visible.length) % visible.length;
+      return (
+        (((start + delta) % visible.length) + visible.length) % visible.length
+      );
     });
   };
 
@@ -212,10 +219,13 @@ export function Combobox({
           )}
           {hidden > 0 && (
             <div className="combo-note">
-              {hidden} more {hidden === 1 ? "match" : "matches"} — type to narrow the list.
+              {hidden} more {hidden === 1 ? "match" : "matches"} — type to
+              narrow the list.
             </div>
           )}
-          {visible.length > 0 && loading && <div className="combo-note">Loading…</div>}
+          {visible.length > 0 && loading && (
+            <div className="combo-note">Loading…</div>
+          )}
         </div>
       )}
     </div>

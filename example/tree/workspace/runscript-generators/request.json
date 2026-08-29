@@ -1,8 +1,8 @@
 {
-  "meta":  {
-    "name":  "RunScript (generators)"
+  "meta": {
+    "name": "RunScript (generators)"
   },
-  "service":  "grpcview.v1.WorkspaceService",
-  "method":  "RunScript",
-  "middleware":  []
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "RunScript",
+  "middleware": []
 }

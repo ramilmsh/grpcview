@@ -5,13 +5,18 @@
 // field, so the package specifier alone does not resolve.
 import { protocGenEs } from "@bufbuild/protoc-gen-es/dist/cjs/src/protoc-gen-es-plugin.js";
 import { fromBinary, create } from "@bufbuild/protobuf";
-import { FileDescriptorSetSchema, CodeGeneratorRequestSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorSetSchema,
+  CodeGeneratorRequestSchema,
+} from "@bufbuild/protobuf/wkt";
 
 const cache = new WeakMap<Uint8Array, Map<string, string>>();
 
 // generateWorkspaceTypes maps generated-file name (e.g. "proto/foo/v1/foo_pb.ts") → TS source.
 // WKTs are left out; their Json types come from the vendor/bufbuild-stubs.ts Monaco stub.
-export function generateWorkspaceTypes(descriptorSet: Uint8Array): Map<string, string> {
+export function generateWorkspaceTypes(
+  descriptorSet: Uint8Array,
+): Map<string, string> {
   const memo = cache.get(descriptorSet);
   if (memo) return memo;
 
@@ -35,9 +40,14 @@ export function generateWorkspaceTypes(descriptorSet: Uint8Array): Map<string, s
 
 // resolveLocalSymbol reads the full-name literal in `export type <Sym> = Message…<"<fullName>">`,
 // which is what lets a nested message resolve from its short name.
-export function resolveLocalSymbol(content: string, pkg: string, name: string): string | null {
+export function resolveLocalSymbol(
+  content: string,
+  pkg: string,
+  name: string,
+): string | null {
   const byFullName = new Map<string, string>();
-  const re = /export\s+(?:declare\s+)?type\s+(\$?\w+)\s*=\s*[A-Za-z_$][\w$]*\s*<\s*"([^"]+)"/g;
+  const re =
+    /export\s+(?:declare\s+)?type\s+(\$?\w+)\s*=\s*[A-Za-z_$][\w$]*\s*<\s*"([^"]+)"/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) byFullName.set(m[2], m[1]);
 
@@ -45,7 +55,10 @@ export function resolveLocalSymbol(content: string, pkg: string, name: string): 
   const local = byFullName.get(exact);
   if (local) return local;
   for (const [full, sym] of byFullName) {
-    if ((!pkg || full.startsWith(pkg + ".")) && (full === exact || full.endsWith("." + name))) {
+    if (
+      (!pkg || full.startsWith(pkg + ".")) &&
+      (full === exact || full.endsWith("." + name))
+    ) {
       return sym;
     }
   }
@@ -58,7 +71,7 @@ export function requestMessageAlias(
   files: Map<string, string>,
   pkg: string,
   name: string,
-  file: string
+  file: string,
 ): { symbol: string; importPath: string; dts: string } {
   const base = file.replace(/\.proto$/, "_pb");
   const importPath = `./gen/${base}`;
@@ -90,7 +103,7 @@ export interface InvokeTarget {
 // is one flat file.
 export function gvRequestMapDts(
   files: Map<string, string>,
-  targets: InvokeTarget[]
+  targets: InvokeTarget[],
 ): string | null {
   const imports: string[] = [];
   const entries: string[] = [];
@@ -109,7 +122,9 @@ export function gvRequestMapDts(
     if (!local) continue;
 
     const alias = `GvResponse${imports.length}`;
-    imports.push(`import type { ${local}Json as ${alias} } from "./gen/${base}";`);
+    imports.push(
+      `import type { ${local}Json as ${alias} } from "./gen/${base}";`,
+    );
     entries.push(`    ${JSON.stringify(target.path)}: { response: ${alias} };`);
     seen.add(target.path);
   }
@@ -131,7 +146,7 @@ export function messageTypeText(
   files: Map<string, string>,
   pkg: string,
   name: string,
-  file: string
+  file: string,
 ): { symbol: string; text: string } | null {
   if (file.startsWith("google/protobuf/")) return null;
 
@@ -148,7 +163,9 @@ export function messageTypeText(
 }
 
 function sliceTypeBlock(content: string, symbol: string): string | null {
-  const re = new RegExp(`export\\s+(?:declare\\s+)?type\\s+${escapeRegExp(symbol)}\\s*=`);
+  const re = new RegExp(
+    `export\\s+(?:declare\\s+)?type\\s+${escapeRegExp(symbol)}\\s*=`,
+  );
   const m = re.exec(content);
   if (!m) return null;
 

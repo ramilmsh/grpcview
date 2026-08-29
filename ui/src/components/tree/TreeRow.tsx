@@ -1,7 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import clsx from "clsx";
 import { CaretDown, CaretRight } from "@/components/ui/icons";
-import type { TreeAdapter, TreeProps, TreeRowModel, TreeRowState } from "./types";
+import type {
+  TreeAdapter,
+  TreeProps,
+  TreeRowModel,
+  TreeRowState,
+} from "./types";
 import { TreeIcon } from "./icon-map";
 import { RenameInput } from "./RenameInput";
 
@@ -79,7 +84,8 @@ export function TreeRow<T>({
   // which falls this row back to the portable getTreeItem renderer below. That is
   // what lets a tree mix tiers: one kind of node renders rich React, another stays
   // portable (and therefore renderable by a VS Code TreeItem too).
-  const rich = renaming || renderRow === undefined ? null : renderRow(row.node, state);
+  const rich =
+    renaming || renderRow === undefined ? null : renderRow(row.node, state);
   if (renaming) {
     // The input replaces the whole row content, renderRow included — hence first.
     content = (
@@ -139,14 +145,16 @@ export function TreeRow<T>({
         focused && "foc",
         active && "on",
         dragging && "dragging",
-        dropTarget === "into" && "dropinto"
+        dropTarget === "into" && "dropinto",
       )}
       // className must stay the FIRST rendered attribute: Tree.portable.test.tsx
       // and request-tree.test.tsx scrape rows by a `<div class="treerow...` prefix.
       id={domId}
       data-index={dataIndex}
       ref={rowRef}
-      style={{ height: rowHeight, "--tree-indent": `${indent}px` } as CSSProperties}
+      style={
+        { height: rowHeight, "--tree-indent": `${indent}px` } as CSSProperties
+      }
       role="treeitem"
       aria-level={row.depth + 1}
       aria-posinset={row.posInSet}
@@ -187,9 +195,15 @@ export function TreeRow<T>({
       >
         {row.expandable &&
           (row.expanded ? (
-            <CaretDown size={11} style={{ color: "var(--color-neutral-500)" }} />
+            <CaretDown
+              size={11}
+              style={{ color: "var(--color-neutral-500)" }}
+            />
           ) : (
-            <CaretRight size={11} style={{ color: "var(--color-neutral-500)" }} />
+            <CaretRight
+              size={11}
+              style={{ color: "var(--color-neutral-500)" }}
+            />
           ))}
       </span>
       {content}

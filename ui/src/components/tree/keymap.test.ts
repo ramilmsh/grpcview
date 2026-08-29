@@ -3,7 +3,10 @@ import { expect } from "expect";
 import type { KeyStroke } from "./keymap";
 import { keyToIntent } from "./keymap";
 
-const stroke = (key: string, mods: Partial<Omit<KeyStroke, "key">> = {}): KeyStroke => ({
+const stroke = (
+  key: string,
+  mods: Partial<Omit<KeyStroke, "key">> = {},
+): KeyStroke => ({
   key,
   shiftKey: false,
   metaKey: false,
@@ -14,23 +17,45 @@ const stroke = (key: string, mods: Partial<Omit<KeyStroke, "key">> = {}): KeyStr
 
 describe("keyToIntent: non-macOS (isMac=false)", () => {
   it("bare arrows move focus one row", () => {
-    expect(keyToIntent(stroke("ArrowUp"), false)).toEqual({ kind: "move", to: "up" });
-    expect(keyToIntent(stroke("ArrowDown"), false)).toEqual({ kind: "move", to: "down" });
+    expect(keyToIntent(stroke("ArrowUp"), false)).toEqual({
+      kind: "move",
+      to: "up",
+    });
+    expect(keyToIntent(stroke("ArrowDown"), false)).toEqual({
+      kind: "move",
+      to: "down",
+    });
   });
 
   it("Home/End move to the first/last row", () => {
-    expect(keyToIntent(stroke("Home"), false)).toEqual({ kind: "move", to: "first" });
-    expect(keyToIntent(stroke("End"), false)).toEqual({ kind: "move", to: "last" });
+    expect(keyToIntent(stroke("Home"), false)).toEqual({
+      kind: "move",
+      to: "first",
+    });
+    expect(keyToIntent(stroke("End"), false)).toEqual({
+      kind: "move",
+      to: "last",
+    });
   });
 
   it("PageUp/PageDown move a page", () => {
-    expect(keyToIntent(stroke("PageUp"), false)).toEqual({ kind: "move", to: "pageUp" });
-    expect(keyToIntent(stroke("PageDown"), false)).toEqual({ kind: "move", to: "pageDown" });
+    expect(keyToIntent(stroke("PageUp"), false)).toEqual({
+      kind: "move",
+      to: "pageUp",
+    });
+    expect(keyToIntent(stroke("PageDown"), false)).toEqual({
+      kind: "move",
+      to: "pageDown",
+    });
   });
 
   it("ArrowLeft/ArrowRight are the structural collapse/expand intents", () => {
-    expect(keyToIntent(stroke("ArrowLeft"), false)).toEqual({ kind: "collapseOrParent" });
-    expect(keyToIntent(stroke("ArrowRight"), false)).toEqual({ kind: "expandOrFirstChild" });
+    expect(keyToIntent(stroke("ArrowLeft"), false)).toEqual({
+      kind: "collapseOrParent",
+    });
+    expect(keyToIntent(stroke("ArrowRight"), false)).toEqual({
+      kind: "expandOrFirstChild",
+    });
   });
 
   it("Space toggles expand/collapse", () => {
@@ -54,11 +79,15 @@ describe("keyToIntent: non-macOS (isMac=false)", () => {
   });
 
   it("cmd+ArrowDown is not open here — that binding is macOS-only", () => {
-    expect(keyToIntent(stroke("ArrowDown", { metaKey: true }), false)).toBeNull();
+    expect(
+      keyToIntent(stroke("ArrowDown", { metaKey: true }), false),
+    ).toBeNull();
   });
 
   it("cmd+Backspace is not delete here either — macOS's binding doesn't carry over", () => {
-    expect(keyToIntent(stroke("Backspace", { metaKey: true }), false)).toBeNull();
+    expect(
+      keyToIntent(stroke("Backspace", { metaKey: true }), false),
+    ).toBeNull();
   });
 
   it("shift+ArrowUp/shift+ArrowDown extend the selection from the anchor (T2)", () => {
@@ -66,18 +95,24 @@ describe("keyToIntent: non-macOS (isMac=false)", () => {
       kind: "extend",
       to: "up",
     });
-    expect(keyToIntent(stroke("ArrowDown", { shiftKey: true }), false)).toEqual({
-      kind: "extend",
-      to: "down",
-    });
+    expect(keyToIntent(stroke("ArrowDown", { shiftKey: true }), false)).toEqual(
+      {
+        kind: "extend",
+        to: "down",
+      },
+    );
   });
 
   it("ctrl+A selects all visible rows on this platform (T2)", () => {
-    expect(keyToIntent(stroke("a", { ctrlKey: true }), false)).toEqual({ kind: "selectAll" });
+    expect(keyToIntent(stroke("a", { ctrlKey: true }), false)).toEqual({
+      kind: "selectAll",
+    });
   });
 
   it('ctrl+A is recognized under caps lock too, where the key arrives as "A" with shiftKey still false', () => {
-    expect(keyToIntent(stroke("A", { ctrlKey: true }), false)).toEqual({ kind: "selectAll" });
+    expect(keyToIntent(stroke("A", { ctrlKey: true }), false)).toEqual({
+      kind: "selectAll",
+    });
   });
 
   it("cmd+A does nothing here — select-all's macOS chord isn't live off-mac", () => {
@@ -85,29 +120,53 @@ describe("keyToIntent: non-macOS (isMac=false)", () => {
   });
 
   it("Escape clears the selection (T2)", () => {
-    expect(keyToIntent(stroke("Escape"), false)).toEqual({ kind: "clearSelection" });
+    expect(keyToIntent(stroke("Escape"), false)).toEqual({
+      kind: "clearSelection",
+    });
   });
 });
 
 describe("keyToIntent: macOS (isMac=true)", () => {
   it("bare arrows move focus one row, same as off-mac", () => {
-    expect(keyToIntent(stroke("ArrowUp"), true)).toEqual({ kind: "move", to: "up" });
-    expect(keyToIntent(stroke("ArrowDown"), true)).toEqual({ kind: "move", to: "down" });
+    expect(keyToIntent(stroke("ArrowUp"), true)).toEqual({
+      kind: "move",
+      to: "up",
+    });
+    expect(keyToIntent(stroke("ArrowDown"), true)).toEqual({
+      kind: "move",
+      to: "down",
+    });
   });
 
   it("Home/End move to the first/last row", () => {
-    expect(keyToIntent(stroke("Home"), true)).toEqual({ kind: "move", to: "first" });
-    expect(keyToIntent(stroke("End"), true)).toEqual({ kind: "move", to: "last" });
+    expect(keyToIntent(stroke("Home"), true)).toEqual({
+      kind: "move",
+      to: "first",
+    });
+    expect(keyToIntent(stroke("End"), true)).toEqual({
+      kind: "move",
+      to: "last",
+    });
   });
 
   it("PageUp/PageDown move a page", () => {
-    expect(keyToIntent(stroke("PageUp"), true)).toEqual({ kind: "move", to: "pageUp" });
-    expect(keyToIntent(stroke("PageDown"), true)).toEqual({ kind: "move", to: "pageDown" });
+    expect(keyToIntent(stroke("PageUp"), true)).toEqual({
+      kind: "move",
+      to: "pageUp",
+    });
+    expect(keyToIntent(stroke("PageDown"), true)).toEqual({
+      kind: "move",
+      to: "pageDown",
+    });
   });
 
   it("ArrowLeft/ArrowRight are the structural collapse/expand intents", () => {
-    expect(keyToIntent(stroke("ArrowLeft"), true)).toEqual({ kind: "collapseOrParent" });
-    expect(keyToIntent(stroke("ArrowRight"), true)).toEqual({ kind: "expandOrFirstChild" });
+    expect(keyToIntent(stroke("ArrowLeft"), true)).toEqual({
+      kind: "collapseOrParent",
+    });
+    expect(keyToIntent(stroke("ArrowRight"), true)).toEqual({
+      kind: "expandOrFirstChild",
+    });
   });
 
   it("Space toggles expand/collapse", () => {
@@ -123,11 +182,15 @@ describe("keyToIntent: macOS (isMac=true)", () => {
   });
 
   it("cmd+ArrowDown opens — mac's substitute, since Enter is taken by rename", () => {
-    expect(keyToIntent(stroke("ArrowDown", { metaKey: true }), true)).toEqual({ kind: "open" });
+    expect(keyToIntent(stroke("ArrowDown", { metaKey: true }), true)).toEqual({
+      kind: "open",
+    });
   });
 
   it("cmd+Backspace deletes, matching VS Code's moveFileToTrash binding", () => {
-    expect(keyToIntent(stroke("Backspace", { metaKey: true }), true)).toEqual({ kind: "delete" });
+    expect(keyToIntent(stroke("Backspace", { metaKey: true }), true)).toEqual({
+      kind: "delete",
+    });
   });
 
   it("a bare Delete is NOT bound here — VS Code replaces it with cmd+Backspace, not both", () => {
@@ -150,11 +213,15 @@ describe("keyToIntent: macOS (isMac=true)", () => {
   });
 
   it("cmd+A selects all visible rows on this platform (T2)", () => {
-    expect(keyToIntent(stroke("a", { metaKey: true }), true)).toEqual({ kind: "selectAll" });
+    expect(keyToIntent(stroke("a", { metaKey: true }), true)).toEqual({
+      kind: "selectAll",
+    });
   });
 
   it('cmd+A is recognized under caps lock too, where the key arrives as "A" with shiftKey still false', () => {
-    expect(keyToIntent(stroke("A", { metaKey: true }), true)).toEqual({ kind: "selectAll" });
+    expect(keyToIntent(stroke("A", { metaKey: true }), true)).toEqual({
+      kind: "selectAll",
+    });
   });
 
   it("ctrl+A does nothing here — select-all's off-mac chord isn't live on macOS", () => {
@@ -162,7 +229,9 @@ describe("keyToIntent: macOS (isMac=true)", () => {
   });
 
   it("Escape clears the selection (T2), same as off-mac", () => {
-    expect(keyToIntent(stroke("Escape"), true)).toEqual({ kind: "clearSelection" });
+    expect(keyToIntent(stroke("Escape"), true)).toEqual({
+      kind: "clearSelection",
+    });
   });
 });
 
@@ -178,13 +247,17 @@ describe("keyToIntent: unclaimed combinations return null, on either platform", 
   });
 
   it("ctrl+ArrowLeft returns null, same reasoning", () => {
-    expect(keyToIntent(stroke("ArrowLeft", { ctrlKey: true }), false)).toBeNull();
+    expect(
+      keyToIntent(stroke("ArrowLeft", { ctrlKey: true }), false),
+    ).toBeNull();
   });
 
   it("shift+Home / shift+End / shift+PageDown all return null — only the bare keys are claimed", () => {
     expect(keyToIntent(stroke("Home", { shiftKey: true }), false)).toBeNull();
     expect(keyToIntent(stroke("End", { shiftKey: true }), false)).toBeNull();
-    expect(keyToIntent(stroke("PageDown", { shiftKey: true }), false)).toBeNull();
+    expect(
+      keyToIntent(stroke("PageDown", { shiftKey: true }), false),
+    ).toBeNull();
   });
 
   it("shift+F2 and cmd+F2 both return null — F2's binding is bare-only on every platform", () => {
@@ -197,8 +270,12 @@ describe("keyToIntent: unclaimed combinations return null, on either platform", 
   });
 
   it("an extra shift alongside cmd rejects the mac-only bindings — the modifier match is exact", () => {
-    expect(keyToIntent(stroke("ArrowDown", { metaKey: true, shiftKey: true }), true)).toBeNull();
-    expect(keyToIntent(stroke("Backspace", { metaKey: true, shiftKey: true }), true)).toBeNull();
+    expect(
+      keyToIntent(stroke("ArrowDown", { metaKey: true, shiftKey: true }), true),
+    ).toBeNull();
+    expect(
+      keyToIntent(stroke("Backspace", { metaKey: true, shiftKey: true }), true),
+    ).toBeNull();
   });
 
   it("shift+PageUp also returns null, same reasoning as its Home/End/PageDown siblings above", () => {
@@ -207,8 +284,12 @@ describe("keyToIntent: unclaimed combinations return null, on either platform", 
   });
 
   it("ctrl+shift+A and cmd+alt+A both return null — select-all's modifier match is exact, same reasoning as the mac-only pair above", () => {
-    expect(keyToIntent(stroke("a", { ctrlKey: true, shiftKey: true }), false)).toBeNull();
-    expect(keyToIntent(stroke("a", { metaKey: true, altKey: true }), true)).toBeNull();
+    expect(
+      keyToIntent(stroke("a", { ctrlKey: true, shiftKey: true }), false),
+    ).toBeNull();
+    expect(
+      keyToIntent(stroke("a", { metaKey: true, altKey: true }), true),
+    ).toBeNull();
   });
 
   it("shift+Escape and cmd+Escape both return null — Escape's binding is bare-only, like F2's", () => {

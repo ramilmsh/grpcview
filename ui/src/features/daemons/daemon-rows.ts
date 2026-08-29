@@ -24,6 +24,10 @@ export function daemonLabel(root: string): string {
 // Stable sort by workspace root — the server already orders ListServersResponse this way, but
 // a client-side re-sort keeps the view correct even if that ever changes, and gives the row
 // `key` (workspaceRoot) a defined order to render in.
-export function sortedDaemonRows(entries: readonly ServerEntry[]): ServerEntry[] {
-  return [...entries].sort((a, b) => a.workspaceRoot.localeCompare(b.workspaceRoot));
+export function sortedDaemonRows(
+  entries: readonly ServerEntry[],
+): ServerEntry[] {
+  return [...entries].sort((a, b) =>
+    a.workspaceRoot.localeCompare(b.workspaceRoot),
+  );
 }

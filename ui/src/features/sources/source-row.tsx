@@ -19,6 +19,10 @@ import { SourceOrigin, type DescriptorSource } from "@grpcview/v1/workspace_pb";
 // One row of the priority-ordered source list, kept apart from SourcesView because the view
 // is hooks all the way down: rendered from a plain DescriptorSource, a row's markup can be
 // asserted on directly (source-row.test.tsx).
+//
+// The pure helpers below are exported for their own unit tests, deliberately colocated with
+// the row they serve — this file mixes components and non-components on purpose.
+/* eslint-disable react-refresh/only-export-components */
 
 // How the row presents a source. "reference" is a WORKSPACE-origin entry whose oneof arm is
 // unset — a reference grpcview.work.json no longer defines. It has no kind to claim, since
@@ -49,7 +53,10 @@ export function refreshRecipe(s: DescriptorSource): string {
   return s.source.case === "upload" ? s.source.value.path : "";
 }
 
-export function contribution(s: DescriptorSource): { text: string; tone: "ok" | "muted" | "warn" } {
+export function contribution(s: DescriptorSource): {
+  text: string;
+  tone: "ok" | "muted" | "warn";
+} {
   const r = s.resolved;
   if (r?.error) return { text: r.error, tone: "warn" };
   if (!r) return { text: "not resolved yet", tone: "muted" };
@@ -58,13 +65,17 @@ export function contribution(s: DescriptorSource): { text: string; tone: "ok" | 
   const files = `${r.fileCount} file${r.fileCount === 1 ? "" : "s"}`;
   if (defined === 0) return { text: `${files}, no services`, tone: "muted" };
   if (won === 0) {
-    const shadowed = defined === 1 ? "its 1 service" : `all ${defined} services`;
+    const shadowed =
+      defined === 1 ? "its 1 service" : `all ${defined} services`;
     return { text: `${files}, ${shadowed} shadowed`, tone: "muted" };
   }
   if (won < defined) {
     return { text: `${files}, ${won} of ${defined} services`, tone: "ok" };
   }
-  return { text: `${files}, ${won} service${won === 1 ? "" : "s"}`, tone: "ok" };
+  return {
+    text: `${files}, ${won} service${won === 1 ? "" : "s"}`,
+    tone: "ok",
+  };
 }
 
 // The two states of commit_descriptors, as words a user who has read no design doc can act
@@ -126,7 +137,9 @@ export function refreshTitle(s: DescriptorSource): string {
       return "Re-reflect this target";
     case "descriptorSet": {
       const path = refreshRecipe(s);
-      return path ? `Re-read this descriptor set from ${path}` : REDROP_TO_REFRESH;
+      return path
+        ? `Re-read this descriptor set from ${path}`
+        : REDROP_TO_REFRESH;
     }
     case "bazel":
       // Refusable: an untrusted workspace runs no build, and says so in Resolved.error.
@@ -138,7 +151,8 @@ export function refreshTitle(s: DescriptorSource): string {
   }
 }
 
-const REDERIVED = "This collection's definitions are re-derived from the sources that remain.";
+const REDERIVED =
+  "This collection's definitions are re-derived from the sources that remain.";
 
 // Removing a WORKSPACE-origin source drops THIS collection's reference and leaves the shared
 // definition alone — the one place the two origins differ in what a client's remove means. The
@@ -217,7 +231,10 @@ export function SourceRow({
   // outline is reserved for the case where "off" costs a clone its schema entirely.
   const uncommittedUpload = kind === "descriptorSet" && !s.commitDescriptors;
   const commitStyle = s.commitDescriptors
-    ? { background: "var(--color-neutral-800)", color: "var(--color-neutral-100)" }
+    ? {
+        background: "var(--color-neutral-800)",
+        color: "var(--color-neutral-100)",
+      }
     : uncommittedUpload
       ? { borderColor: "var(--warn)", color: "var(--warn)" }
       : { borderColor: "var(--line)", color: "var(--color-neutral-500)" };
@@ -234,7 +251,11 @@ export function SourceRow({
     >
       <span
         className="font-mono"
-        style={{ fontSize: 11, color: "var(--color-neutral-600)", width: "2ch" }}
+        style={{
+          fontSize: 11,
+          color: "var(--color-neutral-600)",
+          width: "2ch",
+        }}
       >
         {index + 1}
       </span>
@@ -299,7 +320,11 @@ export function SourceRow({
           ...commitStyle,
         }}
       >
-        {s.commitDescriptors ? <GitBranch size={11} /> : <HardDrives size={11} />}
+        {s.commitDescriptors ? (
+          <GitBranch size={11} />
+        ) : (
+          <HardDrives size={11} />
+        )}
         {s.commitDescriptors ? COMMITTED_LABEL : LOCAL_LABEL}
       </button>
       <div className="flex items-center">

@@ -14,6 +14,9 @@
 // substitute for a real uuid.
 
 const hex = (n: number): string =>
-  Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  Array.from({ length: n }, () =>
+    Math.floor(Math.random() * 16).toString(16),
+  ).join("");
 
-export const requestId = (prefix = "req"): string => `${prefix}_${hex(8)}${hex(4)}`;
+export const requestId = (prefix = "req"): string =>
+  `${prefix}_${hex(8)}${hex(4)}`;

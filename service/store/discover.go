@@ -255,4 +255,3 @@ func (s *Store) relativeID(path string) (string, error) {
 	}
 	return filepath.ToSlash(rel), nil
 }
-

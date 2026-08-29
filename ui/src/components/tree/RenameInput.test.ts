@@ -34,7 +34,9 @@ describe("renameVerdict", () => {
   });
 
   it("refuses a collision found after trimming, not just an exact match", () => {
-    expect(renameVerdict(" ListHellos ", "SayHello", SIBLINGS)).toBe("collision");
+    expect(renameVerdict(" ListHellos ", "SayHello", SIBLINGS)).toBe(
+      "collision",
+    );
   });
 
   it("is case SENSITIVE — the store's own collision check is too", () => {
@@ -42,7 +44,9 @@ describe("renameVerdict", () => {
   });
 
   it("cancels rather than colliding when the value equals the row's OWN name", () => {
-    expect(renameVerdict("SayHello", "SayHello", ["SayHello", ...SIBLINGS])).toBe("cancel");
+    expect(
+      renameVerdict("SayHello", "SayHello", ["SayHello", ...SIBLINGS]),
+    ).toBe("cancel");
   });
 
   it("commits against an empty sibling list — an only child collides with nothing", () => {

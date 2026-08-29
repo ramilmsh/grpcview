@@ -1,8 +1,8 @@
 {
-  "meta":  {
-    "name":  "ListCollections"
+  "meta": {
+    "name": "ListCollections"
   },
-  "service":  "grpcview.v1.WorkspaceService",
-  "method":  "ListCollections",
-  "middleware":  []
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "ListCollections",
+  "middleware": []
 }

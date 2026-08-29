@@ -17,22 +17,23 @@ export const SCRATCH_PATH = "file:///scripts/scratch.ts";
 // Exported so gv-types.ts's useWorkspaceModuleTypes can re-set `compilerOptions.paths` without
 // dropping everything set here: setCompilerOptions REPLACES the whole object, so a caller that
 // only wants to add `paths` still has to restate every option below.
-export const baseCompilerOptions: Monaco.languages.typescript.CompilerOptions = {
-  target: ts.ScriptTarget.ESNext,
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.NodeJs,
-  // 3 === ModuleDetectionKind.Force — makes top-level `await` legal with no imports.
-  moduleDetection: 3,
-  allowNonTsExtensions: true,
-  // dayjs ships `export = dayjs` but is imported as a default.
-  allowSyntheticDefaultImports: true,
-  esModuleInterop: true,
-  strict: false,
-  noEmit: true,
-  // No "dom": it would clash with the custom console/fetch declarations below.
-  lib: ["es2022"],
-  skipLibCheck: true,
-};
+export const baseCompilerOptions: Monaco.languages.typescript.CompilerOptions =
+  {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeJs,
+    // 3 === ModuleDetectionKind.Force — makes top-level `await` legal with no imports.
+    moduleDetection: 3,
+    allowNonTsExtensions: true,
+    // dayjs ships `export = dayjs` but is imported as a default.
+    allowSyntheticDefaultImports: true,
+    esModuleInterop: true,
+    strict: false,
+    noEmit: true,
+    // No "dom": it would clash with the custom console/fetch declarations below.
+    lib: ["es2022"],
+    skipLibCheck: true,
+  };
 ts.typescriptDefaults.setCompilerOptions(baseCompilerOptions);
 
 ts.typescriptDefaults.setEagerModelSync(true);
@@ -46,13 +47,21 @@ ts.typescriptDefaults.setDiagnosticsOptions({
 // The package.json is required: NodeJs resolution follows its "types" to the .d.ts.
 ts.typescriptDefaults.addExtraLib(
   JSON.stringify(
-    { name: "dayjs", version: "1.11.21", main: "dayjs.min.js", types: "index.d.ts" },
+    {
+      name: "dayjs",
+      version: "1.11.21",
+      main: "dayjs.min.js",
+      types: "index.d.ts",
+    },
     null,
-    2
+    2,
   ),
-  "file:///node_modules/dayjs/package.json"
+  "file:///node_modules/dayjs/package.json",
 );
-ts.typescriptDefaults.addExtraLib(dayjsTypes, "file:///node_modules/dayjs/index.d.ts");
+ts.typescriptDefaults.addExtraLib(
+  dayjsTypes,
+  "file:///node_modules/dayjs/index.d.ts",
+);
 
 // Must stay a script (no import/export) so its declarations are global in the buffer.
 const ENV_DTS = `

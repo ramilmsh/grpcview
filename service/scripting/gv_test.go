@@ -160,13 +160,19 @@ func TestGrpcviewAssertExpressionFormPasses(t *testing.T) {
 
 func TestGrpcviewAssertFailsSync(t *testing.T) {
 	for _, tc := range []struct{ name, src, want string }{
-		{"falsy-bool", `import { assert } from "grpcview:assert"; assert("bool is false", false)`,
-			"assertion failed: bool is false"},
-		{"falsy-fn", `import { assert } from "grpcview:assert"; assert("fn is false", function () { return false; })`,
-			"assertion failed: fn is false"},
-		{"throwing-fn", `import { assert } from "grpcview:assert";
+		{
+			"falsy-bool", `import { assert } from "grpcview:assert"; assert("bool is false", false)`,
+			"assertion failed: bool is false",
+		},
+		{
+			"falsy-fn", `import { assert } from "grpcview:assert"; assert("fn is false", function () { return false; })`,
+			"assertion failed: fn is false",
+		},
+		{
+			"throwing-fn", `import { assert } from "grpcview:assert";
 assert("fn blew up", function () { throw new Error("inner boom"); })`,
-			"assertion failed: fn blew up: inner boom"},
+			"assertion failed: fn blew up: inner boom",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEngine(t)
@@ -250,14 +256,20 @@ await assert("async true", async () => true); "done"`, Grant{}, Input{})
 	}
 
 	for _, tc := range []struct{ name, src, want string }{
-		{"async-false", `import { assert } from "grpcview:assert"; await assert("async is false", async () => false)`,
-			"assertion failed: async is false"},
-		{"bare-promise-false", `import { assert } from "grpcview:assert";
+		{
+			"async-false", `import { assert } from "grpcview:assert"; await assert("async is false", async () => false)`,
+			"assertion failed: async is false",
+		},
+		{
+			"bare-promise-false", `import { assert } from "grpcview:assert";
 await assert("promise is false", Promise.resolve(false))`,
-			"assertion failed: promise is false"},
-		{"async-rejects", `import { assert } from "grpcview:assert";
+			"assertion failed: promise is false",
+		},
+		{
+			"async-rejects", `import { assert } from "grpcview:assert";
 await assert("async blew up", async () => { throw new Error("async boom"); })`,
-			"assertion failed: async blew up: async boom"},
+			"assertion failed: async blew up: async boom",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEngine(t)

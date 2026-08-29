@@ -22,23 +22,36 @@ const COLL = ".";
 
 // Slugs default to the lower-kebab of the name, matching store.slugify, but the
 // fixtures below pass them explicitly wherever a test turns on slug vs name.
-const slugify = (name: string): string => name.toLowerCase().replace(/\s+/g, "-");
+const slugify = (name: string): string =>
+  name.toLowerCase().replace(/\s+/g, "-");
 
 const folder = (
   name: string,
   path: string[],
   children: ItemWithPath[],
-  slug = slugify(name)
+  slug = slugify(name),
 ): ItemWithPath => ({
-  item: { name, slug, content: { case: "folder", value: { items: [] } } } as unknown as Item,
+  item: {
+    name,
+    slug,
+    content: { case: "folder", value: { items: [] } },
+  } as unknown as Item,
   collection: COLL,
   path,
   slugPath: path.map(slugify),
   children,
 });
 
-const request = (name: string, path: string[], slug = slugify(name)): ItemWithPath => ({
-  item: { name, slug, content: { case: "request", value: {} } } as unknown as Item,
+const request = (
+  name: string,
+  path: string[],
+  slug = slugify(name),
+): ItemWithPath => ({
+  item: {
+    name,
+    slug,
+    content: { case: "request", value: {} },
+  } as unknown as Item,
   collection: COLL,
   path,
   slugPath: path.map(slugify),
@@ -46,10 +59,14 @@ const request = (name: string, path: string[], slug = slugify(name)): ItemWithPa
 
 const tree: ItemWithPath[] = [
   request("Ping", []),
-  folder("Users", [], [
-    request("GetUser", ["Users"]),
-    folder("Admin", ["Users"], [request("Ban", ["Users", "Admin"])]),
-  ]),
+  folder(
+    "Users",
+    [],
+    [
+      request("GetUser", ["Users"]),
+      folder("Admin", ["Users"], [request("Ban", ["Users", "Admin"])]),
+    ],
+  ),
 ];
 
 // A wire Item tree, for rootItemsOf/slugKeyIn (which read protos, not ItemWithPath).
@@ -57,7 +74,11 @@ const wireRequest = (name: string, slug = slugify(name)): Item =>
   ({ name, slug, content: { case: "request", value: {} } }) as unknown as Item;
 
 const wireFolder = (name: string, items: Item[], slug = slugify(name)): Item =>
-  ({ name, slug, content: { case: "folder", value: { items } } }) as unknown as Item;
+  ({
+    name,
+    slug,
+    content: { case: "folder", value: { items } },
+  }) as unknown as Item;
 
 const service = (pkg: string, name: string, methods: string[]): Service =>
   ({
@@ -68,7 +89,9 @@ const service = (pkg: string, name: string, methods: string[]): Service =>
 
 describe("serviceName", () => {
   it("joins a package and a name with a dot", () => {
-    expect(serviceName(service("echo.v1", "EchoService", []))).toBe("echo.v1.EchoService");
+    expect(serviceName(service("echo.v1", "EchoService", []))).toBe(
+      "echo.v1.EchoService",
+    );
   });
 
   it("is just the name in the EMPTY package — a leading dot matches nothing", () => {
@@ -79,7 +102,9 @@ describe("serviceName", () => {
 describe("resolveMethod", () => {
   it("finds a method on a packaged service", () => {
     const services = [service("echo.v1", "EchoService", ["Echo"])];
-    expect(resolveMethod(services, "echo.v1.EchoService", "Echo")?.name).toBe("Echo");
+    expect(resolveMethod(services, "echo.v1.EchoService", "Echo")?.name).toBe(
+      "Echo",
+    );
   });
 
   it("finds a method on a service in the EMPTY package (regression: the leading dot)", () => {
@@ -90,7 +115,9 @@ describe("resolveMethod", () => {
 
 describe("itemKey", () => {
   it("derives the key from the item's slug path, prefixed by its collection id", () => {
-    expect(itemKey(tree[1].children![1].children![0])).toBe("./users/admin/ban");
+    expect(itemKey(tree[1].children![1].children![0])).toBe(
+      "./users/admin/ban",
+    );
   });
 
   it("prefixes a DIFFERENT collection id, so two collections never collide", () => {
@@ -149,7 +176,7 @@ describe("slugKeyIn", () => {
 
   it("reads back the RE-SLUGGED key of a moved item, which names cannot predict", () => {
     expect(slugKeyIn(".", root, ["Users", "Admin"], "Get User")).toBe(
-      "./users/admin/get-user-2"
+      "./users/admin/get-user-2",
     );
   });
 
@@ -235,7 +262,10 @@ describe("pruneNestedSelections", () => {
   });
 
   it("preserves the original relative order of the SURVIVING items, not tree order", () => {
-    expect(pruneNestedSelections([getUser, ping, users])).toEqual([ping, users]);
+    expect(pruneNestedSelections([getUser, ping, users])).toEqual([
+      ping,
+      users,
+    ]);
   });
 
   it("is a no-op for a single-item selection", () => {
@@ -247,9 +277,12 @@ describe("pruneNestedSelections", () => {
   });
 
   it("de-duplicates two DISTINCT objects that name the same path (what a rename collision actually produces)", () => {
-    expect(pruneNestedSelections([request("GetUser", ["Users"]), request("GetUser", ["Users"])])).toEqual([
-      request("GetUser", ["Users"]),
-    ]);
+    expect(
+      pruneNestedSelections([
+        request("GetUser", ["Users"]),
+        request("GetUser", ["Users"]),
+      ]),
+    ).toEqual([request("GetUser", ["Users"])]);
   });
 
   it("de-duplicates and prunes in ONE pass: a duplicated descendant of a selected folder leaves just the folder", () => {
@@ -258,7 +291,10 @@ describe("pruneNestedSelections", () => {
 
   it("still distinguishes sibling names where one is a prefix STRING of the other", () => {
     const adminTools = folder("AdminTools", ["Users"], []);
-    expect(pruneNestedSelections([admin, adminTools])).toEqual([admin, adminTools]);
+    expect(pruneNestedSelections([admin, adminTools])).toEqual([
+      admin,
+      adminTools,
+    ]);
   });
 
   it("is empty for an empty selection", () => {
@@ -308,26 +344,26 @@ describe("uptimeLabel", () => {
 describe("idleTimeoutLabel", () => {
   it("reads an absent or zero duration as never idling out", () => {
     expect(idleTimeoutLabel(undefined)).toBe("never idles out");
-    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 0n, nanos: 0 }))).toBe(
-      "never idles out"
-    );
+    expect(
+      idleTimeoutLabel(create(DurationSchema, { seconds: 0n, nanos: 0 })),
+    ).toBe("never idles out");
   });
 
   it("prefixes a real timeout with 'idle' so the column reads on its own", () => {
-    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 90n, nanos: 0 }))).toBe(
-      "idle 1m 30s"
-    );
+    expect(
+      idleTimeoutLabel(create(DurationSchema, { seconds: 90n, nanos: 0 })),
+    ).toBe("idle 1m 30s");
   });
 
   it("drops a trailing zero component — 'idle 1h', not 'idle 1h 0m'", () => {
-    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 3600n, nanos: 0 }))).toBe(
-      "idle 1h"
-    );
-    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 86400n, nanos: 0 }))).toBe(
-      "idle 1d"
-    );
-    expect(idleTimeoutLabel(create(DurationSchema, { seconds: 60n, nanos: 0 }))).toBe(
-      "idle 1m"
-    );
+    expect(
+      idleTimeoutLabel(create(DurationSchema, { seconds: 3600n, nanos: 0 })),
+    ).toBe("idle 1h");
+    expect(
+      idleTimeoutLabel(create(DurationSchema, { seconds: 86400n, nanos: 0 })),
+    ).toBe("idle 1d");
+    expect(
+      idleTimeoutLabel(create(DurationSchema, { seconds: 60n, nanos: 0 })),
+    ).toBe("idle 1m");
   });
 });

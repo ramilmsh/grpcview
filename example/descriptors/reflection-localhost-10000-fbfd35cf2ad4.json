@@ -1994,9 +1994,7 @@
                 "end": 2
               }
             ],
-            "reservedName": [
-              "refresh"
-            ]
+            "reservedName": ["refresh"]
           },
           {
             "name": "CollectionSummary",
@@ -3387,8 +3385,5 @@
       }
     ]
   },
-  "serviceNames": [
-    "grpcview.v1.WorkspaceService",
-    "grpcview.v1.ServerService"
-  ]
+  "serviceNames": ["grpcview.v1.WorkspaceService", "grpcview.v1.ServerService"]
 }

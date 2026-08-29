@@ -29,9 +29,10 @@ export function Backdrop({
     () => () => {
       const active = document.activeElement;
       const focusIsStray = active === null || active === document.body;
-      if (focusIsStray && opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      if (focusIsStray && opener instanceof HTMLElement && opener.isConnected)
+        opener.focus();
     },
-    [opener]
+    [opener],
   );
 
   return (

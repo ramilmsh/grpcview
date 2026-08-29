@@ -5,7 +5,11 @@ import type { CollectionSummary } from "@grpcview/v1/service_pb";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import { Tree } from "@/components/tree/Tree";
 import { findByKey, type ItemWithPath } from "@/lib/format";
-import { renderRequestRow, requestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
+import {
+  renderRequestRow,
+  requestTreeAdapter,
+  type RequestRowCallbacks,
+} from "./request-tree";
 import {
   EMPTY_LABEL,
   LOADING_LABEL,
@@ -36,7 +40,7 @@ const folder = (
   collection: string,
   name: string,
   path: string[],
-  children: ItemWithPath[]
+  children: ItemWithPath[],
 ): ItemWithPath => ({
   item: {
     name,
@@ -49,8 +53,16 @@ const folder = (
   children,
 });
 
-const request = (collection: string, name: string, path: string[]): ItemWithPath => ({
-  item: { name, slug: slugify(name), content: { case: "request", value: {} } } as unknown as Item,
+const request = (
+  collection: string,
+  name: string,
+  path: string[],
+): ItemWithPath => ({
+  item: {
+    name,
+    slug: slugify(name),
+    content: { case: "request", value: {} },
+  } as unknown as Item,
   collection,
   path,
   slugPath: path.map(slugify),
@@ -66,11 +78,21 @@ const ledger = summary(LEDGER, "ledger");
 
 const payItems: ItemWithPath[] = [
   request(PAY, "Ping", []),
-  folder(PAY, "Calls", [], [
-    request(PAY, "Charge", ["Calls"]),
-    request(PAY, "Ping", ["Calls"]),
-    folder(PAY, "Admin", ["Calls"], [request(PAY, "Purge", ["Calls", "Admin"])]),
-  ]),
+  folder(
+    PAY,
+    "Calls",
+    [],
+    [
+      request(PAY, "Charge", ["Calls"]),
+      request(PAY, "Ping", ["Calls"]),
+      folder(
+        PAY,
+        "Admin",
+        ["Calls"],
+        [request(PAY, "Purge", ["Calls", "Admin"])],
+      ),
+    ],
+  ),
   folder(PAY, "Dupes", [], [request(PAY, "Charge", ["Dupes"])]),
 ];
 const ledgerItems: ItemWithPath[] = [
@@ -102,7 +124,10 @@ const rowsOf = (markup: string): Row[] =>
   markup
     .split('<div class="treerow')
     .slice(1)
-    .map((html) => ({ level: Number(/aria-level="(\d+)"/.exec(html)?.[1] ?? "0"), html }));
+    .map((html) => ({
+      level: Number(/aria-level="(\d+)"/.exec(html)?.[1] ?? "0"),
+      html,
+    }));
 
 const panelMarkup = (
   input: {
@@ -110,7 +135,7 @@ const panelMarkup = (
     itemsByCollection: ReadonlyMap<string, ItemWithPath[]>;
     activeCollection: string | null;
   },
-  expanded: ReadonlySet<string>
+  expanded: ReadonlySet<string>,
 ): string =>
   renderToStaticMarkup(
     <Tree<PanelNode>
@@ -118,23 +143,31 @@ const panelMarkup = (
       renderRow={(node, state) => renderPanelRow(node, state, cb)}
       expanded={expanded}
       aria-label="Collection"
-    />
+    />,
   );
 
 describe("collectionsToQuery", () => {
   it("queries the active collection plus every EXPANDED collection row, sorted", () => {
     expect(
-      collectionsToQuery(PAY, new Set([LEDGER]), [payments, ledger])
+      collectionsToQuery(PAY, new Set([LEDGER]), [payments, ledger]),
     ).toEqual([LEDGER, PAY]);
   });
 
   it("ignores the item keys that share treeExpanded with the collection ids", () => {
-    const expanded = new Set([`${PAY}/calls`, `${PAY}/calls/admin`, "services/other/requests"]);
-    expect(collectionsToQuery(PAY, expanded, [payments, ledger])).toEqual([PAY]);
+    const expanded = new Set([
+      `${PAY}/calls`,
+      `${PAY}/calls/admin`,
+      "services/other/requests",
+    ]);
+    expect(collectionsToQuery(PAY, expanded, [payments, ledger])).toEqual([
+      PAY,
+    ]);
   });
 
   it("dedupes an expanded collection that is also the active one", () => {
-    expect(collectionsToQuery(PAY, new Set([PAY]), [payments, ledger])).toEqual([PAY]);
+    expect(collectionsToQuery(PAY, new Set([PAY]), [payments, ledger])).toEqual(
+      [PAY],
+    );
   });
 
   it("queries nothing when nothing is active or expanded", () => {
@@ -158,18 +191,28 @@ describe("filterItemsByCollection", () => {
   it("prunes each collection independently", () => {
     const filtered = filterItemsByCollection(bothLoaded, "purge");
     expect(filtered.get(PAY)?.map((i) => i.item.name)).toEqual(["Calls"]);
-    expect(findByKey(filtered.get(PAY) ?? [], `${PAY}/calls`)?.children?.map((c) => c.item.name))
-      .toEqual(["Admin"]);
+    expect(
+      findByKey(filtered.get(PAY) ?? [], `${PAY}/calls`)?.children?.map(
+        (c) => c.item.name,
+      ),
+    ).toEqual(["Admin"]);
     // A collection with no match keeps its entry, holding nothing.
     expect(filtered.has(LEDGER)).toBe(true);
     expect(filtered.get(LEDGER)).toEqual([]);
   });
 
   it("never turns a loaded collection back into an absent one — empty means empty, not loading", () => {
-    const filtered = filterItemsByCollection(bothLoaded, "nothing-matches-this");
+    const filtered = filterItemsByCollection(
+      bothLoaded,
+      "nothing-matches-this",
+    );
     const markup = panelMarkup(
-      { collections: [payments, ledger], itemsByCollection: filtered, activeCollection: PAY },
-      new Set([PAY, LEDGER])
+      {
+        collections: [payments, ledger],
+        itemsByCollection: filtered,
+        activeCollection: PAY,
+      },
+      new Set([PAY, LEDGER]),
     );
     // Two collection rows, each with one empty row under it — not a Loading… row, which
     // would claim a Get is still in flight.
@@ -187,9 +230,13 @@ describe("the panel's composed tree", () => {
   it("puts a collection row above each collection's items when there are two", () => {
     const rows = rowsOf(
       panelMarkup(
-        { collections: [payments, ledger], itemsByCollection: bothLoaded, activeCollection: PAY },
-        new Set([PAY, LEDGER])
-      )
+        {
+          collections: [payments, ledger],
+          itemsByCollection: bothLoaded,
+          activeCollection: PAY,
+        },
+        new Set([PAY, LEDGER]),
+      ),
     );
     // Two roots, and both of them are collection rows: name plus the path that
     // disambiguates two collections sharing one.
@@ -198,20 +245,30 @@ describe("the panel's composed tree", () => {
     expect(rows[0].html).toContain("payments");
     expect(rows[0].html).toContain(PAY);
 
-    const ledgerRow = rows.findIndex((r) => r.level === 1 && r.html.includes(">ledger<"));
+    const ledgerRow = rows.findIndex(
+      (r) => r.level === 1 && r.html.includes(">ledger<"),
+    );
     expect(ledgerRow).toBeGreaterThan(0);
     expect(rows[ledgerRow].html).toContain(LEDGER);
     // Every item row hangs off one collection row or the other; none is a root.
     expect(rows.slice(1, ledgerRow).every((r) => r.level >= 2)).toBe(true);
     expect(rows.slice(ledgerRow + 1).every((r) => r.level >= 2)).toBe(true);
-    expect(rows.slice(1, ledgerRow).some((r) => r.html.includes(">Ping<"))).toBe(true);
-    expect(rows.slice(ledgerRow + 1).some((r) => r.html.includes(">ListEntries<"))).toBe(true);
+    expect(
+      rows.slice(1, ledgerRow).some((r) => r.html.includes(">Ping<")),
+    ).toBe(true);
+    expect(
+      rows.slice(ledgerRow + 1).some((r) => r.html.includes(">ListEntries<")),
+    ).toBe(true);
   });
 
   it("renders ONE collection byte-for-byte as the single-collection request tree did", () => {
     const markup = panelMarkup(
-      { collections: [payments], itemsByCollection: bothLoaded, activeCollection: PAY },
-      new Set()
+      {
+        collections: [payments],
+        itemsByCollection: bothLoaded,
+        activeCollection: PAY,
+      },
+      new Set(),
     );
     const asBefore = renderToStaticMarkup(
       <Tree<ItemWithPath>
@@ -219,7 +276,7 @@ describe("the panel's composed tree", () => {
         renderRow={(item, state) => renderRequestRow(item, state, cb)}
         expanded={new Set()}
         aria-label="Collection"
-      />
+      />,
     );
     expect(markup).toBe(asBefore);
     // No collection row: the three root ITEMS are the depth-0 rows.
@@ -256,7 +313,7 @@ describe("the panel's composed tree", () => {
         ]),
         activeCollection: PAY,
       },
-      new Set([LEDGER])
+      new Set([LEDGER]),
     );
     expect(markup).toContain(EMPTY_LABEL);
     expect(markup).not.toContain(LOADING_LABEL);
@@ -264,7 +321,10 @@ describe("the panel's composed tree", () => {
 });
 
 describe("panelCanDrop", () => {
-  const collectionNode = (c: CollectionSummary): PanelNode => ({ kind: "collection", collection: c });
+  const collectionNode = (c: CollectionSummary): PanelNode => ({
+    kind: "collection",
+    collection: c,
+  });
   const itemNode = (item: ItemWithPath): PanelNode => ({ kind: "item", item });
 
   const opts = { tiered: true, itemsByCollection: bothLoaded };
@@ -279,7 +339,9 @@ describe("panelCanDrop", () => {
 
   it("rejects a cross-collection drop even where the name is free", () => {
     expect(panelCanDrop([charge], { parent: ledgerRow }, opts)).toBe(false);
-    expect(panelCanDrop([charge], { parent: itemNode(ledgerItems[1]) }, opts)).toBe(false);
+    expect(
+      panelCanDrop([charge], { parent: itemNode(ledgerItems[1]) }, opts),
+    ).toBe(false);
     expect(panelCanDrop([reportsPing], { parent: calls }, opts)).toBe(false);
   });
 
@@ -294,12 +356,18 @@ describe("panelCanDrop", () => {
   it("counts a sibling the FILTER hid, which is why the panel passes the UNFILTERED map", () => {
     const filtered = filterItemsByCollection(bothLoaded, "purge");
     expect(
-      findByKey(filtered.get(PAY) ?? [], `${PAY}/calls`)?.children?.map((c) => c.item.name)
+      findByKey(filtered.get(PAY) ?? [], `${PAY}/calls`)?.children?.map(
+        (c) => c.item.name,
+      ),
     ).toEqual(["Admin"]);
     expect(panelCanDrop([dupeCharge], { parent: calls }, opts)).toBe(false);
     // What the panel must NOT do: resolve the collision against what the filter left.
     expect(
-      panelCanDrop([dupeCharge], { parent: calls }, { tiered: true, itemsByCollection: filtered })
+      panelCanDrop(
+        [dupeCharge],
+        { parent: calls },
+        { tiered: true, itemsByCollection: filtered },
+      ),
     ).toBe(true);
   });
 
@@ -311,11 +379,16 @@ describe("panelCanDrop", () => {
   });
 
   it("allows a pure reorder inside a parent that already holds the name", () => {
-    expect(panelCanDrop([charge], { parent: calls, before: callsPing }, opts)).toBe(true);
+    expect(
+      panelCanDrop([charge], { parent: calls, before: callsPing }, opts),
+    ).toBe(true);
   });
 
   it("uses the sole collection's root for the untiered null parent", () => {
-    const solo = { tiered: false, itemsByCollection: new Map([[PAY, payItems]]) };
+    const solo = {
+      tiered: false,
+      itemsByCollection: new Map([[PAY, payItems]]),
+    };
     expect(panelCanDrop([charge], { parent: null }, solo)).toBe(true);
     // "Ping" is already at that root.
     expect(panelCanDrop([callsPing], { parent: null }, solo)).toBe(false);
@@ -326,7 +399,11 @@ describe("panelCanDrop", () => {
     expect(panelCanDrop([payRow], { parent: calls }, opts)).toBe(false);
     expect(panelCanDrop([charge], { parent: null }, opts)).toBe(false); // tiered root
     expect(
-      panelCanDrop([charge], { parent: { kind: "status", collection: PAY, label: LOADING_LABEL } }, opts)
+      panelCanDrop(
+        [charge],
+        { parent: { kind: "status", collection: PAY, label: LOADING_LABEL } },
+        opts,
+      ),
     ).toBe(false);
   });
 });
@@ -345,13 +422,20 @@ describe("collectionForNodeId", () => {
     const key = panelNodeId({ kind: "item", item: payItems[0] });
     expect(key.startsWith(`${PAY}/`)).toBe(true);
     expect(collectionForNodeId(key, all)).toBe(PAY);
-    expect(collectionForNodeId(panelNodeId({ kind: "item", item: ledgerItems[0] }), all)).toBe(
-      LEDGER
-    );
+    expect(
+      collectionForNodeId(
+        panelNodeId({ kind: "item", item: ledgerItems[0] }),
+        all,
+      ),
+    ).toBe(LEDGER);
   });
 
   it("resolves a status row id", () => {
-    const id = panelNodeId({ kind: "status", collection: LEDGER, label: LOADING_LABEL });
+    const id = panelNodeId({
+      kind: "status",
+      collection: LEDGER,
+      label: LOADING_LABEL,
+    });
     expect(id).toBe(`${LEDGER}${STATUS_SEPARATOR}status`);
     expect(collectionForNodeId(id, all)).toBe(LEDGER);
   });

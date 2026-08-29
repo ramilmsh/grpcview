@@ -43,7 +43,10 @@ import {
 import { MethodPickerModal } from "./MethodPickerModal";
 import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import { deleteConfirmCopy } from "./delete-confirm";
-import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
+import {
+  collectionMenuItems,
+  type CollectionMenuActions,
+} from "./collection-menu";
 import { NewCollectionDialog } from "./NewCollectionDialog";
 
 export function CollectionPanel() {
@@ -52,8 +55,14 @@ export function CollectionPanel() {
   // collection listing, so "" is the unreachable pre-gate value rather than a default.
   const collection = activeCollection ?? "";
   const { collections } = useCollections();
-  const { createFolder, createRequest, deleteRequest, updateRequest, updateFolder, moveItem } =
-    useWorkspaceMutations();
+  const {
+    createFolder,
+    createRequest,
+    deleteRequest,
+    updateRequest,
+    updateFolder,
+    moveItem,
+  } = useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
   const setActiveCollection = useUIStore((s) => s.setActiveCollection);
   const activeKey = useUIStore((s) => s.activeKey);
@@ -68,34 +77,46 @@ export function CollectionPanel() {
   const [filter, setFilter] = useState("");
   const [folderName, setFolderName] = useState("");
   // undefined = dialog closed, null = collection root, a folder = inside it.
-  const [newFolderParent, setNewFolderParent] = useState<ItemWithPath | null | undefined>(
-    undefined
-  );
-  const [pickerParent, setPickerParent] = useState<ItemWithPath | null | undefined>(undefined);
+  const [newFolderParent, setNewFolderParent] = useState<
+    ItemWithPath | null | undefined
+  >(undefined);
+  const [pickerParent, setPickerParent] = useState<
+    ItemWithPath | null | undefined
+  >(undefined);
   const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
-  const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(null);
+  const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(
+    null,
+  );
   const [newCollection, setNewCollection] = useState(false);
   const treeRef = useRef<TreeHandle<PanelNode>>(null);
   // Empty `nodes` = a right-click on the panel's empty space, i.e. the collection root.
-  const [menu, setMenu] = useState<{ x: number; y: number; nodes: PanelNode[] } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    nodes: PanelNode[];
+  } | null>(null);
 
   // One Get per collection the tree needs items from — the active one plus every expanded
   // collection row. Absent from the map = not landed yet, which is a "Loading…" row.
   const queryIds = useMemo(
     () => collectionsToQuery(activeCollection, treeExpanded, collections),
-    [activeCollection, treeExpanded, collections]
+    [activeCollection, treeExpanded, collections],
   );
   const loaded = useCollectionItems(queryIds);
   const itemsByCollection = useMemo(
     () => filterItemsByCollection(loaded, filter),
-    [loaded, filter]
+    [loaded, filter],
   );
 
   const tiered = panelTiered(collections);
-  const adapter = usePanelTreeAdapter({ collections, itemsByCollection, activeCollection });
+  const adapter = usePanelTreeAdapter({
+    collections,
+    itemsByCollection,
+    activeCollection,
+  });
   // Untiered, the sole collection IS the active one (resolveActiveCollection), and these are
   // the tree's roots. Unfiltered, because the empty state asks what the collection HOLDS.
-  const soloItems = tiered ? [] : loaded.get(collections[0]?.id ?? "") ?? [];
+  const soloItems = tiered ? [] : (loaded.get(collections[0]?.id ?? "") ?? []);
   // Tiered, the strip counts the whole workspace: no row carries a per-collection count, so
   // an active-collection count next to several collection rows would name none of them.
   const total = useMemo(() => countAllRequests(loaded), [loaded]);
@@ -166,7 +187,7 @@ export function CollectionPanel() {
   // disk.
   const onTreeMove = (
     nodes: PanelNode[],
-    to: { parent: PanelNode | null; before?: PanelNode }
+    to: { parent: PanelNode | null; before?: PanelNode },
   ): void => {
     const batch = pruneNestedSelections(panelItems(nodes));
     // The DESTINATION's collection, never the panel's active one. panelDropAllowed has
@@ -177,7 +198,8 @@ export function CollectionPanel() {
     const parentItem = panelDropParentItem(to.parent);
     const newPath = childPathOf(parentItem);
     // A `before` can only be a sibling item; the tiers have no name to position against.
-    const before = to.before?.kind === "item" ? to.before.item.item.name : undefined;
+    const before =
+      to.before?.kind === "item" ? to.before.item.item.name : undefined;
     const fire = (i: number): void => {
       const node = batch[i];
       if (node === undefined) return;
@@ -193,11 +215,16 @@ export function CollectionPanel() {
           // The new key comes from the response, never from names: Move allocates a
           // fresh slug when the destination already has one by that name.
           onSuccess: (res) => {
-            const newKey = slugKeyIn(destination, res.collection?.item, newPath, node.item.name);
+            const newKey = slugKeyIn(
+              destination,
+              res.collection?.item,
+              newPath,
+              node.item.name,
+            );
             if (newKey) moveSubtree(itemKey(node), newKey);
             fire(i + 1);
           },
-        }
+        },
       );
     };
     fire(0);
@@ -238,13 +265,26 @@ export function CollectionPanel() {
   return (
     <div
       className="bg-panel flex flex-col"
-      style={{ width: 278, flex: "none", borderRight: "1px solid var(--line)", minHeight: 0 }}
+      style={{
+        width: 278,
+        flex: "none",
+        borderRight: "1px solid var(--line)",
+        minHeight: 0,
+      }}
     >
       <div
         className="flex items-center gap-[8px]"
-        style={{ height: 40, flex: "none", padding: "0 12px", borderBottom: "1px solid var(--line)" }}
+        style={{
+          height: 40,
+          flex: "none",
+          padding: "0 12px",
+          borderBottom: "1px solid var(--line)",
+        }}
       >
-        <MagnifyingGlass size={14} style={{ color: "var(--color-neutral-500)" }} />
+        <MagnifyingGlass
+          size={14}
+          style={{ color: "var(--color-neutral-500)" }}
+        />
         <input
           className="bare"
           style={{ fontSize: 13 }}
@@ -269,7 +309,8 @@ export function CollectionPanel() {
         // defaultPrevented means a row already claimed the gesture in Tree.tsx;
         // isEditableTarget is the same exception the tree makes for a mid-rename box.
         onContextMenu={(ev) => {
-          if (ev.defaultPrevented || isEditableTarget(ev.target as HTMLElement)) return;
+          if (ev.defaultPrevented || isEditableTarget(ev.target as HTMLElement))
+            return;
           ev.preventDefault();
           setMenu({ x: ev.clientX, y: ev.clientY, nodes: [] });
         }}
@@ -329,7 +370,8 @@ export function CollectionPanel() {
             // the way VS Code lets the selected thing decide the context.
             onFocusedChange={(id) => {
               setTreeFocused(id);
-              const owner = id === null ? null : collectionForNodeId(id, collections);
+              const owner =
+                id === null ? null : collectionForNodeId(id, collections);
               if (owner !== null) setActiveCollection(owner);
             }}
             activeId={activeKey}
@@ -344,7 +386,9 @@ export function CollectionPanel() {
             onDelete={onTreeDelete}
             onMove={onTreeMove}
             // The UNFILTERED map: the collision check must see siblings the filter hid.
-            canDrop={(dragged, to) => panelCanDrop(dragged, to, { tiered, itemsByCollection: loaded })}
+            canDrop={(dragged, to) =>
+              panelCanDrop(dragged, to, { tiered, itemsByCollection: loaded })
+            }
             // clientX/clientY, not pageX/pageY: .menu is position: fixed.
             onContextMenu={(nodes, ev) =>
               setMenu({ x: ev.clientX, y: ev.clientY, nodes })
@@ -357,7 +401,11 @@ export function CollectionPanel() {
       <Dialog
         open={newFolderParent !== undefined}
         onClose={() => setNewFolderParent(undefined)}
-        title={newFolderParent ? `New folder in ${newFolderParent.item.name}` : "New folder"}
+        title={
+          newFolderParent
+            ? `New folder in ${newFolderParent.item.name}`
+            : "New folder"
+        }
         width={380}
       >
         <Input
@@ -371,13 +419,20 @@ export function CollectionPanel() {
         />
         <div className="dialog-actions">
           <Button onClick={() => setNewFolderParent(undefined)}>Cancel</Button>
-          <Button variant="primary" onClick={submitFolder} disabled={!folderName.trim()}>
+          <Button
+            variant="primary"
+            onClick={submitFolder}
+            disabled={!folderName.trim()}
+          >
             Create
           </Button>
         </div>
       </Dialog>
 
-      <NewCollectionDialog open={newCollection} onClose={() => setNewCollection(false)} />
+      <NewCollectionDialog
+        open={newCollection}
+        onClose={() => setNewCollection(false)}
+      />
 
       {/* Keyed on the summon point plus the row set so a second right-click remounts.
           panelNodeId, not itemKey: an empty-space right-click and a collection right-click

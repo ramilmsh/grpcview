@@ -40,5 +40,9 @@ export function MethodKindTag({
   kind?: MethodKind;
   className?: string;
 }) {
-  return <span className={clsx("mtag", `mt-${kind}`, className)}>{KIND_LABEL[kind]}</span>;
+  return (
+    <span className={clsx("mtag", `mt-${kind}`, className)}>
+      {KIND_LABEL[kind]}
+    </span>
+  );
 }

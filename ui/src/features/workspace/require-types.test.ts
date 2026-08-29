@@ -18,7 +18,9 @@ describe("moduleSpecifiers", () => {
   });
 
   it("gives a module outside it only the workspace-rooted one", () => {
-    expect(moduleSpecifiers("other/scripts/x.ts", "example")).toEqual(["@/other/scripts/x"]);
+    expect(moduleSpecifiers("other/scripts/x.ts", "example")).toEqual([
+      "@/other/scripts/x",
+    ]);
   });
 
   it("treats #/ as workspace-relative for the root collection and for none", () => {
@@ -39,7 +41,7 @@ describe("requireTypesDts", () => {
   "@/example/scripts/ids": typeof import("@/example/scripts/ids");
   "@/other/scripts/x": typeof import("@/other/scripts/x");
 }
-`
+`,
     );
   });
 
@@ -47,12 +49,19 @@ describe("requireTypesDts", () => {
   // empty buffer is the normal state of a script the moment it is created.
   it("skips a file that exports nothing", () => {
     expect(
-      requireTypesDts([{ path: "example/scripts/empty.ts", content: "const x = 1;\n" }], "example")
+      requireTypesDts(
+        [{ path: "example/scripts/empty.ts", content: "const x = 1;\n" }],
+        "example",
+      ),
     ).toBeUndefined();
   });
 
   it("recognizes the other export forms", () => {
-    for (const content of ["export default 1;\n", "export * from './a';\n", "export{a};\n"]) {
+    for (const content of [
+      "export default 1;\n",
+      "export * from './a';\n",
+      "export{a};\n",
+    ]) {
       expect(requireTypesDts([{ path: "a.ts", content }], ".")).toBeDefined();
     }
   });

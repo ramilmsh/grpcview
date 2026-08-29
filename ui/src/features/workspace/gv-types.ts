@@ -14,7 +14,11 @@ import "./vendor/bufbuild-stubs";
 // Also a side-effect import (sets the global TS defaults) — baseCompilerOptions is the exported
 // base useWorkspaceModuleTypes below extends with `paths` rather than duplicating.
 import { baseCompilerOptions } from "@/features/scripts/monaco-scripts";
-import { useActiveWorkspace, useRootItems, useWorkspaceModules } from "@/lib/workspace-query";
+import {
+  useActiveWorkspace,
+  useRootItems,
+  useWorkspaceModules,
+} from "@/lib/workspace-query";
 import { collectInvokeTargets } from "./gv-requests";
 // Side-effect import (registers the auto-import completion provider) — colocated with the
 // other Monaco global setup above. setAutoImportContext is what useWorkspaceModuleTypes below
@@ -42,7 +46,7 @@ export function useGvInvokeTypes(): void {
   // Recomputed on any tree or descriptor change: a rename moves a path.
   const targets = useMemo(
     () => collectInvokeTargets(rootItems, services),
-    [rootItems, services]
+    [rootItems, services],
   );
 
   // typescriptDefaults is global and a same-path re-add throws "Duplicate definition".
@@ -52,14 +56,17 @@ export function useGvInvokeTypes(): void {
     if (!descriptorSet?.length) return;
     let cancelled = false;
     void (async () => {
-      const { generateWorkspaceTypes, gvRequestMapDts } = await import("./proto-types");
+      const { generateWorkspaceTypes, gvRequestMapDts } =
+        await import("./proto-types");
       const files = generateWorkspaceTypes(descriptorSet);
       if (cancelled) return;
       const tsDefaults = monaco.languages.typescript.typescriptDefaults;
       libs.current.forEach((d) => d.dispose());
       libs.current = [];
       for (const [path, content] of files) {
-        libs.current.push(tsDefaults.addExtraLib(content, `${GEN_PREFIX}${path}`));
+        libs.current.push(
+          tsDefaults.addExtraLib(content, `${GEN_PREFIX}${path}`),
+        );
       }
       const map = gvRequestMapDts(files, targets);
       if (map) libs.current.push(tsDefaults.addExtraLib(map, MAP_PATH));
@@ -87,7 +94,9 @@ export function useWorkspaceModuleTypes(): void {
   useEffect(() => {
     const tsDefaults = monaco.languages.typescript.typescriptDefaults;
     libs.current.forEach((d) => d.dispose());
-    libs.current = modules.map((m) => tsDefaults.addExtraLib(m.content, workspaceModuleUri(m.path)));
+    libs.current = modules.map((m) =>
+      tsDefaults.addExtraLib(m.content, workspaceModuleUri(m.path)),
+    );
     return () => {
       libs.current.forEach((d) => d.dispose());
       libs.current = [];
@@ -100,10 +109,11 @@ export function useWorkspaceModuleTypes(): void {
   useEffect(() => {
     const dts = requireTypesDts(modules, collection);
     if (!dts) return;
-    requireLib.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
-      dts,
-      MODULES_PATH
-    );
+    requireLib.current =
+      monaco.languages.typescript.typescriptDefaults.addExtraLib(
+        dts,
+        MODULES_PATH,
+      );
     return () => {
       requireLib.current?.dispose();
       requireLib.current = undefined;

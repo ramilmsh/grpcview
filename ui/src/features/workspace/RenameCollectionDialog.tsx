@@ -52,7 +52,7 @@ export function RenameCollectionDialog({
         ...(nameChanged ? { name: trimmedName } : {}),
         ...(dirChanged ? { newCollection: nextDir } : {}),
       },
-      { onSuccess: () => onClose() }
+      { onSuccess: () => onClose() },
     );
   };
 
@@ -79,18 +79,28 @@ export function RenameCollectionDialog({
           placeholder="e.g. services/payments"
         />
       </Field>
-      <span className="text-muted" style={{ fontSize: 12, marginTop: -6, lineHeight: 1.5 }}>
-        Workspace-relative. Changing it <strong>moves the directory on disk</strong>. Neither
-        the current nor the new path may be “<code>.</code>”, the workspace root.
+      <span
+        className="text-muted"
+        style={{ fontSize: 12, marginTop: -6, lineHeight: 1.5 }}
+      >
+        Workspace-relative. Changing it{" "}
+        <strong>moves the directory on disk</strong>. Neither the current nor
+        the new path may be “<code>.</code>”, the workspace root.
       </span>
 
       {update.isError && (
-        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>{update.error.message}</p>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>
+          {update.error.message}
+        </p>
       )}
 
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={submit} disabled={unchanged || update.isPending}>
+        <Button
+          variant="primary"
+          onClick={submit}
+          disabled={unchanged || update.isPending}
+        >
           {update.isPending ? "Saving…" : "Save"}
         </Button>
       </div>

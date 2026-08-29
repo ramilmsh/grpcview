@@ -1,18 +1,24 @@
 import { describe, it } from "node:test";
 import { expect } from "expect";
-import { collectionModulePrefix, workspaceModulePaths, workspaceModuleUri } from "./workspace-modules";
+import {
+  collectionModulePrefix,
+  workspaceModulePaths,
+  workspaceModuleUri,
+} from "./workspace-modules";
 
 describe("workspaceModuleUri", () => {
   it("registers a workspace-relative path under the file:///grpcview/ws prefix", () => {
     expect(workspaceModuleUri("example/scripts/uuid.ts")).toBe(
-      "file:///grpcview/ws/example/scripts/uuid.ts"
+      "file:///grpcview/ws/example/scripts/uuid.ts",
     );
   });
 });
 
 describe("collectionModulePrefix", () => {
   it("maps a nested collection id to a sub-path", () => {
-    expect(collectionModulePrefix("example")).toBe("file:///grpcview/ws/example");
+    expect(collectionModulePrefix("example")).toBe(
+      "file:///grpcview/ws/example",
+    );
   });
 
   it('maps "." (a workspace-root collection) to the workspace prefix itself, not a trailing "."', () => {

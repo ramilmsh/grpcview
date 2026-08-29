@@ -7,7 +7,10 @@ export interface KeyStroke {
 }
 
 export type TreeIntent =
-  | { kind: "move"; to: "up" | "down" | "first" | "last" | "pageUp" | "pageDown" }
+  | {
+      kind: "move";
+      to: "up" | "down" | "first" | "last" | "pageUp" | "pageDown";
+    }
   | { kind: "extend"; to: "up" | "down" }
   | { kind: "collapseOrParent" }
   | { kind: "expandOrFirstChild" }
@@ -19,22 +22,33 @@ export type TreeIntent =
   | { kind: "clearSelection" };
 
 function onlyMetaHeld(stroke: KeyStroke): boolean {
-  return stroke.metaKey && !stroke.shiftKey && !stroke.ctrlKey && !stroke.altKey;
+  return (
+    stroke.metaKey && !stroke.shiftKey && !stroke.ctrlKey && !stroke.altKey
+  );
 }
 
 function noModifiersHeld(stroke: KeyStroke): boolean {
-  return !stroke.shiftKey && !stroke.metaKey && !stroke.ctrlKey && !stroke.altKey;
+  return (
+    !stroke.shiftKey && !stroke.metaKey && !stroke.ctrlKey && !stroke.altKey
+  );
 }
 
 function onlyCtrlHeld(stroke: KeyStroke): boolean {
-  return stroke.ctrlKey && !stroke.shiftKey && !stroke.metaKey && !stroke.altKey;
+  return (
+    stroke.ctrlKey && !stroke.shiftKey && !stroke.metaKey && !stroke.altKey
+  );
 }
 
 function onlyShiftHeld(stroke: KeyStroke): boolean {
-  return stroke.shiftKey && !stroke.metaKey && !stroke.ctrlKey && !stroke.altKey;
+  return (
+    stroke.shiftKey && !stroke.metaKey && !stroke.ctrlKey && !stroke.altKey
+  );
 }
 
-export function keyToIntent(stroke: KeyStroke, isMac: boolean): TreeIntent | null {
+export function keyToIntent(
+  stroke: KeyStroke,
+  isMac: boolean,
+): TreeIntent | null {
   const { key } = stroke;
 
   // Every modified chord is resolved before the bare-key gate below, which
@@ -46,7 +60,8 @@ export function keyToIntent(stroke: KeyStroke, isMac: boolean): TreeIntent | nul
 
   // The uppercase form is reachable with caps lock, since shift is excluded.
   if (key === "a" || key === "A") {
-    if (isMac ? onlyMetaHeld(stroke) : onlyCtrlHeld(stroke)) return { kind: "selectAll" };
+    if (isMac ? onlyMetaHeld(stroke) : onlyCtrlHeld(stroke))
+      return { kind: "selectAll" };
   }
 
   if (onlyShiftHeld(stroke)) {

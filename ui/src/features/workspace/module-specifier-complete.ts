@@ -31,14 +31,14 @@ monaco.languages.registerCompletionItemProvider("typescript", {
       position.lineNumber,
       prefix.segmentOffset + 1,
       position.lineNumber,
-      position.column
+      position.column,
     );
 
     const suggestions: Monaco.languages.CompletionItem[] = specifierCompletions(
       prefix.typed,
       modules,
       collectionId,
-      currentPath
+      currentPath,
     ).map((c) => ({
       label: c.insertText,
       kind:

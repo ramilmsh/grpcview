@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Code, Folder, MagnifyingGlass, Plus, Shield } from "@/components/ui/icons";
+import {
+  Code,
+  Folder,
+  MagnifyingGlass,
+  Plus,
+  Shield,
+} from "@/components/ui/icons";
 import { IconButton } from "@/components/ui/Button";
 import type { Script } from "@grpcview/v1/workspace_pb";
 
@@ -46,20 +52,35 @@ export function ScriptSidebar({
 }) {
   const [filter, setFilter] = useState("");
   const q = filter.trim().toLowerCase();
-  const visible = q ? scripts.filter((s) => s.path.toLowerCase().includes(q)) : scripts;
+  const visible = q
+    ? scripts.filter((s) => s.path.toLowerCase().includes(q))
+    : scripts;
 
   const groups = useMemo(() => groupScripts(visible), [visible]);
 
   return (
     <div
       className="bg-panel flex flex-col"
-      style={{ width: 280, flex: "none", borderRight: "1px solid var(--line)", minHeight: 0 }}
+      style={{
+        width: 280,
+        flex: "none",
+        borderRight: "1px solid var(--line)",
+        minHeight: 0,
+      }}
     >
       <div
         className="flex items-center gap-[8px]"
-        style={{ height: 40, flex: "none", padding: "0 12px", borderBottom: "1px solid var(--line)" }}
+        style={{
+          height: 40,
+          flex: "none",
+          padding: "0 12px",
+          borderBottom: "1px solid var(--line)",
+        }}
       >
-        <MagnifyingGlass size={14} style={{ color: "var(--color-neutral-500)" }} />
+        <MagnifyingGlass
+          size={14}
+          style={{ color: "var(--color-neutral-500)" }}
+        />
         <input
           className="bare"
           style={{ fontSize: 13 }}
@@ -95,7 +116,10 @@ export function ScriptSidebar({
                   className="flex items-center gap-[6px]"
                   style={{ padding: `${i === 0 ? 2 : 14}px 6px 6px` }}
                 >
-                  <Folder size={14} style={{ color: "var(--color-neutral-500)" }} />
+                  <Folder
+                    size={14}
+                    style={{ color: "var(--color-neutral-500)" }}
+                  />
                   <span
                     className="font-mono"
                     style={{
@@ -118,10 +142,17 @@ export function ScriptSidebar({
                   onClick={() => onSelect(s.path)}
                   title={s.path}
                 >
-                  <Code size={16} style={{ color: "var(--color-accent-300)", flex: "none" }} />
+                  <Code
+                    size={16}
+                    style={{ color: "var(--color-accent-300)", flex: "none" }}
+                  />
                   <span
                     className="font-mono"
-                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
                   >
                     {splitScriptPath(s.path).label}
                   </span>
@@ -144,7 +175,8 @@ export function ScriptSidebar({
         title="QuickJS compiled to WASM, run in-process by wazero — hard memory + wall-clock bounds; filesystem and process denied, network open to every script"
       >
         <Shield size={14} />
-        QuickJS·WASM<span style={{ color: "var(--color-neutral-700)" }}>·</span>bounded
+        QuickJS·WASM<span style={{ color: "var(--color-neutral-700)" }}>·</span>
+        bounded
       </div>
     </div>
   );

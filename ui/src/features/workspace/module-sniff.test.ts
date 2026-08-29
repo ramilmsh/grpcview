@@ -20,9 +20,11 @@ describe("leadsWithBrace", () => {
   });
 
   it("is false for a module with imports", () => {
-    expect(leadsWithBrace('import { x } from "#/x";\nexport default async () => ({});')).toBe(
-      false
-    );
+    expect(
+      leadsWithBrace(
+        'import { x } from "#/x";\nexport default async () => ({});',
+      ),
+    ).toBe(false);
   });
 
   it("is false for a module with no imports", () => {
@@ -51,7 +53,9 @@ describe("isModule", () => {
 
   it("is true for a module with a leading import", () => {
     expect(
-      isModule('import { x } from "#/scripts/x";\nexport default async () => x();')
+      isModule(
+        'import { x } from "#/scripts/x";\nexport default async () => x();',
+      ),
     ).toBe(true);
   });
 
@@ -60,11 +64,15 @@ describe("isModule", () => {
   });
 
   it("is false when the only mention is inside a // comment", () => {
-    expect(isModule("// there is no export default here\n{ ok: true }")).toBe(false);
+    expect(isModule("// there is no export default here\n{ ok: true }")).toBe(
+      false,
+    );
   });
 
   it("is false when the only mention is inside a /* */ comment", () => {
-    expect(isModule("/* export default lives elsewhere */\n{ ok: true }")).toBe(false);
+    expect(isModule("/* export default lives elsewhere */\n{ ok: true }")).toBe(
+      false,
+    );
   });
 
   it("is false when the only mention is inside a multi-line block comment", () => {

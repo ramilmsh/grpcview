@@ -8,4 +8,5 @@
 
 import dayjs from "dayjs";
 
-export const stamp = (format = "YYYY-MM-DDTHH:mm:ss[Z]"): string => dayjs().format(format);
+export const stamp = (format = "YYYY-MM-DDTHH:mm:ss[Z]"): string =>
+  dayjs().format(format);

@@ -1,8 +1,8 @@
 {
-  "meta":  {
-    "name":  "Invoke (chained)"
+  "meta": {
+    "name": "Invoke (chained)"
   },
-  "service":  "grpcview.v1.WorkspaceService",
-  "method":  "Invoke",
-  "middleware":  []
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "Invoke",
+  "middleware": []
 }

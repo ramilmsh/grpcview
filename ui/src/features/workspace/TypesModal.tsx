@@ -29,7 +29,8 @@ export function TypesModal({
     let cancelled = false;
     setLoading(true);
     void (async () => {
-      const { generateWorkspaceTypes, messageTypeText } = await import("./proto-types");
+      const { generateWorkspaceTypes, messageTypeText } =
+        await import("./proto-types");
       if (cancelled) return;
       setGen({ files: generateWorkspaceTypes(descriptorSet), messageTypeText });
       setLoading(false);
@@ -62,16 +63,26 @@ type SectionState =
 
 function resolveSection(
   message: Message | undefined,
-  gen: { files: Map<string, string>; messageTypeText: ProtoTypes["messageTypeText"] }
+  gen: {
+    files: Map<string, string>;
+    messageTypeText: ProtoTypes["messageTypeText"];
+  },
 ): SectionState {
   if (!message || !message.name) return { kind: "unavailable" };
   if (message.file.startsWith("google/protobuf/")) {
     return {
       kind: "wkt",
-      fullName: message.package ? `${message.package}.${message.name}` : message.name,
+      fullName: message.package
+        ? `${message.package}.${message.name}`
+        : message.name,
     };
   }
-  const result = gen.messageTypeText(gen.files, message.package, message.name, message.file);
+  const result = gen.messageTypeText(
+    gen.files,
+    message.package,
+    message.name,
+    message.file,
+  );
   if (!result) return { kind: "unavailable" };
   const wholeFile = !result.text.trimStart().startsWith("export type");
   return { kind: "text", symbol: result.symbol, text: result.text, wholeFile };
@@ -84,7 +95,10 @@ function TypeSection({
 }: {
   label: string;
   message?: Message;
-  gen: { files: Map<string, string>; messageTypeText: ProtoTypes["messageTypeText"] };
+  gen: {
+    files: Map<string, string>;
+    messageTypeText: ProtoTypes["messageTypeText"];
+  };
 }) {
   const state = resolveSection(message, gen);
   return (
@@ -98,19 +112,24 @@ function TypeSection({
         }}
       >
         {label} —{" "}
-        <span className="font-mono" style={{ color: "var(--color-accent-300)" }}>
+        <span
+          className="font-mono"
+          style={{ color: "var(--color-accent-300)" }}
+        >
           {message?.name || "unknown"}
         </span>
       </div>
 
       {state.kind === "unavailable" && (
-        <Note>Type unavailable — this message's schema couldn't be resolved.</Note>
+        <Note>
+          Type unavailable — this message's schema couldn't be resolved.
+        </Note>
       )}
 
       {state.kind === "wkt" && (
         <Note>
-          Well-known type <span className="font-mono">{state.fullName}</span> — not generated
-          locally (common for responses, e.g.{" "}
+          Well-known type <span className="font-mono">{state.fullName}</span> —
+          not generated locally (common for responses, e.g.{" "}
           <span className="font-mono">google.protobuf.Empty</span>).
         </Note>
       )}
@@ -118,7 +137,10 @@ function TypeSection({
       {state.kind === "text" && (
         <>
           {state.wholeFile && (
-            <div className="text-muted" style={{ fontSize: 11, marginBottom: 5 }}>
+            <div
+              className="text-muted"
+              style={{ fontSize: 11, marginBottom: 5 }}
+            >
               Couldn't isolate a single type — showing the full generated file.
             </div>
           )}
@@ -147,7 +169,10 @@ function TypeSection({
 
 function Note({ children }: { children: ReactNode }) {
   return (
-    <p className="text-muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+    <p
+      className="text-muted"
+      style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}
+    >
       {children}
     </p>
   );

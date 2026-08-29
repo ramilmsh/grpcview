@@ -10,7 +10,11 @@ import {
   type MoveTarget,
 } from "./navigate";
 
-const row = (id: string, parentId: string | null = null, depth = 0): TreeRowModel<string> => ({
+const row = (
+  id: string,
+  parentId: string | null = null,
+  depth = 0,
+): TreeRowModel<string> => ({
   node: id,
   id,
   depth,
@@ -22,10 +26,16 @@ const row = (id: string, parentId: string | null = null, depth = 0): TreeRowMode
 });
 
 function flatOf(rows: TreeRowModel<string>[]): FlatTree<string> {
-  return { rows, indexById: new Map(rows.map((r, i) => [r.id, i])), defaultExpanded: [] };
+  return {
+    rows,
+    indexById: new Map(rows.map((r, i) => [r.id, i])),
+    defaultExpanded: [],
+  };
 }
 
-const TEN = flatOf(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((id) => row(id)));
+const TEN = flatOf(
+  ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((id) => row(id)),
+);
 
 describe("targetIndex: first/last", () => {
   it("first is always index 0, regardless of fromId", () => {
@@ -107,7 +117,14 @@ describe("targetIndex: pageUp/pageDown", () => {
 
 describe("targetIndex: empty tree", () => {
   const empty = flatOf([]);
-  const everyTarget: MoveTarget[] = ["first", "last", "up", "down", "pageUp", "pageDown"];
+  const everyTarget: MoveTarget[] = [
+    "first",
+    "last",
+    "up",
+    "down",
+    "pageUp",
+    "pageDown",
+  ];
 
   it("returns null for every move target, with either a null or a non-empty fromId", () => {
     for (const to of everyTarget) {
@@ -119,7 +136,11 @@ describe("targetIndex: empty tree", () => {
 
 describe("parentIndex", () => {
   it("returns the parent row's index for a nested row", () => {
-    const flat = flatOf([row("folder-a"), row("a1", "folder-a"), row("a2", "folder-a")]);
+    const flat = flatOf([
+      row("folder-a"),
+      row("a1", "folder-a"),
+      row("a2", "folder-a"),
+    ]);
     expect(parentIndex(flat, "a1")).toBe(0);
     expect(parentIndex(flat, "a2")).toBe(0);
   });
@@ -142,12 +163,21 @@ describe("parentIndex", () => {
 
 describe("firstChildIndex", () => {
   it("returns the index right after an expanded folder with visible children", () => {
-    const flat = flatOf([row("folder-a"), row("a1", "folder-a"), row("a2", "folder-a")]);
+    const flat = flatOf([
+      row("folder-a"),
+      row("a1", "folder-a"),
+      row("a2", "folder-a"),
+    ]);
     expect(firstChildIndex(flat, "folder-a")).toBe(1);
   });
 
   it("returns null for a collapsed folder — its children were never made into rows at all", () => {
-    const flat = flatOf([row("folder-a"), row("a1", "folder-a"), row("folder-b"), row("sibling-of-b")]);
+    const flat = flatOf([
+      row("folder-a"),
+      row("a1", "folder-a"),
+      row("folder-b"),
+      row("sibling-of-b"),
+    ]);
     expect(firstChildIndex(flat, "folder-b")).toBeNull();
   });
 
@@ -207,7 +237,11 @@ describe("descendantIds", () => {
   });
 
   it("returns [] for a folder with no children of its own (collapsed, or genuinely empty)", () => {
-    const flat = flatOf([row("folder-a", null, 0), row("folder-b", null, 0), row("leaf-c", null, 0)]);
+    const flat = flatOf([
+      row("folder-a", null, 0),
+      row("folder-b", null, 0),
+      row("leaf-c", null, 0),
+    ]);
     expect(descendantIds(flat, "folder-b")).toEqual([]);
   });
 

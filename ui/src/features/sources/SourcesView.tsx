@@ -65,16 +65,20 @@ export function SourcesView() {
   // the risk is invisible until it fires; here the thing that would execute is a row on this
   // screen. No bazel source means nothing in this workspace can build, and a permission
   // request for a capability nobody is using is noise that teaches users to click through.
-  const untrustedBuild = !trusted && sources.some((s) => s.source.case === "bazel");
+  const untrustedBuild =
+    !trusted && sources.some((s) => s.source.case === "bazel");
 
   const onAdd = (address: string, tls: boolean, commitDescriptors: boolean) => {
     addDescriptorSource.mutate(
       {
         collection,
-        source: { case: "reflection", value: { address, tls: tls ? {} : undefined } },
+        source: {
+          case: "reflection",
+          value: { address, tls: tls ? {} : undefined },
+        },
         commitDescriptors,
       },
-      { onSuccess: () => setModalOpen(false) }
+      { onSuccess: () => setModalOpen(false) },
     );
   };
 
@@ -82,19 +86,28 @@ export function SourcesView() {
   // picker, not a filesystem. A bazel label needs none — it knows how to produce its bytes.
   const onAddBazel = (label: string, commitDescriptors: boolean) => {
     addDescriptorSource.mutate(
-      { collection, source: { case: "bazel", value: { label } }, commitDescriptors },
-      { onSuccess: () => setModalOpen(false) }
+      {
+        collection,
+        source: { case: "bazel", value: { label } },
+        commitDescriptors,
+      },
+      { onSuccess: () => setModalOpen(false) },
     );
   };
 
   const onAddDescriptorSet = (
     bytes: Uint8Array,
     fileName: string,
-    commitDescriptors: boolean
+    commitDescriptors: boolean,
   ) => {
     addDescriptorSource.mutate(
-      { collection, source: { case: "descriptorSet", value: bytes }, fileName, commitDescriptors },
-      { onSuccess: () => setModalOpen(false) }
+      {
+        collection,
+        source: { case: "descriptorSet", value: bytes },
+        fileName,
+        commitDescriptors,
+      },
+      { onSuccess: () => setModalOpen(false) },
     );
   };
 
@@ -102,7 +115,7 @@ export function SourcesView() {
     if (!confirm) return;
     removeDescriptorSource.mutate(
       { collection, id: confirm.id },
-      { onSuccess: () => setConfirm(null) }
+      { onSuccess: () => setConfirm(null) },
     );
   };
 
@@ -134,15 +147,23 @@ export function SourcesView() {
     ].find((m) => m.isError)?.error ?? null;
 
   return (
-    <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+    <div
+      className="flex flex-col"
+      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+    >
       <div
         className="flex items-center gap-[12px]"
-        style={{ flex: "none", padding: "14px 20px", borderBottom: "1px solid var(--line)" }}
+        style={{
+          flex: "none",
+          padding: "14px 20px",
+          borderBottom: "1px solid var(--line)",
+        }}
       >
         <div>
           <h4 style={{ margin: 0 }}>Definition sources</h4>
           <span className="text-muted" style={{ fontSize: 12 }}>
-            Highest priority first — when sources share protos, the top one wins.
+            Highest priority first — when sources share protos, the top one
+            wins.
           </span>
         </div>
         <Button
@@ -159,15 +180,18 @@ export function SourcesView() {
       <div style={{ flex: 1, overflow: "auto", padding: "14px 20px" }}>
         {activeError && (
           <Banner tone="error">
-            {activeError instanceof Error ? activeError.message : "Source operation failed"}
+            {activeError instanceof Error
+              ? activeError.message
+              : "Source operation failed"}
           </Banner>
         )}
 
         {untrustedBuild && (
           <Banner tone="warn">
             <span>
-              Resolving a bazel source runs <code>bazel build</code>, which executes this
-              repo's own build code — so it is refused until you trust this workspace.
+              Resolving a bazel source runs <code>bazel build</code>, which
+              executes this repo's own build code — so it is refused until you
+              trust this workspace.
               {setWorkspaceTrust.isError && (
                 <span style={{ display: "block", color: "var(--err-fg)" }}>
                   {setWorkspaceTrust.error instanceof Error
@@ -182,15 +206,20 @@ export function SourcesView() {
               onClick={() => setWorkspaceTrust.mutate({ trusted: true })}
               disabled={setWorkspaceTrust.isPending}
             >
-              {setWorkspaceTrust.isPending ? "Trusting…" : "Trust this workspace"}
+              {setWorkspaceTrust.isPending
+                ? "Trusting…"
+                : "Trust this workspace"}
             </Button>
           </Banner>
         )}
 
         {sources.length === 0 ? (
-          <div className="text-muted" style={{ fontSize: 13, padding: "16px 0", lineHeight: 1.6 }}>
-            No definition sources yet. Add a server-reflection target, a bazel label, or
-            upload a descriptor set to load its services and schemas.
+          <div
+            className="text-muted"
+            style={{ fontSize: 13, padding: "16px 0", lineHeight: 1.6 }}
+          >
+            No definition sources yet. Add a server-reflection target, a bazel
+            label, or upload a descriptor set to load its services and schemas.
           </div>
         ) : (
           <div className="flex flex-col" style={{ gap: 8, maxWidth: 720 }}>
@@ -207,7 +236,11 @@ export function SourcesView() {
                     refreshDescriptorSource.mutate({ collection, id: src.id }),
                   onRemove: setConfirm,
                   onSetCommit: (src, commit) =>
-                    setDescriptorSourceCommit.mutate({ collection, id: src.id, commit }),
+                    setDescriptorSourceCommit.mutate({
+                      collection,
+                      id: src.id,
+                      commit,
+                    }),
                 }}
               />
             ))}
@@ -231,12 +264,17 @@ export function SourcesView() {
         width={400}
       >
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
-          Remove <strong>{confirm ? sourceLabel(confirm) : "this source"}</strong>?{" "}
+          Remove{" "}
+          <strong>{confirm ? sourceLabel(confirm) : "this source"}</strong>?{" "}
           {confirm ? removeConsequence(confirm) : ""}
         </p>
         <div className="dialog-actions">
           <Button onClick={() => setConfirm(null)}>Cancel</Button>
-          <Button variant="danger" onClick={doRemove} disabled={removeDescriptorSource.isPending}>
+          <Button
+            variant="danger"
+            onClick={doRemove}
+            disabled={removeDescriptorSource.isPending}
+          >
             {removeDescriptorSource.isPending ? "Removing…" : "Remove"}
           </Button>
         </div>

@@ -31,9 +31,19 @@ const ICON_BY_TOKEN: Record<IconToken, IconEntry> = {
 
 const DEFAULT_SIZE = 14;
 
-export function TreeIcon({ token, size }: { token: IconToken; size?: number }): ReactNode {
+export function TreeIcon({
+  token,
+  size,
+}: {
+  token: IconToken;
+  size?: number;
+}): ReactNode {
   const { Icon, weight } = ICON_BY_TOKEN[token];
   return (
-    <Icon size={size ?? DEFAULT_SIZE} weight={weight} style={{ color: "var(--color-neutral-500)" }} />
+    <Icon
+      size={size ?? DEFAULT_SIZE}
+      weight={weight}
+      style={{ color: "var(--color-neutral-500)" }}
+    />
   );
 }

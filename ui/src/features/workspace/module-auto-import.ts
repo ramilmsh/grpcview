@@ -62,7 +62,7 @@ monaco.languages.registerCompletionItemProvider("typescript", {
       position.lineNumber,
       word.startColumn,
       position.lineNumber,
-      word.endColumn
+      word.endColumn,
     );
 
     const suggestions: Monaco.languages.CompletionItem[] = [];
@@ -89,7 +89,10 @@ monaco.languages.registerCompletionItemProvider("typescript", {
           range,
           detail: `Auto-import from "${specifier}"`,
           additionalTextEdits: [
-            { range: monaco.Range.fromPositions(insertPos, insertPos), text: edit.insertText },
+            {
+              range: monaco.Range.fromPositions(insertPos, insertPos),
+              text: edit.insertText,
+            },
           ],
         });
       }

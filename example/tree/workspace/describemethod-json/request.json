@@ -1,8 +1,8 @@
 {
-  "meta":  {
-    "name":  "DescribeMethod (JSON)"
+  "meta": {
+    "name": "DescribeMethod (JSON)"
   },
-  "service":  "grpcview.v1.WorkspaceService",
-  "method":  "DescribeMethod",
-  "middleware":  []
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "DescribeMethod",
+  "middleware": []
 }

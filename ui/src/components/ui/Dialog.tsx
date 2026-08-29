@@ -35,7 +35,10 @@ export function Dialog({
         ref={cardRef}
         className="dialog"
         tabIndex={-1}
-        style={{ outline: "none", ...(width ? { width: `min(${width}px, 100%)` } : null) }}
+        style={{
+          outline: "none",
+          ...(width ? { width: `min(${width}px, 100%)` } : null),
+        }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

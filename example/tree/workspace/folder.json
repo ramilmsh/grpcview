@@ -1,8 +1,8 @@
 {
-  "meta":  {
-    "name":  "Workspace"
+  "meta": {
+    "name": "Workspace"
   },
-  "items":  [
+  "items": [
     "listcollections",
     "describemethod-json",
     "runscript-params",
@@ -11,5 +11,5 @@
     "invoke-chained",
     "streaming"
   ],
-  "draftMetadataScript":  "export default async (): Promise<Metadata> => (\n// grpcview:script start\n{\n  // Folder metadata: written once here, inherited by every request below.\n  // Everything under this folder talks to grpcview's OWN workspace server on\n  // localhost:10000 — the collection's only reflection source — so no request\n  // carries a target of its own.\n  //\n  // The region rules are the ones a request body follows: the two marker\n  // comments delimit what you edit, and there is no import block above the\n  // start marker because nothing here needs a binding.\n  \"x-demo-suite\": [\"workspace\"],\n  \"x-demo-inherited-from\": [\"Workspace folder\"],\n}\n// grpcview:script end\n)"
+  "draftMetadataScript": "export default async (): Promise<Metadata> => (\n// grpcview:script start\n{\n  // Folder metadata: written once here, inherited by every request below.\n  // Everything under this folder talks to grpcview's OWN workspace server on\n  // localhost:10000 — the collection's only reflection source — so no request\n  // carries a target of its own.\n  //\n  // The region rules are the ones a request body follows: the two marker\n  // comments delimit what you edit, and there is no import block above the\n  // start marker because nothing here needs a binding.\n  \"x-demo-suite\": [\"workspace\"],\n  \"x-demo-inherited-from\": [\"Workspace folder\"],\n}\n// grpcview:script end\n)"
 }

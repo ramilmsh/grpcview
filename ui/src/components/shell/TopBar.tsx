@@ -1,9 +1,18 @@
 import { useRef, useState } from "react";
-import { Broadcast, CaretDown, MagnifyingGlass, Gear } from "@/components/ui/icons";
+import {
+  Broadcast,
+  CaretDown,
+  MagnifyingGlass,
+  Gear,
+} from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { Menu } from "@/components/ui/Menu";
-import { useActiveWorkspace, hostLabel, useCollections } from "@/lib/workspace-query";
+import {
+  useActiveWorkspace,
+  hostLabel,
+  useCollections,
+} from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { collectionSwitcherItems } from "@/features/workspace/collection-switcher";
 import { NewCollectionDialog } from "@/features/workspace/NewCollectionDialog";
@@ -26,7 +35,11 @@ export function TopBar() {
   return (
     <div
       className="flex items-center gap-[14px] px-[14px] bg-panel"
-      style={{ height: 46, flex: "none", borderBottom: "1px solid var(--line)" }}
+      style={{
+        height: 46,
+        flex: "none",
+        borderBottom: "1px solid var(--line)",
+      }}
     >
       <div className="flex items-center gap-[9px]">
         <div
@@ -66,7 +79,9 @@ export function TopBar() {
           setMenu({ x: rect?.left ?? 0, y: (rect?.bottom ?? 0) + 4 });
         }}
       >
-        <span className="text-accent" style={{ fontSize: 13 }}>❯</span>
+        <span className="text-accent" style={{ fontSize: 13 }}>
+          ❯
+        </span>
         {collectionLabel || "No collection"}
         <CaretDown size={11} style={{ opacity: 0.5 }} />
       </Button>
@@ -120,9 +135,15 @@ export function TopBar() {
         >
           <span
             className="dot"
-            style={{ background: connected ? "var(--ok)" : "var(--color-neutral-600)" }}
+            style={{
+              background: connected ? "var(--ok)" : "var(--color-neutral-600)",
+            }}
           />
-          {connected ? hostLabel(reflection) : sources.length > 0 ? sourceCount : "no source"}
+          {connected
+            ? hostLabel(reflection)
+            : sources.length > 0
+              ? sourceCount
+              : "no source"}
         </span>
         <IconButton title="Settings — not available in Phase 1" disabled>
           <Gear />

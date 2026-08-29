@@ -1,9 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "example",
-  "items": [
-    "workspace"
-  ],
+  "items": ["workspace"],
   "sources": [
     {
       "id": "bazel://grpcview/v1:grpcviewv1_proto",

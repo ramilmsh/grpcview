@@ -6,7 +6,10 @@ export function WorkspaceView() {
   return (
     <div className="flex" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
       <CollectionPanel />
-      <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+      <div
+        className="flex flex-col"
+        style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+      >
         <RequestTabs />
         <RequestWorkspace />
       </div>

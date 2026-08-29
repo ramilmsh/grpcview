@@ -15,7 +15,10 @@ const BEATS_PER_IDLE = 3;
 // Read from the server rather than assumed, so a daemon started with a different --idle-timeout
 // retunes the tab that is holding it open.
 function intervalFor(idleMs: number): number {
-  return Math.min(MAX_INTERVAL_MS, Math.max(MIN_INTERVAL_MS, idleMs / BEATS_PER_IDLE));
+  return Math.min(
+    MAX_INTERVAL_MS,
+    Math.max(MIN_INTERVAL_MS, idleMs / BEATS_PER_IDLE),
+  );
 }
 
 // Runs for the page's lifetime and is never torn down: there is no unmount to hang a disposer on.

@@ -1,0 +1,14 @@
+# These .d.ts files are bazel-generated then copied into the source tree
+# (grpcviewv1_ts_proto.copy, AGENTS.md) — each has its own copy_test diffing it
+# byte-for-byte against a fresh, unformatted codegen run. Reformatting them here
+# would just make that test fail.
+**/*_pb.d.ts
+**/*_connect.d.ts
+**/*_connectquery.d.ts
+
+# Request bodies/metadata (AGENTS.md, request-body-contract.md): authored content that
+# round-trips byte-identical through the store, and a bare-object body is protojson —
+# valid without unquoted keys — as much as it is a TS object literal. Prettier's
+# quote-prop stripping and reflow would rewrite that content, not just its whitespace.
+**/tree/**/body.ts
+**/tree/**/metadata.ts

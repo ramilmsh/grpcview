@@ -19,12 +19,20 @@ import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
 import { TypesModal } from "./TypesModal";
 import { migrateBodyToTs } from "./body-wrapper";
-import { defaultMetadataModule, hostMetadataScript, migrateMetadataToTs } from "./metadata-wrapper";
+import {
+  defaultMetadataModule,
+  hostMetadataScript,
+  migrateMetadataToTs,
+} from "./metadata-wrapper";
 
 const DEBOUNCE_MS = 400;
 
 export function RequestWorkspace() {
-  const { collection: activeCollection, workspace, services } = useActiveWorkspace();
+  const {
+    collection: activeCollection,
+    workspace,
+    services,
+  } = useActiveWorkspace();
   // Non-null everywhere this view renders (App gates on the collection listing).
   const collection = activeCollection ?? "";
   const rootItems = useRootItems(workspace);
@@ -34,8 +42,12 @@ export function RequestWorkspace() {
   const refreshWorkspace = useRefreshWorkspace(activeCollection);
 
   const activeKey = useUIStore((s) => s.activeKey);
-  const draft = useUIStore((s) => (activeKey ? s.drafts[activeKey] : undefined));
-  const invokeState = useUIStore((s) => (activeKey ? s.invokes[activeKey] : undefined));
+  const draft = useUIStore((s) =>
+    activeKey ? s.drafts[activeKey] : undefined,
+  );
+  const invokeState = useUIStore((s) =>
+    activeKey ? s.invokes[activeKey] : undefined,
+  );
   const seedDraft = useUIStore((s) => s.seedDraft);
   const setDraft = useUIStore((s) => s.setDraft);
   const setInvoke = useUIStore((s) => s.setInvoke);
@@ -46,21 +58,26 @@ export function RequestWorkspace() {
   const failStream = useUIStore((s) => s.failStream);
   const [typesOpen, setTypesOpen] = useState(false);
 
-  const activeItem = useMemo(() => findByKey(rootItems, activeKey), [rootItems, activeKey]);
+  const activeItem = useMemo(
+    () => findByKey(rootItems, activeKey),
+    [rootItems, activeKey],
+  );
   const request =
-    activeItem?.item.content.case === "request" ? activeItem.item.content.value : null;
+    activeItem?.item.content.case === "request"
+      ? activeItem.item.content.value
+      : null;
 
   // The live default invoke target: the origin of this service's schema, else the
   // workspace's first reflection source (mirrors resolveTarget server-side).
   const requestSource = useMemo(
     () => (request ? sourceForService(workspace, request.service) : null),
-    [workspace, request]
+    [workspace, request],
   );
 
   // Where the SCHEMA came from — a different question from where the request is sent.
   const schemaSource = useMemo(
     () => (request ? schemaSourceFor(workspace, request.service) : null),
-    [workspace, request]
+    [workspace, request],
   );
 
   useEffect(() => {
@@ -68,7 +85,9 @@ export function RequestWorkspace() {
       // Migrate a legacy JSON / token / old-TS body to the canonical hidden-wrapper
       // module the editor can host. Idempotent; persisted lazily, on the next edit.
       const primary = migrateBodyToTs(request.draftBody || "{}");
-      const metadata = hostMetadataScript(request.draftMetadataScript) || defaultMetadataModule();
+      const metadata =
+        hostMetadataScript(request.draftMetadataScript) ||
+        defaultMetadataModule();
       seedDraft(activeKey, {
         body: primary,
         metadata,
@@ -79,8 +98,11 @@ export function RequestWorkspace() {
   }, [activeKey, request, seedDraft]);
 
   const activeMethod = useMemo(
-    () => (request ? resolveMethod(services, request.service, request.method) : undefined),
-    [services, request]
+    () =>
+      request
+        ? resolveMethod(services, request.service, request.method)
+        : undefined,
+    [services, request],
   );
   const kind = methodKind(activeMethod);
 
@@ -102,9 +124,12 @@ export function RequestWorkspace() {
   const body = draft?.body ?? migrateBodyToTs(request.draftBody || "{}");
   const metadata =
     draft?.metadata ??
-    (hostMetadataScript(request.draftMetadataScript) || defaultMetadataModule());
+    (hostMetadataScript(request.draftMetadataScript) ||
+      defaultMetadataModule());
   // Index 0 is always the current body, so the persisted message can't drift from it.
-  const messages = draft?.messages ? [body, ...draft.messages.slice(1)] : [body];
+  const messages = draft?.messages
+    ? [body, ...draft.messages.slice(1)]
+    : [body];
   // Undefined means "follow the reflection source" — protobuf-es omits it and the
   // backend defaults it.
   const targetOverride = draft?.target ?? request.target;
@@ -116,7 +141,7 @@ export function RequestWorkspace() {
       draftMetadataScript?: string;
       updateTarget?: boolean;
       target?: Server;
-    }
+    },
   ) => {
     const timerKey = `${key}:${slot}`;
     window.clearTimeout(timers.current[timerKey]);
@@ -194,8 +219,11 @@ export function RequestWorkspace() {
             setInvoke(key, { response: res.response });
             refreshWorkspace();
           },
-          onError: (e) => setInvoke(key, { error: e instanceof Error ? e.message : String(e) }),
-        }
+          onError: (e) =>
+            setInvoke(key, {
+              error: e instanceof Error ? e.message : String(e),
+            }),
+        },
       );
       return;
     }
@@ -225,16 +253,24 @@ export function RequestWorkspace() {
 
     void (async () => {
       try {
-        for await (const frame of streamClient.invokeStreaming(req, { signal: ac.signal })) {
+        for await (const frame of streamClient.invokeStreaming(req, {
+          signal: ac.signal,
+        })) {
           if (frame.event.case === "message") {
-            pushStreamMessage(key, { body: prettyBody(frame.event.value), at: Date.now() });
+            pushStreamMessage(key, {
+              body: prettyBody(frame.event.value),
+              at: Date.now(),
+            });
           } else if (frame.event.case === "result") {
             endStream(key, frame.event.value);
           }
         }
       } catch (e) {
         // Stop surfaces as a Canceled ConnectError: a clean close, not a failure.
-        if (ac.signal.aborted || (e instanceof ConnectError && e.code === Code.Canceled)) {
+        if (
+          ac.signal.aborted ||
+          (e instanceof ConnectError && e.code === Code.Canceled)
+        ) {
           stopStream(key);
         } else {
           failStream(key, e instanceof Error ? e.message : String(e));
@@ -271,7 +307,10 @@ export function RequestWorkspace() {
   };
 
   return (
-    <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+    <div
+      className="flex flex-col"
+      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+    >
       <MethodHeader
         request={request}
         services={services}

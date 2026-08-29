@@ -25,14 +25,22 @@ function applyLineEdit(text: string, edit: LineEdit): string {
   return text.slice(0, start) + edit.text + text.slice(end);
 }
 
-const IDS: ModuleExports = { specifier: "#/scripts/ids", names: ["requestId", "stamp"] };
-const OTHER_IDS: ModuleExports = { specifier: "@/shared/ids", names: ["requestId"] };
+const IDS: ModuleExports = {
+  specifier: "#/scripts/ids",
+  names: ["requestId", "stamp"],
+};
+const OTHER_IDS: ModuleExports = {
+  specifier: "@/shared/ids",
+  names: ["requestId"],
+};
 
 describe("unresolvedNamesIn", () => {
   it("returns [] for a document with no region", () => {
     const text = "export default async () => ({ id: requestId() });";
     const start = text.indexOf("requestId");
-    expect(unresolvedNamesIn(text, [{ start, length: 9, code: 2304 }])).toEqual([]);
+    expect(unresolvedNamesIn(text, [{ start, length: 9, code: 2304 }])).toEqual(
+      [],
+    );
   });
 
   it("keeps a 2304 span inside the region, deduped", () => {
@@ -61,7 +69,7 @@ describe("unresolvedNamesIn", () => {
       unresolvedNamesIn(text, [
         { start: headerSpan, length: 4, code: 2304 },
         { start: regionSpan, length: 9, code: 2552 },
-      ])
+      ]),
     ).toEqual([]);
   });
 });
@@ -70,7 +78,10 @@ describe("candidatesFrom", () => {
   it("maps modules to specifiers, skips the current file and appends the virtuals", () => {
     const ctx = {
       modules: [
-        { path: "coll/scripts/ids.ts", content: "export const requestId = () => 1;" },
+        {
+          path: "coll/scripts/ids.ts",
+          content: "export const requestId = () => 1;",
+        },
         { path: "coll/scripts/self.ts", content: "export const self = 1;" },
       ],
       collectionId: "coll",
@@ -96,13 +107,23 @@ describe("resolveOrBail", () => {
 
   it("is none when nothing is unresolved", () => {
     const text = buildWrapped({ skeleton: SKELETON, region: "{\n  id: 1,\n}" });
-    expect(resolveOrBail({ text, skeleton: SKELETON, unresolved: [], candidates: [IDS] })).toEqual({
+    expect(
+      resolveOrBail({
+        text,
+        skeleton: SKELETON,
+        unresolved: [],
+        candidates: [IDS],
+      }),
+    ).toEqual({
       kind: "none",
     });
   });
 
   it("adds the one import for a name exactly one module exports", () => {
-    const text = buildWrapped({ skeleton: SKELETON, region: "{\n  id: requestId(),\n}" });
+    const text = buildWrapped({
+      skeleton: SKELETON,
+      region: "{\n  id: requestId(),\n}",
+    });
     const outcome = resolveOrBail({
       text,
       skeleton: SKELETON,
@@ -117,17 +138,23 @@ describe("resolveOrBail", () => {
         imports: ['import { requestId } from "#/scripts/ids";'],
         skeleton: SKELETON,
         region: "{\n  id: requestId(),\n}",
-      })
+      }),
     );
   });
 
   it("resolves a name against a grpcview:* virtual module", () => {
-    const text = buildWrapped({ skeleton: SKELETON, region: "{\n  id: params.id,\n}" });
+    const text = buildWrapped({
+      skeleton: SKELETON,
+      region: "{\n  id: params.id,\n}",
+    });
     const outcome = resolveOrBail({
       text,
       skeleton: SKELETON,
       unresolved: ["params"],
-      candidates: candidatesFrom({ modules: [], collectionId: null }, undefined),
+      candidates: candidatesFrom(
+        { modules: [], collectionId: null },
+        undefined,
+      ),
     });
     const edits = (outcome as { edits: LineEdit[] }).edits;
     expect(applyLineEdit(text, edits[0])).toBe(
@@ -135,19 +162,22 @@ describe("resolveOrBail", () => {
         imports: ['import { params } from "grpcview:request";'],
         skeleton: SKELETON,
         region: "{\n  id: params.id,\n}",
-      })
+      }),
     );
   });
 
   it("bails when two modules export the same name", () => {
-    const text = buildWrapped({ skeleton: SKELETON, region: "{\n  id: requestId(),\n}" });
+    const text = buildWrapped({
+      skeleton: SKELETON,
+      region: "{\n  id: requestId(),\n}",
+    });
     expect(
       resolveOrBail({
         text,
         skeleton: SKELETON,
         unresolved: ["requestId"],
         candidates: [IDS, OTHER_IDS],
-      })
+      }),
     ).toEqual({ kind: "bail" });
   });
 
@@ -162,7 +192,7 @@ describe("resolveOrBail", () => {
         skeleton: SKELETON,
         unresolved: ["requestId", "nowhere"],
         candidates: [IDS],
-      })
+      }),
     ).toEqual({ kind: "bail" });
   });
 
@@ -187,7 +217,7 @@ describe("resolveOrBail", () => {
         ],
         skeleton: SKELETON,
         region: "{\n  id: invoke(),\n  at: stamp(),\n  n: requestId(),\n}",
-      })
+      }),
     );
   });
 
@@ -206,10 +236,13 @@ describe("resolveOrBail", () => {
     const edits = (outcome as { edits: LineEdit[] }).edits;
     expect(applyLineEdit(text, edits[0])).toBe(
       buildWrapped({
-        imports: ['import Foo from "other";', 'import { requestId } from "#/scripts/ids";'],
+        imports: [
+          'import Foo from "other";',
+          'import { requestId } from "#/scripts/ids";',
+        ],
         skeleton: SKELETON,
         region: "{\n  id: requestId(),\n}",
-      })
+      }),
     );
   });
 
@@ -225,7 +258,7 @@ describe("resolveOrBail", () => {
         skeleton: SKELETON,
         unresolved: ["requestId"],
         candidates: [IDS, OTHER_IDS],
-      })
+      }),
     ).toEqual({ kind: "none" });
   });
 
@@ -241,7 +274,7 @@ describe("resolveOrBail", () => {
         skeleton: SKELETON,
         unresolved: ["requestId"],
         candidates: [],
-      })
+      }),
     ).toEqual({ kind: "none" });
   });
 });

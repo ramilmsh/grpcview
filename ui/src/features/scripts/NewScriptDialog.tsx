@@ -48,7 +48,9 @@ export function NewScriptDialog({
         />
       </Field>
       {ruleError && (
-        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>{ruleError}</p>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>
+          {ruleError}
+        </p>
       )}
       {collision && (
         <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>
@@ -56,7 +58,9 @@ export function NewScriptDialog({
         </p>
       )}
       {error && !ruleError && !collision && (
-        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>{error.message}</p>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)" }}>
+          {error.message}
+        </p>
       )}
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>

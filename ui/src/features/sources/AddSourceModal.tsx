@@ -9,6 +9,7 @@ import { useBazelTargets } from "@/lib/workspace-query";
 // reported in bazel's own words — the untrusted-workspace refusal names trust as the fix and
 // a query failure names the package that broke — because none of it stops the user: the
 // field takes a typed label either way, which is what this sentence has to make obvious.
+// eslint-disable-next-line react-refresh/only-export-components
 export function bazelHint(targets: {
   labels: readonly string[];
   isPending: boolean;
@@ -17,7 +18,9 @@ export function bazelHint(targets: {
   if (targets.isPending) return "";
   if (targets.error) {
     const reason =
-      targets.error instanceof Error ? targets.error.message : "the target listing failed";
+      targets.error instanceof Error
+        ? targets.error.message
+        : "the target listing failed";
     return `Targets could not be listed, so type the label: ${reason}`;
   }
   if (targets.labels.length === 0) {
@@ -37,12 +40,16 @@ export function AddSourceModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAddReflection: (address: string, tls: boolean, commitDescriptors: boolean) => void;
+  onAddReflection: (
+    address: string,
+    tls: boolean,
+    commitDescriptors: boolean,
+  ) => void;
   onAddBazel: (label: string, commitDescriptors: boolean) => void;
   onAddDescriptorSet: (
     bytes: Uint8Array,
     fileName: string,
-    commitDescriptors: boolean
+    commitDescriptors: boolean,
   ) => void;
   pending?: boolean;
 }) {
@@ -85,11 +92,20 @@ export function AddSourceModal({
     const file = e.target.files?.[0];
     e.target.value = ""; // reset so re-selecting the same file fires onChange
     if (!file) return;
-    onAddDescriptorSet(new Uint8Array(await file.arrayBuffer()), file.name, commit);
+    onAddDescriptorSet(
+      new Uint8Array(await file.arrayBuffer()),
+      file.name,
+      commit,
+    );
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="Add definition source" width={460}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Add definition source"
+      width={460}
+    >
       <Field label="Server reflection">
         <Input
           value={address}
@@ -127,10 +143,16 @@ export function AddSourceModal({
         />
         <span
           className="text-muted"
-          style={{ display: "block", fontSize: 12, lineHeight: 1.5, marginTop: 5 }}
+          style={{
+            display: "block",
+            fontSize: 12,
+            lineHeight: 1.5,
+            marginTop: 5,
+          }}
         >
-          A label whose default outputs are descriptor sets — a plain proto_library is enough.
-          Adding or refreshing it runs bazel build, so the workspace has to be trusted.
+          A label whose default outputs are descriptor sets — a plain
+          proto_library is enough. Adding or refreshing it runs bazel build, so
+          the workspace has to be trusted.
           {targets.warning && (
             <span style={{ display: "block", color: "var(--warn)" }}>
               Some packages could not be listed: {targets.warning}
@@ -154,12 +176,16 @@ export function AddSourceModal({
         />
         <span>
           Commit its descriptors to this collection
-          <span className="text-muted" style={{ display: "block", fontSize: 12, lineHeight: 1.5 }}>
-            Any kind. The resolved descriptors land in the repo (descriptors/….json), so a
-            fresh clone resolves this source with no local state and no network — at the cost
-            of a large file in git history. Off, they are cached in local state only, which for
-            an uploaded set means a clone has no schema for it until someone uploads the file
-            again.
+          <span
+            className="text-muted"
+            style={{ display: "block", fontSize: 12, lineHeight: 1.5 }}
+          >
+            Any kind. The resolved descriptors land in the repo
+            (descriptors/….json), so a fresh clone resolves this source with no
+            local state and no network — at the cost of a large file in git
+            history. Off, they are cached in local state only, which for an
+            uploaded set means a clone has no schema for it until someone
+            uploads the file again.
           </span>
         </span>
       </label>

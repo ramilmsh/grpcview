@@ -23,7 +23,7 @@ export type PortableTreeAdapter<T> = TreeAdapter<T>;
 
 export interface TreeItemLike {
   label: string;
-  description?: string;   // dimmed trailing text
+  description?: string; // dimmed trailing text
   icon?: IconToken;
   tooltip?: string;
   kind?: string;
@@ -32,11 +32,19 @@ export interface TreeItemLike {
 // Names match VS Code's codicons, which is the point of the token layer: a portable
 // provider picks a token here and a VS Code TreeItem resolves the same name.
 export type IconToken =
-  | "folder" | "root-folder" | "file"
-  | "symbol-class" | "symbol-enum" | "symbol-field" | "symbol-method";
+  | "folder"
+  | "root-folder"
+  | "file"
+  | "symbol-class"
+  | "symbol-enum"
+  | "symbol-field"
+  | "symbol-method";
 
 export interface TreeHandle<T> {
-  reveal(id: string, opts?: { select?: boolean; focus?: boolean; expand?: boolean }): void;
+  reveal(
+    id: string,
+    opts?: { select?: boolean; focus?: boolean; expand?: boolean },
+  ): void;
   invalidate(node?: T): void;
   // No-op for an id that names no current row.
   startRename(id: string): void;
@@ -45,7 +53,7 @@ export interface TreeHandle<T> {
 export interface TreeRowState {
   focused: boolean;
   selected: boolean;
-  active: boolean;   // the row matching TreeProps.activeId
+  active: boolean; // the row matching TreeProps.activeId
   expanded: boolean;
   depth: number;
   renaming: boolean;
@@ -62,9 +70,12 @@ export interface TreeProps<T> {
   renderRow?(node: T, state: TreeRowState): ReactNode;
 
   // Controlled state — omit any pair to fall back to internal state.
-  expanded?: ReadonlySet<string>;  onExpandedChange?(next: ReadonlySet<string>): void;
-  selection?: readonly string[];   onSelectionChange?(next: readonly string[]): void;
-  focused?: string | null;         onFocusedChange?(next: string | null): void;
+  expanded?: ReadonlySet<string>;
+  onExpandedChange?(next: ReadonlySet<string>): void;
+  selection?: readonly string[];
+  onSelectionChange?(next: readonly string[]): void;
+  focused?: string | null;
+  onFocusedChange?(next: string | null): void;
 
   // Independent of selection/focus, and purely an input: the tree never changes it.
   activeId?: string | null;
@@ -77,8 +88,8 @@ export interface TreeProps<T> {
   onContextMenu?(nodes: T[], ev: React.MouseEvent): void;
   canDrop?(dragged: T[], to: { parent: T | null; before?: T }): boolean;
 
-  indent?: number;      // default 8
-  rowHeight?: number;   // default 22
+  indent?: number; // default 8
+  rowHeight?: number; // default 22
   compactFolders?: boolean;
   "aria-label"?: string;
 }

@@ -20,10 +20,11 @@ export interface MenuItem {
 
 // Moves `delta` items from `from` (null = just outside the array), skipping disabled,
 // wrapping at both ends. Null only when no item is selectable.
+// eslint-disable-next-line react-refresh/only-export-components
 export function stepMenuIndex(
   items: readonly Pick<MenuItem, "disabled">[],
   from: number | null,
-  delta: 1 | -1
+  delta: 1 | -1,
 ): number | null {
   const n = items.length;
   if (n === 0) return null;
@@ -47,7 +48,11 @@ export interface MenuPositionInput {
 
 // Places the card at the click, flipping it back over the click point on overflow,
 // then clamping into the viewport. Each axis independently.
-export function menuPosition(input: MenuPositionInput): { left: number; top: number } {
+// eslint-disable-next-line react-refresh/only-export-components
+export function menuPosition(input: MenuPositionInput): {
+  left: number;
+  top: number;
+} {
   const margin = input.margin ?? 6;
   const place = (at: number, size: number, viewport: number): number => {
     const flipped = at + size + margin > viewport ? at - size : at;
@@ -75,7 +80,7 @@ export function Menu({
   const domIdFor = (index: number): string => `${idPrefix}item-${index}`;
 
   const [highlighted, setHighlighted] = useState<number | null>(() =>
-    stepMenuIndex(items, null, 1)
+    stepMenuIndex(items, null, 1),
   );
 
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -91,7 +96,7 @@ export function Menu({
         height: rect.height,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
-      })
+      }),
     );
   }, [x, y, items.length]);
 
@@ -115,7 +120,9 @@ export function Menu({
       case "ArrowDown":
       case "ArrowUp": {
         ev.preventDefault();
-        setHighlighted((from) => stepMenuIndex(items, from, ev.key === "ArrowDown" ? 1 : -1));
+        setHighlighted((from) =>
+          stepMenuIndex(items, from, ev.key === "ArrowDown" ? 1 : -1),
+        );
         break;
       }
       case "Home":
@@ -145,7 +152,9 @@ export function Menu({
         ref={cardRef}
         className="menu"
         role="menu"
-        aria-activedescendant={highlighted !== null ? domIdFor(highlighted) : undefined}
+        aria-activedescendant={
+          highlighted !== null ? domIdFor(highlighted) : undefined
+        }
         tabIndex={-1}
         style={{ outline: "none", left: pos?.left ?? x, top: pos?.top ?? y }}
         onKeyDown={onKeyDown}
@@ -155,7 +164,9 @@ export function Menu({
       >
         {items.map((item, index) => (
           <Fragment key={item.label}>
-            {item.separatorBefore ? <div className="menusep" role="separator" /> : null}
+            {item.separatorBefore ? (
+              <div className="menusep" role="separator" />
+            ) : null}
             <button
               type="button"
               id={domIdFor(index)}
@@ -164,7 +175,7 @@ export function Menu({
               className={clsx(
                 "menuitem",
                 index === highlighted && "hl",
-                item.danger && "danger"
+                item.danger && "danger",
               )}
               aria-disabled={item.disabled ? "true" : undefined}
               onMouseEnter={() => {

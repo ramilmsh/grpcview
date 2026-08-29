@@ -42,14 +42,21 @@ export function OutputRegion({
     summaryColor = "var(--err-fg)";
   } else if (result) {
     const logs = result.logs.length ? ` · ${result.logs.length} logs` : "";
-    summary = (result.value !== undefined ? "value returned" : "no value") + logs;
-    summaryColor = result.value !== undefined ? "var(--ok)" : "var(--color-neutral-500)";
+    summary =
+      (result.value !== undefined ? "value returned" : "no value") + logs;
+    summaryColor =
+      result.value !== undefined ? "var(--ok)" : "var(--color-neutral-500)";
   }
 
   return (
     <div
       className="flex flex-col"
-      style={{ flex: "none", borderTop: "1px solid var(--line)", minHeight: 0, ...(open ? { height: 260 } : {}) }}
+      style={{
+        flex: "none",
+        borderTop: "1px solid var(--line)",
+        minHeight: 0,
+        ...(open ? { height: 260 } : {}),
+      }}
     >
       <button
         className="bg-panel flex items-center gap-[8px]"
@@ -82,7 +89,10 @@ export function OutputRegion({
         >
           Test run output
         </span>
-        <span className="font-mono ml-auto" style={{ fontSize: 11, color: summaryColor }}>
+        <span
+          className="font-mono ml-auto"
+          style={{ fontSize: 11, color: summaryColor }}
+        >
           {summary}
         </span>
       </button>
@@ -96,7 +106,11 @@ export function OutputRegion({
             background: "var(--color-bg)",
           }}
         >
-          <OutputPane result={result} connectError={connectError} pending={pending} />
+          <OutputPane
+            result={result}
+            connectError={connectError}
+            pending={pending}
+          />
         </div>
       )}
     </div>
@@ -138,7 +152,11 @@ function OutputPane({
           {error.stack && (
             <pre
               className="font-mono"
-              style={{ margin: "6px 0 0", fontSize: 12, whiteSpace: "pre-wrap" }}
+              style={{
+                margin: "6px 0 0",
+                fontSize: 12,
+                whiteSpace: "pre-wrap",
+              }}
             >
               {error.stack}
             </pre>
@@ -151,7 +169,12 @@ function OutputPane({
           ) : (
             <pre
               className="font-mono"
-              style={{ margin: 0, fontSize: 13, whiteSpace: "pre-wrap", lineHeight: 1.55 }}
+              style={{
+                margin: 0,
+                fontSize: 13,
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.55,
+              }}
             >
               {prettyValue(value)}
             </pre>
@@ -163,13 +186,27 @@ function OutputPane({
         {logs.length === 0 ? (
           <Muted>No console output.</Muted>
         ) : (
-          <div className="flex flex-col font-mono" style={{ gap: 3, fontSize: 12.5 }}>
+          <div
+            className="flex flex-col font-mono"
+            style={{ gap: 3, fontSize: 12.5 }}
+          >
             {logs.map((line, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, whiteSpace: "pre-wrap" }}>
-                <span style={{ color: "var(--color-neutral-600)", flex: "none", width: 42 }}>
+              <div
+                key={i}
+                style={{ display: "flex", gap: 8, whiteSpace: "pre-wrap" }}
+              >
+                <span
+                  style={{
+                    color: "var(--color-neutral-600)",
+                    flex: "none",
+                    width: 42,
+                  }}
+                >
                   {line.level}
                 </span>
-                <span style={{ color: LEVEL_COLOR[line.level] }}>{line.message}</span>
+                <span style={{ color: LEVEL_COLOR[line.level] }}>
+                  {line.message}
+                </span>
               </div>
             ))}
           </div>
@@ -206,7 +243,13 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ErrorBox({ title, children }: { title: string; children?: ReactNode }) {
+function ErrorBox({
+  title,
+  children,
+}: {
+  title: string;
+  children?: ReactNode;
+}) {
   return (
     <div
       style={{
@@ -227,5 +270,7 @@ function ErrorBox({ title, children }: { title: string; children?: ReactNode }) 
 }
 
 function ErrorDetail({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{children}</div>;
+  return (
+    <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{children}</div>
+  );
 }

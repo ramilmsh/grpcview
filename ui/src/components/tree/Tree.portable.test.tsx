@@ -32,8 +32,9 @@ const roots: FixtureNode[] = [
 
 const adapter: PortableTreeAdapter<FixtureNode> = {
   getId: (node) => node.id,
-  getChildren: (node) => (node === undefined ? roots : node.kids ?? []),
-  getCollapsibleState: (node) => (node.kids && node.kids.length > 0 ? "collapsed" : "none"),
+  getChildren: (node) => (node === undefined ? roots : (node.kids ?? [])),
+  getCollapsibleState: (node) =>
+    node.kids && node.kids.length > 0 ? "collapsed" : "none",
   getTreeItem: (node) => ({ label: node.label, description: node.description }),
   getTypeaheadLabel: (node) => node.label,
 };
@@ -41,10 +42,20 @@ const adapter: PortableTreeAdapter<FixtureNode> = {
 describe("Tree: portable tier", () => {
   it("renders a readable tree from getTreeItem with no renderRow supplied", () => {
     const markup = renderToStaticMarkup(
-      <Tree adapter={adapter} expanded={new Set(["folder-a"])} aria-label="Test tree" />
+      <Tree
+        adapter={adapter}
+        expanded={new Set(["folder-a"])}
+        aria-label="Test tree"
+      />,
     );
 
-    for (const label of ["Alpha", "Beta", "Charlie", "Alpha One", "Alpha Two"]) {
+    for (const label of [
+      "Alpha",
+      "Beta",
+      "Charlie",
+      "Alpha One",
+      "Alpha Two",
+    ]) {
       expect(markup).toContain(label);
     }
 
@@ -71,13 +82,11 @@ describe("Tree: portable tier", () => {
         selection={["leaf-b"]}
         focused="leaf-b"
         activeId="folder-c"
-      />
+      />,
     );
-    const rowClasses = [...markup.matchAll(/<div class="(treerow[^"]*)"/g)].map((m) => m[1]);
-    expect(rowClasses).toEqual([
-      "treerow",
-      "treerow on",
-      "treerow sel foc",
-    ]);
+    const rowClasses = [...markup.matchAll(/<div class="(treerow[^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(rowClasses).toEqual(["treerow", "treerow on", "treerow sel foc"]);
   });
 });

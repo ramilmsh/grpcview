@@ -1,10 +1,18 @@
 import { useEffect, useRef } from "react";
-import { Editor as MonacoEditor, useMonaco, type OnMount } from "@monaco-editor/react";
+import {
+  Editor as MonacoEditor,
+  useMonaco,
+  type OnMount,
+} from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
 // Side-effect import: global TS defaults. Our own TS_MODEL_URI keeps this model distinct.
 import "@/features/scripts/monaco-scripts";
-import { META_SKELETON, metaBounds as boundsOf, hiddenLineRanges } from "./metadata-wrapper";
+import {
+  META_SKELETON,
+  metaBounds as boundsOf,
+  hiddenLineRanges,
+} from "./metadata-wrapper";
 import { findRegion, type Region } from "./script-region";
 import { modeSwitchFor, unwrapEdits, wrapEdits } from "./region-edits";
 import { pruneEdits, type UnusedSpan } from "./import-block";
@@ -35,7 +43,9 @@ const UNUSED_IMPORT_CODES = new Set([6133, 6192]);
 const METADATA_TYPE_DTS = "type Metadata = { [key: string]: string[] };";
 
 // setHiddenAreas exists in monaco 0.52.2 but is stripped from the public monaco.d.ts.
-type HasHiddenAreas = { setHiddenAreas?(ranges: Monaco.IRange[], source?: unknown): void };
+type HasHiddenAreas = {
+  setHiddenAreas?(ranges: Monaco.IRange[], source?: unknown): void;
+};
 
 // monaco merges hidden areas across sources; a private tag lets us replace only ours.
 const HIDDEN_SOURCE = "grpcview-metadata-wrapper";
@@ -56,7 +66,10 @@ function hiddenRanges(model: Monaco.editor.ITextModel): Monaco.IRange[] {
 }
 
 // force: an identical re-set is skipped by monaco's cache, even after setValue reset the view.
-function applyHidden(editor: Monaco.editor.IStandaloneCodeEditor, force = false) {
+function applyHidden(
+  editor: Monaco.editor.IStandaloneCodeEditor,
+  force = false,
+) {
   const model = editor.getModel();
   const ha = editor as unknown as HasHiddenAreas;
   if (!model || typeof ha.setHiddenAreas !== "function") return;
@@ -124,7 +137,12 @@ export function MetadataEditor({
     if (editor.getModel() !== model || model.getValue() !== before) return;
     const unused: UnusedSpan[] = [];
     for (const d of diags) {
-      if (!UNUSED_IMPORT_CODES.has(d.code) || d.start == null || d.length == null) continue;
+      if (
+        !UNUSED_IMPORT_CODES.has(d.code) ||
+        d.start == null ||
+        d.length == null
+      )
+        continue;
       unused.push({ start: d.start, length: d.length, code: d.code });
     }
     const edits = pruneEdits(before, META_SKELETON, unused);
@@ -149,7 +167,8 @@ export function MetadataEditor({
     const getWorker = await m.languages.typescript.getTypeScriptWorker();
     const client = await getWorker(model.uri);
     const diags = await client.getSemanticDiagnostics(model.uri.toString());
-    if (editor.getModel() !== model || model.getValue() !== before) return false;
+    if (editor.getModel() !== model || model.getValue() !== before)
+      return false;
     const spans: NameSpan[] = [];
     for (const d of diags) {
       if (d.start == null || d.length == null) continue;
@@ -159,7 +178,10 @@ export function MetadataEditor({
       text: before,
       skeleton: META_SKELETON,
       unresolved: unresolvedNamesIn(before, spans),
-      candidates: candidatesFrom(getAutoImportContext(), workspacePathForUri(model.uri.toString())),
+      candidates: candidatesFrom(
+        getAutoImportContext(),
+        workspacePathForUri(model.uri.toString()),
+      ),
     });
     if (outcome.kind === "addImports") {
       editor.executeEdits("grpcview.resolve-imports", outcome.edits);
@@ -208,12 +230,15 @@ export function MetadataEditor({
   // to follow it.
   const setRegion = (
     editor: Monaco.editor.IStandaloneCodeEditor,
-    next: Region | undefined
+    next: Region | undefined,
   ): boolean => {
     const prev = regionRef.current;
     const same =
       prev === next ||
-      (!!prev && !!next && prev.startLine === next.startLine && prev.endLine === next.endLine);
+      (!!prev &&
+        !!next &&
+        prev.startLine === next.startLine &&
+        prev.endLine === next.endLine);
     if (same) return false;
     regionRef.current = next;
     editor.updateOptions({ lineNumbers: (n: number) => lineNumbersFor(n) });
@@ -270,7 +295,7 @@ export function MetadataEditor({
     typeLib.current?.dispose();
     typeLib.current = tsDefaults.addExtraLib(
       METADATA_TYPE_DTS,
-      "file:///grpcview/request/metadata-type.d.ts"
+      "file:///grpcview/request/metadata-type.d.ts",
     );
     return () => {
       typeLib.current?.dispose();
@@ -296,11 +321,15 @@ export function MetadataEditor({
         });
       };
       selectObject();
-      void Promise.resolve(editor.getAction("editor.action.formatSelection")?.run())
+      void Promise.resolve(
+        editor.getAction("editor.action.formatSelection")?.run(),
+      )
         .then(() => {
           // formatSelection indents one level inside the hidden `=> (`; outdent clamps at 0.
           selectObject();
-          return Promise.resolve(editor.getAction("editor.action.outdentLines")?.run());
+          return Promise.resolve(
+            editor.getAction("editor.action.outdentLines")?.run(),
+          );
         })
         .then(() => applyHidden(editor));
     });
@@ -327,7 +356,8 @@ export function MetadataEditor({
       const { first, last } = metaBounds(model);
       const atStart = sel.startLineNumber === first && sel.startColumn === 1;
       const atEnd =
-        sel.startLineNumber === last && sel.startColumn === model.getLineMaxColumn(last);
+        sel.startLineNumber === last &&
+        sel.startColumn === model.getLineMaxColumn(last);
       if (e.keyCode === m.KeyCode.Backspace && atStart) {
         e.preventDefault();
         e.stopPropagation();
@@ -371,7 +401,9 @@ export function MetadataEditor({
       const switchTo = modeSwitchFor(v);
       if (switchTo !== "none") {
         const edits =
-          switchTo === "toPlain" ? unwrapEdits(v, findRegion(v)!) : wrapEdits(v, META_SKELETON);
+          switchTo === "toPlain"
+            ? unwrapEdits(v, findRegion(v)!)
+            : wrapEdits(v, META_SKELETON);
         // Merge with the keystroke so one Cmd-Z restores the prior state. If monaco refuses, one
         // extra Cmd-Z still leaves a consistent state — text without markers, mode recomputed as
         // plain from that text — never corruption.

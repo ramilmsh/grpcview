@@ -10,7 +10,7 @@ declare global {
 
 export function registerEditorForDebug(
   uri: string,
-  editor: Monaco.editor.IStandaloneCodeEditor
+  editor: Monaco.editor.IStandaloneCodeEditor,
 ): void {
   (window.__grpcviewEditors ??= {})[uri] = editor;
 }

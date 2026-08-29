@@ -14,7 +14,12 @@ import {
   useQuery as useTanStackQuery,
   type QueryKey,
 } from "@tanstack/react-query";
-import { createClient, ConnectError, Code, type Transport } from "@connectrpc/connect";
+import {
+  createClient,
+  ConnectError,
+  Code,
+  type Transport,
+} from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { WorkspaceService } from "@grpcview/v1/service_pb";
 import {
@@ -43,7 +48,10 @@ import {
   deleteScript,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
-import type { CollectionSummary, WorkspaceModule } from "@grpcview/v1/service_pb";
+import type {
+  CollectionSummary,
+  WorkspaceModule,
+} from "@grpcview/v1/service_pb";
 import type { Collection, Server } from "@grpcview/v1/workspace_pb";
 import { rootItemsOf, type ItemWithPath } from "./format";
 import { resolveActiveCollection } from "./active-collection";
@@ -60,7 +68,7 @@ export const firstReflectionSource = (ws?: Collection): Server | null => {
 // falling back to the collection's first reflection source (upload-only services).
 export const sourceForService = (
   ws: Collection | undefined,
-  service: string
+  service: string,
 ): Server | null => {
   const svc = ws?.services.find((s) => `${s.package}.${s.name}` === service);
   return svc?.source ?? firstReflectionSource(ws);
@@ -70,10 +78,13 @@ export const sourceForService = (
 // which need not be where its traffic goes. `live` is true only for reflection.
 export const schemaSourceFor = (
   ws: Collection | undefined,
-  service: string
+  service: string,
 ): { id: string; live: boolean } | null => {
-  const winner = ws?.sources.find((s) => s.resolved?.wonServiceNames.includes(service));
-  if (winner) return { id: winner.id, live: winner.source.case === "reflection" };
+  const winner = ws?.sources.find((s) =>
+    s.resolved?.wonServiceNames.includes(service),
+  );
+  if (winner)
+    return { id: winner.id, live: winner.source.case === "reflection" };
   // Fallback for a collection whose sources predate per-source contributions.
   const dial = sourceForService(ws, service);
   return dial ? { id: `reflection:${dial.address}`, live: true } : null;
@@ -143,7 +154,10 @@ export function useCollections(): {
 // Every importable `.ts` in the workspace, as the editor's module resolution needs it (Monaco
 // registration is useWorkspaceModuleTypes, in features/workspace/gv-types.ts). Workspace-wide
 // like useCollections, so it takes no collection argument either.
-export function useWorkspaceModules(): { modules: WorkspaceModule[]; isPending: boolean } {
+export function useWorkspaceModules(): {
+  modules: WorkspaceModule[];
+  isPending: boolean;
+} {
   const query = useQuery(listWorkspaceModules, {});
   return {
     modules: query.data?.modules ?? [],
@@ -167,7 +181,8 @@ export function useActiveCollectionId(): string | null {
 export function useWorkspace(collection: string | null) {
   const query = useQuery(get, collection === null ? skipToken : { collection });
   const workspace = query.data?.collection;
-  const notFound = query.isError && ConnectError.from(query.error).code === Code.NotFound;
+  const notFound =
+    query.isError && ConnectError.from(query.error).code === Code.NotFound;
   return {
     workspace,
     services: workspace?.services ?? [],
@@ -199,7 +214,7 @@ export function useCreateCollection() {
       if (!id) return;
       qc.setQueryData(
         keyForCollection(transport, id),
-        create(GetResponseSchema, { collection: res.collection })
+        create(GetResponseSchema, { collection: res.collection }),
       );
       void qc.invalidateQueries({ queryKey: listKey });
       // A collection can be created over a directory that already holds scripts.
@@ -229,7 +244,7 @@ export function useUpdateCollection() {
       if (!id) return;
       qc.setQueryData(
         keyForCollection(transport, id),
-        create(GetResponseSchema, { collection: res.collection })
+        create(GetResponseSchema, { collection: res.collection }),
       );
       void qc.invalidateQueries({ queryKey: listKey });
       // A directory rename moves every script in it, so every module path changes with it.
@@ -247,7 +262,10 @@ export function useUpdateCollection() {
 // Keys are collection-prefixed, and the collection comes off the RESPONSE, so the tree
 // of whatever snapshot is in hand is keyed correctly with no extra argument.
 export function useRootItems(workspace?: Collection): ItemWithPath[] {
-  return useMemo(() => rootItemsOf(workspace?.item, workspace?.id ?? ""), [workspace]);
+  return useMemo(
+    () => rootItemsOf(workspace?.item, workspace?.id ?? ""),
+    [workspace],
+  );
 }
 
 // The root items of each of `ids`, one Get per collection — what the panel's collection tier
@@ -264,11 +282,13 @@ export function useRootItems(workspace?: Collection): ItemWithPath[] {
 // A collection whose Get has not landed is ABSENT from the map — which the panel renders as
 // a "Loading…" row, distinct from a collection that loaded and is empty ([]).
 export function useCollectionItems(
-  ids: readonly string[]
+  ids: readonly string[],
 ): ReadonlyMap<string, ItemWithPath[]> {
   const transport = useTransport();
   const results = useQueries({
-    queries: ids.map((id) => createQueryOptions(get, { collection: id }, { transport })),
+    queries: ids.map((id) =>
+      createQueryOptions(get, { collection: id }, { transport }),
+    ),
   });
 
   // The map's IDENTITY has to survive a render that changed nothing: usePanelTreeAdapter
@@ -282,7 +302,8 @@ export function useCollectionItems(
     map: ReadonlyMap<string, ItemWithPath[]>;
   }>();
   const signature: unknown[] = [];
-  for (const [i, id] of ids.entries()) signature.push(id, results[i]?.data?.collection);
+  for (const [i, id] of ids.entries())
+    signature.push(id, results[i]?.data?.collection);
 
   const previous = cache.current;
   if (
@@ -326,7 +347,7 @@ function useSeedGetCache() {
       if (!id) return;
       qc.setQueryData(
         keyForCollection(transport, id),
-        create(GetResponseSchema, { collection: res.collection })
+        create(GetResponseSchema, { collection: res.collection }),
       );
     },
   };
@@ -434,9 +455,11 @@ export function useRefreshWorkspace(collection: string | null) {
   return useMemo(
     () => () => {
       if (collection === null) return;
-      void qc.invalidateQueries({ queryKey: keyForCollection(transport, collection) });
+      void qc.invalidateQueries({
+        queryKey: keyForCollection(transport, collection),
+      });
     },
-    [qc, transport, collection]
+    [qc, transport, collection],
   );
 }
 

@@ -8,7 +8,11 @@ import { gvRequestMapDts } from "./proto-types";
 const COLL = ".";
 const slugify = (name: string): string => name.toLowerCase();
 
-const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWithPath => ({
+const folder = (
+  name: string,
+  path: string[],
+  children: ItemWithPath[],
+): ItemWithPath => ({
   item: {
     name,
     slug: slugify(name),
@@ -20,7 +24,12 @@ const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWit
   children,
 });
 
-const request = (name: string, path: string[], service: string, method: string): ItemWithPath => ({
+const request = (
+  name: string,
+  path: string[],
+  service: string,
+  method: string,
+): ItemWithPath => ({
   item: {
     name,
     slug: slugify(name),
@@ -31,7 +40,11 @@ const request = (name: string, path: string[], service: string, method: string):
   slugPath: path.map(slugify),
 });
 
-const message = (pkg: string, name: string, file: string) => ({ package: pkg, name, file });
+const message = (pkg: string, name: string, file: string) => ({
+  package: pkg,
+  name,
+  file,
+});
 
 const SERVICE = "fixture.Greeter";
 const services = [
@@ -43,29 +56,61 @@ const services = [
         name: "SayHello",
         clientStreaming: false,
         serverStreaming: false,
-        input: message("fixture", "SayHelloRequest", "fixture/v1/greeter.proto"),
-        output: message("fixture", "SayHelloResponse", "fixture/v1/greeter.proto"),
+        input: message(
+          "fixture",
+          "SayHelloRequest",
+          "fixture/v1/greeter.proto",
+        ),
+        output: message(
+          "fixture",
+          "SayHelloResponse",
+          "fixture/v1/greeter.proto",
+        ),
       },
       {
         name: "ListHellos",
         clientStreaming: false,
         serverStreaming: true,
-        input: message("fixture", "ListHellosRequest", "fixture/v1/greeter.proto"),
-        output: message("fixture", "ListHellosResponse", "fixture/v1/greeter.proto"),
+        input: message(
+          "fixture",
+          "ListHellosRequest",
+          "fixture/v1/greeter.proto",
+        ),
+        output: message(
+          "fixture",
+          "ListHellosResponse",
+          "fixture/v1/greeter.proto",
+        ),
       },
       {
         name: "SendHellos",
         clientStreaming: true,
         serverStreaming: false,
-        input: message("fixture", "SendHellosRequest", "fixture/v1/greeter.proto"),
-        output: message("fixture", "SendHellosResponse", "fixture/v1/greeter.proto"),
+        input: message(
+          "fixture",
+          "SendHellosRequest",
+          "fixture/v1/greeter.proto",
+        ),
+        output: message(
+          "fixture",
+          "SendHellosResponse",
+          "fixture/v1/greeter.proto",
+        ),
       },
       {
         name: "Timestamped",
         clientStreaming: false,
         serverStreaming: false,
-        input: message("fixture", "TimestampedRequest", "fixture/v1/greeter.proto"),
-        output: message("google.protobuf", "Timestamp", "google/protobuf/timestamp.proto"),
+        input: message(
+          "fixture",
+          "TimestampedRequest",
+          "fixture/v1/greeter.proto",
+        ),
+        output: message(
+          "google.protobuf",
+          "Timestamp",
+          "google/protobuf/timestamp.proto",
+        ),
       },
     ],
   },
@@ -75,10 +120,18 @@ describe("collectInvokeTargets", () => {
   it("lists unary requests by display-name path, nested folders included", () => {
     const roots = [
       request("Ping", [], SERVICE, "SayHello"),
-      folder("Calls", [], [
-        request("Hello", ["Calls"], SERVICE, "SayHello"),
-        folder("Deep", ["Calls"], [request("Nested", ["Calls", "Deep"], SERVICE, "SayHello")]),
-      ]),
+      folder(
+        "Calls",
+        [],
+        [
+          request("Hello", ["Calls"], SERVICE, "SayHello"),
+          folder(
+            "Deep",
+            ["Calls"],
+            [request("Nested", ["Calls", "Deep"], SERVICE, "SayHello")],
+          ),
+        ],
+      ),
     ];
 
     expect(collectInvokeTargets(roots, services).map((t) => t.path)).toEqual([
@@ -89,7 +142,10 @@ describe("collectInvokeTargets", () => {
   });
 
   it("carries the RESPONSE message, not the request's input", () => {
-    const targets = collectInvokeTargets([request("Ping", [], SERVICE, "SayHello")], services);
+    const targets = collectInvokeTargets(
+      [request("Ping", [], SERVICE, "SayHello")],
+      services,
+    );
     expect(targets).toEqual([
       {
         path: "Ping",
@@ -106,11 +162,18 @@ describe("collectInvokeTargets", () => {
       request("Client", [], SERVICE, "SendHellos"),
       request("Unary", [], SERVICE, "SayHello"),
     ];
-    expect(collectInvokeTargets(roots, services).map((t) => t.path)).toEqual(["Unary"]);
+    expect(collectInvokeTargets(roots, services).map((t) => t.path)).toEqual([
+      "Unary",
+    ]);
   });
 
   it("skips a request whose method is no longer in the descriptors", () => {
-    expect(collectInvokeTargets([request("Gone", [], SERVICE, "Vanished")], services)).toEqual([]);
+    expect(
+      collectInvokeTargets(
+        [request("Gone", [], SERVICE, "Vanished")],
+        services,
+      ),
+    ).toEqual([]);
   });
 
   it("skips a name containing a slash, which splitInvokePath would split elsewhere", () => {
@@ -142,10 +205,15 @@ export type SayHelloResponseJson = { greeting?: string };
 describe("gvRequestMapDts", () => {
   it("emits one GvRequestMap entry per target, importing from ./gen", () => {
     const dts = gvRequestMapDts(GEN, [
-      { path: "Calls/Hello", pkg: "fixture", name: "SayHelloResponse", file: "fixture/v1/greeter.proto" },
+      {
+        path: "Calls/Hello",
+        pkg: "fixture",
+        name: "SayHelloResponse",
+        file: "fixture/v1/greeter.proto",
+      },
     ]);
     expect(dts).toContain(
-      'import type { SayHelloResponseJson as GvResponse0 } from "./gen/fixture/v1/greeter_pb";'
+      'import type { SayHelloResponseJson as GvResponse0 } from "./gen/fixture/v1/greeter_pb";',
     );
     expect(dts).toContain('"Calls/Hello": { response: GvResponse0 };');
     expect(dts).toContain("interface GvRequestMap");
@@ -153,8 +221,18 @@ describe("gvRequestMapDts", () => {
 
   it("aliases each import so the same symbol from two files does not collide", () => {
     const dts = gvRequestMapDts(GEN, [
-      { path: "A", pkg: "fixture", name: "SayHelloResponse", file: "fixture/v1/greeter.proto" },
-      { path: "B", pkg: "other", name: "SayHelloResponse", file: "other/v1/other.proto" },
+      {
+        path: "A",
+        pkg: "fixture",
+        name: "SayHelloResponse",
+        file: "fixture/v1/greeter.proto",
+      },
+      {
+        path: "B",
+        pkg: "other",
+        name: "SayHelloResponse",
+        file: "other/v1/other.proto",
+      },
     ]);
     expect(dts).toContain("as GvResponse0");
     expect(dts).toContain("as GvResponse1");
@@ -166,8 +244,13 @@ describe("gvRequestMapDts", () => {
     expect(gvRequestMapDts(GEN, [])).toBeNull();
     expect(
       gvRequestMapDts(GEN, [
-        { path: "Unknown", pkg: "nope", name: "Nope", file: "nope/v1/nope.proto" },
-      ])
+        {
+          path: "Unknown",
+          pkg: "nope",
+          name: "Nope",
+          file: "nope/v1/nope.proto",
+        },
+      ]),
     ).toBeNull();
   });
 
@@ -180,7 +263,7 @@ describe("gvRequestMapDts", () => {
           name: "Timestamp",
           file: "google/protobuf/timestamp.proto",
         },
-      ])
+      ]),
     ).toBeNull();
   });
 });

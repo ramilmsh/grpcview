@@ -1,7 +1,10 @@
 function detectIsMac(): boolean {
   // Node 21+ ships its own global `navigator` with a host-derived userAgent and
   // platform, so the Node/Electron check has to come first.
-  if (typeof process !== "undefined" && typeof process.versions?.node === "string") {
+  if (
+    typeof process !== "undefined" &&
+    typeof process.versions?.node === "string"
+  ) {
     return process.platform === "darwin";
   }
   if (typeof navigator === "undefined") return false;

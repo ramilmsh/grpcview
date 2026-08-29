@@ -10,7 +10,10 @@ import {
   createConnectQueryKey,
 } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { listServers, stopServer } from "@grpcview/v1/service-ServerService_connectquery";
+import {
+  listServers,
+  stopServer,
+} from "@grpcview/v1/service-ServerService_connectquery";
 import type { ServerEntry } from "@grpcview/v1/service_pb";
 import { ArrowClockwise, ArrowSquareOut, Stop } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -50,7 +53,9 @@ function DaemonRow({
     >
       <span
         className="dot"
-        style={{ background: running ? "var(--ok)" : "var(--color-neutral-600)" }}
+        style={{
+          background: running ? "var(--ok)" : "var(--color-neutral-600)",
+        }}
         title={
           running
             ? "Answered just now"
@@ -77,10 +82,14 @@ function DaemonRow({
         className="font-mono truncate"
         style={{
           fontSize: 11,
-          color: running ? "var(--color-neutral-500)" : "var(--color-neutral-600)",
+          color: running
+            ? "var(--color-neutral-500)"
+            : "var(--color-neutral-600)",
           flex: "none",
         }}
-        title={running ? "port · pid · version" : "Registration outlived its process"}
+        title={
+          running ? "port · pid · version" : "Registration outlived its process"
+        }
       >
         {running
           ? `:${entry.port} · pid ${entry.pid} · ${entry.version || "dev"}`
@@ -89,10 +98,15 @@ function DaemonRow({
       {running && (
         <span
           className="font-mono truncate"
-          style={{ fontSize: 11, color: "var(--color-neutral-600)", flex: "none" }}
+          style={{
+            fontSize: 11,
+            color: "var(--color-neutral-600)",
+            flex: "none",
+          }}
           title="uptime · idle timeout"
         >
-          up {uptimeLabel(entry.startedUnix)} · {idleTimeoutLabel(entry.idleTimeout)}
+          up {uptimeLabel(entry.startedUnix)} ·{" "}
+          {idleTimeoutLabel(entry.idleTimeout)}
         </span>
       )}
       {entry.current && (
@@ -131,11 +145,17 @@ function DaemonRow({
 export function DaemonsView() {
   const transport = useTransport();
   const qc = useQueryClient();
-  const query = useQuery(listServers, {}, { refetchInterval: POLL_INTERVAL_MS });
+  const query = useQuery(
+    listServers,
+    {},
+    { refetchInterval: POLL_INTERVAL_MS },
+  );
   const stop = useMutation(stopServer);
   // The one row this page is served by, held only while its stop is pending confirmation —
   // every other row stops with no prompt.
-  const [confirmCurrent, setConfirmCurrent] = useState<ServerEntry | null>(null);
+  const [confirmCurrent, setConfirmCurrent] = useState<ServerEntry | null>(
+    null,
+  );
 
   const refresh = () => {
     void qc.invalidateQueries({
@@ -156,7 +176,7 @@ export function DaemonsView() {
           setConfirmCurrent(null);
           refresh();
         },
-      }
+      },
     );
   };
 
@@ -177,10 +197,17 @@ export function DaemonsView() {
   const rows = sortedDaemonRows(query.data?.servers ?? []);
 
   return (
-    <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+    <div
+      className="flex flex-col"
+      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+    >
       <div
         className="flex items-center gap-[12px]"
-        style={{ flex: "none", padding: "14px 20px", borderBottom: "1px solid var(--line)" }}
+        style={{
+          flex: "none",
+          padding: "14px 20px",
+          borderBottom: "1px solid var(--line)",
+        }}
       >
         <div>
           <h4 style={{ margin: 0 }}>Daemons</h4>
@@ -238,9 +265,12 @@ export function DaemonsView() {
         width={420}
       >
         <p className="dialog-body">
-          <strong>{confirmCurrent ? daemonLabel(confirmCurrent.workspaceRoot) : ""}</strong> is
-          the server answering this very page. Stopping it will disconnect this tab — the page
-          will stop working until another daemon is started for this workspace.
+          <strong>
+            {confirmCurrent ? daemonLabel(confirmCurrent.workspaceRoot) : ""}
+          </strong>{" "}
+          is the server answering this very page. Stopping it will disconnect
+          this tab — the page will stop working until another daemon is started
+          for this workspace.
         </p>
         <div className="dialog-actions">
           <Button onClick={() => setConfirmCurrent(null)}>Cancel</Button>

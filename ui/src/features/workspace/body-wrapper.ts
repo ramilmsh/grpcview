@@ -9,14 +9,23 @@
 //
 // Per D2 (docs/design/planned/script-region.md) the skeleton carries no standard imports:
 // `invoke` and `params` are ordinary auto-import candidates, not an always-on prefix.
-import { buildWrapped, findRegion, normalizeSkeleton, regionHiddenRanges, regionBounds } from "./script-region";
+import {
+  buildWrapped,
+  findRegion,
+  normalizeSkeleton,
+  regionHiddenRanges,
+  regionBounds,
+} from "./script-region";
 import { leadsWithBrace } from "./module-sniff";
 
-export const BODY_SKELETON = "export default async (): Promise<RequestMessage> => (";
+export const BODY_SKELETON =
+  "export default async (): Promise<RequestMessage> => (";
 
-export const isWrapped = (text: string): boolean => findRegion(text) !== undefined;
+export const isWrapped = (text: string): boolean =>
+  findRegion(text) !== undefined;
 
-export const wrap = (body: string): string => buildWrapped({ skeleton: BODY_SKELETON, region: body });
+export const wrap = (body: string): string =>
+  buildWrapped({ skeleton: BODY_SKELETON, region: body });
 
 // Never `wrap("")`, which serializes to `=> ()` — a JS syntax error.
 const EMPTY_BODY = "{\n  \n}";

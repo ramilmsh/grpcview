@@ -35,7 +35,9 @@ describe("normalizeCollectionPath", () => {
   });
 
   it("preserves nested paths", () => {
-    expect(normalizeCollectionPath("apps/api/requests")).toBe("apps/api/requests");
+    expect(normalizeCollectionPath("apps/api/requests")).toBe(
+      "apps/api/requests",
+    );
   });
 });
 

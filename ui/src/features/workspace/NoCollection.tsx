@@ -2,7 +2,10 @@ import { useState, type KeyboardEvent } from "react";
 import { FolderPlus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Input, Field } from "@/components/ui/Input";
-import { useActiveCollectionId, useCreateCollection } from "@/lib/workspace-query";
+import {
+  useActiveCollectionId,
+  useCreateCollection,
+} from "@/lib/workspace-query";
 import { collectionBaseName, normalizeCollectionPath } from "./collection-path";
 
 // Replaces the workspace view (and Sources/Scripts, equally meaningless without a
@@ -15,7 +18,9 @@ export function NoCollection() {
   // — there, offering to scatter grpcview.json across the repo root is a worse guess than
   // suggesting a subdirectory for it.
   const suggestedDir =
-    !activeCollection || activeCollection === "." ? "requests" : activeCollection;
+    !activeCollection || activeCollection === "."
+      ? "requests"
+      : activeCollection;
 
   const [dir, setDir] = useState(suggestedDir);
   const [name, setName] = useState("");
@@ -24,7 +29,10 @@ export function NoCollection() {
   const createCollection = useCreateCollection();
 
   const submit = () => {
-    createCollection.mutate({ collection: normalizeCollectionPath(dir), name: name.trim() });
+    createCollection.mutate({
+      collection: normalizeCollectionPath(dir),
+      name: name.trim(),
+    });
   };
 
   const onEnter = (e: KeyboardEvent) => {
@@ -34,7 +42,13 @@ export function NoCollection() {
   return (
     <div
       className="flex flex-col items-center justify-center"
-      style={{ flex: 1, minWidth: 0, gap: 14, padding: 24, textAlign: "center" }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        gap: 14,
+        padding: 24,
+        textAlign: "center",
+      }}
     >
       <div
         className="flex items-center justify-center"
@@ -49,13 +63,22 @@ export function NoCollection() {
       >
         <FolderPlus size={24} />
       </div>
-      <div style={{ fontSize: 15, color: "var(--color-neutral-200)" }}>No collection here</div>
-      <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0, maxWidth: 420 }}>
+      <div style={{ fontSize: 15, color: "var(--color-neutral-200)" }}>
+        No collection here
+      </div>
+      <p
+        className="text-muted"
+        style={{ fontSize: 13, lineHeight: 1.6, margin: 0, maxWidth: 420 }}
+      >
         This workspace has no grpcview collection at this path yet. Creating one
-        writes a <code>grpcview.json</code> and a <code>tree/</code> directory there.
+        writes a <code>grpcview.json</code> and a <code>tree/</code> directory
+        there.
       </p>
 
-      <div className="flex flex-col" style={{ gap: 12, width: "100%", maxWidth: 340, textAlign: "left" }}>
+      <div
+        className="flex flex-col"
+        style={{ gap: 12, width: "100%", maxWidth: 340, textAlign: "left" }}
+      >
         <Field label="Directory">
           <Input
             value={dir}
@@ -79,7 +102,14 @@ export function NoCollection() {
       </div>
 
       {createCollection.isError && (
-        <p style={{ margin: 0, fontSize: 12, color: "var(--err-fg)", maxWidth: 340 }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12,
+            color: "var(--err-fg)",
+            maxWidth: 340,
+          }}
+        >
           {createCollection.error.message}
         </p>
       )}

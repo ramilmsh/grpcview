@@ -12,6 +12,7 @@ import (
 
 // Not protoregistry.GlobalFiles: protoc-gen-go strips SourceCodeInfo, so it carries no
 // comments, and comments are the point here.
+//
 //go:embed descriptor_set.pb
 var descriptorSet []byte
 

@@ -13,8 +13,10 @@ import (
 	"codeberg.org/ramilmsh/grpcview/service/store"
 )
 
-const requestParamsImport = "import { params } from \"grpcview:request\";\n"
-const invokeImport = "import { invoke } from \"grpcview:invoke\";\n"
+const (
+	requestParamsImport = "import { params } from \"grpcview:request\";\n"
+	invokeImport        = "import { invoke } from \"grpcview:invoke\";\n"
+)
 
 func gvTarget(t *testing.T, w Workspace, ctx context.Context, parent []string, name, body string, port int) {
 	t.Helper()

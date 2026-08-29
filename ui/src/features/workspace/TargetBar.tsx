@@ -1,6 +1,10 @@
 import { create } from "@bufbuild/protobuf";
 import { HardDrives, LockSimple, LockSimpleOpen } from "@/components/ui/icons";
-import { ServerSchema, Server_TLSSchema, type Server } from "@grpcview/v1/workspace_pb";
+import {
+  ServerSchema,
+  Server_TLSSchema,
+  type Server,
+} from "@grpcview/v1/workspace_pb";
 
 // TargetBar shows and edits the request's invoke target (host:port + TLS).
 export function TargetBar({
@@ -28,7 +32,7 @@ export function TargetBar({
       create(ServerSchema, {
         address: patch.address ?? cur?.address ?? "",
         tls: nextTls ? create(Server_TLSSchema, {}) : undefined,
-      })
+      }),
     );
   };
 
@@ -69,7 +73,9 @@ export function TargetBar({
         type="button"
         onClick={() => emit({ tls: !tls })}
         className="ml-auto flex items-center gap-[5px]"
-        title={tls ? "TLS on — click to disable" : "insecure — click to enable TLS"}
+        title={
+          tls ? "TLS on — click to disable" : "insecure — click to enable TLS"
+        }
         style={{
           background: "transparent",
           border: "none",
@@ -81,12 +87,19 @@ export function TargetBar({
       >
         {tls ? (
           <>
-            <LockSimple weight="fill" size={13} style={{ color: "var(--ok)" }} />
+            <LockSimple
+              weight="fill"
+              size={13}
+              style={{ color: "var(--ok)" }}
+            />
             TLS
           </>
         ) : (
           <>
-            <LockSimpleOpen size={13} style={{ color: "var(--color-neutral-500)" }} />
+            <LockSimpleOpen
+              size={13}
+              style={{ color: "var(--color-neutral-500)" }}
+            />
             insecure
           </>
         )}

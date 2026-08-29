@@ -17,7 +17,7 @@ export function collectionMenuItems(
   // The tree's post-right-click selection, or empty for a click on the panel's empty space.
   nodes: readonly ItemWithPath[],
   actions: CollectionMenuActions,
-  opts: { canCreateRequest: boolean }
+  opts: { canCreateRequest: boolean },
 ): MenuItem[] {
   const batch = pruneNestedSelections(nodes);
   const deleteItem: MenuItem = {
@@ -36,7 +36,11 @@ export function collectionMenuItems(
         onSelect: () => actions.newRequest(null),
       },
       { label: "New folder", onSelect: () => actions.newFolder(null) },
-      { label: "New collection…", separatorBefore: true, onSelect: () => actions.newCollection() },
+      {
+        label: "New collection…",
+        separatorBefore: true,
+        onSelect: () => actions.newCollection(),
+      },
     ];
   }
 
@@ -48,7 +52,10 @@ export function collectionMenuItems(
   const folder = item.item.content.case === "folder";
 
   if (!folder) {
-    return [{ label: "Rename", onSelect: () => actions.startRename(item) }, deleteItem];
+    return [
+      { label: "Rename", onSelect: () => actions.startRename(item) },
+      deleteItem,
+    ];
   }
 
   return [
@@ -63,7 +70,11 @@ export function collectionMenuItems(
       separatorBefore: true,
       onSelect: () => actions.editFolderMetadata(item),
     },
-    { label: "Rename", separatorBefore: true, onSelect: () => actions.startRename(item) },
+    {
+      label: "Rename",
+      separatorBefore: true,
+      onSelect: () => actions.startRename(item),
+    },
     deleteItem,
   ];
 }

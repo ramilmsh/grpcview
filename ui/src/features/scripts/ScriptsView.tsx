@@ -31,7 +31,7 @@ export function ScriptsView() {
           setScriptSubtab("code");
           setNewOpen(false);
         },
-      }
+      },
     );
   };
 
@@ -64,7 +64,13 @@ function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
   return (
     <div
       className="flex flex-col items-center justify-center"
-      style={{ flex: 1, minWidth: 0, gap: 14, padding: 24, textAlign: "center" }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        gap: 14,
+        padding: 24,
+        textAlign: "center",
+      }}
     >
       <div
         className="flex items-center justify-center"
@@ -79,12 +85,21 @@ function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
       >
         <BracketsCurly size={24} />
       </div>
-      <div style={{ fontSize: 15, color: "var(--color-neutral-200)" }}>No script selected</div>
-      <p className="text-muted" style={{ fontSize: 13, lineHeight: 1.6, margin: 0, maxWidth: 420 }}>
-        Pick a script from the sidebar, or create one to author and test-run it. See a
-        script's Capabilities tab for what the runtime enforces.
+      <div style={{ fontSize: 15, color: "var(--color-neutral-200)" }}>
+        No script selected
+      </div>
+      <p
+        className="text-muted"
+        style={{ fontSize: 13, lineHeight: 1.6, margin: 0, maxWidth: 420 }}
+      >
+        Pick a script from the sidebar, or create one to author and test-run it.
+        See a script's Capabilities tab for what the runtime enforces.
       </p>
-      <Button variant="primary" onClick={onNew} style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}>
+      <Button
+        variant="primary"
+        onClick={onNew}
+        style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}
+      >
         <Plus size={14} />
         New script
       </Button>

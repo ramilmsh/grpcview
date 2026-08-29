@@ -1,8 +1,8 @@
 {
-  "meta":  {
-    "name":  "InvokeStreaming"
+  "meta": {
+    "name": "InvokeStreaming"
   },
-  "service":  "grpcview.v1.WorkspaceService",
-  "method":  "InvokeStreaming",
-  "middleware":  []
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "InvokeStreaming",
+  "middleware": []
 }

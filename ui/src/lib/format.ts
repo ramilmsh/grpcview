@@ -18,7 +18,7 @@ const convertToItemWithPath = (
   protoItem: Item,
   collection: string,
   parentPath: string[],
-  parentSlugPath: string[]
+  parentSlugPath: string[],
 ): ItemWithPath => {
   const result: ItemWithPath = {
     item: protoItem,
@@ -30,7 +30,7 @@ const convertToItemWithPath = (
     const childPath = [...parentPath, protoItem.name];
     const childSlugPath = [...parentSlugPath, protoItem.slug];
     result.children = protoItem.content.value.items.map((child) =>
-      convertToItemWithPath(child, collection, childPath, childSlugPath)
+      convertToItemWithPath(child, collection, childPath, childSlugPath),
     );
   }
   return result;
@@ -38,11 +38,11 @@ const convertToItemWithPath = (
 
 export const rootItemsOf = (
   rootItem: Item | undefined,
-  collection: string
+  collection: string,
 ): ItemWithPath[] => {
   if (rootItem?.content.case === "folder") {
     return rootItem.content.value.items.map((child) =>
-      convertToItemWithPath(child, collection, [], [])
+      convertToItemWithPath(child, collection, [], []),
     );
   }
   return [];
@@ -64,13 +64,13 @@ export const slugKeyIn = (
   collection: string,
   root: Item | undefined,
   path: string[],
-  name: string
+  name: string,
 ): string | null => {
   let items = root?.content.case === "folder" ? root.content.value.items : null;
   const slugs: string[] = [];
   for (const segment of path) {
     const folder = items?.find(
-      (it) => it.name === segment && it.content.case === "folder"
+      (it) => it.name === segment && it.content.case === "folder",
     );
     if (!folder || folder.content.case !== "folder") return null;
     slugs.push(folder.slug);
@@ -83,7 +83,7 @@ export const slugKeyIn = (
 
 export const findByKey = (
   items: ItemWithPath[],
-  key: string | null
+  key: string | null,
 ): ItemWithPath | null => {
   if (!key) return null;
   for (const it of items) {
@@ -100,18 +100,25 @@ export const findByKey = (
 export const childPathOf = (parent: ItemWithPath | null): string[] =>
   parent ? [...parent.path, parent.item.name] : [];
 
-const fullPathOf = (item: ItemWithPath): string[] => [...item.path, item.item.name];
+const fullPathOf = (item: ItemWithPath): string[] => [
+  ...item.path,
+  item.item.name,
+];
 
 const isStrictPrefix = (prefix: string[], full: string[]): boolean =>
-  prefix.length < full.length && prefix.every((segment, i) => segment === full[i]);
+  prefix.length < full.length &&
+  prefix.every((segment, i) => segment === full[i]);
 
 // Drops items already covered by an ancestor in the same selection, plus exact
 // duplicates — so a delete's count matches the number of independent operations.
-export const pruneNestedSelections = (items: readonly ItemWithPath[]): ItemWithPath[] => {
+export const pruneNestedSelections = (
+  items: readonly ItemWithPath[],
+): ItemWithPath[] => {
   const paths = items.map(fullPathOf);
   const kept = new Set<string>();
   return items.filter((_, i) => {
-    if (paths.some((other, j) => i !== j && isStrictPrefix(other, paths[i]))) return false;
+    if (paths.some((other, j) => i !== j && isStrictPrefix(other, paths[i])))
+      return false;
     // Joined on NUL, not "/", so a name containing a slash cannot make two
     // different paths compare equal.
     const identity = paths[i].join("\u0000");
@@ -130,7 +137,7 @@ export const serviceName = (s: Service): string =>
 export const resolveMethod = (
   services: Service[],
   service: string,
-  method: string
+  method: string,
 ): Method | undefined =>
   services
     .find((s) => serviceName(s) === service)
@@ -203,8 +210,15 @@ function elapsedLabel(totalSeconds: number, trimTrailingZero = false): string {
   const hours = Math.floor((s % 86400) / 3600);
   const minutes = Math.floor((s % 3600) / 60);
   const seconds = s % 60;
-  const pair = (coarse: number, unit: string, fine: number, fineUnit: string): string =>
-    trimTrailingZero && fine === 0 ? `${coarse}${unit}` : `${coarse}${unit} ${fine}${fineUnit}`;
+  const pair = (
+    coarse: number,
+    unit: string,
+    fine: number,
+    fineUnit: string,
+  ): string =>
+    trimTrailingZero && fine === 0
+      ? `${coarse}${unit}`
+      : `${coarse}${unit} ${fine}${fineUnit}`;
   if (days > 0) return pair(days, "d", hours, "h");
   if (hours > 0) return pair(hours, "h", minutes, "m");
   if (minutes > 0) return pair(minutes, "m", seconds, "s");
@@ -214,7 +228,10 @@ function elapsedLabel(totalSeconds: number, trimTrailingZero = false): string {
 // Wall-clock elapsed since a daemon's `started_unix` (seconds since epoch — int64 on the
 // wire, hence bigint), for the Daemons view's uptime column. `now` is a parameter (ms epoch,
 // defaulting to Date.now()) purely so a test can pin it rather than racing the clock.
-export const uptimeLabel = (startedUnix: number | bigint, now: number = Date.now()): string => {
+export const uptimeLabel = (
+  startedUnix: number | bigint,
+  now: number = Date.now(),
+): string => {
   const started = Number(startedUnix);
   if (!started) return "";
   return elapsedLabel(now / 1000 - started);
@@ -243,6 +260,6 @@ const metadataValueToString = (value: unknown): string =>
     : String(value ?? "");
 
 export const metadataEntries = (
-  md?: Record<string, unknown>
+  md?: Record<string, unknown>,
 ): Array<[string, string]> =>
   md ? Object.entries(md).map(([k, v]) => [k, metadataValueToString(v)]) : [];

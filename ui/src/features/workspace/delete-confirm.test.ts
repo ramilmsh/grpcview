@@ -46,7 +46,9 @@ describe("deleteConfirmCopy: a single item (unchanged wording from before T2)", 
 
 describe("deleteConfirmCopy: N > 1, homogeneous", () => {
   it("an all-request batch reads as 'N requests?' with no folder warning", () => {
-    expect(deleteConfirmCopy([request("Ping"), request("Pong"), request("Pang")])).toEqual({
+    expect(
+      deleteConfirmCopy([request("Ping"), request("Pong"), request("Pang")]),
+    ).toEqual({
       title: "Delete 3 requests",
       emphasis: "3 requests",
       suffix: "?",
@@ -64,15 +66,23 @@ describe("deleteConfirmCopy: N > 1, homogeneous", () => {
 
 describe("deleteConfirmCopy: N > 1, mixed folder + request selection", () => {
   it("reads as 'N items', with an explicit sentence warning that folders take their contents", () => {
-    expect(deleteConfirmCopy([folder("Calls"), request("Ping"), request("Pong")])).toEqual({
+    expect(
+      deleteConfirmCopy([folder("Calls"), request("Ping"), request("Pong")]),
+    ).toEqual({
       title: "Delete 3 items",
       emphasis: "3 items",
-      suffix: "? Folders in the selection will be deleted along with everything inside them.",
+      suffix:
+        "? Folders in the selection will be deleted along with everything inside them.",
     });
   });
 
   it("the folder-warning sentence appears even with just ONE folder among many requests", () => {
-    const copy = deleteConfirmCopy([request("A"), request("B"), request("C"), folder("D")]);
+    const copy = deleteConfirmCopy([
+      request("A"),
+      request("B"),
+      request("C"),
+      folder("D"),
+    ]);
     expect(copy.suffix).toContain("Folders in the selection will be deleted");
   });
 });

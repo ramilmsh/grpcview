@@ -10,7 +10,7 @@ import type { InvokeTarget } from "./proto-types";
 // the caller passes that collection's root items and its services.
 export function collectInvokeTargets(
   items: ItemWithPath[],
-  services: Service[]
+  services: Service[],
 ): InvokeTarget[] {
   const targets: InvokeTarget[] = [];
 

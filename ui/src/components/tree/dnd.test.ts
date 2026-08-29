@@ -31,7 +31,7 @@ const tree: Node[] = [
 
 const adapter: TreeAdapter<Node> = {
   getId: (node) => node.id,
-  getChildren: (node) => (node === undefined ? tree : node.kids ?? []),
+  getChildren: (node) => (node === undefined ? tree : (node.kids ?? [])),
   getCollapsibleState: (node) => (node.folder ? "collapsed" : "none"),
   getTreeItem: (node) => ({ label: node.id }),
   getTypeaheadLabel: (node) => node.id,
@@ -49,12 +49,16 @@ describe("zoneForOffset: a leaf splits in half", () => {
   });
 
   it("the exact midpoint belongs to the LOWER half (after)", () => {
-    expect(zoneForOffset({ rowHeight: 22, expandable: false, offsetY: 11 })).toBe("after");
+    expect(
+      zoneForOffset({ rowHeight: 22, expandable: false, offsetY: 11 }),
+    ).toBe("after");
   });
 
   it("never produces into, wherever the pointer is", () => {
     for (let offsetY = -4; offsetY <= 26; offsetY += 0.5) {
-      expect(zoneForOffset({ rowHeight: 22, expandable: false, offsetY })).not.toBe("into");
+      expect(
+        zoneForOffset({ rowHeight: 22, expandable: false, offsetY }),
+      ).not.toBe("into");
     }
   });
 });
@@ -82,7 +86,9 @@ describe("zoneForOffset: a folder splits into quarters (listView.js's getTargetS
   });
 
   it("degrades to before for a row with no measurable height", () => {
-    expect(zoneForOffset({ rowHeight: 0, expandable: true, offsetY: 0 })).toBe("before");
+    expect(zoneForOffset({ rowHeight: 0, expandable: true, offsetY: 0 })).toBe(
+      "before",
+    );
   });
 });
 
@@ -111,11 +117,19 @@ describe("nextVisibleSiblingId", () => {
 
 describe("resolveDrop: into", () => {
   it("appends inside the folder", () => {
-    expect(resolveDrop(flat, 0, "into")).toEqual({ parentId: "F1", beforeId: null, depth: 1 });
+    expect(resolveDrop(flat, 0, "into")).toEqual({
+      parentId: "F1",
+      beforeId: null,
+      depth: 1,
+    });
   });
 
   it("works for a COLLAPSED folder too — the destination need not be open", () => {
-    expect(resolveDrop(flat, 2, "into")).toEqual({ parentId: "F2", beforeId: null, depth: 2 });
+    expect(resolveDrop(flat, 2, "into")).toEqual({
+      parentId: "F2",
+      beforeId: null,
+      depth: 2,
+    });
   });
 
   it("refuses a leaf: there is no inside of a request", () => {
@@ -125,21 +139,45 @@ describe("resolveDrop: into", () => {
 
 describe("resolveDrop: before/after between rows", () => {
   it("before a row inserts ahead of it, in that row's own parent", () => {
-    expect(resolveDrop(flat, 1, "before")).toEqual({ parentId: "F1", beforeId: "r1", depth: 1 });
-    expect(resolveDrop(flat, 3, "before")).toEqual({ parentId: null, beforeId: "F3", depth: 0 });
+    expect(resolveDrop(flat, 1, "before")).toEqual({
+      parentId: "F1",
+      beforeId: "r1",
+      depth: 1,
+    });
+    expect(resolveDrop(flat, 3, "before")).toEqual({
+      parentId: null,
+      beforeId: "F3",
+      depth: 0,
+    });
   });
 
   it("after a row inserts ahead of its next visible SIBLING", () => {
-    expect(resolveDrop(flat, 1, "after")).toEqual({ parentId: "F1", beforeId: "F2", depth: 1 });
-    expect(resolveDrop(flat, 4, "after")).toEqual({ parentId: null, beforeId: "r4", depth: 0 });
+    expect(resolveDrop(flat, 1, "after")).toEqual({
+      parentId: "F1",
+      beforeId: "F2",
+      depth: 1,
+    });
+    expect(resolveDrop(flat, 4, "after")).toEqual({
+      parentId: null,
+      beforeId: "r4",
+      depth: 0,
+    });
   });
 
   it("after the last child of a folder appends inside that folder", () => {
-    expect(resolveDrop(flat, 2, "after")).toEqual({ parentId: "F1", beforeId: null, depth: 1 });
+    expect(resolveDrop(flat, 2, "after")).toEqual({
+      parentId: "F1",
+      beforeId: null,
+      depth: 1,
+    });
   });
 
   it("after the last root row appends at the collection root", () => {
-    expect(resolveDrop(flat, 5, "after")).toEqual({ parentId: null, beforeId: null, depth: 0 });
+    expect(resolveDrop(flat, 5, "after")).toEqual({
+      parentId: null,
+      beforeId: null,
+      depth: 0,
+    });
   });
 
   it("is null for an index that names no row", () => {
@@ -149,21 +187,37 @@ describe("resolveDrop: before/after between rows", () => {
 
 describe("resolveDrop: after an EXPANDED folder resolves INSIDE it, at position 0", () => {
   it("targets the folder's first child, not the folder's next sibling", () => {
-    expect(resolveDrop(flat, 0, "after")).toEqual({ parentId: "F1", beforeId: "r1", depth: 1 });
+    expect(resolveDrop(flat, 0, "after")).toEqual({
+      parentId: "F1",
+      beforeId: "r1",
+      depth: 1,
+    });
   });
 
   it("degrades to append-inside for an expanded folder with no visible children", () => {
-    expect(resolveDrop(flat, 3, "after")).toEqual({ parentId: "F3", beforeId: null, depth: 1 });
+    expect(resolveDrop(flat, 3, "after")).toEqual({
+      parentId: "F3",
+      beforeId: null,
+      depth: 1,
+    });
   });
 
   it("a COLLAPSED folder keeps the ordinary sibling reading", () => {
-    expect(resolveDrop(flat, 2, "after")).toEqual({ parentId: "F1", beforeId: null, depth: 1 });
+    expect(resolveDrop(flat, 2, "after")).toEqual({
+      parentId: "F1",
+      beforeId: null,
+      depth: 1,
+    });
   });
 });
 
 describe("draggedSubtreeIds", () => {
   it("includes each dragged row and its whole VISIBLE subtree", () => {
-    expect([...draggedSubtreeIds(flat, ["F1"])].sort()).toEqual(["F1", "F2", "r1"]);
+    expect([...draggedSubtreeIds(flat, ["F1"])].sort()).toEqual([
+      "F1",
+      "F2",
+      "r1",
+    ]);
   });
 
   it("does not reach a collapsed folder's children — they are not rows", () => {
@@ -172,38 +226,61 @@ describe("draggedSubtreeIds", () => {
   });
 
   it("unions a multi-row drag", () => {
-    expect([...draggedSubtreeIds(flat, ["r3", "F3"])].sort()).toEqual(["F3", "r3"]);
+    expect([...draggedSubtreeIds(flat, ["r3", "F3"])].sort()).toEqual([
+      "F3",
+      "r3",
+    ]);
   });
 });
 
 describe("isNoOpDrop", () => {
   it("is true for inserting a row before itself", () => {
-    expect(isNoOpDrop(flat, ["r3"], { parentId: null, beforeId: "r3", depth: 0 })).toBe(true);
+    expect(
+      isNoOpDrop(flat, ["r3"], { parentId: null, beforeId: "r3", depth: 0 }),
+    ).toBe(true);
   });
 
   it("is true for inserting a row before its own next sibling", () => {
-    expect(isNoOpDrop(flat, ["r3"], { parentId: null, beforeId: "r4", depth: 0 })).toBe(true);
+    expect(
+      isNoOpDrop(flat, ["r3"], { parentId: null, beforeId: "r4", depth: 0 }),
+    ).toBe(true);
   });
 
   it("is true for appending a row that is already the last child", () => {
-    expect(isNoOpDrop(flat, ["F2"], { parentId: "F1", beforeId: null, depth: 1 })).toBe(true);
-    expect(isNoOpDrop(flat, ["r4"], { parentId: null, beforeId: null, depth: 0 })).toBe(true);
+    expect(
+      isNoOpDrop(flat, ["F2"], { parentId: "F1", beforeId: null, depth: 1 }),
+    ).toBe(true);
+    expect(
+      isNoOpDrop(flat, ["r4"], { parentId: null, beforeId: null, depth: 0 }),
+    ).toBe(true);
   });
 
   it("is false for appending a row that is NOT already last", () => {
-    expect(isNoOpDrop(flat, ["r1"], { parentId: "F1", beforeId: null, depth: 1 })).toBe(false);
+    expect(
+      isNoOpDrop(flat, ["r1"], { parentId: "F1", beforeId: null, depth: 1 }),
+    ).toBe(false);
   });
 
   it("is false for any reparent, even to the same position index", () => {
-    expect(isNoOpDrop(flat, ["r3"], { parentId: "F1", beforeId: null, depth: 1 })).toBe(false);
+    expect(
+      isNoOpDrop(flat, ["r3"], { parentId: "F1", beforeId: null, depth: 1 }),
+    ).toBe(false);
   });
 
   it("is false for a multi-row drag, which has no unchanged position", () => {
-    expect(isNoOpDrop(flat, ["r3", "r4"], { parentId: null, beforeId: "r3", depth: 0 })).toBe(false);
+    expect(
+      isNoOpDrop(flat, ["r3", "r4"], {
+        parentId: null,
+        beforeId: "r3",
+        depth: 0,
+      }),
+    ).toBe(false);
   });
 
   it("is false for a dragged id that is no longer a row", () => {
-    expect(isNoOpDrop(flat, ["gone"], { parentId: null, beforeId: null, depth: 0 })).toBe(false);
+    expect(
+      isNoOpDrop(flat, ["gone"], { parentId: null, beforeId: null, depth: 0 }),
+    ).toBe(false);
   });
 });
 

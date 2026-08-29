@@ -21,7 +21,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className={clsx("btn", VARIANT[variant], className)}
       {...rest}
     />
-  )
+  ),
 );
 Button.displayName = "Button";
 
@@ -29,6 +29,11 @@ export const IconButton = forwardRef<
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement>
 >(({ className, type = "button", ...rest }, ref) => (
-  <button ref={ref} type={type} className={clsx("iconbtn", className)} {...rest} />
+  <button
+    ref={ref}
+    type={type}
+    className={clsx("iconbtn", className)}
+    {...rest}
+  />
 ));
 IconButton.displayName = "IconButton";

@@ -7,7 +7,7 @@
 // of leaving the user parked on whatever happened to be first.
 export function resolveActiveCollection(
   stored: string | null,
-  collections: readonly { id: string }[]
+  collections: readonly { id: string }[],
 ): string | null {
   if (stored && collections.some((c) => c.id === stored)) return stored;
   return collections[0]?.id ?? null;

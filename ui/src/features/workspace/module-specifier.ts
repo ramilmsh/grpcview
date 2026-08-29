@@ -9,7 +9,11 @@
 // (hover, go-to-definition and diagnostics on `#/scripts/ids` are all correct) while the
 // specifier itself completes to nothing but monaco's word-based suggestions. Same data source as
 // auto-import.ts: the workspace module list the frontend already holds.
-import { collectionPathPrefix, stripModuleExtension, WS_PREFIX } from "./workspace-modules";
+import {
+  collectionPathPrefix,
+  stripModuleExtension,
+  WS_PREFIX,
+} from "./workspace-modules";
 
 // The specifier's own text, as typed so far, plus where its last `/`-delimited segment starts —
 // the range a completion replaces, so accepting `scripts/` after `#/scr` does not double the
@@ -22,15 +26,21 @@ export interface SpecifierPrefix {
 // `from "…`, `import("…`, `require("…`, and the bare `import "…` side-effect form. Anchored at
 // the end of the text before the cursor, and rejecting a closing quote inside the specifier, so
 // this only ever matches an UNTERMINATED specifier the cursor is sitting in.
-const SPECIFIER_RE = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(["'])([^"'\n]*)$/;
+const SPECIFIER_RE =
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(["'])([^"'\n]*)$/;
 
-export function specifierPrefixAt(lineUntilCursor: string): SpecifierPrefix | undefined {
+export function specifierPrefixAt(
+  lineUntilCursor: string,
+): SpecifierPrefix | undefined {
   const m = SPECIFIER_RE.exec(lineUntilCursor);
   if (!m) return undefined;
   const typed = m[2];
   const start = lineUntilCursor.length - typed.length;
   const lastSlash = typed.lastIndexOf("/");
-  return { typed, segmentOffset: lastSlash === -1 ? start : start + lastSlash + 1 };
+  return {
+    typed,
+    segmentOffset: lastSlash === -1 ? start : start + lastSlash + 1,
+  };
 }
 
 export interface SpecifierCompletion {
@@ -54,7 +64,7 @@ export function specifierCompletions(
   typed: string,
   modules: readonly { path: string }[],
   collectionId: string | null | undefined,
-  currentPath: string | undefined
+  currentPath: string | undefined,
 ): SpecifierCompletion[] {
   if (typed === "" || typed === "@" || typed === "#") {
     const sigils: SpecifierCompletion[] = [
@@ -82,7 +92,11 @@ export function specifierCompletions(
     const segment = rel.slice(dir.length);
     const slash = segment.indexOf("/");
     if (slash === -1) {
-      out.push({ insertText: segment, kind: "module", specifier: `${sigil}${rel}` });
+      out.push({
+        insertText: segment,
+        kind: "module",
+        specifier: `${sigil}${rel}`,
+      });
       continue;
     }
     const folder = segment.slice(0, slash);

@@ -36,8 +36,10 @@ export function useTreeState<T>(props: TreeProps<T>): TreeState<T> {
   const selectionControlled = selectionProp !== undefined;
   const focusedControlled = focusedProp !== undefined;
 
-  const [internalExpanded, setInternalExpanded] = useState<ReadonlySet<string>>(EMPTY_EXPANDED);
-  const [internalSelection, setInternalSelection] = useState<readonly string[]>(EMPTY_SELECTION);
+  const [internalExpanded, setInternalExpanded] =
+    useState<ReadonlySet<string>>(EMPTY_EXPANDED);
+  const [internalSelection, setInternalSelection] =
+    useState<readonly string[]>(EMPTY_SELECTION);
   const [internalFocused, setInternalFocused] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<string | null>(null);
 
@@ -68,7 +70,7 @@ export function useTreeState<T>(props: TreeProps<T>): TreeState<T> {
   const seenDefaults = useRef<Set<string>>(new Set());
   const { flat, seeded } = useMemo(
     () => resolveExpansion(adapter, expanded, seenDefaults.current),
-    [adapter, expanded]
+    [adapter, expanded],
   );
 
   useEffect(() => {
@@ -81,5 +83,15 @@ export function useTreeState<T>(props: TreeProps<T>): TreeState<T> {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seeded]);
 
-  return { flat, expanded, setExpanded, selection, setSelection, focused, setFocused, anchor, setAnchor };
+  return {
+    flat,
+    expanded,
+    setExpanded,
+    selection,
+    setSelection,
+    focused,
+    setFocused,
+    anchor,
+    setAnchor,
+  };
 }

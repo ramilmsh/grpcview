@@ -39,7 +39,10 @@ describe("daemonLabel", () => {
 
 describe("sortedDaemonRows", () => {
   it("orders by workspace root and does not mutate its input", () => {
-    const rows = [entry({ workspaceRoot: "/b" }), entry({ workspaceRoot: "/a" })];
+    const rows = [
+      entry({ workspaceRoot: "/b" }),
+      entry({ workspaceRoot: "/a" }),
+    ];
     const sorted = sortedDaemonRows(rows);
     expect(sorted.map((r) => r.workspaceRoot)).toEqual(["/a", "/b"]);
     expect(rows.map((r) => r.workspaceRoot)).toEqual(["/b", "/a"]);

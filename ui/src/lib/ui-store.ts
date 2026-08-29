@@ -13,10 +13,13 @@ export type ActiveView = "workspace" | "sources" | "scripts" | "daemons";
 const COLLECTION_STORAGE_KEY = "grpcview.collection";
 
 const readStoredCollection = (): string | null =>
-  typeof localStorage === "undefined" ? null : localStorage.getItem(COLLECTION_STORAGE_KEY);
+  typeof localStorage === "undefined"
+    ? null
+    : localStorage.getItem(COLLECTION_STORAGE_KEY);
 
 const writeStoredCollection = (id: string): void => {
-  if (typeof localStorage !== "undefined") localStorage.setItem(COLLECTION_STORAGE_KEY, id);
+  if (typeof localStorage !== "undefined")
+    localStorage.setItem(COLLECTION_STORAGE_KEY, id);
 };
 
 export interface OpenTab {
@@ -73,7 +76,7 @@ interface KeyedSlices {
 function remapKeyedState(
   s: KeyedSlices,
   oldKey: string,
-  newKey: string
+  newKey: string,
 ): Partial<KeyedSlices> {
   if (oldKey === newKey) return {};
   const prefix = `${oldKey}/`;
@@ -84,7 +87,9 @@ function remapKeyedState(
     if (key.startsWith(prefix)) return newKey + key.slice(oldKey.length);
     return null;
   };
-  const rekey = <T,>(m: Record<string, T | undefined>): Record<string, T | undefined> => {
+  const rekey = <T>(
+    m: Record<string, T | undefined>,
+  ): Record<string, T | undefined> => {
     let changed = false;
     const out: Record<string, T | undefined> = {};
     for (const [key, value] of Object.entries(m)) {
@@ -111,7 +116,7 @@ function remapKeyedState(
     return changed ? next : ids;
   };
   const rekeyOne = (key: string | null): string | null =>
-    key === null ? null : remap(key) ?? key;
+    key === null ? null : (remap(key) ?? key);
 
   let tabsChanged = false;
   const openTabs = s.openTabs.map((t) => {
@@ -235,7 +240,11 @@ export const useUIStore = create<UIState>()((set) => ({
     writeStoredCollection(item.collection);
     set((s) => {
       const exists = s.openTabs.some((t) => t.key === key);
-      const tab: OpenTab = { key, name: item.item.name, collection: item.collection };
+      const tab: OpenTab = {
+        key,
+        name: item.item.name,
+        collection: item.collection,
+      };
       return {
         openTabs: exists ? s.openTabs : [...s.openTabs, tab],
         activeKey: key,
@@ -266,14 +275,16 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ activeKey, activeCollection: collection });
   },
 
-  moveSubtree: (oldKey, newKey) => set((s) => remapKeyedState(s, oldKey, newKey)),
+  moveSubtree: (oldKey, newKey) =>
+    set((s) => remapKeyedState(s, oldKey, newKey)),
 
   renameCollection: (oldId, newId) => {
     if (oldId === newId) return;
     writeStoredCollection(newId);
     set((s) => {
       const patch = remapKeyedState(s, oldId, newId);
-      let tabsChanged = patch.openTabs !== undefined && patch.openTabs !== s.openTabs;
+      let tabsChanged =
+        patch.openTabs !== undefined && patch.openTabs !== s.openTabs;
       const openTabs = (patch.openTabs ?? s.openTabs).map((t) => {
         if (t.collection !== oldId) return t;
         tabsChanged = true;
@@ -292,7 +303,9 @@ export const useUIStore = create<UIState>()((set) => ({
   setTreeFocused: (treeFocused) => set({ treeFocused }),
 
   seedDraft: (key, draft) =>
-    set((s) => (s.drafts[key] ? {} : { drafts: { ...s.drafts, [key]: draft } })),
+    set((s) =>
+      s.drafts[key] ? {} : { drafts: { ...s.drafts, [key]: draft } },
+    ),
 
   setDraft: (key, patch) =>
     set((s) => {
@@ -315,14 +328,21 @@ export const useUIStore = create<UIState>()((set) => ({
       return {
         invokes: {
           ...s.invokes,
-          [key]: { ...prev, streaming: true, messages: [...(prev?.messages ?? []), msg] },
+          [key]: {
+            ...prev,
+            streaming: true,
+            messages: [...(prev?.messages ?? []), msg],
+          },
         },
       };
     }),
 
   endStream: (key, response) =>
     set((s) => ({
-      invokes: { ...s.invokes, [key]: { ...s.invokes[key], streaming: false, response } },
+      invokes: {
+        ...s.invokes,
+        [key]: { ...s.invokes[key], streaming: false, response },
+      },
     })),
 
   stopStream: (key) =>
@@ -332,7 +352,10 @@ export const useUIStore = create<UIState>()((set) => ({
 
   failStream: (key, error) =>
     set((s) => ({
-      invokes: { ...s.invokes, [key]: { ...s.invokes[key], streaming: false, error } },
+      invokes: {
+        ...s.invokes,
+        [key]: { ...s.invokes[key], streaming: false, error },
+      },
     })),
 
   setRequestSubtab: (requestSubtab) => set({ requestSubtab }),
@@ -345,7 +368,7 @@ export const useUIStore = create<UIState>()((set) => ({
     set((s) =>
       s.scriptDrafts[name] !== undefined
         ? {}
-        : { scriptDrafts: { ...s.scriptDrafts, [name]: source } }
+        : { scriptDrafts: { ...s.scriptDrafts, [name]: source } },
     ),
 
   setScriptDraft: (name, source) =>
@@ -361,7 +384,8 @@ export const useUIStore = create<UIState>()((set) => ({
         if (moved !== undefined) scriptDrafts[newName] = moved;
       }
       return {
-        selectedScript: s.selectedScript === oldName ? newName : s.selectedScript,
+        selectedScript:
+          s.selectedScript === oldName ? newName : s.selectedScript,
         scriptDrafts,
       };
     }),

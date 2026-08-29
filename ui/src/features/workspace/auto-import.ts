@@ -18,19 +18,22 @@ import { regionHeader } from "./script-region";
 // Declarations that create a name in a module's OWN scope: found lines are scanned regardless of
 // whether they carry `export`, because a name declared but not exported still shadows an
 // auto-import candidate of the same name.
-const DECL_RE = /^[ \t]*(?:export\s+)?(?:async\s+)?(?:function\*?|class)\s+(\w+)/gm;
+const DECL_RE =
+  /^[ \t]*(?:export\s+)?(?:async\s+)?(?:function\*?|class)\s+(\w+)/gm;
 const VAR_DECL_RE = /^[ \t]*(?:export\s+)?(?:const|let|var)\s+(\w+)/gm;
 
 // `export function`/`export class`/`export const` — deliberately excludes `export default …`:
 // a default export has no name to bind at the import site (the caller picks its own local name),
 // so there is no single specifier-relative label to offer as a completion for it.
-const EXPORT_DECL_RE = /^[ \t]*export\s+(?:async\s+)?(?:function\*?|class)\s+(\w+)/gm;
+const EXPORT_DECL_RE =
+  /^[ \t]*export\s+(?:async\s+)?(?:function\*?|class)\s+(\w+)/gm;
 const EXPORT_VAR_RE = /^[ \t]*export\s+(?:const|let|var)\s+(\w+)/gm;
 // `export { a, b as c };` — a local re-export list. `export { x as default }` is excluded for
 // the same reason as `export default` above.
 const EXPORT_LIST_RE = /^[ \t]*export\s*\{([^}]*)\}/gm;
 
-const IMPORT_DEFAULT_RE = /\bimport\s+(\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']/g;
+const IMPORT_DEFAULT_RE =
+  /\bimport\s+(\w+)\s*(?:,\s*\{[^}]*\})?\s*from\s*["']/g;
 const IMPORT_NAMESPACE_RE = /\bimport\s*\*\s*as\s+(\w+)\s*from\s*["']/g;
 // Named import list — matched independent of a preceding default binding (which
 // IMPORT_DEFAULT_RE already captures), on the reasoning already used elsewhere in this track:
@@ -97,10 +100,11 @@ export function namesAlreadyInScope(source: string): Set<string> {
 // is the fallback, including for a workspace-root collection where the two are identical.
 export function importSpecifierFor(
   modulePath: string,
-  collectionId: string | null | undefined
+  collectionId: string | null | undefined,
 ): string {
   const withoutExt = modulePath.replace(/\.tsx?$/, "");
-  const prefix = !collectionId || collectionId === "." ? "" : `${collectionId}/`;
+  const prefix =
+    !collectionId || collectionId === "." ? "" : `${collectionId}/`;
   if (prefix === "" || withoutExt.startsWith(prefix)) {
     return `#/${withoutExt.slice(prefix.length)}`;
   }
@@ -123,7 +127,11 @@ export interface ImportInsertion {
 // region's expression sits, so a wrapped document's import block must live strictly above the
 // marker; scanning the whole source could splice one into the region and produce a hard parse
 // error. regionHeader is a prefix of `source`, so offsets found within it still index correctly.
-export function insertImportEdit(source: string, name: string, specifier: string): ImportInsertion {
+export function insertImportEdit(
+  source: string,
+  name: string,
+  specifier: string,
+): ImportInsertion {
   const header = regionHeader(source);
   const masked = maskLiterals(header);
   const importLineRe = /^[ \t]*import\b.*$/gm;

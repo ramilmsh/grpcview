@@ -56,7 +56,8 @@ export function maskLiterals(source: string): string {
 
 // isModule reports whether `source` is already a module (carries its own default export) rather
 // than a bare expression that still needs wrapping.
-export const isModule = (source: string): boolean => EXPORT_DEFAULT_RE.test(maskLiterals(source));
+export const isModule = (source: string): boolean =>
+  EXPORT_DEFAULT_RE.test(maskLiterals(source));
 
 // leadsWithBrace reports whether the first token of `source` — skipping whitespace and leading
 // comments — is `{`. This, not isModule, is what decides whether a body/metadata script gets the
@@ -77,7 +78,8 @@ export const leadsWithBrace = (source: string): boolean => {
       while (i < source.length && source[i] !== "\n") i++;
     } else if (c === "/" && source[i + 1] === "*") {
       i += 2;
-      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i++;
+      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/"))
+        i++;
       i += 2;
     } else {
       return c === "{";

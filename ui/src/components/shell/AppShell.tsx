@@ -7,7 +7,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div
       className="flex flex-col bg-bg text-text"
-      style={{ height: "100vh", overflow: "hidden", fontFamily: "var(--font-body)" }}
+      style={{
+        height: "100vh",
+        overflow: "hidden",
+        fontFamily: "var(--font-body)",
+      }}
     >
       <TopBar />
       {/* minWidth:0 all the way down: without it a flex row sizes to its widest

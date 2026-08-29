@@ -8,7 +8,12 @@ import {
   migrateBodyToTs,
   wrap,
 } from "./body-wrapper";
-import { buildWrapped, END_MARKER, findRegion, START_MARKER } from "./script-region";
+import {
+  buildWrapped,
+  END_MARKER,
+  findRegion,
+  START_MARKER,
+} from "./script-region";
 
 const MODULE_WITH_IMPORTS = [
   'import { requestId } from "#/scripts/ids";',
@@ -18,7 +23,11 @@ const MODULE_WITH_IMPORTS = [
   "});",
 ].join("\n");
 
-const MODULE_NO_IMPORTS = ["export default async () => ({", "  ok: true,", "});"].join("\n");
+const MODULE_NO_IMPORTS = [
+  "export default async () => ({",
+  "  ok: true,",
+  "});",
+].join("\n");
 
 // The regression fixture: example/tree/workspace/runscript-generators/body.ts — a module whose
 // own `export default async (): Promise<RequestMessage> => (` line reads like the wrapper's, and
@@ -31,7 +40,7 @@ const RUNSCRIPT_GENERATORS_BODY = [
   "export default async (): Promise<RequestMessage> => (",
   "{",
   '  collection: "example",',
-  "  source: JSON.stringify(`${requestId(\"gv\")} at ${stamp()}`),",
+  '  source: JSON.stringify(`${requestId("gv")} at ${stamp()}`),',
   "}",
   ")",
 ].join("\n");
@@ -152,7 +161,8 @@ describe("migrateBodyToTs", () => {
     empty: "",
     "empty object": "{}",
     "comment mentioning export default": MODULE_WITH_COMMENT_MENTION,
-    "block comment mentioning export default": MODULE_WITH_BLOCK_COMMENT_MENTION,
+    "block comment mentioning export default":
+      MODULE_WITH_BLOCK_COMMENT_MENTION,
   })) {
     it(`is idempotent for: ${name}`, () => {
       const once = migrateBodyToTs(body);

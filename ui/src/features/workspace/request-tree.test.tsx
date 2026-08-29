@@ -7,7 +7,11 @@ import { flatten } from "@/components/tree/flatten";
 import type { TreeRowState } from "@/components/tree/types";
 import type { Item, Service } from "@grpcview/v1/workspace_pb";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
-import { renderRequestRow, requestTreeAdapter, type RequestRowCallbacks } from "./request-tree";
+import {
+  renderRequestRow,
+  requestTreeAdapter,
+  type RequestRowCallbacks,
+} from "./request-tree";
 import type { ItemWithPath } from "@/lib/format";
 
 // No jsdom here, so rows are rendered with react-dom/server; `expanded` is passed
@@ -18,7 +22,11 @@ import type { ItemWithPath } from "@/lib/format";
 const COLL = ".";
 const slugify = (name: string): string => name.toLowerCase();
 
-const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWithPath => ({
+const folder = (
+  name: string,
+  path: string[],
+  children: ItemWithPath[],
+): ItemWithPath => ({
   item: {
     name,
     slug: slugify(name),
@@ -30,7 +38,12 @@ const folder = (name: string, path: string[], children: ItemWithPath[]): ItemWit
   children,
 });
 
-const request = (name: string, path: string[], service: string, method: string): ItemWithPath => ({
+const request = (
+  name: string,
+  path: string[],
+  service: string,
+  method: string,
+): ItemWithPath => ({
   item: {
     name,
     slug: slugify(name),
@@ -57,15 +70,21 @@ const services = [
 
 const roots: ItemWithPath[] = [
   request("Ping", [], SERVICE, "SayHello"),
-  folder("Calls", [], [
-    request("SayHello", ["Calls"], SERVICE, "SayHello"),
-    request("ListHellos", ["Calls"], SERVICE, "ListHellos"),
-    request("SendHellos", ["Calls"], SERVICE, "SendHellos"),
-    request("Chat", ["Calls"], SERVICE, "Chat"),
-    folder("Admin", ["Calls"], [
-      request("Purge", ["Calls", "Admin"], SERVICE, "SayHello"),
-    ]),
-  ]),
+  folder(
+    "Calls",
+    [],
+    [
+      request("SayHello", ["Calls"], SERVICE, "SayHello"),
+      request("ListHellos", ["Calls"], SERVICE, "ListHellos"),
+      request("SendHellos", ["Calls"], SERVICE, "SendHellos"),
+      request("Chat", ["Calls"], SERVICE, "Chat"),
+      folder(
+        "Admin",
+        ["Calls"],
+        [request("Purge", ["Calls", "Admin"], SERVICE, "SayHello")],
+      ),
+    ],
+  ),
 ];
 
 const FULLY_EXPANDED = new Set(["./calls", "./calls/admin"]);
@@ -81,8 +100,7 @@ const noopCallbacks: RequestRowCallbacks = {
 };
 
 const rowRendererWith =
-  (cb: RequestRowCallbacks) =>
-  (item: ItemWithPath, state: TreeRowState) =>
+  (cb: RequestRowCallbacks) => (item: ItemWithPath, state: TreeRowState) =>
     renderRequestRow(item, state, cb);
 
 // A tag-nesting scanner for react-dom/server's output, not a general HTML parser:
@@ -97,7 +115,13 @@ interface PNode {
 
 function parseFragment(html: string): PNode[] {
   const tagRe = /<(\/)?([a-zA-Z][a-zA-Z0-9]*)([^<>]*)>/g;
-  const root: PNode = { tag: "#root", classes: [], attrs: {}, children: [], text: "" };
+  const root: PNode = {
+    tag: "#root",
+    classes: [],
+    attrs: {},
+    children: [],
+    text: "",
+  };
   const stack: PNode[] = [root];
   let lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -148,11 +172,15 @@ function findAll(nodes: PNode[], pred: (n: PNode) => boolean): PNode[] {
 const hasClass = (n: PNode, cls: string): boolean => n.classes.includes(cls);
 
 function rowsOf(markup: string): PNode[] {
-  return findAll(parseFragment(markup), (n) => n.tag === "div" && hasClass(n, "treerow"));
+  return findAll(
+    parseFragment(markup),
+    (n) => n.tag === "div" && hasClass(n, "treerow"),
+  );
 }
 
 function labelFor(kind: MethodKind): string {
-  return parseFragment(renderToStaticMarkup(<MethodKindTag kind={kind} />))[0].text;
+  return parseFragment(renderToStaticMarkup(<MethodKindTag kind={kind} />))[0]
+    .text;
 }
 
 describe("request tree rows: direct-child CSS contract", () => {
@@ -164,7 +192,7 @@ describe("request tree rows: direct-child CSS contract", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
     const rows = rowsOf(markup);
     expect(rows).toHaveLength(8);
@@ -182,7 +210,7 @@ describe("request tree rows: direct-child CSS contract", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
     const rows = rowsOf(markup);
     const [rowPing, rowCalls, rowSayHello, , , , rowAdmin, rowPurge] = rows;
@@ -205,16 +233,27 @@ describe("request tree rows: folder row", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
     const [, rowCalls, , , , , rowAdmin] = rowsOf(markup);
 
-    expect(rowCalls.children.find((c) => hasClass(c, "rowmeta"))?.text).toBe("5");
-    expect(rowAdmin.children.find((c) => hasClass(c, "rowmeta"))?.text).toBe("1");
+    expect(rowCalls.children.find((c) => hasClass(c, "rowmeta"))?.text).toBe(
+      "5",
+    );
+    expect(rowAdmin.children.find((c) => hasClass(c, "rowmeta"))?.text).toBe(
+      "1",
+    );
 
     for (const row of [rowCalls, rowAdmin]) {
-      const titles = findAll(row.children, (n) => n.tag === "button").map((b) => b.attrs.title);
-      expect(titles).toEqual(["Folder metadata", "Add request", "Rename folder", "Delete folder"]);
+      const titles = findAll(row.children, (n) => n.tag === "button").map(
+        (b) => b.attrs.title,
+      );
+      expect(titles).toEqual([
+        "Folder metadata",
+        "Add request",
+        "Rename folder",
+        "Delete folder",
+      ]);
     }
   });
 });
@@ -227,9 +266,10 @@ describe("request tree rows: request row", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
-    const [, , rowSayHello, rowListHellos, rowSendHellos, rowChat] = rowsOf(markup);
+    const [, , rowSayHello, rowListHellos, rowSendHellos, rowChat] =
+      rowsOf(markup);
 
     const cases: Array<[PNode, string, MethodKind]> = [
       [rowSayHello, "SayHello", "u"],
@@ -243,7 +283,9 @@ describe("request tree rows: request row", () => {
       expect(tag?.text).toBe(labelFor(kind));
       expect(row.children.some((c) => c.text === name)).toBe(true);
 
-      const titles = findAll(row.children, (n) => n.tag === "button").map((b) => b.attrs.title);
+      const titles = findAll(row.children, (n) => n.tag === "button").map(
+        (b) => b.attrs.title,
+      );
       expect(titles).toEqual(["Rename request", "Delete request"]);
 
       expect(findAll(row.children, (n) => n.tag === "input")).toHaveLength(0);
@@ -262,7 +304,7 @@ describe("request tree rows: active/selected/focused", () => {
         selection={["./calls/sendhellos"]}
         focused="./calls/chat"
         aria-label="Test tree"
-      />
+      />,
     );
     const rows = rowsOf(markup);
     expect(rows.map((r) => r.classes)).toEqual([
@@ -287,7 +329,7 @@ describe("request tree rows: active/selected/focused", () => {
         selection={["./calls/chat"]}
         focused="./calls/chat"
         aria-label="Test tree"
-      />
+      />,
     );
     const [, , , , , rowChat] = rowsOf(markup);
     expect(rowChat.classes).toEqual(["treerow", "sel", "foc", "on"]);
@@ -302,10 +344,12 @@ describe("request tree rows: indent guides", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
     const rows = rowsOf(markup);
-    const guideCounts = rows.map((r) => r.children.filter((c) => hasClass(c, "guide")).length);
+    const guideCounts = rows.map(
+      (r) => r.children.filter((c) => hasClass(c, "guide")).length,
+    );
     expect(guideCounts).toEqual([0, 0, 1, 1, 1, 1, 1, 2]);
   });
 });
@@ -341,8 +385,8 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
           onTwistieClick={() => {}}
           onContextMenu={() => {}}
           onDragStart={() => {}}
-        />
-      )
+        />,
+      ),
     )[0];
 
   it("swaps a request row's whole content for the input — tag, name and buttons all yield", () => {
@@ -368,7 +412,9 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
     const row = renamingMarkup("./calls/sayhello");
     const input = findAll(row.children, (n) => n.tag === "input")[0];
     expect(input.attrs.value).toBe("SayHello");
-    expect(adapter.getTreeItem(rowModel("./calls/sayhello").node).label).toBe("SayHello");
+    expect(adapter.getTreeItem(rowModel("./calls/sayhello").node).label).toBe(
+      "SayHello",
+    );
     expect(input.attrs["aria-invalid"]).toBeUndefined();
     expect(input.classes).not.toContain("rename-invalid");
   });
@@ -376,7 +422,10 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
 
 describe("request tree rows: keyboard + a11y (T1)", () => {
   const treeContainer = (markup: string): PNode =>
-    findAll(parseFragment(markup), (n) => n.tag === "div" && hasClass(n, "tree"))[0];
+    findAll(
+      parseFragment(markup),
+      (n) => n.tag === "div" && hasClass(n, "tree"),
+    )[0];
 
   it("the container is the one tabbable element, and names the focused row via aria-activedescendant", () => {
     const markup = renderToStaticMarkup(
@@ -386,7 +435,7 @@ describe("request tree rows: keyboard + a11y (T1)", () => {
         expanded={FULLY_EXPANDED}
         focused="./calls/sayhello"
         aria-label="Test tree"
-      />
+      />,
     );
     const container = treeContainer(markup);
     expect(container.attrs.tabindex).toBe("0");
@@ -405,19 +454,33 @@ describe("request tree rows: keyboard + a11y (T1)", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
-    expect(treeContainer(markup).attrs["aria-activedescendant"]).toBeUndefined();
+    expect(
+      treeContainer(markup).attrs["aria-activedescendant"],
+    ).toBeUndefined();
   });
 
   it("each row's dom id is stable across two renders of the same tree", () => {
     const markupA = renderToStaticMarkup(
-      <Tree adapter={adapter} renderRow={rowRendererWith(noopCallbacks)} expanded={FULLY_EXPANDED} aria-label="t" />
+      <Tree
+        adapter={adapter}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={FULLY_EXPANDED}
+        aria-label="t"
+      />,
     );
     const markupB = renderToStaticMarkup(
-      <Tree adapter={adapter} renderRow={rowRendererWith(noopCallbacks)} expanded={FULLY_EXPANDED} aria-label="t" />
+      <Tree
+        adapter={adapter}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={FULLY_EXPANDED}
+        aria-label="t"
+      />,
     );
-    expect(rowsOf(markupA).map((r) => r.attrs.id)).toEqual(rowsOf(markupB).map((r) => r.attrs.id));
+    expect(rowsOf(markupA).map((r) => r.attrs.id)).toEqual(
+      rowsOf(markupB).map((r) => r.attrs.id),
+    );
   });
 
   it("aria-selected reflects SELECTION, independent of which row is focused", () => {
@@ -429,10 +492,19 @@ describe("request tree rows: keyboard + a11y (T1)", () => {
         selection={["./calls/sendhellos"]}
         focused="./calls/chat"
         aria-label="Test tree"
-      />
+      />,
     );
     const ariaSelected = rowsOf(markup).map((r) => r.attrs["aria-selected"]);
-    expect(ariaSelected).toEqual(["false", "false", "false", "false", "true", "false", "false", "false"]);
+    expect(ariaSelected).toEqual([
+      "false",
+      "false",
+      "false",
+      "false",
+      "true",
+      "false",
+      "false",
+      "false",
+    ]);
   });
 });
 
@@ -444,10 +516,28 @@ describe("request tree rows: aria-posinset / aria-setsize (T1)", () => {
         renderRow={rowRendererWith(noopCallbacks)}
         expanded={FULLY_EXPANDED}
         aria-label="Test tree"
-      />
+      />,
     );
     const rows = rowsOf(markup);
-    expect(rows.map((r) => r.attrs["aria-posinset"])).toEqual(["1", "2", "1", "2", "3", "4", "5", "1"]);
-    expect(rows.map((r) => r.attrs["aria-setsize"])).toEqual(["2", "2", "5", "5", "5", "5", "5", "1"]);
+    expect(rows.map((r) => r.attrs["aria-posinset"])).toEqual([
+      "1",
+      "2",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "1",
+    ]);
+    expect(rows.map((r) => r.attrs["aria-setsize"])).toEqual([
+      "2",
+      "2",
+      "5",
+      "5",
+      "5",
+      "5",
+      "5",
+      "1",
+    ]);
   });
 });

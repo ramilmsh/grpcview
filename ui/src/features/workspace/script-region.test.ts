@@ -35,24 +35,44 @@ describe("findRegion", () => {
   });
 
   it("returns undefined for a plain script with no markers", () => {
-    expect(findRegion("export default async () => ({ ok: true });")).toBeUndefined();
+    expect(
+      findRegion("export default async () => ({ ok: true });"),
+    ).toBeUndefined();
   });
 
   it("returns undefined with only a start marker", () => {
-    expect(findRegion([SKELETON, START_MARKER, "{}", ")"].join("\n"))).toBeUndefined();
+    expect(
+      findRegion([SKELETON, START_MARKER, "{}", ")"].join("\n")),
+    ).toBeUndefined();
   });
 
   it("returns undefined with only an end marker", () => {
-    expect(findRegion([SKELETON, "{}", END_MARKER, ")"].join("\n"))).toBeUndefined();
+    expect(
+      findRegion([SKELETON, "{}", END_MARKER, ")"].join("\n")),
+    ).toBeUndefined();
   });
 
   it("returns undefined with two start markers", () => {
-    const text = [SKELETON, START_MARKER, START_MARKER, "{}", END_MARKER, ")"].join("\n");
+    const text = [
+      SKELETON,
+      START_MARKER,
+      START_MARKER,
+      "{}",
+      END_MARKER,
+      ")",
+    ].join("\n");
     expect(findRegion(text)).toBeUndefined();
   });
 
   it("returns undefined with two end markers", () => {
-    const text = [SKELETON, START_MARKER, "{}", END_MARKER, END_MARKER, ")"].join("\n");
+    const text = [
+      SKELETON,
+      START_MARKER,
+      "{}",
+      END_MARKER,
+      END_MARKER,
+      ")",
+    ].join("\n");
     expect(findRegion(text)).toBeUndefined();
   });
 
@@ -67,7 +87,13 @@ describe("findRegion", () => {
   });
 
   it("finds a marker line with leading/trailing whitespace", () => {
-    const text = [SKELETON, `  ${START_MARKER}  `, "{}", `\t${END_MARKER}`, ")"].join("\n");
+    const text = [
+      SKELETON,
+      `  ${START_MARKER}  `,
+      "{}",
+      `\t${END_MARKER}`,
+      ")",
+    ].join("\n");
     const region = findRegion(text);
     expect(region).toBeDefined();
     expect(region!.startLine).toBe(2);
@@ -75,7 +101,13 @@ describe("findRegion", () => {
   });
 
   it("does not match marker text that is merely part of a longer line", () => {
-    const text = [SKELETON, `foo ${START_MARKER} bar`, "{}", END_MARKER, ")"].join("\n");
+    const text = [
+      SKELETON,
+      `foo ${START_MARKER} bar`,
+      "{}",
+      END_MARKER,
+      ")",
+    ].join("\n");
     expect(findRegion(text)).toBeUndefined();
   });
 
@@ -83,13 +115,9 @@ describe("findRegion", () => {
     // findRegion is a pure line scan; it does not track string/template state. A template literal
     // whose content is, on its own line, exactly the marker text is indistinguishable from a real
     // marker. This is accepted (see the file header) rather than hand-rolling a lexer for it.
-    const text = [
-      "const s = `",
-      START_MARKER,
-      "body",
-      END_MARKER,
-      "`;",
-    ].join("\n");
+    const text = ["const s = `", START_MARKER, "body", END_MARKER, "`;"].join(
+      "\n",
+    );
     expect(findRegion(text)).toBeDefined();
   });
 });
@@ -141,7 +169,9 @@ describe("regionText", () => {
   });
 
   it("returns undefined when there is no region", () => {
-    expect(regionText("export default async () => ({ ok: true });")).toBeUndefined();
+    expect(
+      regionText("export default async () => ({ ok: true });"),
+    ).toBeUndefined();
   });
 });
 
@@ -173,7 +203,9 @@ describe("buildWrapped", () => {
   });
 
   it("produces no trailing newline", () => {
-    expect(buildWrapped({ skeleton: SKELETON, region: "{}" }).endsWith("\n")).toBe(false);
+    expect(
+      buildWrapped({ skeleton: SKELETON, region: "{}" }).endsWith("\n"),
+    ).toBe(false);
   });
 });
 

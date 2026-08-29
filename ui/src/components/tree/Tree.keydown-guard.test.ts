@@ -12,7 +12,9 @@ describe("isEditableTarget", () => {
   });
 
   it("is true for any contentEditable element, regardless of its tag", () => {
-    expect(isEditableTarget({ tagName: "DIV", isContentEditable: true })).toBe(true);
+    expect(isEditableTarget({ tagName: "DIV", isContentEditable: true })).toBe(
+      true,
+    );
   });
 
   it("is false for a plain row surface — a DIV that is not contentEditable", () => {
@@ -24,7 +26,9 @@ describe("isEditableTarget", () => {
   });
 
   it("is false when isContentEditable is merely absent, not explicitly true", () => {
-    expect(isEditableTarget({ tagName: "SPAN", isContentEditable: undefined })).toBe(false);
+    expect(
+      isEditableTarget({ tagName: "SPAN", isContentEditable: undefined }),
+    ).toBe(false);
   });
 
   it("is false for an empty target with neither field present", () => {

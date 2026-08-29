@@ -1,4 +1,10 @@
-import { useId, useImperativeHandle, useRef, useState, type ReactNode } from "react";
+import {
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { TreeAdapter, TreeHandle, TreeProps, TreeRowModel } from "./types";
 import { useTreeState } from "./useTreeState";
 import { replaceSelection } from "./selection";
@@ -41,7 +47,7 @@ function findNode<T>(adapter: TreeAdapter<T>, id: string): T | undefined {
           "thenable. Like flatten(), this component implements only the " +
           'synchronous TreeDataProvider path (T8, "Async children", is not built ' +
           "yet); silently skipping the branch would make reveal() quietly fail to " +
-          "find a real node instead of failing loudly."
+          "find a real node instead of failing loudly.",
       );
     }
     for (const node of children) {
@@ -56,17 +62,24 @@ function findNode<T>(adapter: TreeAdapter<T>, id: string): T | undefined {
 
 // Whether a keydown's target is a live text control, whose keys must not be
 // reinterpreted as tree intents.
-export function isEditableTarget(target: { tagName?: string; isContentEditable?: boolean }): boolean {
+// eslint-disable-next-line react-refresh/only-export-components
+export function isEditableTarget(target: {
+  tagName?: string;
+  isContentEditable?: boolean;
+}): boolean {
   return (
-    target.isContentEditable === true || target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+    target.isContentEditable === true ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA"
   );
 }
 
 // On macOS ctrl+click is a right-click gesture, and Firefox delivers it as a
 // `click` with button 0 and ctrlKey true.
+// eslint-disable-next-line react-refresh/only-export-components
 export function isRightClickGesture(
   ev: { button: number; ctrlKey: boolean },
-  isMac: boolean
+  isMac: boolean,
 ): boolean {
   return ev.button === 2 || (isMac && ev.ctrlKey);
 }
@@ -138,7 +151,12 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   const setDropState = (next: DropState | null): void => {
     const current = dropStateRef.current;
     if (current === null && next === null) return;
-    if (current !== null && next !== null && current.rowId === next.rowId && current.zone === next.zone) {
+    if (
+      current !== null &&
+      next !== null &&
+      current.rowId === next.rowId &&
+      current.zone === next.zone
+    ) {
       return;
     }
     dropStateRef.current = next;
@@ -150,7 +168,9 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   const domIdFor = (id: string): string => `${treeId}${encodeURIComponent(id)}`;
 
   const focusedRow: TreeRowModel<T> | null =
-    focused === null ? null : flat.rows[flat.indexById.get(focused) ?? -1] ?? null;
+    focused === null
+      ? null
+      : (flat.rows[flat.indexById.get(focused) ?? -1] ?? null);
 
   useImperativeHandle(handle, (): TreeHandle<T> => ({
     reveal(id, opts) {
@@ -198,7 +218,8 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     if (scroll) rowEls.current.get(id)?.scrollIntoView({ block: "nearest" });
   };
 
-  const nodeFor = (id: string): T | undefined => flat.rows[flat.indexById.get(id) ?? -1]?.node;
+  const nodeFor = (id: string): T | undefined =>
+    flat.rows[flat.indexById.get(id) ?? -1]?.node;
 
   const siblingLabelsFor = (row: TreeRowModel<T>): string[] =>
     flat.rows
@@ -236,7 +257,9 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           setRenamingId(action.id);
           break;
         case "delete": {
-          const nodes = action.ids.map(nodeFor).filter((n): n is T => n !== undefined);
+          const nodes = action.ids
+            .map(nodeFor)
+            .filter((n): n is T => n !== undefined);
           onDelete?.(nodes);
           break;
         }
@@ -256,28 +279,40 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
       modKey: IS_MAC ? ev.metaKey : ev.ctrlKey,
       rightButton: isRightClickGesture(ev, IS_MAC),
     };
-    applyActions(applyRowClick(row, mods, { flat, focused, selection, anchor }));
+    applyActions(
+      applyRowClick(row, mods, { flat, focused, selection, anchor }),
+    );
   };
 
-  const handleTwistieClick = (row: TreeRowModel<T>, ev: React.MouseEvent): void => {
+  const handleTwistieClick = (
+    row: TreeRowModel<T>,
+    ev: React.MouseEvent,
+  ): void => {
     // stopPropagation is what keeps handleRowClick, which selects, from also firing.
     ev.stopPropagation();
     applyActions(applyTwistieClick(row, { flat, focused, selection, anchor }));
   };
 
-  const handleContextMenu = (row: TreeRowModel<T>, ev: React.MouseEvent): void => {
+  const handleContextMenu = (
+    row: TreeRowModel<T>,
+    ev: React.MouseEvent,
+  ): void => {
     // No host menu: do nothing at all, so the browser's own menu still shows.
     if (!onContextMenu) return;
     // Mid-rename, the native menu is the only way to paste into the input.
     if (isEditableTarget(ev.target as HTMLElement)) return;
     ev.preventDefault();
-    const nextSelection = selection.includes(row.id) ? selection : replaceSelection(row.id);
+    const nextSelection = selection.includes(row.id)
+      ? selection
+      : replaceSelection(row.id);
     if (nextSelection !== selection) {
       setSelection(nextSelection);
       setAnchor(row.id);
     }
     focusRow(row.id, false);
-    const nodes = nextSelection.map(nodeFor).filter((n): n is T => n !== undefined);
+    const nodes = nextSelection
+      .map(nodeFor)
+      .filter((n): n is T => n !== undefined);
     onContextMenu(nodes, ev);
   };
 
@@ -290,10 +325,14 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   const draggedNodes = (ids: readonly string[]): T[] =>
     [...ids]
       .filter((id) => flat.indexById.has(id))
-      .sort((a, b) => (flat.indexById.get(a) ?? 0) - (flat.indexById.get(b) ?? 0))
+      .sort(
+        (a, b) => (flat.indexById.get(a) ?? 0) - (flat.indexById.get(b) ?? 0),
+      )
       .map((id) => flat.rows[flat.indexById.get(id) ?? -1].node);
 
-  const destinationFor = (res: DropResolution): { parent: T | null; before?: T } | null => {
+  const destinationFor = (
+    res: DropResolution,
+  ): { parent: T | null; before?: T } | null => {
     let parent: T | null = null;
     if (res.parentId !== null) {
       const node = nodeFor(res.parentId);
@@ -332,20 +371,23 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
       "text/plain",
       draggedNodes(ids)
         .map((node) => adapter.getTreeItem(node).label)
-        .join("\n")
+        .join("\n"),
     );
   };
 
   // The event target is whatever descendant the pointer is over, so walk up to the
   // nearest `data-index` carrier.
-  const rowElementFor = (ev: React.DragEvent): { index: number; el: HTMLElement } | null => {
+  const rowElementFor = (
+    ev: React.DragEvent,
+  ): { index: number; el: HTMLElement } | null => {
     const container = containerRef.current;
     const target = ev.target;
     if (container === null || !(target instanceof HTMLElement)) return null;
     const el = target.closest<HTMLElement>("[data-index]");
     if (el === null || !container.contains(el)) return null;
     const index = Number(el.dataset.index);
-    if (!Number.isInteger(index) || index < 0 || index >= flat.rows.length) return null;
+    if (!Number.isInteger(index) || index < 0 || index >= flat.rows.length)
+      return null;
     return { index, el };
   };
 
@@ -443,7 +485,13 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
       : 0;
     const rowsPerPage = Math.max(1, Math.floor(viewportHeight / rowHeight));
 
-    const actions = applyIntent(intent, { flat, focused, selection, anchor, rowsPerPage });
+    const actions = applyIntent(intent, {
+      flat,
+      focused,
+      selection,
+      anchor,
+      rowsPerPage,
+    });
     applyActions(actions);
   };
 
@@ -482,7 +530,9 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           dropTarget={dropState?.rowId === row.id ? dropState.zone : null}
           dropDepth={dropState?.rowId === row.id ? dropState.res.depth : 0}
           dragging={dragIds?.includes(row.id) ?? false}
-          renameSiblings={row.id === renamingId ? siblingLabelsFor(row) : NO_SIBLINGS}
+          renameSiblings={
+            row.id === renamingId ? siblingLabelsFor(row) : NO_SIBLINGS
+          }
           onRenameCommit={(next) => {
             setRenamingId(null);
             onRenameCommit?.(row.node, next);

@@ -5,10 +5,11 @@ import clsx from "clsx";
 // stays in the box, blur cancels.
 export type RenameVerdict = "commit" | "cancel" | "collision";
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function renameVerdict(
   value: string,
   current: string,
-  siblings: readonly string[]
+  siblings: readonly string[],
 ): RenameVerdict {
   const next = value.trim();
   if (!next || next === current) return "cancel";
@@ -39,7 +40,6 @@ export function RenameInput({
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const verdict = renameVerdict(text, current, siblings);

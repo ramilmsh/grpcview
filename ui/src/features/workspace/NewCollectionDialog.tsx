@@ -8,7 +8,13 @@ import { collectionBaseName, normalizeCollectionPath } from "./collection-path";
 // Creating a collection in a workspace that already has one. <NoCollection> covers the empty
 // workspace with the same two fields inside its empty state; this is the same act from the
 // TopBar picker and the tree's context menu, where a dialog is the only place it can live.
-export function NewCollectionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewCollectionDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   // No suggested directory: unlike <NoCollection>, nothing here came back not_found, so
   // there is no path the user already asked for — and defaulting to "." would scatter a
   // grpcview.json across the repo root on a stray Enter.
@@ -28,7 +34,7 @@ export function NewCollectionDialog({ open, onClose }: { open: boolean; onClose:
           setName("");
           onClose();
         },
-      }
+      },
     );
   };
 
@@ -47,9 +53,12 @@ export function NewCollectionDialog({ open, onClose }: { open: boolean; onClose:
           placeholder="e.g. services/payments"
         />
       </Field>
-      <span className="text-muted" style={{ fontSize: 12, marginTop: -6, lineHeight: 1.5 }}>
-        Workspace-relative. Use “.” for the workspace root. Creating one writes a{" "}
-        <code>grpcview.json</code> and a <code>tree/</code> directory there.
+      <span
+        className="text-muted"
+        style={{ fontSize: 12, marginTop: -6, lineHeight: 1.5 }}
+      >
+        Workspace-relative. Use “.” for the workspace root. Creating one writes
+        a <code>grpcview.json</code> and a <code>tree/</code> directory there.
       </span>
       <Field label="Name (optional)">
         <Input

@@ -42,7 +42,9 @@ assert(
 );
 
 // The second argument of invoke lands in the target's `params`.
-const params = await invoke("Workspace/RunScript (params)", { expression: "6 * 7" });
+const params = await invoke("Workspace/RunScript (params)", {
+  expression: "6 * 7",
+});
 assert("params reach the target's body", params.body.value === "42");
 
 // Imports compose: this request's body and its metadata both import scripts.
@@ -72,6 +74,9 @@ assert(
 // asking grpcview to then call grpcview again.
 const chained = await invoke("Workspace/Invoke (chained)");
 assert("the chained body resolved and invoked", chained.ok);
-assert("the inner call came back with a response", chained.body.response.response.length > 0);
+assert(
+  "the inner call came back with a response",
+  chained.body.response.response.length > 0,
+);
 
-"13 assertions passed"
+("13 assertions passed");

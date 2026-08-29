@@ -5,7 +5,9 @@ import { latencyLabel } from "@/lib/format";
 export function StatusBar() {
   const { sources, reflection } = useActiveWorkspace();
   const activeKey = useUIStore((s) => s.activeKey);
-  const invoke = useUIStore((s) => (activeKey ? s.invokes[activeKey] : undefined));
+  const invoke = useUIStore((s) =>
+    activeKey ? s.invokes[activeKey] : undefined,
+  );
   const latency = invoke?.response?.latency;
 
   return (
@@ -34,14 +36,18 @@ export function StatusBar() {
       >
         <span
           className="dot"
-          style={{ background: reflection ? "var(--ok)" : "var(--color-neutral-600)" }}
+          style={{
+            background: reflection ? "var(--ok)" : "var(--color-neutral-600)",
+          }}
         />
         {reflection ? "Local" : sources.length > 0 ? "No server" : "No source"}
       </span>
       <span>
         {sources.length} {sources.length === 1 ? "source" : "sources"}
       </span>
-      {latency && <span className="ml-auto">last invoke {latencyLabel(latency)}</span>}
+      {latency && (
+        <span className="ml-auto">last invoke {latencyLabel(latency)}</span>
+      )}
     </div>
   );
 }

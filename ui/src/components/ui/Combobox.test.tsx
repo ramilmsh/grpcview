@@ -19,7 +19,9 @@ describe("filterOptions", () => {
   });
 
   it("matches every term anywhere, in any order, ignoring case", () => {
-    expect(filterOptions(TARGETS, "PAY v1")).toEqual(["//proto/pay/v1:pay_proto"]);
+    expect(filterOptions(TARGETS, "PAY v1")).toEqual([
+      "//proto/pay/v1:pay_proto",
+    ]);
     expect(filterOptions(TARGETS, "pay")).toEqual([
       "//proto/pay/v1:pay_proto",
       "//services/pay:descriptors",
@@ -46,7 +48,7 @@ describe("filterOptions", () => {
 describe("Combobox", () => {
   const markup = (over: Partial<Parameters<typeof Combobox>[0]> = {}) =>
     renderToStaticMarkup(
-      <Combobox value="" onChange={() => {}} options={TARGETS} {...over} />
+      <Combobox value="" onChange={() => {}} options={TARGETS} {...over} />,
     );
 
   it("is a text field first: closed, editable, and typed into freely", () => {

@@ -10,7 +10,9 @@ export interface DeleteConfirmCopy {
 
 // `items` must be the ALREADY-PRUNED selection (lib/format.ts's pruneNestedSelections), so the
 // count reported matches the mutations doDelete will actually fire.
-export function deleteConfirmCopy(items: readonly ItemWithPath[]): DeleteConfirmCopy {
+export function deleteConfirmCopy(
+  items: readonly ItemWithPath[],
+): DeleteConfirmCopy {
   if (items.length === 0) {
     return { title: "Delete", emphasis: "nothing", suffix: "?" };
   }
@@ -25,7 +27,9 @@ export function deleteConfirmCopy(items: readonly ItemWithPath[]): DeleteConfirm
     };
   }
 
-  const folderCount = items.filter((it) => it.item.content.case === "folder").length;
+  const folderCount = items.filter(
+    (it) => it.item.content.case === "folder",
+  ).length;
   const allFolders = folderCount === items.length;
   const noFolders = folderCount === 0;
   const noun = allFolders ? "folders" : noFolders ? "requests" : "items";

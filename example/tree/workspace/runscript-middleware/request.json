@@ -1,10 +1,8 @@
 {
-  "meta":  {
-    "name":  "RunScript (middleware)"
+  "meta": {
+    "name": "RunScript (middleware)"
   },
-  "service":  "grpcview.v1.WorkspaceService",
-  "method":  "RunScript",
-  "middleware":  [
-    "#/scripts/trace-headers.ts"
-  ]
+  "service": "grpcview.v1.WorkspaceService",
+  "method": "RunScript",
+  "middleware": ["#/scripts/trace-headers.ts"]
 }

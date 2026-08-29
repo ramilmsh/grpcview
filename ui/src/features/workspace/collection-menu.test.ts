@@ -3,7 +3,10 @@ import { fn } from "jest-mock";
 import { expect } from "expect";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
-import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
+import {
+  collectionMenuItems,
+  type CollectionMenuActions,
+} from "./collection-menu";
 
 const slugify = (name: string): string => name.toLowerCase();
 
@@ -29,7 +32,8 @@ const request = (name: string, path: string[] = []): ItemWithPath => ({
   slugPath: path.map(slugify),
 });
 
-const spies = (): CollectionMenuActions & Record<keyof CollectionMenuActions, ReturnType<typeof fn>> => ({
+const spies = (): CollectionMenuActions &
+  Record<keyof CollectionMenuActions, ReturnType<typeof fn>> => ({
   newRequest: fn(),
   newFolder: fn(),
   newCollection: fn(),
@@ -38,15 +42,24 @@ const spies = (): CollectionMenuActions & Record<keyof CollectionMenuActions, Re
   editFolderMetadata: fn(),
 });
 
-const labels = (items: { label: string }[]): string[] => items.map((i) => i.label);
+const labels = (items: { label: string }[]): string[] =>
+  items.map((i) => i.label);
 
 const CAN_CREATE = { canCreateRequest: true };
 
 describe("collectionMenuItems: empty space / the collection root", () => {
   it("offers the root's creation actions, plus the workspace-level one behind a separator", () => {
     const items = collectionMenuItems([], spies(), CAN_CREATE);
-    expect(labels(items)).toEqual(["New request", "New folder", "New collection\u2026"]);
-    expect(items.map((i) => i.separatorBefore ?? false)).toEqual([false, false, true]);
+    expect(labels(items)).toEqual([
+      "New request",
+      "New folder",
+      "New collection\u2026",
+    ]);
+    expect(items.map((i) => i.separatorBefore ?? false)).toEqual([
+      false,
+      false,
+      true,
+    ]);
   });
 
   it("routes New collection at the workspace, with no parent to speak of", () => {
@@ -66,7 +79,11 @@ describe("collectionMenuItems: empty space / the collection root", () => {
 
   it("disables — never omits — New request when there are no services yet", () => {
     const items = collectionMenuItems([], spies(), { canCreateRequest: false });
-    expect(labels(items)).toEqual(["New request", "New folder", "New collection\u2026"]);
+    expect(labels(items)).toEqual([
+      "New request",
+      "New folder",
+      "New collection\u2026",
+    ]);
     expect(items[0].disabled).toBe(true);
     expect(items[1].disabled).toBeUndefined();
     // A collection needs no service, so this one is reachable in an empty workspace too.
@@ -138,7 +155,9 @@ describe("collectionMenuItems: a single FOLDER row", () => {
   });
 
   it("still disables New request with no services, leaving New folder alone", () => {
-    const items = collectionMenuItems([folder("Alpha")], spies(), { canCreateRequest: false });
+    const items = collectionMenuItems([folder("Alpha")], spies(), {
+      canCreateRequest: false,
+    });
     expect(items[0].disabled).toBe(true);
     expect(items[1].disabled).toBeUndefined();
   });
@@ -149,17 +168,21 @@ describe("collectionMenuItems: a MULTI-row selection", () => {
     const items = collectionMenuItems(
       [request("Ping"), request("Pong")],
       spies(),
-      CAN_CREATE
+      CAN_CREATE,
     );
     expect(labels(items)).toEqual(["Delete 2 requests"]);
   });
 
   it("pluralizes by kind through deleteConfirmCopy rather than a second pluralizer", () => {
-    expect(labels(collectionMenuItems([folder("A"), folder("B")], spies(), CAN_CREATE))).toEqual([
-      "Delete 2 folders",
-    ]);
     expect(
-      labels(collectionMenuItems([folder("A"), request("B")], spies(), CAN_CREATE))
+      labels(
+        collectionMenuItems([folder("A"), folder("B")], spies(), CAN_CREATE),
+      ),
+    ).toEqual(["Delete 2 folders"]);
+    expect(
+      labels(
+        collectionMenuItems([folder("A"), request("B")], spies(), CAN_CREATE),
+      ),
     ).toEqual(["Delete 2 items"]);
   });
 
@@ -182,7 +205,7 @@ describe("collectionMenuItems: a MULTI-row selection", () => {
     const items = collectionMenuItems(
       [folder("Alpha"), request("Ping", ["Alpha"])],
       spies(),
-      CAN_CREATE
+      CAN_CREATE,
     );
     expect(labels(items)).not.toContain("Rename");
     expect(items).toHaveLength(1);

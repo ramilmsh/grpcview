@@ -8,7 +8,7 @@ const ts = monaco.languages.typescript.typescriptDefaults;
 // package.json first — node10 reads it and follows "types" to the .d.ts.
 ts.addExtraLib(
   `{"name":"@bufbuild/protobuf","version":"2","types":"index.d.ts"}`,
-  "file:///node_modules/@bufbuild/protobuf/package.json"
+  "file:///node_modules/@bufbuild/protobuf/package.json",
 );
 ts.addExtraLib(
   `
@@ -16,7 +16,7 @@ ts.addExtraLib(
   export type JsonObject = { [k: string]: JsonValue };
   export type Message<T extends string = string> = { readonly $typeName: T };
 `,
-  "file:///node_modules/@bufbuild/protobuf/index.d.ts"
+  "file:///node_modules/@bufbuild/protobuf/index.d.ts",
 );
 
 // protoc-gen-es imports these WKT Json aliases by name rather than emitting them locally.
@@ -42,7 +42,7 @@ ts.addExtraLib(
   export type StringValueJson = string;
   export type BytesValueJson = string;
 `,
-  "file:///node_modules/@bufbuild/protobuf/wkt/index.d.ts"
+  "file:///node_modules/@bufbuild/protobuf/wkt/index.d.ts",
 );
 
 // Loose shapes are fine: nothing types against the runtime consts, only the `…Json` types.
@@ -58,5 +58,5 @@ ts.addExtraLib(
   export declare function messageDesc<S extends Message, O = unknown>(f: GenFile, ...p: number[]): GenMessage<S, O>;
   export declare function enumDesc(f: GenFile, ...p: number[]): unknown;
 `,
-  "file:///node_modules/@bufbuild/protobuf/codegenv2/index.d.ts"
+  "file:///node_modules/@bufbuild/protobuf/codegenv2/index.d.ts",
 );

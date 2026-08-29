@@ -1,7 +1,13 @@
 // The two mode-switch edits (D3 + D4, docs/design/planned/script-region.md) as plain data:
 // executeEdits accepts IRange literals, so nothing here needs the monaco namespace, and the pure
 // shape is what makes this testable without mounting an editor (mirrors module-specifier.ts).
-import { END_MARKER, START_MARKER, findRegion, regionText, type Region } from "./script-region";
+import {
+  END_MARKER,
+  START_MARKER,
+  findRegion,
+  regionText,
+  type Region,
+} from "./script-region";
 import { leadsWithBrace, maskLiterals } from "./module-sniff";
 
 export interface LineEdit {
@@ -28,7 +34,10 @@ const IMPORT_LINE_RE = /^[ \t]*import\b/m;
 // When neither applies the shim is dead weight, and leaving it behind is boilerplate the author
 // then has to delete by hand.
 function shimIsDisposable(text: string, region: Region): boolean {
-  const header = text.split("\n").slice(0, region.startLine - 1).join("\n");
+  const header = text
+    .split("\n")
+    .slice(0, region.startLine - 1)
+    .join("\n");
   if (IMPORT_LINE_RE.test(maskLiterals(header))) return false;
   return !leadsWithBrace(regionText(text) ?? "");
 }
@@ -97,7 +106,12 @@ export function wrapEdits(text: string, skeleton: string): LineEdit[] {
   const lastColumn = lines[lastLine - 1].length + 1;
   return [
     {
-      range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 },
+      range: {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 1,
+        endColumn: 1,
+      },
       text: `${skeleton}\n${START_MARKER}\n`,
     },
     {

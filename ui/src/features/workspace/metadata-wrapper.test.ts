@@ -10,7 +10,12 @@ import {
   migrateMetadataToTs,
   wrap,
 } from "./metadata-wrapper";
-import { buildWrapped, END_MARKER, findRegion, START_MARKER } from "./script-region";
+import {
+  buildWrapped,
+  END_MARKER,
+  findRegion,
+  START_MARKER,
+} from "./script-region";
 
 // example's `RunScript (generators)` metadata script: a module reached via `import`, carrying no
 // `grpcview:script` markers.
@@ -22,7 +27,11 @@ const MODULE_WITH_IMPORTS = [
   "});",
 ].join("\n");
 
-const MODULE_NO_IMPORTS = ["export default async () => ({", '  a: ["b"],', "});"].join("\n");
+const MODULE_NO_IMPORTS = [
+  "export default async () => ({",
+  '  a: ["b"],',
+  "});",
+].join("\n");
 
 // D11: the old marker-less wrapper this design replaces. No markers, does not lead with `{` — a
 // plain script, with no migration path back into a marked region.

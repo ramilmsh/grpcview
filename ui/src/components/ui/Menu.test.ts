@@ -2,7 +2,8 @@ import { describe, it } from "node:test";
 import { expect } from "expect";
 import { menuPosition, stepMenuIndex } from "./Menu";
 
-const enabled = (n: number): { disabled?: boolean }[] => Array.from({ length: n }, () => ({}));
+const enabled = (n: number): { disabled?: boolean }[] =>
+  Array.from({ length: n }, () => ({}));
 
 describe("stepMenuIndex: plain movement", () => {
   it("moves one item per step in each direction", () => {
@@ -50,7 +51,9 @@ describe("stepMenuIndex: disabled items", () => {
   });
 
   it("returns null when every item is disabled, rather than spinning", () => {
-    expect(stepMenuIndex([{ disabled: true }, { disabled: true }], 0, 1)).toBeNull();
+    expect(
+      stepMenuIndex([{ disabled: true }, { disabled: true }], 0, 1),
+    ).toBeNull();
     expect(stepMenuIndex([{ disabled: true }], null, 1)).toBeNull();
   });
 
@@ -63,7 +66,14 @@ describe("stepMenuIndex: disabled items", () => {
 describe("menuPosition: the common case", () => {
   it("places the card at the click when it fits", () => {
     expect(
-      menuPosition({ x: 40, y: 60, width: 180, height: 120, viewportWidth: 1200, viewportHeight: 800 })
+      menuPosition({
+        x: 40,
+        y: 60,
+        width: 180,
+        height: 120,
+        viewportWidth: 1200,
+        viewportHeight: 800,
+      }),
     ).toEqual({ left: 40, top: 60 });
   });
 });

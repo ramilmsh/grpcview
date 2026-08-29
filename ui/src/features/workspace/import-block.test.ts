@@ -25,7 +25,9 @@ function applyLineEdit(text: string, edit: LineEdit): string {
 
 describe("parseImportBlock", () => {
   it("captures a plain named import, dropping the skeleton and blank-line noise", () => {
-    const header = ['import { a, b as c } from "mod";', "", SKELETON].join("\n");
+    const header = ['import { a, b as c } from "mod";', "", SKELETON].join(
+      "\n",
+    );
     expect(parseImportBlock(header)).toEqual({
       imports: [{ specifier: "mod", names: ["a", "b as c"] }],
       other: [],
@@ -52,7 +54,9 @@ describe("parseImportBlock", () => {
 
   it("leaves a namespace import in other", () => {
     const header = ['import * as ns from "mod";', SKELETON].join("\n");
-    expect(parseImportBlock(header).other).toEqual(['import * as ns from "mod";']);
+    expect(parseImportBlock(header).other).toEqual([
+      'import * as ns from "mod";',
+    ]);
   });
 
   it("leaves a side-effect import in other", () => {
@@ -62,12 +66,16 @@ describe("parseImportBlock", () => {
 
   it("leaves a whole type-only import in other", () => {
     const header = ['import type { A } from "mod";', SKELETON].join("\n");
-    expect(parseImportBlock(header).other).toEqual(['import type { A } from "mod";']);
+    expect(parseImportBlock(header).other).toEqual([
+      'import type { A } from "mod";',
+    ]);
   });
 
   it("leaves a mixed value/type named import in other", () => {
     const header = ['import { type A, b } from "mod";', SKELETON].join("\n");
-    expect(parseImportBlock(header).other).toEqual(['import { type A, b } from "mod";']);
+    expect(parseImportBlock(header).other).toEqual([
+      'import { type A, b } from "mod";',
+    ]);
   });
 
   it("merges multiple managed import lines into separate entries", () => {
@@ -112,7 +120,9 @@ describe("renderImportBlock", () => {
 
 describe("pruneEdits", () => {
   it("returns undefined for a document with no region", () => {
-    expect(pruneEdits("export default async () => ({ ok: true });", SKELETON, [])).toBeUndefined();
+    expect(
+      pruneEdits("export default async () => ({ ok: true });", SKELETON, []),
+    ).toBeUndefined();
   });
 
   it("returns undefined when no span matches a managed import", () => {
@@ -132,7 +142,9 @@ describe("pruneEdits", () => {
       region: "{\n  a,\n}",
     });
     const start = text.indexOf("b }");
-    const edits = pruneEdits(text, SKELETON, [{ start, length: 1, code: 6133 }]);
+    const edits = pruneEdits(text, SKELETON, [
+      { start, length: 1, code: 6133 },
+    ]);
     expect(edits).toBeDefined();
     expect(edits!).toHaveLength(1);
     const result = applyLineEdit(text, edits![0]);
@@ -153,7 +165,9 @@ describe("pruneEdits", () => {
       region: "{\n  a,\n}",
     });
     const start = text.indexOf(decl);
-    const edits = pruneEdits(text, SKELETON, [{ start, length: decl.length, code: 6133 }]);
+    const edits = pruneEdits(text, SKELETON, [
+      { start, length: decl.length, code: 6133 },
+    ]);
     const result = applyLineEdit(text, edits![0]);
     expect(result).toBe(
       buildWrapped({
@@ -172,7 +186,9 @@ describe("pruneEdits", () => {
       region: "{\n  a,\n}",
     });
     const start = text.indexOf(decl);
-    const edits = pruneEdits(text, SKELETON, [{ start, length: decl.length, code: 6192 }]);
+    const edits = pruneEdits(text, SKELETON, [
+      { start, length: decl.length, code: 6192 },
+    ]);
     const result = applyLineEdit(text, edits![0]);
     expect(result).toBe(
       buildWrapped({
@@ -191,7 +207,9 @@ describe("pruneEdits", () => {
     });
     const markerStart = text.indexOf(START_MARKER);
     // A span AT the marker line itself: still "in or past" the region, not the header.
-    const edits = pruneEdits(text, SKELETON, [{ start: markerStart, length: 1, code: 6133 }]);
+    const edits = pruneEdits(text, SKELETON, [
+      { start: markerStart, length: 1, code: 6133 },
+    ]);
     expect(edits).toBeUndefined();
   });
 
@@ -203,7 +221,9 @@ describe("pruneEdits", () => {
     });
     const decl = 'import Foo from "mod";';
     const start = text.indexOf(decl);
-    const edits = pruneEdits(text, SKELETON, [{ start, length: decl.length, code: 6133 }]);
+    const edits = pruneEdits(text, SKELETON, [
+      { start, length: decl.length, code: 6133 },
+    ]);
     expect(edits).toBeUndefined();
   });
 
@@ -216,7 +236,9 @@ describe("pruneEdits", () => {
       region: "{\n  a,\n}",
     });
     const start = text.indexOf(decl);
-    const edits = pruneEdits(text, SKELETON, [{ start, length: decl.length, code: 6133 }]);
+    const edits = pruneEdits(text, SKELETON, [
+      { start, length: decl.length, code: 6133 },
+    ]);
     const result = applyLineEdit(text, edits![0]);
     expect(result).toBe(
       buildWrapped({

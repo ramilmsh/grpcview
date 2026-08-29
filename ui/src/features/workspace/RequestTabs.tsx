@@ -30,9 +30,11 @@ export function RequestTabs() {
         const active = tab.key === activeKey;
         const item = findByKey(rootItems, tab.key);
         const req =
-          item?.item.content.case === "request" ? item.item.content.value : undefined;
+          item?.item.content.case === "request"
+            ? item.item.content.value
+            : undefined;
         const kind = methodKind(
-          resolveMethod(services, req?.service ?? "", req?.method ?? "")
+          resolveMethod(services, req?.service ?? "", req?.method ?? ""),
         );
         return (
           <div
@@ -45,7 +47,9 @@ export function RequestTabs() {
               whiteSpace: "nowrap",
               color: active ? "var(--color-text)" : "var(--color-neutral-400)",
               borderRight: "1px solid var(--line)",
-              borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
+              borderBottom: active
+                ? "2px solid var(--color-accent)"
+                : "2px solid transparent",
               background: active ? "var(--color-bg)" : "transparent",
             }}
             // The collection rides on the tab, so activating one in another collection

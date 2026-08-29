@@ -26,7 +26,7 @@ import {
 export const collectionsToQuery = (
   activeCollection: string | null,
   expanded: ReadonlySet<string>,
-  collections: readonly CollectionSummary[]
+  collections: readonly CollectionSummary[],
 ): string[] => {
   const ids = new Set<string>();
   for (const c of collections) {
@@ -43,11 +43,14 @@ export const collectionsToQuery = (
 // non-nesting invariant means no two can match, and the longest match is taken anyway.
 export const collectionForNodeId = (
   id: string,
-  collections: readonly CollectionSummary[]
+  collections: readonly CollectionSummary[],
 ): string | null => {
   let best: string | null = null;
   for (const c of collections) {
-    const owns = id === c.id || id.startsWith(c.id + '/') || id.startsWith(c.id + STATUS_SEPARATOR);
+    const owns =
+      id === c.id ||
+      id.startsWith(c.id + "/") ||
+      id.startsWith(c.id + STATUS_SEPARATOR);
     if (owns && (best === null || c.id.length > best.length)) best = c.id;
   }
   return best;
@@ -56,21 +59,26 @@ export const collectionForNodeId = (
 export const countRequests = (items: readonly ItemWithPath[]): number =>
   items.reduce(
     (n, it) =>
-      it.item.content.case === "folder" ? n + countRequests(it.children ?? []) : n + 1,
-    0
+      it.item.content.case === "folder"
+        ? n + countRequests(it.children ?? [])
+        : n + 1,
+    0,
   );
 
 // Every loaded collection's requests. A collection whose Get has not landed is absent from
 // the map and so contributes nothing until it does.
 export const countAllRequests = (
-  itemsByCollection: ReadonlyMap<string, ItemWithPath[]>
+  itemsByCollection: ReadonlyMap<string, ItemWithPath[]>,
 ): number => {
   let total = 0;
   for (const items of itemsByCollection.values()) total += countRequests(items);
   return total;
 };
 
-export const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => {
+export const filterTree = (
+  items: ItemWithPath[],
+  q: string,
+): ItemWithPath[] => {
   if (!q) return items;
   const lower = q.toLowerCase();
   const walk = (list: ItemWithPath[]): ItemWithPath[] => {
@@ -96,13 +104,14 @@ export const filterTree = (items: ItemWithPath[], q: string): ItemWithPath[] => 
 // memoizes on, so rebuilding it would cost the tree its node identity on every render.
 export const filterItemsByCollection = (
   itemsByCollection: ReadonlyMap<string, ItemWithPath[]>,
-  query: string
+  query: string,
 ): ReadonlyMap<string, ItemWithPath[]> => {
   if (!query) return itemsByCollection;
   const out = new Map<string, ItemWithPath[]>();
   // A collection that filtered down to nothing stays PRESENT with an empty array: absent
   // means "its Get has not landed" (a Loading… row), which a filter must never claim.
-  for (const [id, items] of itemsByCollection) out.set(id, filterTree(items, query));
+  for (const [id, items] of itemsByCollection)
+    out.set(id, filterTree(items, query));
   return out;
 };
 
@@ -111,14 +120,17 @@ export const filterItemsByCollection = (
 // panelDropAllowed has already verified is the only one they are in.
 export const panelDropCollection = (
   dragged: readonly ItemWithPath[],
-  parent: PanelNode | null
+  parent: PanelNode | null,
 ): string | null =>
-  parent !== null ? panelNodeCollection(parent) : dragged[0]?.collection ?? null;
+  parent !== null
+    ? panelNodeCollection(parent)
+    : (dragged[0]?.collection ?? null);
 
 // The item a drop's parent addresses, or null for a collection row and the untiered root —
 // both of which are a collection's ROOT, which is `null` in item terms.
-export const panelDropParentItem = (parent: PanelNode | null): ItemWithPath | null =>
-  parent?.kind === "item" ? parent.item : null;
+export const panelDropParentItem = (
+  parent: PanelNode | null,
+): ItemWithPath | null => (parent?.kind === "item" ? parent.item : null);
 
 // The UNFILTERED siblings a drop would join, resolved out of the destination COLLECTION's
 // items: the `children` the tree sees are pruned to whatever the filter box left visible,
@@ -126,7 +138,7 @@ export const panelDropParentItem = (parent: PanelNode | null): ItemWithPath | nu
 const destinationChildren = (
   parent: PanelNode | null,
   destination: string,
-  itemsByCollection: ReadonlyMap<string, ItemWithPath[]>
+  itemsByCollection: ReadonlyMap<string, ItemWithPath[]>,
 ): ItemWithPath[] => {
   const roots = itemsByCollection.get(destination) ?? [];
   const parentItem = panelDropParentItem(parent);
@@ -144,7 +156,10 @@ const samePath = (a: readonly string[], b: readonly string[]): boolean =>
 export const panelCanDrop = (
   dragged: readonly PanelNode[],
   to: { parent: PanelNode | null; before?: PanelNode },
-  opts: { tiered: boolean; itemsByCollection: ReadonlyMap<string, ItemWithPath[]> }
+  opts: {
+    tiered: boolean;
+    itemsByCollection: ReadonlyMap<string, ItemWithPath[]>;
+  },
 ): boolean => {
   if (!panelDropAllowed(dragged, to, { tiered: opts.tiered })) return false;
   const items = panelItems(dragged);
@@ -154,8 +169,8 @@ export const panelCanDrop = (
   const newPath = childPathOf(panelDropParentItem(to.parent));
   const taken = new Set(
     destinationChildren(to.parent, destination, opts.itemsByCollection).map(
-      (child) => child.item.name
-    )
+      (child) => child.item.name,
+    ),
   );
   for (const node of pruneNestedSelections(items)) {
     if (samePath(node.path, newPath)) continue; // pure reorder in its own parent

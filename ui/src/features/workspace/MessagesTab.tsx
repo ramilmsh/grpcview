@@ -25,7 +25,13 @@ export function MessagesTab({
     <div className="flex flex-col" style={{ flex: 1, minHeight: 0 }}>
       <div
         className="flex flex-col"
-        style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12, gap: 10 }}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: "auto",
+          padding: 12,
+          gap: 10,
+        }}
       >
         {messages.map((body, i) => (
           <div
@@ -40,7 +46,10 @@ export function MessagesTab({
           >
             <div
               className="flex items-center gap-[8px]"
-              style={{ padding: "6px 10px", borderBottom: "1px solid var(--line)" }}
+              style={{
+                padding: "6px 10px",
+                borderBottom: "1px solid var(--line)",
+              }}
             >
               <Tag variant="accent">#{i + 1}</Tag>
               {i === 0 && (
@@ -80,7 +89,10 @@ export function MessagesTab({
           </div>
         ))}
         <div>
-          <Button onClick={add} style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}>
+          <Button
+            onClick={add}
+            style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
+          >
             <Plus size={13} /> Add message
           </Button>
         </div>
@@ -99,7 +111,9 @@ export function MessagesTab({
           {messages.length} {messages.length === 1 ? "message" : "messages"} ·{" "}
           {inputTypeName ?? "message"}
         </span>
-        <span className="ml-auto">sent together, then responses stream back</span>
+        <span className="ml-auto">
+          sent together, then responses stream back
+        </span>
       </div>
     </div>
   );

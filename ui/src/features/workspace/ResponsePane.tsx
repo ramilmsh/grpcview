@@ -51,7 +51,7 @@ export function ResponsePane({
 
   const pretty = useMemo(
     () => (response ? prettyBody(response.response) : ""),
-    [response]
+    [response],
   );
 
   // Streaming never sets `loading`.
@@ -63,7 +63,13 @@ export function ResponsePane({
     return (
       <div style={{ padding: 16, overflow: "auto" }}>
         <div
-          style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 600, color: "var(--err)", marginBottom: 6 }}
+          style={{
+            fontSize: 11,
+            textTransform: "uppercase",
+            fontWeight: 600,
+            color: "var(--err)",
+            marginBottom: 6,
+          }}
         >
           Error
         </div>
@@ -89,7 +95,9 @@ export function ResponsePane({
   if (!streamMode && !response && !hasHistory) {
     return (
       <Centered>
-        {kind === "u" ? "No response yet. Click Invoke." : "No stream yet. Click Invoke."}
+        {kind === "u"
+          ? "No response yet. Click Invoke."
+          : "No stream yet. Click Invoke."}
       </Centered>
     );
   }
@@ -97,12 +105,18 @@ export function ResponsePane({
   const hasResult = !!response || streamMode;
 
   // undefined means a stream is still open before its result frame.
-  const code = response ? response.status?.code ?? 0 : undefined;
+  const code = response ? (response.status?.code ?? 0) : undefined;
   const ok = code === 0;
-  const reqMd = metadataEntries(response?.requestMetadata as Record<string, unknown> | undefined);
-  const resMd = metadataEntries(response?.responseMetadata as Record<string, unknown> | undefined);
+  const reqMd = metadataEntries(
+    response?.requestMetadata as Record<string, unknown> | undefined,
+  );
+  const resMd = metadataEntries(
+    response?.responseMetadata as Record<string, unknown> | undefined,
+  );
 
-  const bodyText = streamMode ? streamMsgs.map((m) => m.body).join("\n\n") : pretty;
+  const bodyText = streamMode
+    ? streamMsgs.map((m) => m.body).join("\n\n")
+    : pretty;
   const copyBody = () => navigator.clipboard?.writeText(bodyText);
   const downloadBody = () => {
     const blob = new Blob([bodyText], { type: "application/json" });
@@ -115,92 +129,113 @@ export function ResponsePane({
   };
 
   return (
-    <div className="flex flex-col" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+    <div
+      className="flex flex-col"
+      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+    >
       {hasResult && (
-      <div
-        className="flex items-center gap-[10px]"
-        style={{
-          flex: "none",
-          padding: "8px 14px",
-          borderBottom: "1px solid var(--line)",
-          background: "var(--color-bg)",
-        }}
-      >
-        {code !== undefined ? (
-          <span
-            className="tag font-mono"
-            style={{
-              fontWeight: 600,
-              background: ok ? "var(--ok-bg)" : "var(--err-bg)",
-              color: ok ? "var(--ok)" : "var(--err)",
-            }}
-          >
-            {code} {codeName(code)}
-          </span>
-        ) : (
-          <span
-            className="tag font-mono"
-            style={{ fontWeight: 600, background: "var(--panel-2)", color: "var(--color-neutral-400)" }}
-          >
-            pending
-          </span>
-        )}
-
-        {streamMode && (
-          <span
-            className="flex items-center gap-[6px] font-mono"
-            style={{ fontSize: 12, color: "var(--color-neutral-500)" }}
-          >
-            {streaming ? (
-              <>
-                <span className="dot pulse" style={{ background: "var(--ok)" }} />
-                streaming
-              </>
-            ) : (
-              "closed"
-            )}
-          </span>
-        )}
-        {streamMode && (
-          <span
-            className="flex items-center gap-[5px] font-mono"
-            style={{ fontSize: 12, color: "var(--color-neutral-500)" }}
-          >
-            <Stack size={13} />
-            {streamMsgs.length} {streamMsgs.length === 1 ? "msg" : "msgs"}
-          </span>
-        )}
-
-        {response?.latency && (
-          <span className="font-mono" style={{ fontSize: 12, color: "var(--color-neutral-500)" }}>
-            {latencyLabel(response.latency)}
-          </span>
-        )}
-        {response?.timestamp && (
-          <span className="font-mono" style={{ fontSize: 12, color: "var(--color-neutral-500)" }}>
-            {timestampLabel(response.timestamp)}
-          </span>
-        )}
-        <div className="ml-auto flex items-center" style={{ gap: 2 }}>
-          {streaming && (
-            <Button
-              variant="danger"
-              onClick={onStop}
-              style={{ padding: "4px 12px", fontSize: 12, gap: 6, marginRight: 6 }}
-              title="Stop the stream"
+        <div
+          className="flex items-center gap-[10px]"
+          style={{
+            flex: "none",
+            padding: "8px 14px",
+            borderBottom: "1px solid var(--line)",
+            background: "var(--color-bg)",
+          }}
+        >
+          {code !== undefined ? (
+            <span
+              className="tag font-mono"
+              style={{
+                fontWeight: 600,
+                background: ok ? "var(--ok-bg)" : "var(--err-bg)",
+                color: ok ? "var(--ok)" : "var(--err)",
+              }}
             >
-              <Stop weight="fill" size={12} />
-              Stop
-            </Button>
+              {code} {codeName(code)}
+            </span>
+          ) : (
+            <span
+              className="tag font-mono"
+              style={{
+                fontWeight: 600,
+                background: "var(--panel-2)",
+                color: "var(--color-neutral-400)",
+              }}
+            >
+              pending
+            </span>
           )}
-          <IconButton title="Copy body" onClick={copyBody}>
-            <Copy />
-          </IconButton>
-          <IconButton title="Download body" onClick={downloadBody}>
-            <DownloadSimple />
-          </IconButton>
+
+          {streamMode && (
+            <span
+              className="flex items-center gap-[6px] font-mono"
+              style={{ fontSize: 12, color: "var(--color-neutral-500)" }}
+            >
+              {streaming ? (
+                <>
+                  <span
+                    className="dot pulse"
+                    style={{ background: "var(--ok)" }}
+                  />
+                  streaming
+                </>
+              ) : (
+                "closed"
+              )}
+            </span>
+          )}
+          {streamMode && (
+            <span
+              className="flex items-center gap-[5px] font-mono"
+              style={{ fontSize: 12, color: "var(--color-neutral-500)" }}
+            >
+              <Stack size={13} />
+              {streamMsgs.length} {streamMsgs.length === 1 ? "msg" : "msgs"}
+            </span>
+          )}
+
+          {response?.latency && (
+            <span
+              className="font-mono"
+              style={{ fontSize: 12, color: "var(--color-neutral-500)" }}
+            >
+              {latencyLabel(response.latency)}
+            </span>
+          )}
+          {response?.timestamp && (
+            <span
+              className="font-mono"
+              style={{ fontSize: 12, color: "var(--color-neutral-500)" }}
+            >
+              {timestampLabel(response.timestamp)}
+            </span>
+          )}
+          <div className="ml-auto flex items-center" style={{ gap: 2 }}>
+            {streaming && (
+              <Button
+                variant="danger"
+                onClick={onStop}
+                style={{
+                  padding: "4px 12px",
+                  fontSize: 12,
+                  gap: 6,
+                  marginRight: 6,
+                }}
+                title="Stop the stream"
+              >
+                <Stop weight="fill" size={12} />
+                Stop
+              </Button>
+            )}
+            <IconButton title="Copy body" onClick={copyBody}>
+              <Copy />
+            </IconButton>
+            <IconButton title="Download body" onClick={downloadBody}>
+              <DownloadSimple />
+            </IconButton>
+          </div>
         </div>
-      </div>
       )}
 
       {!ok && response?.status?.message && (
@@ -220,12 +255,22 @@ export function ResponsePane({
 
       <div
         className="flex items-center"
-        style={{ flex: "none", padding: "0 6px", borderBottom: "1px solid var(--line)" }}
+        style={{
+          flex: "none",
+          padding: "0 6px",
+          borderBottom: "1px solid var(--line)",
+        }}
       >
-        <Subtab active={subtab === "messages"} onClick={() => setSubtab("messages")}>
+        <Subtab
+          active={subtab === "messages"}
+          onClick={() => setSubtab("messages")}
+        >
           Messages
         </Subtab>
-        <Subtab active={subtab === "metadata"} onClick={() => setSubtab("metadata")}>
+        <Subtab
+          active={subtab === "metadata"}
+          onClick={() => setSubtab("metadata")}
+        >
           Metadata
           {reqMd.length + resMd.length > 0 && (
             <Tag variant="neutral" className="ml-[2px]">
@@ -233,7 +278,10 @@ export function ResponsePane({
             </Tag>
           )}
         </Subtab>
-        <Subtab active={subtab === "history"} onClick={() => setSubtab("history")}>
+        <Subtab
+          active={subtab === "history"}
+          onClick={() => setSubtab("history")}
+        >
           <span className="flex items-center gap-[5px]">
             <ClockCounterClockwise size={13} />
             Timeline
@@ -274,7 +322,13 @@ export function ResponsePane({
   );
 }
 
-function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; streaming: boolean }) {
+function StreamMessagesView({
+  msgs,
+  streaming,
+}: {
+  msgs: StreamMessage[];
+  streaming: boolean;
+}) {
   return (
     <div
       className="flex flex-col"
@@ -293,7 +347,10 @@ function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; stream
         >
           <div
             className="flex items-center gap-[8px]"
-            style={{ padding: "6px 10px", borderBottom: "1px solid var(--line)" }}
+            style={{
+              padding: "6px 10px",
+              borderBottom: "1px solid var(--line)",
+            }}
           >
             <Tag variant="accent">#{i + 1}</Tag>
             <span
@@ -319,7 +376,10 @@ function StreamMessagesView({ msgs, streaming }: { msgs: StreamMessage[]; stream
         </div>
       ))}
       {streaming ? (
-        <div className="flex items-center gap-[8px]" style={{ padding: "4px 2px" }}>
+        <div
+          className="flex items-center gap-[8px]"
+          style={{ padding: "4px 2px" }}
+        >
           <span className="dot pulse" style={{ background: "var(--ok)" }} />
           <span className="text-muted" style={{ fontSize: 12 }}>
             awaiting next message…
@@ -390,7 +450,11 @@ function HistoryTimeline({
             {res?.latency && (
               <span
                 className="font-mono"
-                style={{ fontSize: 12, color: "var(--color-neutral-500)", flex: "none" }}
+                style={{
+                  fontSize: 12,
+                  color: "var(--color-neutral-500)",
+                  flex: "none",
+                }}
               >
                 {latencyLabel(res.latency)}
               </span>
@@ -409,7 +473,11 @@ function HistoryTimeline({
             </span>
             <span
               className="ml-auto font-mono"
-              style={{ fontSize: 11, color: "var(--color-neutral-500)", flex: "none" }}
+              style={{
+                fontSize: 11,
+                color: "var(--color-neutral-500)",
+                flex: "none",
+              }}
             >
               {res?.timestamp ? timestampLabel(res.timestamp) : ""}
             </span>
@@ -429,7 +497,13 @@ function HistoryTimeline({
   );
 }
 
-function MetaSection({ title, entries }: { title: string; entries: Array<[string, string]> }) {
+function MetaSection({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: Array<[string, string]>;
+}) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div
@@ -450,9 +524,22 @@ function MetaSection({ title, entries }: { title: string; entries: Array<[string
       ) : (
         <div className="flex flex-col" style={{ gap: 3 }}>
           {entries.map(([k, v]) => (
-            <div key={k} className="flex gap-[8px] font-mono" style={{ fontSize: 12 }}>
-              <span style={{ color: "var(--color-accent-300)", flex: "none" }}>{k}:</span>
-              <span style={{ color: "var(--color-neutral-400)", wordBreak: "break-all" }}>{v}</span>
+            <div
+              key={k}
+              className="flex gap-[8px] font-mono"
+              style={{ fontSize: 12 }}
+            >
+              <span style={{ color: "var(--color-accent-300)", flex: "none" }}>
+                {k}:
+              </span>
+              <span
+                style={{
+                  color: "var(--color-neutral-400)",
+                  wordBreak: "break-all",
+                }}
+              >
+                {v}
+              </span>
             </div>
           ))}
         </div>

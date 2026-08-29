@@ -1,8 +1,16 @@
 import { useMemo, type ReactNode } from "react";
 import type { CollectionSummary } from "@grpcview/v1/service_pb";
-import type { TreeAdapter, TreeItemLike, TreeRowState } from "@/components/tree/types";
+import type {
+  TreeAdapter,
+  TreeItemLike,
+  TreeRowState,
+} from "@/components/tree/types";
 import { itemKey, type ItemWithPath } from "@/lib/format";
-import { renderRequestRow, requestTreeItem, type RequestRowCallbacks } from "./request-tree";
+import {
+  renderRequestRow,
+  requestTreeItem,
+  type RequestRowCallbacks,
+} from "./request-tree";
 
 // The request panel's tree spans two tiers: the collections in the workspace, and the
 // items inside one. A collection row appears only when there is more than one — with a
@@ -71,8 +79,9 @@ export const panelNodeLabel = (node: PanelNode): string => {
 
 // Whether the collection tier is on screen. Exactly one collection means no tier at
 // all — the panel header names it, as it did before the workspace existed.
-export const panelTiered = (collections: readonly CollectionSummary[]): boolean =>
-  collections.length !== 1;
+export const panelTiered = (
+  collections: readonly CollectionSummary[],
+): boolean => collections.length !== 1;
 
 // Drops the tiers that only the tree understands, for the callbacks that speak items
 // (onDelete / onMove / onContextMenu).
@@ -93,7 +102,9 @@ export interface PanelTreeInput {
 const collectionTooltip = (c: CollectionSummary): string =>
   `${c.id} — ${c.sourceCount} ${c.sourceCount === 1 ? "source" : "sources"}`;
 
-export function panelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> {
+export function panelTreeAdapter(
+  input: PanelTreeInput,
+): TreeAdapter<PanelNode> {
   const { collections, itemsByCollection, activeCollection } = input;
   const tiered = panelTiered(collections);
 
@@ -103,20 +114,33 @@ export function panelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> 
   const childrenById = new Map<string, PanelNode[]>();
   const parentById = new Map<string, PanelNode>();
 
-  const register = (node: PanelNode, children: PanelNode[], parent: PanelNode | undefined): void => {
+  const register = (
+    node: PanelNode,
+    children: PanelNode[],
+    parent: PanelNode | undefined,
+  ): void => {
     const id = panelNodeId(node);
     childrenById.set(id, children);
     if (parent) parentById.set(id, parent);
   };
 
-  const itemNode = (item: ItemWithPath, parent: PanelNode | undefined): PanelNode => {
+  const itemNode = (
+    item: ItemWithPath,
+    parent: PanelNode | undefined,
+  ): PanelNode => {
     const node: PanelNode = { kind: "item", item };
-    const children = (item.children ?? []).map((child) => itemNode(child, node));
+    const children = (item.children ?? []).map((child) =>
+      itemNode(child, node),
+    );
     register(node, children, parent);
     return node;
   };
 
-  const statusNode = (collection: string, label: string, parent: PanelNode): PanelNode => {
+  const statusNode = (
+    collection: string,
+    label: string,
+    parent: PanelNode,
+  ): PanelNode => {
     const node: PanelNode = { kind: "status", collection, label };
     register(node, [], parent);
     return node;
@@ -124,7 +148,10 @@ export function panelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> 
 
   // A broken collection reports its error whatever its Get did, because a listing that
   // failed to summarize it will never produce a tree.
-  const collectionChildren = (c: CollectionSummary, parent: PanelNode): PanelNode[] => {
+  const collectionChildren = (
+    c: CollectionSummary,
+    parent: PanelNode,
+  ): PanelNode[] => {
     if (c.error) return [statusNode(c.id, c.error, parent)];
     const items = itemsByCollection.get(c.id);
     if (items === undefined) return [statusNode(c.id, LOADING_LABEL, parent)];
@@ -138,12 +165,14 @@ export function panelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> 
         register(node, collectionChildren(c, node), undefined);
         return node;
       })
-    : (itemsByCollection.get(collections[0].id) ?? []).map((item) => itemNode(item, undefined));
+    : (itemsByCollection.get(collections[0].id) ?? []).map((item) =>
+        itemNode(item, undefined),
+      );
 
   return {
     getId: panelNodeId,
     getChildren: (node) =>
-      node === undefined ? roots : childrenById.get(panelNodeId(node)) ?? [],
+      node === undefined ? roots : (childrenById.get(panelNodeId(node)) ?? []),
 
     // The ACTIVE collection opens itself; every other one starts closed. Tree folds
     // this in through resolveExpansion (flatten.ts:87-105), whose `seen` set means the
@@ -151,7 +180,9 @@ export function panelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> 
     getCollapsibleState: (node) => {
       switch (node.kind) {
         case "collection":
-          return node.collection.id === activeCollection ? "expanded" : "collapsed";
+          return node.collection.id === activeCollection
+            ? "expanded"
+            : "collapsed";
         case "item":
           return node.item.item.content.case === "folder" ? "expanded" : "none";
         case "status":
@@ -184,11 +215,14 @@ export function panelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> 
   };
 }
 
-export function usePanelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNode> {
+export function usePanelTreeAdapter(
+  input: PanelTreeInput,
+): TreeAdapter<PanelNode> {
   const { collections, itemsByCollection, activeCollection } = input;
   return useMemo(
-    () => panelTreeAdapter({ collections, itemsByCollection, activeCollection }),
-    [collections, itemsByCollection, activeCollection]
+    () =>
+      panelTreeAdapter({ collections, itemsByCollection, activeCollection }),
+    [collections, itemsByCollection, activeCollection],
   );
 }
 
@@ -198,7 +232,7 @@ export function usePanelTreeAdapter(input: PanelTreeInput): TreeAdapter<PanelNod
 export function renderPanelRow(
   node: PanelNode,
   state: TreeRowState,
-  cb: RequestRowCallbacks
+  cb: RequestRowCallbacks,
 ): ReactNode {
   if (node.kind !== "item") return null;
   return renderRequestRow(node.item, state, cb);
@@ -209,7 +243,7 @@ export function renderPanelRow(
 export function panelDropAllowed(
   dragged: readonly PanelNode[],
   to: { parent: PanelNode | null; before?: PanelNode },
-  opts: { tiered: boolean }
+  opts: { tiered: boolean },
 ): boolean {
   // Only items are draggable payloads: a collection row is not moveable (MoveItem
   // addresses one collection) and a status row is not a thing at all.
@@ -234,7 +268,8 @@ export function panelDropAllowed(
   // Cross-collection moves are rejected outright (Decision 10): MoveItem addresses one
   // collection, and copying across two source lists and two script sets is not this phase.
   if (!items.every((item) => item.collection === destination)) return false;
-  if (to.before !== undefined && panelNodeCollection(to.before) !== destination) return false;
+  if (to.before !== undefined && panelNodeCollection(to.before) !== destination)
+    return false;
 
   return true;
 }

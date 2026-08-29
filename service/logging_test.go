@@ -13,7 +13,8 @@ import (
 
 type fakeStreamConn struct{}
 
-func (fakeStreamConn) Spec() connect.Spec           { return connect.Spec{Procedure: "/test.v1.Svc/Proc"} }
+func (fakeStreamConn) Spec() connect.Spec { return connect.Spec{Procedure: "/test.v1.Svc/Proc"} }
+
 func (fakeStreamConn) Peer() connect.Peer           { return connect.Peer{Protocol: "connect", Addr: "test"} }
 func (fakeStreamConn) Receive(any) error            { return nil }
 func (fakeStreamConn) RequestHeader() http.Header   { return http.Header{} }

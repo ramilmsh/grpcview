@@ -15,7 +15,7 @@ const tree: Node[] = [{ id: "F", folder: true, kids: [{ id: "r" }] }];
 
 const adapter: TreeAdapter<Node> = {
   getId: (node) => node.id,
-  getChildren: (node) => (node === undefined ? tree : node.kids ?? []),
+  getChildren: (node) => (node === undefined ? tree : (node.kids ?? [])),
   getCollapsibleState: (node) => (node.folder ? "collapsed" : "none"),
   getTreeItem: (node) => ({ label: node.id }),
   getTypeaheadLabel: (node) => node.id,
@@ -26,7 +26,11 @@ const rowOf = (id: string) => flat.rows[flat.indexById.get(id) ?? -1];
 
 function render(
   id: string,
-  drop: { dropTarget: TreeRowState["dropTarget"]; dropDepth?: number; dragging?: boolean }
+  drop: {
+    dropTarget: TreeRowState["dropTarget"];
+    dropDepth?: number;
+    dragging?: boolean;
+  },
 ): string {
   return renderToStaticMarkup(
     <TreeRow
@@ -51,15 +55,15 @@ function render(
       onTwistieClick={() => {}}
       onContextMenu={() => {}}
       onDragStart={() => {}}
-    />
+    />,
   );
 }
 
 describe("TreeRow: drag and drop chrome", () => {
   it("is draggable and carries the data-index the delegated handlers recover it by", () => {
     const markup = render("r", { dropTarget: null });
-    expect(markup).toContain("draggable=\"true\"");
-    expect(markup).toContain("data-index=\"3\"");
+    expect(markup).toContain('draggable="true"');
+    expect(markup).toContain('data-index="3"');
   });
 
   it("is NOT draggable while renaming — the row is hosting a text input", () => {
@@ -86,9 +90,9 @@ describe("TreeRow: drag and drop chrome", () => {
         onTwistieClick={() => {}}
         onContextMenu={() => {}}
         onDragStart={() => {}}
-      />
+      />,
     );
-    expect(markup).toContain("draggable=\"false\"");
+    expect(markup).toContain('draggable="false"');
   });
 
   it("paints nothing extra when there is no drop in progress", () => {
@@ -106,14 +110,16 @@ describe("TreeRow: drag and drop chrome", () => {
 
   it("a `before`/`after` drop draws a line at that edge, indented to the drop depth", () => {
     expect(render("r", { dropTarget: "before", dropDepth: 1 })).toContain(
-      '<span class="dropline before" style="--drop-depth:1"></span>'
+      '<span class="dropline before" style="--drop-depth:1"></span>',
     );
     expect(render("r", { dropTarget: "after", dropDepth: 2 })).toContain(
-      '<span class="dropline after" style="--drop-depth:2"></span>'
+      '<span class="dropline after" style="--drop-depth:2"></span>',
     );
   });
 
   it("a dragged row reads as in-flight", () => {
-    expect(render("r", { dropTarget: null, dragging: true })).toContain("treerow dragging");
+    expect(render("r", { dropTarget: null, dragging: true })).toContain(
+      "treerow dragging",
+    );
   });
 });

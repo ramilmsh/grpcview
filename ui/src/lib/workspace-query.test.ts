@@ -22,13 +22,15 @@ describe("keyForCollection", () => {
   it("is the key connect-query itself derives for Get with that collection", () => {
     for (const id of [".", "services/payments/requests"]) {
       expect(keyForCollection(transport, id)).toEqual(
-        createQueryOptions(get, { collection: id }, { transport }).queryKey
+        createQueryOptions(get, { collection: id }, { transport }).queryKey,
       );
     }
   });
 
   it("is per collection, so two collections cannot clobber one entry", () => {
-    expect(keyForCollection(transport, "a")).not.toEqual(keyForCollection(transport, "b"));
+    expect(keyForCollection(transport, "a")).not.toEqual(
+      keyForCollection(transport, "b"),
+    );
   });
 });
 
@@ -39,7 +41,7 @@ describe("keyForCollection", () => {
 describe("workspaceModulesKey", () => {
   it("is the key connect-query itself derives for ListWorkspaceModules", () => {
     expect(workspaceModulesKey(transport)).toEqual(
-      createQueryOptions(listWorkspaceModules, {}, { transport }).queryKey
+      createQueryOptions(listWorkspaceModules, {}, { transport }).queryKey,
     );
   });
 });

@@ -11,18 +11,22 @@ interface Node {
   kids?: Node[];
 }
 
-const leaf = (id: string): Node => ({ id, label: `label:${id}`, state: "none" });
+const leaf = (id: string): Node => ({
+  id,
+  label: `label:${id}`,
+  state: "none",
+});
 
 const folder = (
   id: string,
   kids: Node[],
-  state: "collapsed" | "expanded" = "collapsed"
+  state: "collapsed" | "expanded" = "collapsed",
 ): Node => ({ id, label: `label:${id}`, state, kids });
 
 function adapterFor(roots: Node[]): TreeAdapter<Node> {
   return {
     getId: (n) => n.id,
-    getChildren: (n) => (n === undefined ? roots : n.kids ?? []),
+    getChildren: (n) => (n === undefined ? roots : (n.kids ?? [])),
     getCollapsibleState: (n) => n.state,
     getTreeItem: (n) => ({ label: n.label }),
     getTypeaheadLabel: (n) => n.label,
@@ -55,12 +59,42 @@ describe("flatten: expansion-gated descent", () => {
     expect(rows.map((r) => r.id)).toEqual(["A", "B", "B1", "B1a", "B2", "C"]);
 
     const byId = new Map(rows.map((r) => [r.id, r]));
-    expect(byId.get("A")).toMatchObject({ depth: 0, parentId: null, expandable: true, expanded: false });
-    expect(byId.get("B")).toMatchObject({ depth: 0, parentId: null, expandable: true, expanded: true });
-    expect(byId.get("B1")).toMatchObject({ depth: 1, parentId: "B", expandable: true, expanded: true });
-    expect(byId.get("B1a")).toMatchObject({ depth: 2, parentId: "B1", expandable: false, expanded: false });
-    expect(byId.get("B2")).toMatchObject({ depth: 1, parentId: "B", expandable: false, expanded: false });
-    expect(byId.get("C")).toMatchObject({ depth: 0, parentId: null, expandable: false, expanded: false });
+    expect(byId.get("A")).toMatchObject({
+      depth: 0,
+      parentId: null,
+      expandable: true,
+      expanded: false,
+    });
+    expect(byId.get("B")).toMatchObject({
+      depth: 0,
+      parentId: null,
+      expandable: true,
+      expanded: true,
+    });
+    expect(byId.get("B1")).toMatchObject({
+      depth: 1,
+      parentId: "B",
+      expandable: true,
+      expanded: true,
+    });
+    expect(byId.get("B1a")).toMatchObject({
+      depth: 2,
+      parentId: "B1",
+      expandable: false,
+      expanded: false,
+    });
+    expect(byId.get("B2")).toMatchObject({
+      depth: 1,
+      parentId: "B",
+      expandable: false,
+      expanded: false,
+    });
+    expect(byId.get("C")).toMatchObject({
+      depth: 0,
+      parentId: null,
+      expandable: false,
+      expanded: false,
+    });
   });
 
   it("a collapsed folder contributes none of its children's rows", () => {
@@ -89,7 +123,9 @@ describe("flatten: a leaf can never be descended into", () => {
 });
 
 describe("flatten: defaultExpanded seeding", () => {
-  const tree = [folder("D", [folder("D1", [leaf("D1a")], "expanded")], "expanded")];
+  const tree = [
+    folder("D", [folder("D1", [leaf("D1a")], "expanded")], "expanded"),
+  ];
 
   it("reports a default-expanded root not yet in the caller's expanded set", () => {
     const { defaultExpanded, rows } = flatten(adapterFor(tree), new Set());
@@ -104,7 +140,10 @@ describe("flatten: defaultExpanded seeding", () => {
   });
 
   it("reports nothing once every default-expanded ancestor is seeded", () => {
-    const { defaultExpanded, rows } = flatten(adapterFor(tree), new Set(["D", "D1"]));
+    const { defaultExpanded, rows } = flatten(
+      adapterFor(tree),
+      new Set(["D", "D1"]),
+    );
     expect(defaultExpanded).toEqual([]);
     expect(rows.map((r) => r.id)).toEqual(["D", "D1", "D1a"]);
   });
@@ -134,7 +173,9 @@ describe("flatten: posInSet/setSize", () => {
   });
 
   it("a nested folder's children get posInSet ascending 1..n, and setSize == the folder's visible child count", () => {
-    const tree = [folder("F", [leaf("C1"), leaf("C2"), leaf("C3")], "expanded")];
+    const tree = [
+      folder("F", [leaf("C1"), leaf("C2"), leaf("C3")], "expanded"),
+    ];
     const { rows } = flatten(adapterFor(tree), new Set(["F"]));
     const byId = new Map(rows.map((r) => [r.id, r]));
 
@@ -145,7 +186,10 @@ describe("flatten: posInSet/setSize", () => {
   });
 
   it("a collapsed folder's children contribute nothing — they are not rows, so they cannot inflate anyone's setSize", () => {
-    const roots = [folder("A", [leaf("A1"), leaf("A2"), leaf("A3")]), leaf("B")];
+    const roots = [
+      folder("A", [leaf("A1"), leaf("A2"), leaf("A3")]),
+      leaf("B"),
+    ];
     const { rows } = flatten(adapterFor(roots), new Set());
 
     expect(rows.map((r) => r.id)).toEqual(["A", "B"]);
@@ -154,7 +198,10 @@ describe("flatten: posInSet/setSize", () => {
   });
 
   it("a deeper level restarts numbering at 1 rather than continuing the parent's own posInSet", () => {
-    const tree = [leaf("R0"), folder("D", [leaf("D1"), leaf("D2")], "expanded")];
+    const tree = [
+      leaf("R0"),
+      folder("D", [leaf("D1"), leaf("D2")], "expanded"),
+    ];
     const { rows } = flatten(adapterFor(tree), new Set(["D"]));
     const byId = new Map(rows.map((r) => [r.id, r]));
 
@@ -172,7 +219,15 @@ describe("flatten: posInSet/setSize", () => {
     const { rows } = flatten(adapterFor(tree), new Set(["F1", "F2"]));
     const byId = new Map(rows.map((r) => [r.id, r]));
 
-    expect(rows.map((r) => r.id)).toEqual(["F1", "C1", "C2", "F2", "D1", "D2", "D3"]);
+    expect(rows.map((r) => r.id)).toEqual([
+      "F1",
+      "C1",
+      "C2",
+      "F2",
+      "D1",
+      "D2",
+      "D3",
+    ]);
     expect(byId.get("C1")).toMatchObject({ posInSet: 1, setSize: 2 });
     expect(byId.get("C2")).toMatchObject({ posInSet: 2, setSize: 2 });
     expect(byId.get("D1")).toMatchObject({ posInSet: 1, setSize: 3 });
@@ -226,7 +281,11 @@ describe("flatten: guards", () => {
   it("throws on ids that collide across different parents, not just siblings", () => {
     const tree = [
       { id: "dup", label: "Root Dup", state: "none" as const },
-      folder("F", [{ id: "dup", label: "Nested Dup", state: "none" as const }], "expanded"),
+      folder(
+        "F",
+        [{ id: "dup", label: "Nested Dup", state: "none" as const }],
+        "expanded",
+      ),
     ];
     let caught: unknown;
     try {
@@ -242,9 +301,19 @@ describe("flatten: guards", () => {
 
 describe("resolveExpansion", () => {
   it("resolves a deep default-expanded chain in a single call", () => {
-    const tree = [folder("A", [folder("B", [folder("C", [leaf("D")], "expanded")], "expanded")], "expanded")];
+    const tree = [
+      folder(
+        "A",
+        [folder("B", [folder("C", [leaf("D")], "expanded")], "expanded")],
+        "expanded",
+      ),
+    ];
 
-    const { flat, seeded } = resolveExpansion(adapterFor(tree), new Set(), new Set());
+    const { flat, seeded } = resolveExpansion(
+      adapterFor(tree),
+      new Set(),
+      new Set(),
+    );
 
     expect(flat.rows.map((r) => r.id)).toEqual(["A", "B", "C", "D"]);
     expect(flat.defaultExpanded).toEqual([]);
@@ -254,7 +323,11 @@ describe("resolveExpansion", () => {
   it("never re-folds an id already in `seen`, even though it still matches defaultExpanded", () => {
     const tree = [folder("A", [leaf("A1")], "expanded")];
 
-    const { flat, seeded } = resolveExpansion(adapterFor(tree), new Set(), new Set(["A"]));
+    const { flat, seeded } = resolveExpansion(
+      adapterFor(tree),
+      new Set(),
+      new Set(["A"]),
+    );
 
     expect(flat.rows.map((r) => r.id)).toEqual(["A"]);
     expect(flat.defaultExpanded).toEqual(["A"]);

@@ -3,7 +3,8 @@
 // before round-tripping to the backend rule they are re-stating.
 export const DEFAULT_SCRIPT_PATH = "scripts/";
 
-const RULE = 'must be a relative path under scripts/, with no ".." segment, ending in .ts';
+const RULE =
+  'must be a relative path under scripts/, with no ".." segment, ending in .ts';
 
 export function validateScriptPath(path: string): string | null {
   if (!path || path.startsWith("/") || !path.endsWith(".ts")) return RULE;

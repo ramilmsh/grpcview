@@ -2,12 +2,16 @@ import { describe, it } from "node:test";
 import { fn } from "jest-mock";
 import { expect } from "expect";
 import type { CollectionSummary } from "@grpcview/v1/service_pb";
-import { collectionSwitcherItems, collectionSwitcherLabel } from "./collection-switcher";
+import {
+  collectionSwitcherItems,
+  collectionSwitcherLabel,
+} from "./collection-switcher";
 
 const summary = (id: string, name: string): CollectionSummary =>
   ({ id, name }) as unknown as CollectionSummary;
 
-const labels = (items: { label: string }[]): string[] => items.map((i) => i.label);
+const labels = (items: { label: string }[]): string[] =>
+  items.map((i) => i.label);
 
 const noActions = { select() {}, rename() {}, createNew() {} };
 
@@ -43,21 +47,30 @@ describe("collectionSwitcherItems", () => {
 
   it("switches to the collection its row names", () => {
     const select = fn();
-    const items = collectionSwitcherItems(collections, "api", { ...noActions, select });
+    const items = collectionSwitcherItems(collections, "api", {
+      ...noActions,
+      select,
+    });
     items[1].onSelect();
     expect(select).toHaveBeenCalledWith("web");
   });
 
   it("puts the two write actions last, behind ONE separator, rename before create", () => {
     const items = collectionSwitcherItems(collections, "api", noActions);
-    expect(labels(items.slice(2))).toEqual(["Rename collection…", "New collection…"]);
+    expect(labels(items.slice(2))).toEqual([
+      "Rename collection…",
+      "New collection…",
+    ]);
     expect(items[2].separatorBefore).toBe(true);
     expect(items[3].separatorBefore).toBe(false);
   });
 
   it("renames on the rename row — it takes no argument, it acts on the active collection", () => {
     const rename = fn();
-    const items = collectionSwitcherItems(collections, "api", { ...noActions, rename });
+    const items = collectionSwitcherItems(collections, "api", {
+      ...noActions,
+      rename,
+    });
     items[2].onSelect();
     expect(rename).toHaveBeenCalledWith();
   });
@@ -67,7 +80,10 @@ describe("collectionSwitcherItems", () => {
   // Rename goes with them — there is no collection for it to act on.
   it("is the create action alone, unseparated, in a workspace with no collections", () => {
     const createNew = fn();
-    const items = collectionSwitcherItems([], null, { ...noActions, createNew });
+    const items = collectionSwitcherItems([], null, {
+      ...noActions,
+      createNew,
+    });
     expect(labels(items)).toEqual(["New collection…"]);
     expect(items[0].separatorBefore).toBe(false);
     items[0].onSelect();

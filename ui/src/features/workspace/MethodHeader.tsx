@@ -1,6 +1,17 @@
 import { useState } from "react";
-import { CaretDown, Code, FileArchive, Play, PlugsConnected } from "@/components/ui/icons";
-import type { Service, Method, Server, Request } from "@grpcview/v1/workspace_pb";
+import {
+  CaretDown,
+  Code,
+  FileArchive,
+  Play,
+  PlugsConnected,
+} from "@/components/ui/icons";
+import type {
+  Service,
+  Method,
+  Server,
+  Request,
+} from "@grpcview/v1/workspace_pb";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
@@ -57,7 +68,10 @@ export function MethodHeader({
         borderBottom: "1px solid var(--line)",
       }}
     >
-      <div className="flex items-center gap-[10px]" style={{ marginBottom: 10 }}>
+      <div
+        className="flex items-center gap-[10px]"
+        style={{ marginBottom: 10 }}
+      >
         <EditableName
           value={request.name}
           editing={editingName}
@@ -164,14 +178,24 @@ export function MethodHeader({
             onClick={onShowTypes}
             disabled={!hasMethod}
             style={{ opacity: hasMethod ? 1 : 0.35, flex: "none" }}
-            title={hasMethod ? "View request/response message types" : "Select a method first"}
+            title={
+              hasMethod
+                ? "View request/response message types"
+                : "Select a method first"
+            }
           >
             <Code size={15} />
           </IconButton>
           <Button
             variant="secondary"
             className="font-mono"
-            style={{ padding: "4px 9px", fontSize: 11, gap: 6, cursor: "default", minWidth: 0 }}
+            style={{
+              padding: "4px 9px",
+              fontSize: 11,
+              gap: 6,
+              cursor: "default",
+              minWidth: 0,
+            }}
             title={
               schemaSource
                 ? schemaSource.live
@@ -182,11 +206,18 @@ export function MethodHeader({
             disabled
           >
             {schemaSource?.live === false ? (
-              <FileArchive size={14} style={{ color: "var(--color-neutral-400)" }} />
+              <FileArchive
+                size={14}
+                style={{ color: "var(--color-neutral-400)" }}
+              />
             ) : (
               <PlugsConnected
                 size={14}
-                style={{ color: schemaSource ? "var(--ok)" : "var(--color-neutral-600)" }}
+                style={{
+                  color: schemaSource
+                    ? "var(--ok)"
+                    : "var(--color-neutral-600)",
+                }}
               />
             )}
             <span
@@ -205,7 +236,11 @@ export function MethodHeader({
             style={{ padding: "6px 16px", fontSize: 14, gap: 7, flex: "none" }}
             onClick={onInvoke}
             disabled={invoking || !canInvoke}
-            title={!canInvoke ? "Set a target or add a reflection source to invoke" : "Invoke"}
+            title={
+              !canInvoke
+                ? "Set a target or add a reflection source to invoke"
+                : "Invoke"
+            }
           >
             <Play weight="fill" size={13} />
             {invoking ? "Invoking…" : "Invoke"}
@@ -213,7 +248,11 @@ export function MethodHeader({
         </div>
       </div>
 
-      <TargetBar reflection={reflection} override={targetOverride} onChange={onTargetChange} />
+      <TargetBar
+        reflection={reflection}
+        override={targetOverride}
+        onChange={onTargetChange}
+      />
 
       <MethodPickerModal
         open={pickerOpen}

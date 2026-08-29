@@ -33,7 +33,10 @@ const resolved = (fileCount: number, services: string[]) => ({
   error: "",
 });
 
-const reflection = (address: string, over: Partial<DescriptorSource> = {}): DescriptorSource =>
+const reflection = (
+  address: string,
+  over: Partial<DescriptorSource> = {},
+): DescriptorSource =>
   ({
     id: `reflection:${address}`,
     source: { case: "reflection", value: { address } },
@@ -47,7 +50,7 @@ const reflection = (address: string, over: Partial<DescriptorSource> = {}): Desc
 const upload = (
   fileName: string,
   path = "",
-  over: Partial<DescriptorSource> = {}
+  over: Partial<DescriptorSource> = {},
 ): DescriptorSource =>
   ({
     id: `upload:${fileName}`,
@@ -58,7 +61,10 @@ const upload = (
     ...over,
   }) as unknown as DescriptorSource;
 
-const bazel = (label: string, over: Partial<DescriptorSource> = {}): DescriptorSource =>
+const bazel = (
+  label: string,
+  over: Partial<DescriptorSource> = {},
+): DescriptorSource =>
   ({
     id: `bazel:${label}`,
     source: { case: "bazel", value: { label } },
@@ -85,7 +91,7 @@ const danglingReference = (id: string): DescriptorSource =>
 
 const row = (s: DescriptorSource, index = 0, count = 1, busy = false): string =>
   renderToStaticMarkup(
-    <SourceRow source={s} index={index} count={count} busy={busy} cb={cb} />
+    <SourceRow source={s} index={index} count={count} busy={busy} cb={cb} />,
   );
 
 describe("sourceKind", () => {
@@ -93,14 +99,16 @@ describe("sourceKind", () => {
     expect(sourceKind(reflection("localhost:50051"))).toBe("reflection");
     expect(sourceKind(upload("api.binpb"))).toBe("descriptorSet");
     expect(sourceKind(bazel("//proto/echo/v1:echov1_proto"))).toBe("bazel");
-    expect(sourceKind(danglingReference("reflection:gone:1"))).toBe("reference");
+    expect(sourceKind(danglingReference("reflection:gone:1"))).toBe(
+      "reference",
+    );
   });
 
   // The regression this pins: with no bazel arm, sourceKind fell through to "reference", so a
   // perfectly good bazel source rendered as a dangling reference the manifest does not define.
   it("names a bazel source by its label, never by its id", () => {
     expect(sourceLabel(bazel("//proto/echo/v1:echov1_proto"))).toBe(
-      "//proto/echo/v1:echov1_proto"
+      "//proto/echo/v1:echov1_proto",
     );
   });
 });
@@ -115,7 +123,9 @@ describe("a row's kind and origin", () => {
   });
 
   it("badges a WORKSPACE-origin source as shared, keeping its kind", () => {
-    const markup = row(reflection("127.0.0.1:50121", { origin: SourceOrigin.WORKSPACE }));
+    const markup = row(
+      reflection("127.0.0.1:50121", { origin: SourceOrigin.WORKSPACE }),
+    );
     expect(markup).toContain("shared");
     expect(markup).toContain("grpcview.work.json"); // the badge's tooltip says where it lives
     expect(markup).toContain(">reflection<");
@@ -130,9 +140,11 @@ describe("a row's kind and origin", () => {
     expect(markup).not.toContain(">reflection<");
     expect(markup).toContain("shared");
     expect(markup).toContain(NO_DEFINITION_LABEL);
-    expect(markup).toContain("no source named reflection:gone:1 in grpcview.work.json");
+    expect(markup).toContain(
+      "no source named reflection:gone:1 in grpcview.work.json",
+    );
     // Visible to be removable: the remove control is still there.
-    expect(markup).toContain("aria-label=\"Remove reflection:gone:1\"");
+    expect(markup).toContain('aria-label="Remove reflection:gone:1"');
   });
 
   // Dropping a definition does not drop what the collection already resolved: a committed
@@ -146,7 +158,9 @@ describe("a row's kind and origin", () => {
     } as unknown as DescriptorSource);
     expect(markup).toContain("3 files, 1 service");
     expect(markup).toContain(NO_DEFINITION_LABEL);
-    expect(markup).toContain("grpcview.work.json does not define reflection:gone:1");
+    expect(markup).toContain(
+      "grpcview.work.json does not define reflection:gone:1",
+    );
     expect(markup).not.toContain(">reflection<");
   });
 });
@@ -172,7 +186,7 @@ describe("a bazel row", () => {
 
   it("carries a shared badge when the workspace manifest defines it", () => {
     const markup = row(
-      bazel("//proto/echo/v1:echov1_proto", { origin: SourceOrigin.WORKSPACE })
+      bazel("//proto/echo/v1:echov1_proto", { origin: SourceOrigin.WORKSPACE }),
     );
     expect(markup).toContain("shared");
     expect(markup).toContain(">bazel<");
@@ -182,10 +196,12 @@ describe("a bazel row", () => {
 describe("the refresh affordance", () => {
   it("offers to re-read an upload that recorded where its bytes came from", () => {
     expect(refreshTitle(upload("api.binpb", "proto/api.binpb"))).toBe(
-      "Re-read this descriptor set from proto/api.binpb"
+      "Re-read this descriptor set from proto/api.binpb",
     );
     // The recipe is short, so the row's own secondary line shows it.
-    expect(row(upload("api.binpb", "proto/api.binpb"))).toContain("proto/api.binpb");
+    expect(row(upload("api.binpb", "proto/api.binpb"))).toContain(
+      "proto/api.binpb",
+    );
   });
 
   // A browser upload has no path, and the honest answer is not "this failed" but "the refresh
@@ -193,20 +209,26 @@ describe("the refresh affordance", () => {
   // enabled rather than being disabled with no explanation.
   it("tells a pathless upload that re-adding the same file IS its refresh", () => {
     expect(refreshTitle(upload("api.binpb"))).toBe(REDROP_TO_REFRESH);
-    expect(REDROP_TO_REFRESH).toContain("Add the same file again to refresh it");
+    expect(REDROP_TO_REFRESH).toContain(
+      "Add the same file again to refresh it",
+    );
     // Middle of three, so neither priority arrow is disabled for being at an end.
     const markup = row(upload("api.binpb"), 1, 3);
     expect(markup).toContain("there is no path to re-read");
     // Enabled: with nothing pending, the row disables nothing — a pathless upload keeps its
     // refresh control precisely so the tooltip above is reachable.
-    expect(markup).not.toContain("disabled=\"\"");
+    expect(markup).not.toContain('disabled=""');
   });
 
   it("promises a build for a bazel label, and a re-reflect for an address", () => {
-    expect(refreshTitle(bazel("//p:t"))).toContain("Run bazel build for this label");
-    expect(refreshTitle(reflection("localhost:50051"))).toBe("Re-reflect this target");
+    expect(refreshTitle(bazel("//p:t"))).toContain(
+      "Run bazel build for this label",
+    );
+    expect(refreshTitle(reflection("localhost:50051"))).toBe(
+      "Re-reflect this target",
+    );
     expect(refreshTitle(danglingReference("reflection:gone:1"))).toBe(
-      "Re-resolve this reference"
+      "Re-resolve this reference",
     );
   });
 });
@@ -214,26 +236,30 @@ describe("the refresh affordance", () => {
 describe("the commit toggle", () => {
   it("says which of the two places this source's descriptors live in", () => {
     expect(row(reflection("localhost:50051"))).toContain(LOCAL_LABEL);
-    expect(row(reflection("localhost:50051", { commitDescriptors: true }))).toContain(
-      COMMITTED_LABEL
-    );
+    expect(
+      row(reflection("localhost:50051", { commitDescriptors: true })),
+    ).toContain(COMMITTED_LABEL);
     // One control, not two: the row never claims both states at once.
-    expect(row(reflection("localhost:50051", { commitDescriptors: true }))).not.toContain(
-      LOCAL_LABEL
-    );
+    expect(
+      row(reflection("localhost:50051", { commitDescriptors: true })),
+    ).not.toContain(LOCAL_LABEL);
   });
 
   it("explains what clicking does, in both directions", () => {
-    expect(row(reflection("localhost:50051"))).toContain("Click to commit them");
-    expect(row(reflection("localhost:50051", { commitDescriptors: true }))).toContain(
-      "Click to cache them in local state instead"
+    expect(row(reflection("localhost:50051"))).toContain(
+      "Click to commit them",
     );
+    expect(
+      row(reflection("localhost:50051", { commitDescriptors: true })),
+    ).toContain("Click to cache them in local state instead");
   });
 
   it("warns on an UNCOMMITTED upload, whose only copy is then local state", () => {
     const markup = row(upload("api.binpb"));
     expect(markup).toContain("var(--warn)");
-    expect(markup).toContain("a clone of this repo has no schema for it at all");
+    expect(markup).toContain(
+      "a clone of this repo has no schema for it at all",
+    );
     // Committed, the warning is gone and nothing about an upload is special.
     const committed = row(upload("api.binpb", "", { commitDescriptors: true }));
     expect(committed).not.toContain("var(--warn)");
@@ -245,18 +271,22 @@ describe("the commit toggle", () => {
   it("is disabled with every other control while a mutation is in flight", () => {
     const markup = row(reflection("localhost:50051"), 0, 3, true);
     // Five controls: commit, raise, lower, refresh, remove.
-    expect(markup.split("disabled=\"\"")).toHaveLength(6);
+    expect(markup.split('disabled=""')).toHaveLength(6);
   });
 });
 
 describe("removeConsequence", () => {
   it("promises a collection's re-derivation, never a workspace's", () => {
     const text = removeConsequence(reflection("localhost:50051"));
-    expect(text).toBe("This collection's definitions are re-derived from the sources that remain.");
+    expect(text).toBe(
+      "This collection's definitions are re-derived from the sources that remain.",
+    );
   });
 
   it("promises the shared definition survives when the row is only a reference", () => {
-    const text = removeConsequence(reflection("x:1", { origin: SourceOrigin.WORKSPACE }));
+    const text = removeConsequence(
+      reflection("x:1", { origin: SourceOrigin.WORKSPACE }),
+    );
     expect(text).toContain("stays in grpcview.work.json");
     expect(text).toContain("only this collection's reference goes");
     expect(text).not.toContain("workspace's definitions");

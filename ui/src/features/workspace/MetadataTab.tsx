@@ -39,8 +39,12 @@ export function MetadataTab({
             <CheckCircle style={{ color: "var(--ok)" }} /> valid Metadata
           </span>
         ) : (
-          <span className="inline-flex items-center gap-[5px]" style={{ color: "var(--warn)" }}>
-            <Warning weight="fill" /> {errors} {errors === 1 ? "error" : "errors"}
+          <span
+            className="inline-flex items-center gap-[5px]"
+            style={{ color: "var(--warn)" }}
+          >
+            <Warning weight="fill" /> {errors}{" "}
+            {errors === 1 ? "error" : "errors"}
           </span>
         )}
       </div>

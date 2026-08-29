@@ -16,9 +16,11 @@ export interface CollectionSwitcherActions {
 export function collectionSwitcherLabel(
   collection: CollectionSummary,
   collections: readonly CollectionSummary[],
-  activeId: string | null
+  activeId: string | null,
 ): string {
-  const ambiguous = collections.some((o) => o.id !== collection.id && o.name === collection.name);
+  const ambiguous = collections.some(
+    (o) => o.id !== collection.id && o.name === collection.name,
+  );
   const suffix = ambiguous ? ` — ${collection.id}` : "";
   return `${activeId === collection.id ? "● " : "   "}${collection.name}${suffix}`;
 }
@@ -26,7 +28,7 @@ export function collectionSwitcherLabel(
 export function collectionSwitcherItems(
   collections: readonly CollectionSummary[],
   activeId: string | null,
-  actions: CollectionSwitcherActions
+  actions: CollectionSwitcherActions,
 ): MenuItem[] {
   const rows: MenuItem[] = collections.map((collection) => ({
     label: collectionSwitcherLabel(collection, collections, activeId),
@@ -36,10 +38,14 @@ export function collectionSwitcherItems(
   // views. Rename comes first because it acts on the active collection, whose row it sits
   // under — and it is absent without one, since there would be nothing to rename.
   const writes: MenuItem[] = [];
-  if (activeId !== null) writes.push({ label: "Rename collection…", onSelect: actions.rename });
+  if (activeId !== null)
+    writes.push({ label: "Rename collection…", onSelect: actions.rename });
   writes.push({ label: "New collection…", onSelect: actions.createNew });
   return [
     ...rows,
-    ...writes.map((item, i) => ({ ...item, separatorBefore: i === 0 && rows.length > 0 })),
+    ...writes.map((item, i) => ({
+      ...item,
+      separatorBefore: i === 0 && rows.length > 0,
+    })),
   ];
 }

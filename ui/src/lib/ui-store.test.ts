@@ -1,6 +1,11 @@
 import { beforeEach, describe, it } from "node:test";
 import { expect } from "expect";
-import { useUIStore, type Draft, type InvokeState, type OpenTab } from "./ui-store";
+import {
+  useUIStore,
+  type Draft,
+  type InvokeState,
+  type OpenTab,
+} from "./ui-store";
 
 // Keys are "<collection id>/<slug path>" (see format.ts's itemKey), so every fixture
 // here is a slug key. Only a MOVE ever changes one — a rename leaves the slug alone,
@@ -12,7 +17,11 @@ const OTHER = "./users/admin/ban";
 // Every fixture key lives in the "." collection, and OpenTab now carries that id
 // alongside the key: a collection id may contain slashes, so it is never parsed out of
 // the key.
-const tab = (key: string, name: string): OpenTab => ({ key, name, collection: "." });
+const tab = (key: string, name: string): OpenTab => ({
+  key,
+  name,
+  collection: ".",
+});
 
 const seed = (): void => {
   const userTab = tab(OLD, "GetUser");
@@ -37,11 +46,18 @@ describe("the active collection", () => {
 
   it("setActiveCollection records the choice", () => {
     useUIStore.getState().setActiveCollection("services/payments/requests");
-    expect(useUIStore.getState().activeCollection).toBe("services/payments/requests");
+    expect(useUIStore.getState().activeCollection).toBe(
+      "services/payments/requests",
+    );
   });
 
   it("setActiveKey switches the collection when the tab's one is supplied", () => {
-    useUIStore.getState().setActiveKey("services/payments/requests/charge", "services/payments/requests");
+    useUIStore
+      .getState()
+      .setActiveKey(
+        "services/payments/requests/charge",
+        "services/payments/requests",
+      );
     const s = useUIStore.getState();
     expect(s.activeKey).toBe("services/payments/requests/charge");
     expect(s.activeCollection).toBe("services/payments/requests");
@@ -65,7 +81,11 @@ describe("renameCollection", () => {
   const MINE_DEEP = `${OLD_ID}/admin/refund`;
   const THEIRS = "web/list";
 
-  const inCollection = (key: string, name: string, collection: string): OpenTab => ({
+  const inCollection = (
+    key: string,
+    name: string,
+    collection: string,
+  ): OpenTab => ({
     key,
     name,
     collection,
@@ -94,7 +114,10 @@ describe("renameCollection", () => {
     const s = useUIStore.getState();
     expect(s.activeKey).toBe(`${NEW_ID}/get-charge`);
     expect(s.drafts[MINE]).toBeUndefined();
-    expect(s.drafts[`${NEW_ID}/get-charge`]).toEqual({ body: "{}", metadata: "" });
+    expect(s.drafts[`${NEW_ID}/get-charge`]).toEqual({
+      body: "{}",
+      metadata: "",
+    });
     expect(s.invokes[`${NEW_ID}/admin/refund`]).toEqual({ error: "boom" });
     expect(s.treeSelection).toEqual([`${NEW_ID}/get-charge`, THEIRS]);
     expect(s.treeFocused).toBe(`${NEW_ID}/admin/refund`);
@@ -134,7 +157,9 @@ describe("renameCollection", () => {
     });
     useUIStore.getState().renameCollection(OLD_ID, NEW_ID);
     const s = useUIStore.getState();
-    expect(s.openTabs).toEqual([inCollection(sibling, "GetCharge", `${OLD_ID}2`)]);
+    expect(s.openTabs).toEqual([
+      inCollection(sibling, "GetCharge", `${OLD_ID}2`),
+    ]);
     expect(s.activeKey).toBe(sibling);
     expect(s.drafts[sibling]).toEqual({ body: "sibling", metadata: "" });
     expect(s.treeExpanded).toEqual(new Set([`${OLD_ID}2`]));
@@ -179,7 +204,10 @@ describe("moveSubtree: the moved item itself", () => {
 
   it("remaps the open tab's key, keeping its display name — a move never renames", () => {
     useUIStore.getState().moveSubtree(OLD, NEW);
-    expect(useUIStore.getState().openTabs).toEqual([tab(NEW, "GetUser"), tab(OTHER, "Ban")]);
+    expect(useUIStore.getState().openTabs).toEqual([
+      tab(NEW, "GetUser"),
+      tab(OTHER, "Ban"),
+    ]);
   });
 
   it("remaps activeKey when the moved item was the active tab", () => {
@@ -208,7 +236,10 @@ describe("moveSubtree: the moved item itself", () => {
     useUIStore.getState().moveSubtree(OLD, "./archive/get-user-2");
     const { activeKey, drafts } = useUIStore.getState();
     expect(activeKey).toBe("./archive/get-user-2");
-    expect(drafts["./archive/get-user-2"]).toEqual({ body: "{}", metadata: "" });
+    expect(drafts["./archive/get-user-2"]).toEqual({
+      body: "{}",
+      metadata: "",
+    });
   });
 
   it("remaps a selected id inside treeSelection, leaving other selected ids alone", () => {
@@ -260,7 +291,9 @@ describe("moveSubtree: the moved item itself", () => {
 
   it("leaves every collection's reference untouched when nothing at all matched", () => {
     const before = useUIStore.getState();
-    useUIStore.getState().moveSubtree("./nowhere/nothing", "./elsewhere/nothing");
+    useUIStore
+      .getState()
+      .moveSubtree("./nowhere/nothing", "./elsewhere/nothing");
     const after = useUIStore.getState();
     expect(after.openTabs).toBe(before.openTabs);
     expect(after.treeSelection).toBe(before.treeSelection);
@@ -318,7 +351,7 @@ describe("moveSubtree: descendants of a moved folder", () => {
   it("moves BOTH the moved folder's own treeExpanded id and its descendant folders'", () => {
     useUIStore.getState().moveSubtree(FOLDER, MOVED);
     expect(useUIStore.getState().treeExpanded).toEqual(
-      new Set([MOVED, "./archive/users/admin"])
+      new Set([MOVED, "./archive/users/admin"]),
     );
   });
 
@@ -348,11 +381,17 @@ describe("moveSubtree: descendants of a moved folder", () => {
     const unrelated = "./orders/list";
     useUIStore.setState({
       openTabs: [tab(CHILD, "GetUser"), tab(unrelated, "List")],
-      drafts: { [CHILD]: { body: "a", metadata: "" }, [unrelated]: { body: "b", metadata: "" } },
+      drafts: {
+        [CHILD]: { body: "a", metadata: "" },
+        [unrelated]: { body: "b", metadata: "" },
+      },
     });
     useUIStore.getState().moveSubtree(FOLDER, MOVED);
     const { openTabs, drafts } = useUIStore.getState();
-    expect(openTabs).toEqual([tab(CHILD_MOVED, "GetUser"), tab(unrelated, "List")]);
+    expect(openTabs).toEqual([
+      tab(CHILD_MOVED, "GetUser"),
+      tab(unrelated, "List"),
+    ]);
     expect(drafts[unrelated]).toEqual({ body: "b", metadata: "" });
   });
 });

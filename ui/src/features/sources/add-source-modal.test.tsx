@@ -29,7 +29,7 @@ describe("bazelHint", () => {
 
   it("passes a failure through in the server's words, and still points at typing", () => {
     const hint = bazelHint(
-      targets({ error: new Error("the workspace /repo is not trusted") })
+      targets({ error: new Error("the workspace /repo is not trusted") }),
     );
     expect(hint).toContain("not trusted");
     expect(hint).toContain("type the label");

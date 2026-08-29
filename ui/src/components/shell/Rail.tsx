@@ -1,13 +1,19 @@
 import clsx from "clsx";
-import { TreeStructure, Stack, BracketsCurly, HardDrives } from "@/components/ui/icons";
+import {
+  TreeStructure,
+  Stack,
+  BracketsCurly,
+  HardDrives,
+} from "@/components/ui/icons";
 import { useUIStore, type ActiveView } from "@/lib/ui-store";
 
-const VIEWS: Array<{ view: ActiveView; title: string; icon: React.ReactNode }> = [
-  { view: "workspace", title: "Collection", icon: <TreeStructure /> },
-  { view: "sources", title: "Definition sources", icon: <Stack /> },
-  { view: "scripts", title: "Scripts", icon: <BracketsCurly /> },
-  { view: "daemons", title: "Daemons", icon: <HardDrives /> },
-];
+const VIEWS: Array<{ view: ActiveView; title: string; icon: React.ReactNode }> =
+  [
+    { view: "workspace", title: "Collection", icon: <TreeStructure /> },
+    { view: "sources", title: "Definition sources", icon: <Stack /> },
+    { view: "scripts", title: "Scripts", icon: <BracketsCurly /> },
+    { view: "daemons", title: "Daemons", icon: <HardDrives /> },
+  ];
 
 export function Rail() {
   const activeView = useUIStore((s) => s.activeView);

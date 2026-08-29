@@ -23,13 +23,14 @@ import {
 
 // Local fixture builders rather than the ones in format.test.ts / request-tree.test.tsx:
 // both hardcode a single collection id, and every rule here turns on having two.
-const slugify = (name: string): string => name.toLowerCase().replace(/\s+/g, "-");
+const slugify = (name: string): string =>
+  name.toLowerCase().replace(/\s+/g, "-");
 
 const folder = (
   collection: string,
   name: string,
   path: string[],
-  children: ItemWithPath[]
+  children: ItemWithPath[],
 ): ItemWithPath => ({
   item: {
     name,
@@ -42,8 +43,16 @@ const folder = (
   children,
 });
 
-const request = (collection: string, name: string, path: string[]): ItemWithPath => ({
-  item: { name, slug: slugify(name), content: { case: "request", value: {} } } as unknown as Item,
+const request = (
+  collection: string,
+  name: string,
+  path: string[],
+): ItemWithPath => ({
+  item: {
+    name,
+    slug: slugify(name),
+    content: { case: "request", value: {} },
+  } as unknown as Item,
   collection,
   path,
   slugPath: path.map(slugify),
@@ -53,18 +62,29 @@ const summary = (
   id: string,
   name: string,
   sourceCount = 0,
-  error = ""
-): CollectionSummary => ({ id, name, sourceCount, error }) as unknown as CollectionSummary;
+  error = "",
+): CollectionSummary =>
+  ({ id, name, sourceCount, error }) as unknown as CollectionSummary;
 
 const PAY = "services/payments/requests";
 const LEDGER = "services/ledger/requests";
 
 const payItems: ItemWithPath[] = [
   request(PAY, "Ping", []),
-  folder(PAY, "Calls", [], [
-    request(PAY, "Charge", ["Calls"]),
-    folder(PAY, "Admin", ["Calls"], [request(PAY, "Purge", ["Calls", "Admin"])]),
-  ]),
+  folder(
+    PAY,
+    "Calls",
+    [],
+    [
+      request(PAY, "Charge", ["Calls"]),
+      folder(
+        PAY,
+        "Admin",
+        ["Calls"],
+        [request(PAY, "Purge", ["Calls", "Admin"])],
+      ),
+    ],
+  ),
 ];
 const ledgerItems: ItemWithPath[] = [request(LEDGER, "ListEntries", [])];
 
@@ -91,7 +111,10 @@ const soloAdapter = () =>
     activeCollection: PAY,
   });
 
-const collectionNode = (c: CollectionSummary): PanelNode => ({ kind: "collection", collection: c });
+const collectionNode = (c: CollectionSummary): PanelNode => ({
+  kind: "collection",
+  collection: c,
+});
 const itemNode = (item: ItemWithPath): PanelNode => ({ kind: "item", item });
 const statusNode = (collection: string, label = LOADING_LABEL): PanelNode => ({
   kind: "status",
@@ -123,16 +146,19 @@ describe("panelNodeId", () => {
   });
 
   it("cannot collide across tiers: an item key adds a segment, a status id adds a NUL", () => {
-    const ids = flatten(tieredAdapter(), new Set([PAY, LEDGER, `${PAY}/calls`])).rows.map(
-      (r) => r.id
-    );
+    const ids = flatten(
+      tieredAdapter(),
+      new Set([PAY, LEDGER, `${PAY}/calls`]),
+    ).rows.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
 
     // Every item key is the collection id plus at least one more "/" segment, so it is
     // never equal to a collection id (and no collection id prefixes another).
     for (const item of [...payItems, ...ledgerItems]) {
       const key = panelNodeId(itemNode(item));
-      expect(key.startsWith(`${PAY}/`) || key.startsWith(`${LEDGER}/`)).toBe(true);
+      expect(key.startsWith(`${PAY}/`) || key.startsWith(`${LEDGER}/`)).toBe(
+        true,
+      );
       expect(key).not.toBe(PAY);
       expect(key).not.toBe(LEDGER);
       expect(key).not.toContain("\u0000");
@@ -196,7 +222,11 @@ describe("panelTreeAdapter: getChildren", () => {
     });
     const kids = adapter.getChildren(collectionNode(payments)) as PanelNode[];
     expect(kids).toHaveLength(1);
-    expect(kids[0]).toMatchObject({ kind: "status", collection: PAY, label: LOADING_LABEL });
+    expect(kids[0]).toMatchObject({
+      kind: "status",
+      collection: PAY,
+      label: LOADING_LABEL,
+    });
   });
 
   it("a collection with a summary error yields that error, loaded or not", () => {
@@ -208,7 +238,10 @@ describe("panelTreeAdapter: getChildren", () => {
     });
     const kids = adapter.getChildren(collectionNode(broken)) as PanelNode[];
     expect(kids).toHaveLength(1);
-    expect(kids[0]).toMatchObject({ kind: "status", label: "grpcview.json: unexpected EOF" });
+    expect(kids[0]).toMatchObject({
+      kind: "status",
+      label: "grpcview.json: unexpected EOF",
+    });
   });
 
   it("a loaded but genuinely empty collection says so", () => {
@@ -228,10 +261,9 @@ describe("panelTreeAdapter: getChildren", () => {
   it("an item yields its children, and a request none", () => {
     const adapter = tieredAdapter();
     const calls = nodeOf(adapter, `${PAY}/calls`);
-    expect((adapter.getChildren(calls) as PanelNode[]).map(panelNodeId)).toEqual([
-      `${PAY}/calls/charge`,
-      `${PAY}/calls/admin`,
-    ]);
+    expect(
+      (adapter.getChildren(calls) as PanelNode[]).map(panelNodeId),
+    ).toEqual([`${PAY}/calls/charge`, `${PAY}/calls/admin`]);
     expect(adapter.getChildren(nodeOf(adapter, `${PAY}/ping`))).toEqual([]);
   });
 
@@ -249,14 +281,22 @@ describe("panelTreeAdapter: getChildren", () => {
 describe("panelTreeAdapter: getCollapsibleState", () => {
   it("expands the ACTIVE collection and collapses every other", () => {
     const adapter = tieredAdapter(LEDGER);
-    expect(adapter.getCollapsibleState(collectionNode(ledger))).toBe("expanded");
-    expect(adapter.getCollapsibleState(collectionNode(payments))).toBe("collapsed");
+    expect(adapter.getCollapsibleState(collectionNode(ledger))).toBe(
+      "expanded",
+    );
+    expect(adapter.getCollapsibleState(collectionNode(payments))).toBe(
+      "collapsed",
+    );
   });
 
   it("collapses everything when no collection is active", () => {
     const adapter = tieredAdapter(null);
-    expect(adapter.getCollapsibleState(collectionNode(payments))).toBe("collapsed");
-    expect(adapter.getCollapsibleState(collectionNode(ledger))).toBe("collapsed");
+    expect(adapter.getCollapsibleState(collectionNode(payments))).toBe(
+      "collapsed",
+    );
+    expect(adapter.getCollapsibleState(collectionNode(ledger))).toBe(
+      "collapsed",
+    );
   });
 
   it("keeps a folder expanded, a request and a status row uncollapsible", () => {
@@ -267,14 +307,18 @@ describe("panelTreeAdapter: getCollapsibleState", () => {
   });
 
   it("only the active collection is reported as default-expanded by flatten", () => {
-    expect(flatten(tieredAdapter(PAY), new Set()).defaultExpanded).toEqual([PAY]);
-    expect(flatten(tieredAdapter(LEDGER), new Set()).defaultExpanded).toEqual([LEDGER]);
+    expect(flatten(tieredAdapter(PAY), new Set()).defaultExpanded).toEqual([
+      PAY,
+    ]);
+    expect(flatten(tieredAdapter(LEDGER), new Set()).defaultExpanded).toEqual([
+      LEDGER,
+    ]);
     // Already in the caller's set = never re-reported, which is what stops a manual
     // collapse from being forced back open on the next render. Its folder children
     // are now visible and report themselves, as folders always have.
-    expect(flatten(tieredAdapter(PAY), new Set([PAY])).defaultExpanded).toEqual([
-      `${PAY}/calls`,
-    ]);
+    expect(flatten(tieredAdapter(PAY), new Set([PAY])).defaultExpanded).toEqual(
+      [`${PAY}/calls`],
+    );
   });
 });
 
@@ -303,7 +347,9 @@ describe("panelTreeAdapter: getParent", () => {
       itemsByCollection: new Map(),
       activeCollection: PAY,
     });
-    const status = (adapter.getChildren(collectionNode(payments)) as PanelNode[])[0];
+    const status = (
+      adapter.getChildren(collectionNode(payments)) as PanelNode[]
+    )[0];
     expect(adapter.getParent?.(status)).toMatchObject({ kind: "collection" });
     expect(panelNodeId(adapter.getParent?.(status) as PanelNode)).toBe(PAY);
   });
@@ -323,7 +369,7 @@ describe("panelTreeAdapter: getTreeItem / getTypeaheadLabel", () => {
 
   it("singularizes a one-source tooltip", () => {
     expect(tieredAdapter().getTreeItem(collectionNode(ledger)).tooltip).toBe(
-      `${LEDGER} — 1 source`
+      `${LEDGER} — 1 source`,
     );
   });
 
@@ -335,15 +381,21 @@ describe("panelTreeAdapter: getTreeItem / getTypeaheadLabel", () => {
   it("delegates an item row to request-tree's own getTreeItem", () => {
     const adapter = tieredAdapter();
     for (const item of [payItems[0], payItems[1]]) {
-      expect(adapter.getTreeItem(itemNode(item))).toEqual(requestTreeItem(item));
+      expect(adapter.getTreeItem(itemNode(item))).toEqual(
+        requestTreeItem(item),
+      );
     }
   });
 
   it("types ahead on the display label of every tier", () => {
     const adapter = tieredAdapter();
-    expect(adapter.getTypeaheadLabel(collectionNode(payments))).toBe("payments");
+    expect(adapter.getTypeaheadLabel(collectionNode(payments))).toBe(
+      "payments",
+    );
     expect(adapter.getTypeaheadLabel(itemNode(payItems[0]))).toBe("Ping");
-    expect(adapter.getTypeaheadLabel(statusNode(PAY, LOADING_LABEL))).toBe(LOADING_LABEL);
+    expect(adapter.getTypeaheadLabel(statusNode(PAY, LOADING_LABEL))).toBe(
+      LOADING_LABEL,
+    );
   });
 });
 
@@ -368,57 +420,101 @@ describe("panelDropAllowed", () => {
   const entries = itemNode(ledgerItems[0]);
 
   it("allows an item into a folder in its own collection", () => {
-    expect(panelDropAllowed([ping], { parent: calls }, { tiered: true })).toBe(true);
+    expect(panelDropAllowed([ping], { parent: calls }, { tiered: true })).toBe(
+      true,
+    );
   });
 
   it("allows an item into its own collection row, and before a sibling there", () => {
-    expect(panelDropAllowed([charge], { parent: pay }, { tiered: true })).toBe(true);
-    expect(panelDropAllowed([charge], { parent: pay, before: ping }, { tiered: true })).toBe(true);
+    expect(panelDropAllowed([charge], { parent: pay }, { tiered: true })).toBe(
+      true,
+    );
+    expect(
+      panelDropAllowed(
+        [charge],
+        { parent: pay, before: ping },
+        { tiered: true },
+      ),
+    ).toBe(true);
   });
 
   it("allows the untiered root, where a null parent IS the sole collection", () => {
-    expect(panelDropAllowed([charge], { parent: null }, { tiered: false })).toBe(true);
+    expect(
+      panelDropAllowed([charge], { parent: null }, { tiered: false }),
+    ).toBe(true);
   });
 
   it("rejects a dragged collection row", () => {
-    expect(panelDropAllowed([pay], { parent: calls }, { tiered: true })).toBe(false);
-    expect(panelDropAllowed([ping, pay], { parent: calls }, { tiered: true })).toBe(false);
+    expect(panelDropAllowed([pay], { parent: calls }, { tiered: true })).toBe(
+      false,
+    );
+    expect(
+      panelDropAllowed([ping, pay], { parent: calls }, { tiered: true }),
+    ).toBe(false);
   });
 
   it("rejects a dragged status row", () => {
-    expect(panelDropAllowed([statusNode(PAY)], { parent: calls }, { tiered: true })).toBe(false);
+    expect(
+      panelDropAllowed([statusNode(PAY)], { parent: calls }, { tiered: true }),
+    ).toBe(false);
   });
 
   it("rejects an empty drag", () => {
-    expect(panelDropAllowed([], { parent: calls }, { tiered: true })).toBe(false);
+    expect(panelDropAllowed([], { parent: calls }, { tiered: true })).toBe(
+      false,
+    );
   });
 
   it("rejects a status row as the destination", () => {
-    expect(panelDropAllowed([ping], { parent: statusNode(PAY) }, { tiered: true })).toBe(false);
+    expect(
+      panelDropAllowed([ping], { parent: statusNode(PAY) }, { tiered: true }),
+    ).toBe(false);
   });
 
   it("rejects a cross-collection drop into an item", () => {
-    expect(panelDropAllowed([ping], { parent: entries }, { tiered: true })).toBe(false);
-    expect(panelDropAllowed([entries], { parent: calls }, { tiered: true })).toBe(false);
+    expect(
+      panelDropAllowed([ping], { parent: entries }, { tiered: true }),
+    ).toBe(false);
+    expect(
+      panelDropAllowed([entries], { parent: calls }, { tiered: true }),
+    ).toBe(false);
   });
 
   it("rejects a cross-collection drop into a collection row", () => {
-    expect(panelDropAllowed([ping], { parent: led }, { tiered: true })).toBe(false);
+    expect(panelDropAllowed([ping], { parent: led }, { tiered: true })).toBe(
+      false,
+    );
   });
 
   it("rejects a mixed-collection dragged set wherever it lands", () => {
-    expect(panelDropAllowed([ping, entries], { parent: calls }, { tiered: true })).toBe(false);
-    expect(panelDropAllowed([ping, entries], { parent: null }, { tiered: false })).toBe(false);
+    expect(
+      panelDropAllowed([ping, entries], { parent: calls }, { tiered: true }),
+    ).toBe(false);
+    expect(
+      panelDropAllowed([ping, entries], { parent: null }, { tiered: false }),
+    ).toBe(false);
   });
 
   it("rejects the tiered root, which sits between collection rows and names none", () => {
-    expect(panelDropAllowed([ping], { parent: null }, { tiered: true })).toBe(false);
+    expect(panelDropAllowed([ping], { parent: null }, { tiered: true })).toBe(
+      false,
+    );
   });
 
   it("rejects a `before` that lives in another collection", () => {
-    expect(panelDropAllowed([ping], { parent: pay, before: entries }, { tiered: true })).toBe(false);
     expect(
-      panelDropAllowed([ping], { parent: calls, before: statusNode(LEDGER) }, { tiered: true })
+      panelDropAllowed(
+        [ping],
+        { parent: pay, before: entries },
+        { tiered: true },
+      ),
+    ).toBe(false);
+    expect(
+      panelDropAllowed(
+        [ping],
+        { parent: calls, before: statusNode(LEDGER) },
+        { tiered: true },
+      ),
     ).toBe(false);
   });
 });
@@ -460,7 +556,7 @@ describe("renderPanelRow", () => {
         renderRow: (node, rowState) => renderPanelRow(node, rowState, cb),
         expanded: new Set([PAY]),
         "aria-label": "Requests",
-      })
+      }),
     );
 
     // The declined collection row falls back to getTreeItem: label, description, and
@@ -487,7 +583,7 @@ describe("renderPanelRow", () => {
         renderRow: (node, rowState) => renderPanelRow(node, rowState, cb),
         expanded: new Set([PAY]),
         "aria-label": "Requests",
-      })
+      }),
     );
     expect(markup).toContain(LOADING_LABEL);
   });

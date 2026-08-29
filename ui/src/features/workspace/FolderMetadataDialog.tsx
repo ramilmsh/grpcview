@@ -21,9 +21,13 @@ export function FolderMetadataDialog({
   const { updateFolder } = useWorkspaceMutations();
   const key = folder ? itemKey(folder) : "none";
   const savedScript =
-    folder?.item.content.case === "folder" ? folder.item.content.value.draftMetadataScript : "";
+    folder?.item.content.case === "folder"
+      ? folder.item.content.value.draftMetadataScript
+      : "";
 
-  const [draft, setDraft] = useState(() => savedScript || defaultMetadataModule());
+  const [draft, setDraft] = useState(
+    () => savedScript || defaultMetadataModule(),
+  );
 
   const onSave = () => {
     if (!folder) return;
@@ -36,7 +40,7 @@ export function FolderMetadataDialog({
         itemName: folder.item.name,
         draftMetadataScript: draft,
       },
-      { onSuccess: onClose }
+      { onSuccess: onClose },
     );
   };
 
@@ -44,14 +48,18 @@ export function FolderMetadataDialog({
     <Dialog
       open={folder !== null}
       onClose={onClose}
-      title={folder ? `Folder metadata — ${folder.item.name}` : "Folder metadata"}
+      title={
+        folder ? `Folder metadata — ${folder.item.name}` : "Folder metadata"
+      }
       width={640}
     >
       <p className="dialog-body" style={{ marginBottom: 4 }}>
         Inherited by every request and subfolder beneath this one via{" "}
-        <code className="font-mono">require("grpcview:metadata").inherit()</code>. Ancestor
-        scripts are read from the saved workspace, not the live buffer here — edits take
-        effect after you Save, not before.
+        <code className="font-mono">
+          require("grpcview:metadata").inherit()
+        </code>
+        . Ancestor scripts are read from the saved workspace, not the live
+        buffer here — edits take effect after you Save, not before.
       </p>
       <div
         style={{
@@ -65,7 +73,11 @@ export function FolderMetadataDialog({
       </div>
       <div className="dialog-actions">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={onSave} disabled={updateFolder.isPending}>
+        <Button
+          variant="primary"
+          onClick={onSave}
+          disabled={updateFolder.isPending}
+        >
           {updateFolder.isPending ? "Saving…" : "Save"}
         </Button>
       </div>

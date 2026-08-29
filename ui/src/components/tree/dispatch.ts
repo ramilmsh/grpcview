@@ -4,8 +4,18 @@
 import type { FlatTree } from "./flatten";
 import type { TreeIntent } from "./keymap";
 import type { TreeRowModel } from "./types";
-import { targetIndex, parentIndex, firstChildIndex, descendantIds } from "./navigate";
-import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./selection";
+import {
+  targetIndex,
+  parentIndex,
+  firstChildIndex,
+  descendantIds,
+} from "./navigate";
+import {
+  rangeSelection,
+  replaceSelection,
+  selectAll,
+  toggleSelection,
+} from "./selection";
 
 export type TreeAction =
   // `scroll` is per-producer: keyboard moves bring the row into view, mouse
@@ -28,17 +38,26 @@ export interface ApplyIntentCtx<T> {
   rowsPerPage: number;
 }
 
-function rowFor<T>(flat: FlatTree<T>, id: string | null): TreeRowModel<T> | null {
+function rowFor<T>(
+  flat: FlatTree<T>,
+  id: string | null,
+): TreeRowModel<T> | null {
   if (id === null) return null;
   return flat.rows[flat.indexById.get(id) ?? -1] ?? null;
 }
 
-function resolveDeleteIds(focused: string | null, selection: readonly string[]): string[] {
+function resolveDeleteIds(
+  focused: string | null,
+  selection: readonly string[],
+): string[] {
   if (focused === null) return [...selection];
   return selection.includes(focused) ? [...selection] : [focused];
 }
 
-export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): TreeAction[] {
+export function applyIntent<T>(
+  intent: TreeIntent,
+  ctx: ApplyIntentCtx<T>,
+): TreeAction[] {
   const { flat, focused, selection, anchor, rowsPerPage } = ctx;
   const focusedRow = rowFor(flat, focused);
 
@@ -65,7 +84,10 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
       return [
         { kind: "focus", id, scroll: true },
         { kind: "setAnchor", id: effectiveAnchor },
-        { kind: "setSelection", ids: rangeSelection(flat.rows, effectiveAnchor, id) },
+        {
+          kind: "setSelection",
+          ids: rangeSelection(flat.rows, effectiveAnchor, id),
+        },
       ];
     }
 
@@ -91,15 +113,27 @@ export function applyIntent<T>(intent: TreeIntent, ctx: ApplyIntentCtx<T>): Tree
 
     case "toggle":
       return focusedRow?.expandable
-        ? [{ kind: "setExpanded", id: focusedRow.id, expanded: !focusedRow.expanded }]
+        ? [
+            {
+              kind: "setExpanded",
+              id: focusedRow.id,
+              expanded: !focusedRow.expanded,
+            },
+          ]
         : [];
 
     case "open": {
       // Enter on a folder toggles rather than "opening" it, as in VS Code.
       if (!focusedRow) return [];
-      const actions: TreeAction[] = [{ kind: "setSelection", ids: [focusedRow.id] }];
+      const actions: TreeAction[] = [
+        { kind: "setSelection", ids: [focusedRow.id] },
+      ];
       if (focusedRow.expandable) {
-        actions.push({ kind: "setExpanded", id: focusedRow.id, expanded: !focusedRow.expanded });
+        actions.push({
+          kind: "setExpanded",
+          id: focusedRow.id,
+          expanded: !focusedRow.expanded,
+        });
       } else {
         actions.push({ kind: "open", id: focusedRow.id });
       }
@@ -147,7 +181,7 @@ export type ApplyClickCtx<T> = Omit<ApplyIntentCtx<T>, "rowsPerPage">;
 export function applyRowClick<T>(
   row: TreeRowModel<T>,
   mods: ClickMods,
-  ctx: ApplyClickCtx<T>
+  ctx: ApplyClickCtx<T>,
 ): TreeAction[] {
   const { flat, focused, selection, anchor } = ctx;
 
@@ -159,7 +193,10 @@ export function applyRowClick<T>(
     return [
       { kind: "focus", id: row.id, scroll: false },
       { kind: "setAnchor", id: effectiveAnchor },
-      { kind: "setSelection", ids: rangeSelection(flat.rows, effectiveAnchor, row.id) },
+      {
+        kind: "setSelection",
+        ids: rangeSelection(flat.rows, effectiveAnchor, row.id),
+      },
     ];
   }
 
@@ -191,7 +228,7 @@ export function applyRowClick<T>(
 // to row 0), and Delete acts on rows the user cannot see.
 export function applyTwistieClick<T>(
   row: TreeRowModel<T>,
-  ctx: ApplyClickCtx<T>
+  ctx: ApplyClickCtx<T>,
 ): TreeAction[] {
   const { flat, focused, selection } = ctx;
   const actions: TreeAction[] = [

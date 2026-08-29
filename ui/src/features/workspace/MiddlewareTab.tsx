@@ -67,15 +67,15 @@ export function MiddlewareTab({
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "14px" }}>
       <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
-        Middleware runs in order before invoke — each can rewrite body &amp; metadata.
-        Attached by specifier: <span className="font-mono">#/…</span> for a script in this
-        collection, <span className="font-mono">@/…</span> for one anywhere in the workspace.
+        Middleware runs in order before invoke — each can rewrite body &amp;
+        metadata. Attached by specifier: <span className="font-mono">#/…</span>{" "}
+        for a script in this collection, <span className="font-mono">@/…</span>{" "}
+        for one anywhere in the workspace.
       </p>
 
       <div className="flex flex-col" style={{ gap: 8 }}>
         {middleware.map((specifier, i) => (
           <MiddlewareRow
-            // eslint-disable-next-line react/no-array-index-key
             key={`${specifier}:${i}`}
             order={i + 1}
             specifier={specifier}
@@ -91,17 +91,26 @@ export function MiddlewareTab({
         <Button
           variant="secondary"
           onClick={() => setPickerOpen(true)}
-          style={{ justifyContent: "center", fontSize: 13, gap: 6, borderStyle: "dashed" }}
+          style={{
+            justifyContent: "center",
+            fontSize: 13,
+            gap: 6,
+            borderStyle: "dashed",
+          }}
         >
           <Plus size={14} /> Attach middleware
         </Button>
 
         {scripts.length === 0 && (
-          <p className="text-muted" style={{ fontSize: 12, margin: "2px 2px 0", lineHeight: 1.6 }}>
+          <p
+            className="text-muted"
+            style={{ fontSize: 12, margin: "2px 2px 0", lineHeight: 1.6 }}
+          >
             No scripts in this collection yet. Author one in the{" "}
-            <span style={{ color: "var(--color-accent-300)" }}>Scripts</span> view, then attach
-            it here — or type an <span className="font-mono">@/…</span> specifier for one
-            elsewhere in the workspace.
+            <span style={{ color: "var(--color-accent-300)" }}>Scripts</span>{" "}
+            view, then attach it here — or type an{" "}
+            <span className="font-mono">@/…</span> specifier for one elsewhere
+            in the workspace.
           </p>
         )}
       </div>
@@ -162,9 +171,15 @@ function MiddlewareRow({
             color: missing ? "var(--err-fg)" : "var(--color-text)",
           }}
         >
-          {missing && <Warning weight="fill" size={13} style={{ flex: "none" }} />}
+          {missing && (
+            <Warning weight="fill" size={13} style={{ flex: "none" }} />
+          )}
           <span
-            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
             {specifier}
           </span>
@@ -179,13 +194,13 @@ function MiddlewareRow({
             whiteSpace: "nowrap",
           }}
         >
-          {missing ? (
-            "missing — no script at this path in the collection"
-          ) : external ? (
-            "elsewhere in the workspace"
-          ) : script ? (
-            describe(script)
-          ) : null}
+          {missing
+            ? "missing — no script at this path in the collection"
+            : external
+              ? "elsewhere in the workspace"
+              : script
+                ? describe(script)
+                : null}
         </div>
       </div>
       <div className="flex items-center" style={{ gap: 1, flex: "none" }}>
@@ -193,7 +208,12 @@ function MiddlewareRow({
           title="Move up"
           disabled={first}
           onClick={onUp}
-          style={{ width: 24, height: 24, fontSize: 14, opacity: first ? 0.35 : 1 }}
+          style={{
+            width: 24,
+            height: 24,
+            fontSize: 14,
+            opacity: first ? 0.35 : 1,
+          }}
         >
           <CaretUp size={14} />
         </IconButton>
@@ -201,7 +221,12 @@ function MiddlewareRow({
           title="Move down"
           disabled={last}
           onClick={onDown}
-          style={{ width: 24, height: 24, fontSize: 14, opacity: last ? 0.35 : 1 }}
+          style={{
+            width: 24,
+            height: 24,
+            fontSize: 14,
+            opacity: last ? 0.35 : 1,
+          }}
         >
           <CaretDown size={14} />
         </IconButton>
@@ -251,11 +276,17 @@ function AttachMiddlewareDialog({
       width={420}
     >
       {candidates.length === 0 ? (
-        <p className="text-muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+        <p
+          className="text-muted"
+          style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}
+        >
           Every script in this collection is already attached.
         </p>
       ) : (
-        <div className="flex flex-col" style={{ gap: 4, maxHeight: 280, overflow: "auto" }}>
+        <div
+          className="flex flex-col"
+          style={{ gap: 4, maxHeight: 280, overflow: "auto" }}
+        >
           {candidates.map((s) => (
             <button
               key={s.path}
@@ -270,9 +301,15 @@ function AttachMiddlewareDialog({
               }}
               onClick={() => onPick(s)}
             >
-              <ArrowsSplit size={16} style={{ color: "var(--color-accent)", flex: "none" }} />
+              <ArrowsSplit
+                size={16}
+                style={{ color: "var(--color-accent)", flex: "none" }}
+              />
               <div style={{ minWidth: 0 }}>
-                <div className="font-mono" style={{ fontSize: 13, color: "var(--color-text)" }}>
+                <div
+                  className="font-mono"
+                  style={{ fontSize: 13, color: "var(--color-text)" }}
+                >
                   {ownSpecifier(s)}
                 </div>
                 <div
@@ -293,10 +330,16 @@ function AttachMiddlewareDialog({
         </div>
       )}
 
-      <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+      <div
+        style={{
+          marginTop: 14,
+          paddingTop: 14,
+          borderTop: "1px solid var(--line)",
+        }}
+      >
         <p className="text-muted" style={{ margin: "0 0 8px", fontSize: 12 }}>
-          Or attach by specifier — a <span className="font-mono">@/…</span> path reaches a
-          script anywhere else in the workspace.
+          Or attach by specifier — a <span className="font-mono">@/…</span> path
+          reaches a script anywhere else in the workspace.
         </p>
         <div className="flex items-center gap-[8px]">
           <Input
@@ -317,7 +360,9 @@ function AttachMiddlewareDialog({
           </Button>
         </div>
         {customError && (
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--err-fg)" }}>
+          <p
+            style={{ margin: "6px 0 0", fontSize: 12, color: "var(--err-fg)" }}
+          >
             Must start with <span className="font-mono">@/</span> or{" "}
             <span className="font-mono">#/</span> and end in{" "}
             <span className="font-mono">.ts</span>.

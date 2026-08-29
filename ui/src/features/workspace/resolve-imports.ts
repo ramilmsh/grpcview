@@ -53,7 +53,10 @@ export interface NameSpan {
 // start marker are the machine-owned header's and are never resolved against — an import binding
 // does not produce 2304, so a span up there is something this module does not manage. [] for a
 // document with no region: plain mode is never touched by this pass at all.
-export function unresolvedNamesIn(text: string, spans: readonly NameSpan[]): string[] {
+export function unresolvedNamesIn(
+  text: string,
+  spans: readonly NameSpan[],
+): string[] {
   const region = findRegion(text);
   if (!region) return [];
   const lines = text.split("\n");
@@ -87,8 +90,11 @@ export interface ModuleSource {
 // unit-testable with plain objects, and the editors pass module-auto-import.ts's live context
 // straight through.
 export function candidatesFrom(
-  ctx: { modules: readonly ModuleSource[]; collectionId: string | null | undefined },
-  currentPath: string | undefined
+  ctx: {
+    modules: readonly ModuleSource[];
+    collectionId: string | null | undefined;
+  },
+  currentPath: string | undefined,
 ): ModuleExports[] {
   const out: ModuleExports[] = [];
   for (const m of ctx.modules) {
@@ -146,5 +152,8 @@ export function resolveOrBail(input: ResolveInput): ResolveOutcome {
   if (additions.length === 0) return NONE;
 
   const merged = [...imports, ...additions];
-  return { kind: "addImports", edits: rewriteHeaderEdits(region, skeleton, merged, other) };
+  return {
+    kind: "addImports",
+    edits: rewriteHeaderEdits(region, skeleton, merged, other),
+  };
 }

@@ -20,7 +20,8 @@ export interface NamedImport {
 // named-import declaration with no default and no namespace binding. `import type { ... }` does
 // not match — the `\s*` between "import" and "{" cannot also consume the word "type" — so a
 // type-only declaration falls through to `other`, untouched, same as a default or namespace one.
-const PLAIN_NAMED_RE = /^import\s*\{([^}]*)\}\s*from\s*(['"])([^'"]+)\2\s*;?\s*$/;
+const PLAIN_NAMED_RE =
+  /^import\s*\{([^}]*)\}\s*from\s*(['"])([^'"]+)\2\s*;?\s*$/;
 // A single name entry inside the braces: `a` or `a as b`. Anything else — notably a per-name
 // `type Foo` modifier in a mixed value/type list — fails this and the whole line is left
 // unmanaged, on the same "don't guess" principle as D8.
@@ -42,7 +43,10 @@ export function localNameOf(entry: string): string {
 // skeleton itself — so neither ends up in `other`; `other` holds only the non-blank,
 // non-skeleton lines that are not a managed plain-named import, preserved byte-for-byte
 // (a default import, a namespace import, a side-effect import, or a type-only import).
-export function parseImportBlock(header: string): { imports: NamedImport[]; other: string[] } {
+export function parseImportBlock(header: string): {
+  imports: NamedImport[];
+  other: string[];
+} {
   const imports: NamedImport[] = [];
   const other: string[] = [];
   if (header.length === 0) return { imports, other };
@@ -79,7 +83,9 @@ export function renderImportBlock(imports: readonly NamedImport[]): string[] {
   }
   const specifiers = [...bySpecifier.keys()].sort();
   return specifiers.map((specifier) => {
-    const names = [...bySpecifier.get(specifier)!].sort((a, b) => a.localeCompare(b));
+    const names = [...bySpecifier.get(specifier)!].sort((a, b) =>
+      a.localeCompare(b),
+    );
     return `import { ${names.join(", ")} } from "${specifier}";`;
   });
 }
@@ -93,13 +99,19 @@ export function rewriteHeaderEdits(
   region: Region,
   skeleton: string,
   imports: readonly NamedImport[],
-  other: readonly string[]
+  other: readonly string[],
 ): LineEdit[] {
   const headerBody = [...other, ...renderImportBlock(imports)];
-  const finalLines = headerBody.length === 0 ? [skeleton] : [...headerBody, "", skeleton];
+  const finalLines =
+    headerBody.length === 0 ? [skeleton] : [...headerBody, "", skeleton];
   return [
     {
-      range: { startLineNumber: 1, startColumn: 1, endLineNumber: region.startLine, endColumn: 1 },
+      range: {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: region.startLine,
+        endColumn: 1,
+      },
       text: finalLines.join("\n") + "\n",
     },
   ];
@@ -142,7 +154,7 @@ function isWholeDeclarationSpan(spanText: string): boolean {
 export function pruneEdits(
   text: string,
   skeleton: string,
-  unused: readonly UnusedSpan[]
+  unused: readonly UnusedSpan[],
 ): LineEdit[] | undefined {
   const region = findRegion(text);
   if (!region) return undefined;
@@ -192,9 +204,11 @@ export function pruneEdits(
 
   if (!changed) return undefined;
 
-  const prunedImports: NamedImport[] = [...bySpecifier].map(([specifier, names]) => ({
-    specifier,
-    names: [...names],
-  }));
+  const prunedImports: NamedImport[] = [...bySpecifier].map(
+    ([specifier, names]) => ({
+      specifier,
+      names: [...names],
+    }),
+  );
   return rewriteHeaderEdits(region, skeleton, prunedImports, other);
 }
