@@ -104,6 +104,7 @@ use_repo(
 bazel_dep(name = "aspect_rules_ts", version = "3.9.1")
 bazel_dep(name = "aspect_rules_js", version = "3.4.1")
 bazel_dep(name = "aspect_rules_esbuild", version = "0.27.0")
+local_path_override(module_name = "aspect_rules_esbuild", path = "third_party/rules_esbuild")
 bazel_dep(name = "aspect_rules_swc", version = "2.7.6")
 bazel_dep(name = "rules_nodejs", version = "6.7.5")
 
