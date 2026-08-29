@@ -1,0 +1,19 @@
+{
+  "jsc": {
+    "parser": {
+      "syntax": "typescript",
+      "tsx": true
+    },
+    "target": "es2020",
+    "transform": {
+      "react": {
+        "runtime": "automatic"
+      },
+      "useDefineForClassFields": true
+    }
+  },
+  "module": {
+    "type": "es6"
+  },
+  "isModule": true
+}
