@@ -22,10 +22,7 @@
     "runtest": false
   },
   "gopls": {
-    "build.workspaceFiles": [
-      "**/BUILD",
-      "**/*.{bzl,bazel}"
-    ],
+    "build.workspaceFiles": ["**/BUILD", "**/*.{bzl,bazel}"],
     "build.directoryFilters": [
       "-bazel-bin",
       "-bazel-out",

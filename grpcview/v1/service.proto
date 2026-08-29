@@ -11,9 +11,9 @@ option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1";
 message AddDescriptorSourceRequest {
   string collection = 1;
   oneof source {
-    bytes  descriptor_set = 2;
-    Server reflection     = 3;
-    Bazel  bazel          = 6;
+    bytes descriptor_set = 2;
+    Server reflection = 3;
+    Bazel bazel = 6;
   }
   // Identity of a descriptor_set upload; re-uploading the same name refreshes it.
   string file_name = 4;
@@ -159,30 +159,26 @@ message GetResponse {
   Collection collection = 1;
 }
 
-message ListCollectionsRequest {
-  // Was `refresh`: the listing is never memoized, so every call already rescans.
-  reserved 1;
-  reserved "refresh";
-}
+message ListCollectionsRequest {}
 
 message CollectionSummary {
   // Workspace-relative path that addresses this collection; "." is the root.
-  string id           = 1;
+  string id = 1;
   // Display name, never the id — five collections may all be called "requests".
-  string name         = 2;
-  int32  source_count = 3;
+  string name = 2;
+  int32 source_count = 3;
   // Why this collection could not be summarized; a broken one is a visible row.
-  string error        = 4;
+  string error = 4;
 }
 
 message ListCollectionsResponse {
   // Absolute workspace root, so a caller with a cwd of its own (the CLI) can
   // resolve that cwd against the workspace it is talking to.
-  string                      root        = 1;
-  repeated CollectionSummary  collections = 2;
+  string root = 1;
+  repeated CollectionSummary collections = 2;
   // Whether this root is trusted. Trust gates ONLY the source kinds that EXECUTE
   // (a bazel label); reflection and uploads resolve regardless.
-  bool                        trusted     = 3;
+  bool trusted = 3;
 }
 
 message SetWorkspaceTrustRequest {
@@ -211,7 +207,7 @@ message ListBazelTargetsResponse {
 // contents, not declarations — the inferred types are the point.
 message WorkspaceModule {
   // Workspace-relative, slash-separated: "example/scripts/uuid.ts".
-  string path    = 1;
+  string path = 1;
   string content = 2;
 }
 
@@ -226,7 +222,7 @@ message CreateCollectionRequest {
   // Workspace-relative directory to create it in; "." is the workspace root.
   string collection = 1;
   // Display name; empty defaults to the directory's own base name.
-  string name       = 2;
+  string name = 2;
 }
 
 message CreateCollectionResponse {
@@ -238,9 +234,9 @@ message CreateCollectionResponse {
 // field is left alone.
 message UpdateCollectionRequest {
   // The collection to edit, addressed as it is now.
-  string          collection     = 1;
+  string collection = 1;
   // New display name. Empty resets it to the directory's own base name.
-  optional string name           = 2;
+  optional string name = 2;
   // New workspace-relative directory; MOVES the directory on disk. Neither the
   // source nor the destination may be ".", and the destination must not exist.
   optional string new_collection = 3;
@@ -253,17 +249,17 @@ message UpdateCollectionResponse {
 // Everything an ad-hoc invoke needs except the client payload — the one thing
 // the unary and streaming forms disagree about.
 message InvokeSpec {
-  string                 collection      = 1;
+  string collection = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
-  repeated string        path            = 2;
-  string                 item_name       = 3;
-  string                 service         = 4;
-  string                 method          = 5;
-  google.protobuf.Struct metadata        = 6;
+  repeated string path = 2;
+  string item_name = 3;
+  string service = 4;
+  string method = 5;
+  google.protobuf.Struct metadata = 6;
   // Unset defaults to the collection's first reflection source.
-  optional Server        target          = 7;
+  optional Server target = 7;
   // TypeScript module; supersedes `metadata` when non-empty.
-  string                 metadata_script = 8;
+  string metadata_script = 8;
 }
 
 // Executes a unary RPC carrying the caller's own, possibly unsaved, body.
@@ -272,7 +268,7 @@ message InvokeRequest {
   // The request message as a JSON object, or a TypeScript module default-exporting
   // one — valid JSON is already valid TS, so both forms parse. Quote 64-bit ints:
   // an unquoted one loses precision. Empty sends an empty message.
-  string     body = 2;
+  string body = 2;
 }
 
 message InvokeResponse {
@@ -281,7 +277,7 @@ message InvokeResponse {
 
 // All client messages are supplied up-front: connect-web cannot stream a body.
 message InvokeStreamRequest {
-  InvokeSpec      spec     = 1;
+  InvokeSpec spec = 1;
   // Client bodies as JSON text, in send order; empty defaults to one "{}".
   repeated string messages = 2;
 }
@@ -290,32 +286,32 @@ message InvokeStreamRequest {
 // call's gRPC status is reported in `result`, not as a Connect stream error.
 message InvokeStreamingResponse {
   oneof event {
-    bytes            message = 1;
-    Request.Response result  = 2;
+    bytes message = 1;
+    Request.Response result = 2;
   }
 }
 
 // Addresses the request SAVED at path/item_name and says how to run it once.
 message SavedInvokeSpec {
-  string                 collection     = 1;
+  string collection = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
-  repeated string        path           = 2;
-  string                 item_name      = 3;
+  repeated string path = 2;
+  string item_name = 3;
   // This run's gv.request.params.
-  google.protobuf.Struct params         = 4;
+  google.protobuf.Struct params = 4;
   // Unset uses the saved request's own target.
-  optional Server        target         = 5;
+  optional Server target = 5;
   // Overrides the saved body for this run only.
-  repeated string        messages       = 6;
+  repeated string messages = 6;
   // Append this run to the request's history. Defaults to TRUE.
-  optional bool          record_history = 7;
+  optional bool record_history = 7;
 }
 
 // Runs the request SAVED at path/item_name, resolved server-side.
 message InvokeSavedRequest {
-  SavedInvokeSpec spec    = 1;
+  SavedInvokeSpec spec = 1;
   // Resolve and evaluate everything, send nothing.
-  bool            dry_run = 2;
+  bool dry_run = 2;
 }
 
 // No dry_run: a dry run reports one resolved request, which is the unary shape.
@@ -325,35 +321,35 @@ message InvokeSavedStreamRequest {
 
 // Exactly one of `response` (a real call) and `resolved` (a dry run) is set.
 message InvokeSavedResponse {
-  Request.Response         response = 1;
+  Request.Response response = 1;
   optional ResolvedRequest resolved = 2;
 }
 
 // What a dry run reports: what would have been sent, post-middleware, nothing dialed.
 message ResolvedRequest {
-  string                 service  = 1;
-  string                 method   = 2;
-  Server                 target   = 3;
-  repeated string        messages = 4;
+  string service = 1;
+  string method = 2;
+  Server target = 3;
+  repeated string messages = 4;
   google.protobuf.Struct metadata = 5;
 }
 
 message DescribeMethodRequest {
   string collection = 1;
   // Fully qualified, e.g. "echo.v1.EchoService"; method is its own name, "Unary".
-  string service        = 2;
-  string method         = 3;
+  string service = 2;
+  string method = 3;
 }
 
 message DescribeMethodResponse {
   // The method, its input and output messages, and every type they reference.
-  string proto_text        = 1;
+  string proto_text = 1;
   // The same closure, transitive imports included so it links on its own.
-  bytes  descriptor_set    = 2;
+  bytes descriptor_set = 2;
   // The source it was read from, e.g. "reflection:localhost:9000".
-  string source_id         = 3;
-  bool   client_streaming  = 4;
-  bool   server_streaming  = 5;
+  string source_id = 3;
+  bool client_streaming = 4;
+  bool server_streaming = 5;
   // Why invoking this method would fail today; empty when it is invocable. Set for
   // every streaming method, which invoke rejects with Unimplemented.
   string not_invocable_reason = 6;
@@ -361,7 +357,7 @@ message DescribeMethodResponse {
 
 message CreateScriptRequest {
   string collection = 1;
-  string path       = 2;
+  string path = 2;
 }
 
 message CreateScriptResponse {
@@ -370,10 +366,10 @@ message CreateScriptResponse {
 
 // Partial update: `path` addresses the script, `new_path` renames it (a rename is a file move).
 message UpdateScriptRequest {
-  string          collection = 1;
-  string          path       = 2;
-  optional string source     = 3;
-  optional string new_path   = 4;
+  string collection = 1;
+  string path = 2;
+  optional string source = 3;
+  optional string new_path = 4;
 }
 
 message UpdateScriptResponse {
@@ -382,7 +378,7 @@ message UpdateScriptResponse {
 
 message DeleteScriptRequest {
   string collection = 1;
-  string path       = 2;
+  string path = 2;
 }
 
 message DeleteScriptResponse {
@@ -394,13 +390,13 @@ message RunScriptRequest {
   // A source with `export default` is compiled as an entry and its default export is
   // called; anything else is evaluated as a scratchpad and its last expression is the
   // value. Ignored when `script` names a saved script, which follows the same rule.
-  string          source = 2;
+  string source = 2;
   // Path of a saved script to run instead of `source`. Exactly one of the two.
   optional string script = 4;
 }
 
 message ScriptLog {
-  string level = 1;   // debug | log | warn | error
+  string level = 1; // debug | log | warn | error
   string message = 2;
 }
 
@@ -408,15 +404,15 @@ message ScriptError {
   string message = 1;
   string stack = 2;
   // Source line parsed from the guest backtrace; 0 when unknown.
-  int32  line = 3;
+  int32 line = 3;
 }
 
 // A script that throws or times out is reported in `error`, not as a Connect failure.
 message RunScriptResponse {
   // JSON text; unset when the script returned undefined.
-  optional string       value = 1;
-  repeated ScriptLog     logs  = 2;
-  optional ScriptError   error = 3;
+  optional string value = 1;
+  repeated ScriptLog logs = 2;
+  optional ScriptError error = 3;
 }
 
 service WorkspaceService {
@@ -503,9 +499,9 @@ service WorkspaceService {
 // last hour's code from one serving this build. A version STRING cannot: an unstamped
 // build links "dev" for every rebuild.
 message ServerExecutable {
-  string path           = 1;
-  int64  modified_unix  = 2;
-  int64  size           = 3;
+  string path = 1;
+  int64 modified_unix = 2;
+  int64 size = 3;
 }
 
 message ServerInfoRequest {}
@@ -513,11 +509,11 @@ message ServerInfoRequest {}
 message ServerInfoResponse {
   // Absolute, and the field the whole registration design turns on: a client verifies
   // it matches the root it resolved before trusting anything else the server says.
-  string           workspace_root = 1;
-  int32            pid            = 2;
-  int32            port           = 3;
-  string           version        = 4;
-  ServerExecutable executable     = 5;
+  string workspace_root = 1;
+  int32 pid = 2;
+  int32 port = 3;
+  string version = 4;
+  ServerExecutable executable = 5;
   // Zero when the server never idles out, which is every hand-run one.
   google.protobuf.Duration idle_timeout = 6;
 }
@@ -530,22 +526,22 @@ message ShutdownResponse {}
 // the file; everything else is what that server itself answered, so a row that is not
 // running carries only what the file claimed.
 message ServerEntry {
-  string           workspace_root = 1;
-  int32            port           = 2;
-  int32            pid            = 3;
-  string           version        = 4;
-  ServerExecutable executable     = 5;
+  string workspace_root = 1;
+  int32 port = 2;
+  int32 pid = 3;
+  string version = 4;
+  ServerExecutable executable = 5;
   // Zero when it never idles out, which is every hand-run one.
   google.protobuf.Duration idle_timeout = 6;
-  int64            started_unix   = 7;
+  int64 started_unix = 7;
   // A registration is a hint: false means nothing answered on that port, or what did
   // reports another root. The file outliving its process is the ordinary case.
-  bool             running        = 8;
+  bool running = 8;
   // The server answering this call, so a client can tell which row it is talking through.
-  bool             current        = 9;
+  bool current = 9;
   // Answers, and it is that workspace's, but it is running a different build than the
   // server answering this call.
-  bool             skewed         = 10;
+  bool skewed = 10;
 }
 
 message ListServersRequest {}
