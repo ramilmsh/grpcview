@@ -1,6 +1,7 @@
 # gazelle:map_kind ts_project ts_project //ui:defs.bzl
 load("@aspect_rules_ts//ts:defs.bzl", "ts_config")
 load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//ui:tsconfig-to-swcconfig/package_json.bzl", tsconfig_to_swcconfig = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
@@ -10,9 +11,17 @@ ts_config(
     visibility = [":__subpackages__"],
 )
 
-# Referenced by every ts_project's transpiler = partial.make(swc, swcrc = "//ui:.swcrc")
-# across ui/src/...; see swc-migration-plan.md.
-exports_files(
-    [".swcrc"],
+# Generates .swcrc from tsconfig.json (rather than hand-syncing a second, separate
+# config) so every ts_project's transpiler = partial.make(swc, swcrc = "//ui:.swcrc")
+# across ui/src/... stays consistent with tsconfig.json's target/jsx/decorators
+# options. See aspect_rules_swc's examples/generate_swcrc for this pattern.
+tsconfig_to_swcconfig.t2s(
+    name = "write_swcrc",
+    srcs = ["tsconfig.json"],
+    args = [
+        "--filename",
+        "$(location tsconfig.json)",
+    ],
+    stdout = ".swcrc",
     visibility = [":__subpackages__"],
 )
