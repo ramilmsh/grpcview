@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // empty' | { read -r cmd; if echo \"$cmd\" | grep -qiE 'bazel' && echo \"$cmd\" | grep -qiE '\\bclean\\b' && echo \"$cmd\" | grep -qiE 'expunge'; then jq -n --arg cmd \"$cmd\" '{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"ask\",permissionDecisionReason:(\"This runs bazel clean --expunge (\" + $cmd + \"). Bazel has no stale cache to clear this way -- it wipes the whole build/download cache and forces a full rebuild. Confirm this is really the fix, not a substitute for diagnosing the real error, before proceeding.\")}}'; fi; }"
+          }
+        ]
+      }
+    ]
+  }
+}

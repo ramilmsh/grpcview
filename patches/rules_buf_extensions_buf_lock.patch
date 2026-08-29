@@ -1,0 +1,97 @@
+--- a/buf/extensions.bzl
++++ b/buf/extensions.bzl
+@@ -23,18 +23,58 @@
+ _DEFAULT_SHA256 = "1b37b75dc0a777a0cba17fa2604bc9906e55bb4c578823d8b7a8fe3fc9fe4439"
+ _DEFAULT_TOOLCHAIN_NAME = "rules_buf_toolchains"
+ _DEFAULT_DEPS = "buf_deps"
++_DEFAULT_BUF_LOCK = ["@@//:buf.lock"]
+ 
+ dependency = tag_class(attrs = {
+     "name": attr.string(doc = "name of resulting deps repo", default = _DEFAULT_DEPS),
+     "module": attr.string(doc = "A module name from the Buf Schema Registry, see https://buf.build/docs/bsr/module/manage"),
+ })
+ 
++dependencies = tag_class(attrs = {
++    "name": attr.string(doc = "name of resulting deps repo", default = _DEFAULT_DEPS),
++    "buf_lock": attr.label_list(doc = "the buf.lock file", default = _DEFAULT_BUF_LOCK),
++})
++
+ toolchains = tag_class(attrs = {
+     "name": attr.string(doc = "name of resulting buf toolchains repo", default = _DEFAULT_TOOLCHAIN_NAME),
+     "version": attr.string(doc = "Version of the buf tool, see https://github.com/bufbuild/buf/releases"),
+     "sha256": attr.string(doc = "The checksum sha256.txt file"),
+ })
+ 
++def _parse_buf_lock(contents):
++    pins = []
++    reading_deps = False
++    current_name = ""    
++    current_commit = ""   
++    for line in contents.split("\n"):
++        stripped = line.strip()
++        if stripped == "deps:":
++            reading_deps = True
++            continue
++        if not reading_deps:
++            continue
++        
++        if stripped.startswith("-"):
++            if current_name != "" and current_commit != "":
++                pins.append("{}:{}".format(current_name, current_commit))
++            current_name = ""
++            current_commit = ""
++            stripped = stripped[1:].strip()
++        
++        if stripped.startswith("name:"):
++            current_name = stripped.split("name:")[1].strip()
++            continue
++        if stripped.startswith("commit:"):
++            current_commit = stripped.split("commit:")[1].strip()
++            continue
++
++    # Flush the last entry: the loop above only flushes on the *next* "-",
++    # so without this the final (or only) dep in the file is silently dropped.
++    if current_name != "" and current_commit != "":
++        pins.append("{}:{}".format(current_name, current_commit))
++
++    return pins
++
+ def _extension_impl(module_ctx):
+     registrations = {}
+     dependencies = {}
+@@ -47,6 +87,18 @@
+             if dependency.name not in dependencies.keys():
+                 dependencies[dependency.name] = []
+             dependencies[dependency.name].append(dependency.module)
++        
++        for dependency in mod.tags.dependencies:
++            for buf_lock in dependency.buf_lock:
++                repo_name = dependency.name
++                if buf_lock.package != "":
++                    repo_name = repo_name + "_" + buf_lock.package.replace("/", "_")
++
++                if repo_name not in dependencies.keys():
++                    dependencies[repo_name] = []
++
++                contents = module_ctx.read(buf_lock)
++                dependencies[repo_name].extend(_parse_buf_lock(contents))
+ 
+         # collect all toolchain versions, group by name of toolchain repo
+         for toolchains in mod.tags.toolchains:
+@@ -84,10 +136,16 @@
+             modules = modules,
+         )
+ 
++    return module_ctx.extension_metadata(
++        root_module_direct_deps=dependencies.keys() + registrations.keys(),
++        root_module_direct_dev_deps=[],
++    )
++
+ buf = module_extension(
+     implementation = _extension_impl,
+     tag_classes = {
+         "dependency": dependency,
++        "dependencies": dependencies,
+         "toolchains": toolchains,
+     },
+ )

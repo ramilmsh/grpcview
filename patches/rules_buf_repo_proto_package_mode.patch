@@ -1,0 +1,11 @@
+--- a/buf/internal/repo.bzl
++++ b/buf/internal/repo.bzl
+@@ -67,6 +67,8 @@
+         gazelle,
+         "-lang",
+         "proto",
++        "-proto",
++        "package",
+         "-mode",
+         "fix",
+         "-repo_root",

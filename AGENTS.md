@@ -38,6 +38,16 @@ most backwards-compatible one. Dead and legacy code should be deleted on sight.
   dependency.
 - The default shell here is fish. For commands that need bash semantics, wrap
   them: `bash -c '...'`.
+- **`bazel clean` / `--expunge` is not a fix.** Bazel is hermetic — there is no
+  "stale cache" in normal operation. Don't reach for `bazel clean` (especially
+  `--expunge`) when a build or fetch fails or "looks off"; Bazel already detects
+  changed inputs (patches, lockfiles, dep versions) via content hashing and
+  re-fetches just the affected repo on the next command. A plain retry, or a
+  targeted `bazel fetch @broken_repo`, is almost always the actual fix. Treat
+  `--expunge` like opening up the compiler's source to hunt for a bug in it: not
+  impossible that it's warranted, but rare, and a sign to first double check your
+  own change (a bad patch, wrong repo name, wrong label) before blaming the
+  cache. A repo hook pauses for confirmation before it runs.
 
 ## Delegating to background agents
 

@@ -38,11 +38,24 @@ use_repo(quickjs, "quickjs")
 bazel_dep(name = "protobuf", version = "35.1")
 bazel_dep(name = "rules_buf", version = "0.5.4")
 
+# Adds buf.dependencies(buf_lock = ...), letting the extension read BSR module
+# pins straight out of //:buf.lock instead of repeating them here, so buf.yaml
+# (used by the Buf CLI/IDE) stays the single source of truth.
+# See patches/README.md and https://github.com/bufbuild/rules_buf/issues/131.
+single_version_override(
+    module_name = "rules_buf",
+    patch_strip = 1,
+    patches = [
+        "//patches:rules_buf_extensions_buf_lock.patch",
+        "//patches:rules_buf_repo_proto_package_mode.patch",
+    ],
+)
+
 buf = use_extension("@rules_buf//buf:extensions.bzl", "buf")
 buf.toolchains(version = "v1.61.0")
-use_repo(buf, "rules_buf_toolchains")
+buf.dependencies(buf_lock = ["//:buf.lock"])
+use_repo(buf, "buf_deps", "rules_buf_toolchains")
 
-bazel_dep(name = "googleapis", version = "0.0.0-20260623-b6f9ff05")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 bazel_dep(name = "rules_shell", version = "0.6.1")
