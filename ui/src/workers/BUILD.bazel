@@ -17,12 +17,6 @@ ts_project(
     deps = ["//ui:node_modules/monaco-editor"],
 )
 
-# Each Monaco worker gets its own bundle: monaco's getWorkerUrl (see
-# //ui/src/theme:monaco-nocturne.ts) loads these as plain classic scripts (not
-# modules), one per language service. The *-entry.ts files exist purely so these
-# entry_points are ordinary local source rather than reaching into node_modules
-# (esbuild's entry_point/srcs must be co-located in this package — see
-# //ui/src:app's comment).
 # keep
 esbuild(
     name = "editor_worker",

@@ -1,17 +1,12 @@
-# Compiles a minimal libquickjs + our qjs_wasm.c shim to a single wasm32-wasi
-# (reactor) module, embedded later by //service/scripting.
-#
-# We invoke `zig cc` DIRECTLY as a build tool rather than going through cc_toolchain
-# resolution: hermetic_cc_toolchain ships wasm32-wasi-musl target files (headers,
-# libc, wasm-ld) but the root module only registers the host-platform cc
-# toolchains, and the macOS host forces the Apple cc toolchain. Calling the compiler
-# directly sidesteps toolchain resolution entirely and works identically on a macOS
-# host and on the Linux RBE executors. See docs/design/shipped/quickjs-wasm-spike.md.
+# Kept: `zig cc` is invoked directly here rather than through cc_toolchain
+# resolution, because the root module only registers host-platform cc toolchains
+# (which forces the Apple toolchain on macOS) and can't target wasm32-wasi-musl.
+# Routing this through normal toolchain resolution would look like the "correct"
+# fix but silently breaks the macOS-host / Linux-RBE build. See
+# docs/design/shipped/quickjs-wasm-spike.md.
 
 exports_files(["qjs_wasm.c"])
 
-# The zig wasm support files can only be named canonically (see the tools comment
-# below and MODULE.bazel), so the @@ reference is intentional here.
 # buildifier: disable=canonical-repository
 genrule(
     name = "quickjs_wasm",
@@ -23,11 +18,8 @@ genrule(
     outs = ["quickjs.wasm"],
     cmd = """
 set -eu
-# zig needs a writable cache; mktemp -d honours the per-platform sandbox TMPDIR
-# (and the Linux RBE executor), so this stays hermetic on macOS and remote alike.
 export ZIG_GLOBAL_CACHE_DIR="$$(mktemp -d)"
 export ZIG_LOCAL_CACHE_DIR="$$ZIG_GLOBAL_CACHE_DIR"
-# All quickjs sources/headers live in one dir; derive the include path from a src.
 qjs_inc="$$(dirname $$(echo $(execpaths @quickjs//:core_srcs) | cut -d' ' -f1))"
 $(execpath @zig_sdk//:zig) cc \
     -target wasm32-wasi \
@@ -42,11 +34,6 @@ $(execpath @zig_sdk//:zig) cc \
     $(execpath qjs_wasm.c) \
     -o $@
 """,
-    # Compiler + its wasm32-wasi support files (libc, headers, wasm-ld) run on the
-    # build machine, so they belong in tools (exec-configured), not srcs. @zig_sdk//:zig
-    # is a clean alias; the support-files filegroup exists only in the sibling @zig_config
-    # repo, which hermetic_cc_toolchain does not export as a root dep — referenced by its
-    # canonical name so `bazel mod tidy` cannot strip it (see MODULE.bazel).
     tools = [
         "@@hermetic_cc_toolchain++toolchains+zig_config//:wasm32-wasi-musl_all_files",
         "@zig_sdk//:zig",

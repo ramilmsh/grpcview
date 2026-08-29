@@ -43,6 +43,6 @@ ts_proto_library(
         "service.proto",
         "workspace.proto",
     ],
-    visibility = ["//visibility:public"],  # keep: gazelle scopes this to //ui:__pkg__, too
-    # narrow for consumers under ui/src/**.
+    # keep
+    visibility = ["//visibility:public"],
 )

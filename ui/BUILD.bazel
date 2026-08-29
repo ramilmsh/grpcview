@@ -11,10 +11,6 @@ ts_config(
     visibility = [":__subpackages__"],
 )
 
-# Generates .swcrc from tsconfig.json (rather than hand-syncing a second, separate
-# config) so every ts_project's transpiler = partial.make(swc, swcrc = "//ui:.swcrc")
-# across ui/src/... stays consistent with tsconfig.json's target/jsx/decorators
-# options. See aspect_rules_swc's examples/generate_swcrc for this pattern.
 tsconfig_to_swcconfig.t2s(
     name = "write_swcrc",
     srcs = ["tsconfig.json"],

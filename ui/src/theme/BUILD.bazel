@@ -16,11 +16,6 @@ ts_project(
     ],
 )
 
-# The theme layer (fonts + nocturne + app-tokens) is plain CSS bundled straight
-# from theme.css's @imports — not JS-imported from main.tsx, so gazelle's
-# ts_project asset tracking (same-package files only) never has to reach across
-# the ui/src -> ui/src/theme package boundary. See //ui/src's :app and :dist for
-# the rest of the release bundle.
 # keep
 esbuild(
     name = "theme_css",

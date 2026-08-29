@@ -2,9 +2,6 @@ load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_cross_binary", "go_library")
 
-# The platforms //service/cmd:release publishes. Each name is both a
-# @rules_go//go/toolchain platform and the artifact's `grpcview_<goos>_<goarch>`
-# suffix, so tools/release.sh needs no separate table.
 RELEASE_PLATFORMS = [
     "darwin_amd64",
     "darwin_arm64",
@@ -12,24 +9,12 @@ RELEASE_PLATFORMS = [
     "linux_arm64",
 ]
 
-# The bundle is a set of static files with no target-platform content, but each
-# is an ordinary dep, so a go_cross_binary transition would rebuild the whole UI
-# once per release platform — and rules_js picks esbuild/tailwindcss's native
-# binding from the target platform, so every non-host arch would need to
-# fetch/build a toolchain for that arch too. Pinning the UI build to the host
-# platform makes it build once and be shared by every arch.
 platform_transition_filegroup(
     name = "ui_host",
     srcs = ["//ui/src:dist"],
     target_platform = "@platforms//host",
 )
 
-# //ui/src:dist's members each keep their own package's bazel-out path (e.g.
-# ui/src/dist/main.js, ui/src/theme/dist/theme.css, ui/src/workers/dist/*.worker.js
-# — see that target's comment). Flatten them into one directory so every file
-# sits at the root-relative path index.html's absolute asset links (and
-# monaco-nocturne.ts's worker URLs) expect at request time, named "dist" to
-# match main.go's `//go:embed dist` directive.
 copy_to_directory(
     name = "dist",
     srcs = [":ui_host"],
@@ -43,8 +28,7 @@ copy_to_directory(
 go_library(
     name = "cmd_lib",
     srcs = ["main.go"],
-    # keep: gazelle drops embedsrcs it cannot resolve to source files; ":dist"
-    # is a generated tree artifact that satisfies main.go's `//go:embed dist`.
+    # keep
     embedsrcs = [":dist"],
     importpath = "codeberg.org/ramilmsh/grpcview/service/cmd",
     visibility = ["//visibility:private"],
@@ -58,17 +42,11 @@ go_binary(
     name = "grpcview",
     embed = [":cmd_lib"],
     visibility = ["//visibility:public"],
-    # tools/workspace_status.sh emits STABLE_VERSION_TAG, and this is the repo's
-    # only consumer of it. rules_go substitutes {VAR} only when stamping is on;
-    # .bazelrc deliberately does not set --stamp (it would cost a remote-cache hit
-    # on every stamped target on every commit), and an unstamped build omits the
-    # -X flag rather than embedding the placeholder, so cli.version keeps its
-    # "dev" default. tools/release.sh passes --stamp.
     x_defs = {"codeberg.org/ramilmsh/grpcview/service/cli.version": "{STABLE_VERSION_TAG}"},
 )
 
-# The binary was named `cmd` before it was named after what it installs as.
-# Keep `//service/cmd` resolving for the docs and muscle memory that use it.
+# Kept: //service/cmd predates the grpcview rename and still gets typed from
+# habit and old docs; deleting it would silently break that path.
 alias(
     name = "cmd",
     actual = ":grpcview",

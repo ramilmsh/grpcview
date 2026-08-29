@@ -1,9 +1,6 @@
 load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
-# Bring the compiled engine into this package as quickjs.wasm so engine.go can
-# //go:embed it by basename, mirroring how //service/cmd embeds index.html. The
-# result is still a single static pure-Go binary — the .wasm rides inside it.
 copy_file(
     name = "quickjs_wasm",
     src = "//third_party/quickjs:quickjs.wasm",
@@ -24,8 +21,6 @@ go_library(
         "profiles.go",
         "sourcemap.go",
     ],
-    # quickjs.wasm is the engine; npm/** is the embedded npm registry (dayjs) the Engine
-    # self-provisions so bare npm imports resolve offline in the shipped binary.
     embedsrcs = ["quickjs.wasm"] + glob(["npm/**"]),
     importpath = "codeberg.org/ramilmsh/grpcview/service/scripting",
     visibility = ["//visibility:public"],
@@ -48,7 +43,5 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":scripting"],
-    # Vendored npm packages (dayjs/mustache/ms) + entry package.jsons, embedded into the
-    # test binary so the esbuild-bundling validation is hermetic (no node_modules, no net).
     embedsrcs = glob(["testdata/npm/**"]),
 )
