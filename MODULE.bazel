@@ -66,6 +66,7 @@ go_deps.gazelle_override(
 )
 use_repo(
     go_deps,
+    "bazel_gazelle_go_repository_config",
     "com_connectrpc_connect",
     "com_connectrpc_cors",
     "com_connectrpc_grpcreflect",

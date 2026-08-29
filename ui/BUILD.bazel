@@ -1,3 +1,4 @@
+# gazelle:map_kind ts_project ts_project //ui:defs.bzl
 load("@aspect_rules_ts//ts:defs.bzl", "ts_config")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 
