@@ -1,0 +1,52 @@
+load("@aspect_rules_esbuild//esbuild:defs.bzl", "esbuild")
+load("@aspect_rules_js//js:defs.bzl", "js_library")
+load("@bazel_lib//lib:testing.bzl", "assert_contains")
+
+# consumer.js imports @e2e/escape-lib, resolvable only through
+# node_modules/@e2e/escape-lib -- a symlink npm_link_package creates whose
+# realpath lands under this workspace's real (unsandboxed) execroot in
+# bazel-out, not the sandboxed execroot this action actually runs in. This is
+# the exact class of escape github.com/aspect-build/rules_esbuild#58 and
+# esbuild/private/plugins/bazel-sandbox.js exist for; sandbox.go is the Go
+# port under test here.
+js_library(
+    name = "consumer",
+    srcs = ["src/consumer.js"],
+    deps = ["//:npm-link-example/escape-lib"],
+)
+
+# Built with the Go launcher and its sandbox-guard plugin (bazel_sandbox_plugin
+# defaults to True). metafile lets test.sh inspect exactly which path the
+# import resolved to -- proof that the guard rewrote the escaped absolute path
+# back under the sandbox root, not just that the build happened to succeed.
+esbuild(
+    name = "bundle",
+    testonly = 1,
+    entry_point = "src/consumer.js",
+    launcher = "@aspect_rules_esbuild//esbuild/go_launcher",
+    metafile = True,
+    output = "bundle.js",
+    deps = [":consumer"],
+)
+
+assert_contains(
+    name = "bundle_test",
+    actual = ":bundle.js",
+    expected = "ESCAPED_ANSWER = 42",
+)
+
+# Same target with the sandbox-guard plugin turned off. test.sh builds this to
+# show what the guard is actually preventing: without it, esbuild's resolver
+# reports (and, in the metafile, records) the raw escaped path -- the real,
+# unsandboxed execroot's bazel-out location -- instead of the path contained
+# within this action's own sandbox.
+esbuild(
+    name = "bundle-unguarded",
+    testonly = 1,
+    bazel_sandbox_plugin = False,
+    entry_point = "src/consumer.js",
+    launcher = "@aspect_rules_esbuild//esbuild/go_launcher",
+    metafile = True,
+    output = "bundle-unguarded.js",
+    deps = [":consumer"],
+)

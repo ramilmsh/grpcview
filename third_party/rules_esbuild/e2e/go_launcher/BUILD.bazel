@@ -1,0 +1,53 @@
+load("@aspect_rules_esbuild//esbuild:defs.bzl", "esbuild")
+load("@aspect_rules_js//npm:defs.bzl", "npm_link_package")
+load("@bazel_lib//lib:testing.bzl", "assert_contains")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+# --- Check 1: output parity with the default JS launcher -------------------
+#
+# Same sources, same esbuild() attrs, only `launcher` differs. See test.sh for
+# the diff that proves the two outputs match.
+
+SRCS = [
+    "main.js",
+    "lib.js",
+]
+
+ENTRY = "main.js"
+
+esbuild(
+    name = "bundle-js",
+    testonly = 1,
+    srcs = SRCS,
+    entry_point = ENTRY,
+    output = "bundle-js.js",
+)
+
+esbuild(
+    name = "bundle-go",
+    testonly = 1,
+    srcs = SRCS,
+    entry_point = ENTRY,
+    launcher = "@aspect_rules_esbuild//esbuild/go_launcher",
+    output = "bundle-go.js",
+)
+
+assert_contains(
+    name = "bundle-go_test",
+    actual = ":bundle-go.js",
+    expected = "ANSWER = 42",
+)
+
+# --- Check 2 plumbing: a symlink-escape case -------------------------------
+#
+# Links //escape-lib:npm_package into this workspace's node_modules the same
+# way e2e/npm-links does it: npm_link_package + npm_link_all_packages produce
+# a node_modules/@e2e/escape-lib entry that is a *symlink*, not a real
+# directory. See //consumer:BUILD.bazel for the esbuild() targets that prove
+# the Go sandbox-guard plugin handles it.
+npm_link_package(
+    name = "npm-link-example/escape-lib",
+    src = "//escape-lib:npm_package",
+)
+
+npm_link_all_packages(name = "node_modules")
