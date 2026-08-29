@@ -36,6 +36,20 @@ ts_project(
 
 esbuild(
     name = "app",
+    # aspect_rules_esbuild's default bazel-sandbox plugin resolves every import twice (once to
+    # bundle, once more to check/rewrite paths that escaped the sandbox via a symlink -- see
+    # https://github.com/aspect-build/rules_esbuild/issues/58) by hooking onResolve(/./). On a
+    # graph this size (Monaco + workers, tens of thousands of specifiers) that doubling is the
+    # entire cold-build cost: disabling it took this target from ~75s to ~8s, measured
+    # 2026-08-29. A Go-native launcher was tried to remove the plugin's IPC hop instead of the
+    # plugin itself -- no win, because the doubled resolution work dominates either way, in-
+    # process or not. See archive branch `archive/esbuild-go-launcher-experiment` for that
+    # experiment in full.
+    #
+    # Trade-off accepted: `ui/node_modules` is pnpm-symlinked (verified), so the escape this
+    # plugin guards against is real, not theoretical. Revisit if esbuild ever gets a resolver
+    # cache, or if this repo moves off symlinked node_modules.
+    bazel_sandbox_plugin = False,
     config = "esbuild.config.mjs",
     define = {
         "import.meta.env.PROD": "true",

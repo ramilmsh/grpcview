@@ -23,6 +23,8 @@ esbuild(
         "fonts.css",
         "nocturne.css",
     ] + glob(["fonts/**"]),
+    # See //ui/src:app's bazel_sandbox_plugin comment -- same trade-off, applied here too.
+    bazel_sandbox_plugin = False,
     config = "esbuild.config.mjs",
     entry_point = "theme.css",
     output = "dist/theme.css",
