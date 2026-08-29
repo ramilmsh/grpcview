@@ -17,7 +17,6 @@ ts_project(
     deps = ["//ui:node_modules/monaco-editor"],
 )
 
-# keep
 esbuild(
     name = "editor_worker",
     entry_point = "editor-worker-entry.ts",
@@ -30,7 +29,6 @@ esbuild(
     deps = [":workers"],
 )
 
-# keep
 esbuild(
     name = "json_worker",
     entry_point = "json-worker-entry.ts",
@@ -43,7 +41,6 @@ esbuild(
     deps = [":workers"],
 )
 
-# keep
 esbuild(
     name = "ts_worker",
     entry_point = "ts-worker-entry.ts",

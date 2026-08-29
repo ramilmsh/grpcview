@@ -43,6 +43,5 @@ ts_proto_library(
         "service.proto",
         "workspace.proto",
     ],
-    # keep
     visibility = ["//visibility:public"],
 )

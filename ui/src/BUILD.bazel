@@ -34,7 +34,6 @@ ts_project(
     ],
 )
 
-# keep
 esbuild(
     name = "app",
     config = "esbuild.config.mjs",
@@ -63,7 +62,6 @@ esbuild(
     deps = [":src"],
 )
 
-# keep
 tailwindcss_bin.tailwindcss(
     name = "tailwind_css",
     srcs = [
@@ -99,14 +97,12 @@ tailwindcss_bin.tailwindcss(
     chdir = "ui/src",
 )
 
-# keep
 copy_file(
     name = "dist_index_html",
     src = "index.html",
     out = "dist/index.html",
 )
 
-# keep
 filegroup(
     name = "dist",
     srcs = [

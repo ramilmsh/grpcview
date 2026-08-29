@@ -16,7 +16,6 @@ ts_project(
     ],
 )
 
-# keep
 esbuild(
     name = "theme_css",
     srcs = [
