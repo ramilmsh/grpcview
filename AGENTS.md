@@ -37,6 +37,10 @@ something here.
 - Default shell is fish; for bash syntax use `bash -c '...'`.
 - **`bazel clean --expunge` is not a fix** — Bazel is hermetic, no stale
   cache. Retry, or `bazel fetch @broken_repo`; a repo hook pauses to confirm.
+- **Never push without explicit per-push approval** — trunk-based (commit
+  straight to `trunk`, no feature branches) does not mean auto-push.
+  Committing locally is fine; leave the push for the user to request, even
+  when a prior push was approved — that approval doesn't carry over.
 
 ## Delegating to background agents
 
