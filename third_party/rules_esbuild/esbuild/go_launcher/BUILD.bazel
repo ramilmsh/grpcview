@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_launcher_lib",
+    srcs = [
+        "args.go",
+        "main.go",
+        "sandbox.go",
+    ],
+    importpath = "github.com/aspect-build/rules_esbuild/esbuild/go_launcher",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_evanw_esbuild//pkg/api"],
+)
+
+go_binary(
+    name = "go_launcher",
+    embed = [":go_launcher_lib"],
+    visibility = ["//visibility:public"],
+)
