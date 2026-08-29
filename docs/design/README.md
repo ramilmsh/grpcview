@@ -41,6 +41,7 @@ of trunk. For what the code does now, read `AGENTS.md`.
 | [`daemon.md`](./shipped/daemon.md) | One daemon per workspace — registration file, connect-or-spawn, idle exit (2026-08-08). Kept for the naming/token/unix-socket calls it closes and the two deferrals it names. |
 | [`script-imports/`](./shipped/script-imports) | A script is a `.ts` file imported as `@/path` or `#/path`; `script.json`, `ScriptKind`, the generator prelude and the `gv` global are gone (2026-08-08). Kept for the rejected alternatives, the esbuild measurements, and the two defects only the browser pass found. |
 | [`script-region.md`](./shipped/script-region.md) | `// grpcview:script start` markers replace the constant hidden wrapper; the import block above them is machine-derived (2026-08-09). Kept for the thirteen decisions, the rejected alternatives, and the two claims the implementation corrected. |
+| [`esbuild-go-launcher-loader-flag.md`](./shipped/esbuild-go-launcher-loader-flag.md) | Phase 4 of the Go esbuild launcher experiment: added a `loader` rule attribute (kept — retires `ui/src:app`'s config file), measured the launcher-switch flag against the real target, and reverted it (2026-08-29). Kept for the measurements: the Go launcher's IPC-removal win doesn't reproduce outside the isolated `e2e/` case. |
 
 ## active/
 

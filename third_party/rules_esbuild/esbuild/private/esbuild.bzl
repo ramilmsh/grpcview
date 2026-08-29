@@ -28,6 +28,13 @@ define = {
 See https://esbuild.github.io/api/#define for more details
     """,
     ),
+    "loader": attr.string_dict(
+        default = {},
+        doc = """A dict of file extensions to loader names, e.g. {".ttf": "dataurl"}.
+
+See https://esbuild.github.io/api/#loader for more details
+    """,
+    ),
     "deps": attr.label_list(
         default = [],
         doc = "A list of direct dependencies that are required to build the bundle",
@@ -270,6 +277,7 @@ def _esbuild_impl(ctx):
         "define": define,
         "entryPoints": [_bin_relative_path(ctx, entry_point) for entry_point in entry_points_bin_copy],
         "external": ctx.attr.external,
+        "loader": ctx.attr.loader,
         "logLevel": ctx.attr.esbuild_log_level,
         # Disable the log limit and show all logs
         "logLimit": 0,

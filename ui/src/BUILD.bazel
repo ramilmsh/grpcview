@@ -36,7 +36,6 @@ ts_project(
 
 esbuild(
     name = "app",
-    config = "esbuild.config.mjs",
     define = {
         "import.meta.env.PROD": "true",
     },
@@ -52,6 +51,15 @@ esbuild(
         "inspector",
     ],
     format = "esm",
+    # Monaco's codicon.css references codicon.ttf via a plain url(...), and
+    # esbuild has no loader for binary files by default (mirrors the .woff2
+    # fix on //ui/src/theme:theme_css).
+    #
+    # "dataurl", not "file", for the same reason as there: a "file" loader's
+    # content-hashed sibling cannot be declared as a bazel output and is
+    # discarded, which would leave every codicon (the folding chevrons, the
+    # suggest-widget kind icons) as a missing glyph.
+    loader = {".ttf": "dataurl"},
     minify = True,
     output = "dist/main.js",
     output_css = "dist/main.css",
