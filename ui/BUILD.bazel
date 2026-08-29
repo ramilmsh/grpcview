@@ -1,9 +1,29 @@
 # gazelle:map_kind ts_project ts_project //ui:defs.bzl
+load("@aspect_rules_js//js:defs.bzl", "js_library")
 load("@aspect_rules_ts//ts:defs.bzl", "ts_config")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//ui:tsconfig-to-swcconfig/package_json.bzl", tsconfig_to_swcconfig = "bin")
 
 npm_link_all_packages(name = "node_modules")
+
+# lint_eslint_aspect's configs= attr needs this visible cross-package.
+exports_files(["eslint.config.mjs"])
+
+# lint_eslint_aspect gathers _config_files through js_lib_helpers.gather_files_from_js_infos,
+# which only collects targets that carry a JsInfo provider — a bare exports_files source file
+# is silently dropped from the action's inputs (no error, just a missing config at run time).
+# Wrapping it in js_library is what makes the aspect actually copy it into the bin tree.
+js_library(
+    name = "eslint_config",
+    srcs = ["eslint.config.mjs"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":node_modules/@eslint/js",
+        ":node_modules/eslint-plugin-react-hooks",
+        ":node_modules/eslint-plugin-react-refresh",
+        ":node_modules/typescript-eslint",
+    ],
+)
 
 ts_config(
     name = "tsconfig",

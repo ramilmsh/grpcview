@@ -1,0 +1,8 @@
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+
+# Run by the devcontainer tooling directly, never as a Bazel target. sh_library exists
+# purely so the shellcheck lint aspect has something to visit.
+sh_library(
+    name = "post-create",
+    srcs = ["post-create.sh"],
+)

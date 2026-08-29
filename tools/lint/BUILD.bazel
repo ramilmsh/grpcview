@@ -1,0 +1,25 @@
+load("@npm//ui:eslint/package_json.bzl", eslint_bin = "bin")
+load("@npm//ui:prettier/package_json.bzl", prettier_bin = "bin")
+
+package(default_visibility = ["//:__subpackages__"])
+
+eslint_bin.eslint_binary(
+    name = "eslint",
+    # aspect_rules_lint's eslint.stylish-formatter.cjs (loaded via --format at runtime, from
+    # its own location under external/aspect_rules_lint+/lint/js/) requires("chalk") but
+    # declares no dep of its own — chalk has to be reachable by Node's upward node_modules
+    # walk from that file. Root package.json's own node_modules, built in the same exec
+    # config as this binary (`cfg = "exec"` in the aspect), lands at
+    # bazel-out/<exec-config>/bin/node_modules — an ancestor of every external/ path, so
+    # this is the one location that actually resolves.
+    data = ["//:node_modules/chalk"],
+)
+
+# aspect_rules_lint's format.sh invokes this js_binary directly (xargs), not via
+# js_run_binary — so the launcher's own build-action check ("BAZEL_BINDIR must be set")
+# fires with no build action in sight. js_binary's `env` bakes a var into the launcher
+# itself regardless of caller, which is the escape hatch the error message names.
+prettier_bin.prettier_binary(
+    name = "prettier",
+    env = {"BAZEL_BINDIR": "."},
+)

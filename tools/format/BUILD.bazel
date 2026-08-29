@@ -1,0 +1,24 @@
+load("@aspect_rules_lint//format:defs.bzl", "format_multirun", "format_test")
+load("@multitool//:tools.bzl", "TOOLS")
+
+# gofumpt is wired as a formatter only — Go *linting* stays nogo's job (AGENTS.md).
+format_multirun(
+    name = "format",
+    go = TOOLS["gofumpt"],
+    javascript = "//tools/lint:prettier",
+    visibility = ["//:__pkg__"],
+)
+
+# no_sandbox + workspace, not srcs: Bazel's glob() can never cross a subpackage boundary, and
+# nearly every directory here (service/, ui/, grpcview/, tools/) has its own BUILD.bazel — a
+# root-level glob(["**/*.go", ...]) silently matches nothing under any of them, so a
+# srcs-based format_test would pass while checking none of the real source tree. This mode
+# walks the actual checkout directly (non-hermetic, uncached — the tradeoff the rule itself
+# documents), which is what "format_test" for this repo actually needs to mean.
+format_test(
+    name = "format_test",
+    go = TOOLS["gofumpt"],
+    javascript = "//tools/lint:prettier",
+    no_sandbox = True,
+    workspace = "//:MODULE.bazel",
+)

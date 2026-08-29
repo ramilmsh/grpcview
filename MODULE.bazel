@@ -79,6 +79,10 @@ go_deps.gazelle_override(
 )
 use_repo(
     go_deps,
+    # `bazel mod tidy` proposes dropping this one — it only tracks Go-import-based
+    # usage, and this repo is consumed solely as a string label in tools/BUILD.bazel's
+    # `aspect_gazelle`'s `repo_config` attr, which it can't see. Removing it breaks
+    # //tools:gazelle ("no repository visible as '@bazel_gazelle_go_repository_config'").
     "bazel_gazelle_go_repository_config",
     "com_connectrpc_connect",
     "com_connectrpc_cors",
@@ -132,3 +136,5 @@ multitool.hub(
     lockfile = "//tools:multitool.lock.json",
 )
 use_repo(multitool, "multitool")
+
+bazel_dep(name = "aspect_rules_lint", version = "2.8.0")

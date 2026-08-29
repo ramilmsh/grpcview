@@ -76,3 +76,12 @@ build:remote --define=EXECUTOR=remote
 # ts_project — gazelle-generated ones included — to tsc rather than hand-locking a
 # `transpiler = "tsc"` attr on each target.
 common --@aspect_rules_ts//ts:default_to_tsc_transpiler=true
+
+# Lint aspects run on every build/test; findings fail the action. `+` makes the extra
+# output group additive — replacing the default output groups outright would mean e.g.
+# `bazel build //service/cmd` stops producing the actual binary.
+common --aspects=//tools/lint:linters.bzl%eslint
+common --aspects=//tools/lint:linters.bzl%shellcheck
+common --aspects=//tools/lint:linters.bzl%buf
+common --output_groups=+rules_lint_human
+common --@aspect_rules_lint//lint:fail_on_violation

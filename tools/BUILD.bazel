@@ -2,6 +2,7 @@ load("@aspect_gazelle_prebuilt//:def.bzl", "aspect_gazelle")
 load("@multitool//:tools.bzl", "TOOLS")
 load("@rules_go//proto:compiler.bzl", "go_proto_compiler")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
 
 aspect_gazelle(
     name = "gazelle",
@@ -23,6 +24,24 @@ sh_binary(
         "//service/cmd:release",
     ],
     deps = ["@rules_shell//shell/runfiles"],
+)
+
+# Not sh_binary: these are invoked by path (--workspace_status_command, gopackagesdriver,
+# and release.sh's `tools/version.sh`), never as a Bazel target. sh_library exists purely
+# so the shellcheck lint aspect has something to visit.
+sh_library(
+    name = "version",
+    srcs = ["version.sh"],
+)
+
+sh_library(
+    name = "workspace_status",
+    srcs = ["workspace_status.sh"],
+)
+
+sh_library(
+    name = "gopackagesdriver",
+    srcs = ["gopackagesdriver.sh"],
 )
 
 go_proto_compiler(

@@ -1,0 +1,3 @@
+# Vendored npm packages used as scripting fixtures (service/scripting/npm/,
+# service/scripting/testdata/npm/) — third-party, unmodified, never reformatted.
+service/scripting/**/npm/** linguist-generated=true

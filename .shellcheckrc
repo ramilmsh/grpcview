@@ -1,0 +1,9 @@
+# See https://www.mankier.com/1/shellcheck#EXTERNAL_SOURCES for `source` semantics.
+
+# Both fire on idioms already deliberately in use across tools/*.sh:
+# SC2016 flags single-quoted strings with $-signs even when no expansion is wanted (a
+# literal line appended to .bashrc, a printf format string whose %s does the substitution).
+# SC2015 flags `A && B || C` as not being if/then/else in general, which is correct but
+# doesn't apply where B cannot fail.
+disable=SC2016
+disable=SC2015
