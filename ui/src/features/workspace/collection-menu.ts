@@ -1,5 +1,5 @@
 // The collection tree's right-click menu items, driven off the current selection. Its own module
-// so it is testable: CollectionPanel pulls in `monaco-editor`, unresolvable under sandboxed vitest.
+// so it is testable: CollectionPanel pulls in `monaco-editor`, unresolvable under the sandboxed test run.
 import type { MenuItem } from "@/components/ui/Menu";
 import { pruneNestedSelections, type ItemWithPath } from "@/lib/format";
 import { deleteConfirmCopy } from "./delete-confirm";

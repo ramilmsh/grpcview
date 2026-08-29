@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import { flatten } from "./flatten";
 import type { TreeAdapter } from "./types";
 import {

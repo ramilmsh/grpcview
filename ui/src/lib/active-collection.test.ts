@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import { resolveActiveCollection } from "./active-collection";
 
 const listing = (...ids: string[]) => ids.map((id) => ({ id }));

@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // This directory's *.test.ts(x) files import node:test/node:assert directly.
+    // tsc's automatic @types discovery walks *upward* from the compiler's cwd (the
+    // bazel sandbox execroot) for node_modules/@types, never finding this package's
+    // own node_modules/@types/node (a descendant, not an ancestor, of the execroot)
+    // — naming it here resolves it via the ordinary upward node_modules walk from
+    // this tsconfig's own directory. gazelle reads this field and wires the real
+    // @types/node dep onto the generated ts_config target automatically.
+    "types": ["node"]
+  }
+}

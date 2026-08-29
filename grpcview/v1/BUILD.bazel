@@ -29,7 +29,7 @@ go_proto_library(
 )
 
 ts_proto_library(
-    name = "grpcviewv1_ts_proto",
+    name = "grpcviewv1_proto_ts",
     gen_connect_query = True,
     gen_connect_query_service_mapping = {
         "service.proto": [
@@ -43,5 +43,6 @@ ts_proto_library(
         "service.proto",
         "workspace.proto",
     ],
-    visibility = ["//ui:__pkg__"],
+    visibility = ["//visibility:public"],  # keep: gazelle scopes this to //ui:__pkg__, too
+    # narrow for consumers under ui/src/**.
 )

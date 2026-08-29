@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import { moduleSpecifiers, requireTypesDts } from "./require-types";
 
 const EXPORTING = "export const requestId = () => 'x';\n";

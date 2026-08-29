@@ -1,8 +1,9 @@
-# gazelle:go_grpc_compilers @rules_go//proto:go_proto,@rules_go//proto:go_grpc_v2
-# gazelle:go_proto_compilers @rules_go//proto:go_proto
-
+load("@aspect_rules_ts//ts:proto.bzl", "ts_proto_library")
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_go//proto:def.bzl", "go_proto_library")
+
+# gazelle:go_grpc_compilers @rules_go//proto:go_proto,@rules_go//proto:go_grpc_v2
+# gazelle:go_proto_compilers @rules_go//proto:go_proto
 
 proto_library(
     name = "grpcviewechov1_proto",
@@ -19,4 +20,11 @@ go_proto_library(
     importpath = "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1",
     proto = ":grpcviewechov1_proto",
     visibility = ["//visibility:public"],
+)
+
+ts_proto_library(
+    name = "grpcviewechov1_proto_ts",
+    node_modules = "//:node_modules",
+    proto = ":grpcviewechov1_proto",
+    proto_srcs = ["echo.proto"],
 )

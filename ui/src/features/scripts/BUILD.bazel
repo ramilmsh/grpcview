@@ -1,0 +1,76 @@
+load("@aspect_rules_swc//swc:defs.bzl", "swc")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config", "ts_project")
+load("@bazel_skylib//lib:partial.bzl", "partial")
+
+ts_project(
+    name = "scripts",
+    srcs = [
+        "NewScriptDialog.tsx",
+        "ScriptDetail.tsx",
+        "ScriptOutput.tsx",
+        "ScriptSidebar.tsx",
+        "ScriptsView.tsx",
+        "monaco-scripts.ts",
+        "script-path.ts",
+        "script-starter.ts",
+    ],
+    # not type-check only (see //ui/src:app's comment).
+    declaration = True,  # keep: sibling ts_project targets type-check @/* path-aliased
+    no_emit = False,  # keep: this repo compiles TS to real JS for esbuild to bundle,
+    # imports against this target's .d.ts output (see //ui/src:app's comment).
+    preserve_jsx = False,
+    resolve_json_module = True,
+    # keep: swc emits the JS; tsc (declaration = True) stays only for
+    # declaration-only type-checking.
+    transpiler = partial.make(
+        swc,
+        swcrc = "//ui:.swcrc",
+    ),
+    tsconfig = ":tsconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//grpcview/v1:grpcviewv1_proto_ts",
+        "//ui:node_modules/@monaco-editor/react",
+        "//ui:node_modules/@types/react",
+        "//ui:node_modules/clsx",
+        "//ui:node_modules/monaco-editor",
+        "//ui:node_modules/react",
+        "//ui/src/components/ui",
+        "//ui/src/features/scripts/vendor",
+        "//ui/src/lib",
+        "//ui/src/theme",
+    ],
+)
+
+ts_project(
+    name = "scripts_tests",
+    testonly = True,
+    srcs = ["script-path.test.ts"],
+    declaration = True,
+    no_emit = False,  # keep: this repo compiles TS to real JS for esbuild to bundle,
+    # not type-check only (see //ui/src:app's comment).
+    preserve_jsx = False,
+    resolve_json_module = True,
+    # keep: swc emits the JS; tsc (declaration = True) stays only for
+    # declaration-only type-checking.
+    transpiler = partial.make(
+        swc,
+        swcrc = "//ui:.swcrc",
+    ),
+    tsconfig = ":tsconfig",
+    deps = [
+        ":scripts",
+        "//ui:node_modules/@types/node",
+        "//ui:node_modules/expect",
+    ],
+)
+
+ts_config(
+    name = "tsconfig",
+    src = "tsconfig.json",
+    visibility = [":__subpackages__"],
+    deps = [
+        "//ui:node_modules/@types/node",
+        "//ui:tsconfig",
+    ],
+)

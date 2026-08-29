@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CollectionSummary } from "@grpcview/v1/service_pb";

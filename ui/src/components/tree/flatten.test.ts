@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it } from "node:test";
+import { fn } from "jest-mock";
+import { expect } from "expect";
 import type { TreeAdapter } from "./types";
 import { flatten, resolveExpansion, MAX_RESOLVE_PASSES } from "./flatten";
 
@@ -78,7 +80,7 @@ describe("flatten: a leaf can never be descended into", () => {
   it("never even calls getChildren for a leaf", () => {
     const roots = [leaf("a")];
     const base = adapterFor(roots);
-    const getChildren = vi.fn(base.getChildren);
+    const getChildren = fn(base.getChildren);
     flatten({ ...base, getChildren }, new Set(["a"]));
 
     expect(getChildren).toHaveBeenCalledTimes(1);

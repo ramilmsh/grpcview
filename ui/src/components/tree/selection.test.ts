@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import type { TreeRowModel } from "./types";
 import { rangeSelection, replaceSelection, selectAll, toggleSelection } from "./selection";
 

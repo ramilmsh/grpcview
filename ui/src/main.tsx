@@ -1,14 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
-import { startKeepalive } from "./lib/keepalive.ts";
-
-// Import order is the cascade order: the app token layer must come last to win.
-import "./index.css";
-import "./theme/fonts.css";
-import "./theme/nocturne.css";
-import "./theme/app-tokens.css";
+import App from "./App";
+import { startKeepalive } from "./lib/keepalive";
 import "./theme/monaco-nocturne";
+
+// The CSS cascade (tailwind.css, then the theme layer in ./theme/theme.css) is
+// assembled by separate esbuild/tailwindcss passes and linked from index.html —
+// see ui/BUILD.bazel — not JS-imported here, so this bundle stays JS-only.
 
 // Outside the tree on purpose: it holds the server for the whole page, not for a component,
 // and StrictMode would otherwise mount it twice.

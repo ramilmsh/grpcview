@@ -1,16 +1,15 @@
 // Imported for side effects from main.tsx before any editor mounts: points
-// @monaco-editor/react at the bundled monaco, with `?worker&inline` workers (no CDN).
+// @monaco-editor/react at the bundled monaco. Each worker is its own esbuild entry
+// point (see ui/BUILD.bazel) built to a fixed filename and served from "/", so
+// getWorkerUrl just names the file — no CDN, no inlining.
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker&inline";
-import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker&inline";
-import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline";
 
 self.MonacoEnvironment = {
-  getWorker(_workerId: string, label: string) {
-    if (label === "typescript" || label === "javascript") return new TsWorker();
-    if (label === "json") return new JsonWorker();
-    return new EditorWorker();
+  getWorkerUrl(_moduleId: string, label: string) {
+    if (label === "typescript" || label === "javascript") return "/ts.worker.js";
+    if (label === "json") return "/json.worker.js";
+    return "/editor.worker.js";
   },
 };
 

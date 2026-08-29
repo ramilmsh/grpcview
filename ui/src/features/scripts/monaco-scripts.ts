@@ -2,7 +2,9 @@
 // side effect on import. Inert unless the TS worker is bundled — see theme/monaco-nocturne.ts.
 import * as monaco from "monaco-editor";
 import type * as Monaco from "monaco-editor";
-import dayjsTypes from "./vendor/dayjs.d.ts?raw";
+// Vite's `?raw` suffix has no esbuild equivalent, so the vendored dayjs .d.ts
+// is a plain exported string constant instead — see the file itself.
+import dayjsTypes from "./vendor/dayjs-types";
 
 const ts = monaco.languages.typescript;
 

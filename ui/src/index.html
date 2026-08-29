@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>grpcview</title>
+    <!-- Cascade order: tailwind.css (base/components/utilities) first, then
+         main.css (monaco's own editor chrome, emitted alongside main.js by the
+         :app esbuild pass), then theme.css (fonts + nocturne + app tokens) last
+         so the theme layer wins — mirroring the order documented in
+         src/theme/theme.css. -->
+    <link rel="stylesheet" href="/tailwind.css" />
+    <link rel="stylesheet" href="/main.css" />
+    <link rel="stylesheet" href="/theme.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

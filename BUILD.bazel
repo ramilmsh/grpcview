@@ -23,6 +23,25 @@ bazel_env(
 # gazelle:go_grpc_compilers @rules_go//proto:go_proto,//tools:connect_go_proto_compiler
 # gazelle:go_proto_compilers @rules_go//proto:go_proto,//tools:connect_go_proto_compiler
 
+# Checked-in ts_proto_library/connect-query codegen output. It's consumed directly
+# by ui/tsconfig.json's "@grpcview/*" path mapping (esbuild's own tsconfig paths
+# support, and plain tsc for typechecking), not by gazelle's js language, which
+# would otherwise wrap these loose .d.ts files in an unused js_library.
+# gazelle:exclude **/*_pb.d.ts
+# gazelle:exclude **/*_connect.d.ts
+# gazelle:exclude **/*_connectquery.d.ts
+
+# demo/ is a sample grpcview workspace: its body.ts/metadata.ts files are grpcview's
+# own runtime scripting-engine scripts (see //ui/src/features/scripts), evaluated by
+# the app itself, not real Bazel-built TypeScript source — gazelle's js language
+# shouldn't wrap them in a ts_project at all.
+# gazelle:exclude demo/**
+
+# Every ts_project/js_library gazelle generates is public, matching the Go side's
+# convention (every go_library here is visibility = public too) — ui/ is one
+# app's source tree with no internal package boundaries worth enforcing.
+# gazelle:js_visibility //visibility:public
+
 # gazelle:resolve proto proto google/api/annotations.proto                   @googleapis//google/api:annotations_proto
 # gazelle:resolve proto go    google/api/annotations.proto                   @org_golang_google_genproto_googleapis_api//annotations
 # gazelle:resolve proto proto google/api/client.proto                        @googleapis//google/api:client_proto

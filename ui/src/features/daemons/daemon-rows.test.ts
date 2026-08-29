@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import type { ServerEntry } from "@grpcview/v1/service_pb";
 import { daemonLabel, daemonStatus, sortedDaemonRows } from "./daemon-rows";
 

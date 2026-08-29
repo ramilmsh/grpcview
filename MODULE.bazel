@@ -66,7 +66,6 @@ go_deps.gazelle_override(
 )
 use_repo(
     go_deps,
-    "bazel_gazelle_go_repository_config",  # indirect
     "com_connectrpc_connect",
     "com_connectrpc_cors",
     "com_connectrpc_grpcreflect",
@@ -85,7 +84,9 @@ use_repo(
 )
 
 bazel_dep(name = "aspect_rules_ts", version = "3.9.1")
-bazel_dep(name = "aspect_rules_js", version = "3.2.3")
+bazel_dep(name = "aspect_rules_js", version = "3.4.1")
+bazel_dep(name = "aspect_rules_esbuild", version = "0.27.0")
+bazel_dep(name = "aspect_rules_swc", version = "2.7.6")
 bazel_dep(name = "rules_nodejs", version = "6.7.5")
 
 pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
@@ -98,6 +99,13 @@ npm.npm_translate_lock(
     pnpm_lock = "//:pnpm-lock.yaml",
 )
 use_repo(npm, "npm")
+
+# ts_project resolves its tsc toolchain from the "typescript" devDependency
+# declared in ui/package.json via this extension, rather than a separately
+# pinned version here.
+rules_ts_ext = use_extension("@aspect_rules_ts//ts:extensions.bzl", "ext", dev_dependency = True)
+rules_ts_ext.deps()
+use_repo(rules_ts_ext, "npm_typescript")
 
 bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
 

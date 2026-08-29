@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, it } from "node:test";
+import { expect } from "expect";
 import { useUIStore, type Draft, type InvokeState, type OpenTab } from "./ui-store";
 
 // Keys are "<collection id>/<slug path>" (see format.ts's itemKey), so every fixture

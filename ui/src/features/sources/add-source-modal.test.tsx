@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import { bazelHint } from "./AddSourceModal";
 
 // The picker's empty state is the whole point of these: a listing that fails must leave the

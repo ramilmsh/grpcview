@@ -1,0 +1,9 @@
+/* esbuild CSS entry point for the theme layer — bundled separately from main.tsx
+   (see ui/BUILD.bazel's :theme_css target) rather than JS-imported, so gazelle's
+   asset-import tracking never has to reach across this package boundary. Import
+   order is the cascade order: fonts and the base theme first, the app token
+   layer last so it wins — matches the ordering main.tsx used to import these in
+   directly, documented there too. */
+@import "./fonts.css";
+@import "./nocturne.css";
+@import "./app-tokens.css";

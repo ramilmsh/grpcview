@@ -10,6 +10,7 @@ export default async (): Promise<RequestMessage> => (
   // The middleware is configured on the request, not imported here, which is
   // why this file has no import block at all above the start marker.
   source: '"before middleware"',
+  script: "f"
 }
 // grpcview:script end
 )

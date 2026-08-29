@@ -1,0 +1,85 @@
+load("@aspect_rules_swc//swc:defs.bzl", "swc")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config", "ts_project")
+load("@bazel_skylib//lib:partial.bzl", "partial")
+
+ts_project(
+    name = "lib",
+    srcs = [
+        "active-collection.ts",
+        "client.ts",
+        "editor-debug.ts",
+        "format.ts",
+        "keepalive.ts",
+        "ui-store.ts",
+        "workspace-query.ts",
+    ],
+    # not type-check only (see //ui/src:app's comment).
+    declaration = True,  # keep: sibling ts_project targets type-check @/* path-aliased
+    no_emit = False,  # keep: this repo compiles TS to real JS for esbuild to bundle,
+    # imports against this target's .d.ts output (see //ui/src:app's comment).
+    preserve_jsx = False,
+    resolve_json_module = True,
+    # keep: swc emits the JS; tsc (declaration = True) stays only for
+    # declaration-only type-checking.
+    transpiler = partial.make(
+        swc,
+        swcrc = "//ui:.swcrc",
+    ),
+    tsconfig = ":tsconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//grpcview/v1:grpcviewv1_proto_ts",
+        "//ui:node_modules/@bufbuild/protobuf",
+        "//ui:node_modules/@connectrpc/connect",
+        "//ui:node_modules/@connectrpc/connect-query",
+        "//ui:node_modules/@connectrpc/connect-web",
+        "//ui:node_modules/@tanstack/react-query",
+        "//ui:node_modules/@types/react",
+        "//ui:node_modules/monaco-editor",
+        "//ui:node_modules/react",
+        "//ui:node_modules/zustand",
+        "//ui/src/components/ui",
+    ],
+)
+
+ts_project(
+    name = "lib_tests",
+    testonly = True,
+    srcs = [
+        "active-collection.test.ts",
+        "format.test.ts",
+        "ui-store.test.ts",
+        "workspace-query.test.ts",
+    ],
+    declaration = True,
+    no_emit = False,  # keep: this repo compiles TS to real JS for esbuild to bundle,
+    # not type-check only (see //ui/src:app's comment).
+    preserve_jsx = False,
+    resolve_json_module = True,
+    # keep: swc emits the JS; tsc (declaration = True) stays only for
+    # declaration-only type-checking.
+    transpiler = partial.make(
+        swc,
+        swcrc = "//ui:.swcrc",
+    ),
+    tsconfig = ":tsconfig",
+    deps = [
+        ":lib",
+        "//grpcview/v1:grpcviewv1_proto_ts",
+        "//ui:node_modules/@bufbuild/protobuf",
+        "//ui:node_modules/@connectrpc/connect",
+        "//ui:node_modules/@connectrpc/connect-query",
+        "//ui:node_modules/@types/node",
+        "//ui:node_modules/expect",
+    ],
+)
+
+ts_config(
+    name = "tsconfig",
+    src = "tsconfig.json",
+    visibility = [":__subpackages__"],
+    deps = [
+        "//ui:node_modules/@types/node",
+        "//ui:tsconfig",
+    ],
+)

@@ -1,4 +1,4 @@
-load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_cross_binary", "go_library")
 
@@ -12,28 +12,40 @@ RELEASE_PLATFORMS = [
     "linux_arm64",
 ]
 
-# The bundle is a static file with no target-platform content, but it is an
-# ordinary dep, so a go_cross_binary transition would rebuild it once per
-# release platform — and rules_js picks rollup's native binding from the target
-# platform, so every non-host arch fails with a missing @rollup/rollup-<os>-<cpu>.
-# Pinning the vite build to the host platform makes it build once and be shared
-# by every arch.
+# The bundle is a set of static files with no target-platform content, but each
+# is an ordinary dep, so a go_cross_binary transition would rebuild the whole UI
+# once per release platform — and rules_js picks esbuild/tailwindcss's native
+# binding from the target platform, so every non-host arch would need to
+# fetch/build a toolchain for that arch too. Pinning the UI build to the host
+# platform makes it build once and be shared by every arch.
 platform_transition_filegroup(
     name = "ui_host",
-    srcs = ["//ui"],
+    srcs = ["//ui/src:dist"],
     target_platform = "@platforms//host",
 )
 
-copy_file(
-    name = "ui",
-    src = ":ui_host",
-    out = "index.html",
+# //ui/src:dist's members each keep their own package's bazel-out path (e.g.
+# ui/src/dist/main.js, ui/src/theme/dist/theme.css, ui/src/workers/dist/*.worker.js
+# — see that target's comment). Flatten them into one directory so every file
+# sits at the root-relative path index.html's absolute asset links (and
+# monaco-nocturne.ts's worker URLs) expect at request time, named "dist" to
+# match main.go's `//go:embed dist` directive.
+copy_to_directory(
+    name = "dist",
+    srcs = [":ui_host"],
+    root_paths = [
+        "ui/src/dist",
+        "ui/src/theme/dist",
+        "ui/src/workers/dist",
+    ],
 )
 
 go_library(
     name = "cmd_lib",
     srcs = ["main.go"],
-    embedsrcs = ["index.html"],
+    # keep: gazelle drops embedsrcs it cannot resolve to source files; ":dist"
+    # is a generated tree artifact that satisfies main.go's `//go:embed dist`.
+    embedsrcs = [":dist"],
     importpath = "codeberg.org/ramilmsh/grpcview/service/cmd",
     visibility = ["//visibility:private"],
     deps = [

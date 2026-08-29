@@ -6,12 +6,15 @@
     "module": "ESNext",
     "skipLibCheck": true,
 
-    /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
+    "noEmit": false,
+    // Every gazelle-generated ts_project locks declaration=true (see BUILD.bazel
+    // "# keep" comments) so sibling ts_project targets can type-check @/*
+    // path-aliased cross-package imports against .d.ts output; rules_ts
+    // validates the attribute against this file, so it's mirrored here too.
+    "declaration": true,
     "jsx": "react-jsx",
 
     /* Linting */
@@ -20,6 +23,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
+    // TS 5.x deprecates baseUrl ahead of removing it in 7.0; paths below are
+    // already written relative to this file's own directory (ui/), which is
+    // baseUrl:"."'s exact behavior, so silencing rather than restructuring.
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],

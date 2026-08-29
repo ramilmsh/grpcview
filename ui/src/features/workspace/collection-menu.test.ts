@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it } from "node:test";
+import { fn } from "jest-mock";
+import { expect } from "expect";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
 import { collectionMenuItems, type CollectionMenuActions } from "./collection-menu";
@@ -27,13 +29,13 @@ const request = (name: string, path: string[] = []): ItemWithPath => ({
   slugPath: path.map(slugify),
 });
 
-const spies = (): CollectionMenuActions & Record<keyof CollectionMenuActions, ReturnType<typeof vi.fn>> => ({
-  newRequest: vi.fn(),
-  newFolder: vi.fn(),
-  newCollection: vi.fn(),
-  startRename: vi.fn(),
-  requestDelete: vi.fn(),
-  editFolderMetadata: vi.fn(),
+const spies = (): CollectionMenuActions & Record<keyof CollectionMenuActions, ReturnType<typeof fn>> => ({
+  newRequest: fn(),
+  newFolder: fn(),
+  newCollection: fn(),
+  startRename: fn(),
+  requestDelete: fn(),
+  editFolderMetadata: fn(),
 });
 
 const labels = (items: { label: string }[]): string[] => items.map((i) => i.label);

@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it } from "node:test";
+import { fn } from "jest-mock";
+import { expect } from "expect";
 import type { CollectionSummary } from "@grpcview/v1/service_pb";
 import { collectionSwitcherItems, collectionSwitcherLabel } from "./collection-switcher";
 
@@ -40,7 +42,7 @@ describe("collectionSwitcherItems", () => {
   const collections = [summary("api", "API"), summary("web", "Web")];
 
   it("switches to the collection its row names", () => {
-    const select = vi.fn();
+    const select = fn();
     const items = collectionSwitcherItems(collections, "api", { ...noActions, select });
     items[1].onSelect();
     expect(select).toHaveBeenCalledWith("web");
@@ -54,7 +56,7 @@ describe("collectionSwitcherItems", () => {
   });
 
   it("renames on the rename row — it takes no argument, it acts on the active collection", () => {
-    const rename = vi.fn();
+    const rename = fn();
     const items = collectionSwitcherItems(collections, "api", { ...noActions, rename });
     items[2].onSelect();
     expect(rename).toHaveBeenCalledWith();
@@ -64,7 +66,7 @@ describe("collectionSwitcherItems", () => {
   // stand alone: with no rows above it, the create action is the whole menu and needs no rule.
   // Rename goes with them — there is no collection for it to act on.
   it("is the create action alone, unseparated, in a workspace with no collections", () => {
-    const createNew = vi.fn();
+    const createNew = fn();
     const items = collectionSwitcherItems([], null, { ...noActions, createNew });
     expect(labels(items)).toEqual(["New collection…"]);
     expect(items[0].separatorBefore).toBe(false);

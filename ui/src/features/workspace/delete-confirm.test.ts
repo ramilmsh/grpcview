@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import { expect } from "expect";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "@/lib/format";
 import { deleteConfirmCopy } from "./delete-confirm";

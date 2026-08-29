@@ -1,0 +1,179 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@aspect_rules_esbuild//esbuild:defs.bzl", "esbuild")
+load("@aspect_rules_swc//swc:defs.bzl", "swc")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@bazel_skylib//lib:partial.bzl", "partial")
+load("@npm//ui:tailwindcss/package_json.bzl", tailwindcss_bin = "bin")
+
+ts_project(
+    name = "src",
+    srcs = [
+        "App.tsx",
+        "main.tsx",
+        "vite-env.d.ts",
+    ],
+    # not type-check only (see //ui/src:app's comment).
+    declaration = True,  # keep: sibling ts_project targets type-check @/* path-aliased
+    no_emit = False,  # keep: this repo compiles TS to real JS for esbuild to bundle,
+    # imports against this target's .d.ts output (see //ui/src:app's comment).
+    preserve_jsx = False,
+    resolve_json_module = True,
+    # keep: swc emits the JS; tsc (declaration = True) stays only for
+    # declaration-only type-checking.
+    transpiler = partial.make(
+        swc,
+        swcrc = "//ui:.swcrc",
+    ),
+    tsconfig = "//ui:tsconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//ui:node_modules/@connectrpc/connect-query",
+        "//ui:node_modules/@tanstack/react-query",
+        "//ui:node_modules/@types/react",
+        "//ui:node_modules/@types/react-dom",
+        "//ui:node_modules/react",
+        "//ui:node_modules/react-dom",
+        "//ui/src/components/shell",
+        "//ui/src/components/ui",
+        "//ui/src/features/daemons",
+        "//ui/src/features/scripts",
+        "//ui/src/features/sources",
+        "//ui/src/features/workspace",
+        "//ui/src/lib",
+        "//ui/src/theme",
+    ],
+)
+
+# --- Release bundle ----------------------------------------------------------
+# esbuild transpiles+bundles straight from source; ts_project above (and every
+# gazelle-managed ts_project in //ui/src/...) is the type-check-only pass
+# (tsconfig.json has noEmit: true) and is never in this dependency chain — only
+# its JsInfo (source files + npm deps, including the cross-package //ui/src/...
+# targets it deps on) is consumed here via `deps`.
+#
+# esbuild's entry_point/srcs must be co-located in this rule's own package
+# (they go through copy_to_bin, which requires same-package files) — that's why
+# this and the tailwind/dist rules below live here rather than in //ui, and why
+# the worker bundles live in //ui/src/workers and the theme CSS bundle in
+# //ui/src/theme instead of being centralized.
+#
+# Fixed, unhashed output filenames throughout: dist/ is embedded whole into the
+# Go binary (see //service/cmd), which serves it as a plain static file tree, so
+# there is no content-hash cache-busting to wire up and no need for one.
+# keep
+esbuild(
+    name = "app",
+    config = "esbuild.config.mjs",
+    define = {
+        # Mirrors vite's old --mode=release: the built UI and the API it talks
+        # to are always same-origin (the Go binary serves both).
+        "import.meta.env.PROD": "true",
+    },
+    entry_point = "main.tsx",
+    # gv-types.ts's @typescript/vfs + the bundled typescript compiler (both run
+    # in-browser, powering Monaco's in-editor type-checking) guard their Node
+    # `require(...)` calls behind `typeof`/environment checks that are always
+    # false in a browser bundle — dead branches that never execute, but esbuild
+    # still tries to resolve them statically under platform:"browser" unless
+    # told to leave these Node builtins alone.
+    external = [
+        "fs",
+        "path",
+        "os",
+        "crypto",
+        "buffer",
+        "perf_hooks",
+        "source-map-support",
+        "inspector",
+    ],
+    format = "esm",
+    minify = True,
+    output = "dist/main.js",
+    # Monaco's ESM entry imports its own .css (editor chrome, the suggest/hover
+    # widgets, sticky scroll). esbuild writes that next to the JS outfile, but
+    # bazel discards any file the rule did not declare — without this the whole
+    # editor renders unstyled: zero-height view lines, a cursor pinned at 0:0,
+    # and the suggest widget invisible. index.html links it after tailwind.css
+    # and before theme.css.
+    output_css = "dist/main.css",
+    platform = "browser",
+    target = ["es2020"],
+    # tsc already emitted plain .js (see the ts_project above) — esbuild is
+    # bundling that, not .tsx, so it won't discover tsconfig.json's @/* and
+    # @grpcview/* `paths` on its own; point it at the same one explicitly.
+    tsconfig = "//ui:tsconfig",
+    visibility = ["//service/cmd:__pkg__"],
+    deps = [":src"],
+)
+
+# Tailwind owns index.css's @tailwind directives — esbuild's CSS bundler only
+# understands plain CSS, so this runs as its own pass via the tailwindcss npm
+# package's own CLI (the standard, non-bundler way to run it) rather than
+# through a JS build-tool plugin. main.tsx does not import index.css; it's
+# compiled straight to dist/tailwind.css and linked in index.html ahead of
+# dist/theme.css (theme_css, in //ui/src/theme), preserving the cascade order
+# documented in index.html.
+# keep
+tailwindcss_bin.tailwindcss(
+    name = "tailwind_css",
+    srcs = [
+        "index.css",
+        "index.html",
+        "postcss.config.js",
+        "tailwind.config.js",
+        # postcss.config.js's plugins: {} keys require()-resolve these by name at
+        # runtime; the tailwindcss CLI binary itself doesn't pull them in as
+        # postcss.config.js's own node_modules.
+        "//ui:node_modules/autoprefixer",
+        "//ui:node_modules/tailwindcss",
+        ":src",  # content glob (tailwind.config.js) scans **/*.{ts,tsx} under here
+        "//ui/src/components/shell",
+        "//ui/src/components/tree",
+        "//ui/src/components/ui",
+        "//ui/src/features/daemons",
+        "//ui/src/features/scripts",
+        "//ui/src/features/sources",
+        "//ui/src/features/workspace",
+        "//ui/src/lib",
+        "//ui/src/theme",
+    ],
+    outs = ["dist/tailwind.css"],
+    # Plain filenames throughout, not $(execpath ...): chdir below already puts
+    # the CLI's cwd at ui/src/, and execpath expands to an execroot- or
+    # bindir-relative path (already prefixed with ui/src/), which would double
+    # up against that cwd.
+    args = [
+        "-i",
+        "index.css",
+        "-o",
+        "dist/tailwind.css",
+        "--config",
+        "tailwind.config.js",
+        "--postcss",
+        "postcss.config.js",
+        "--minify",
+    ],
+    chdir = "ui/src",
+)
+
+# keep
+copy_file(
+    name = "dist_index_html",
+    src = "index.html",
+    out = "dist/index.html",
+)
+
+# keep
+filegroup(
+    name = "dist",
+    srcs = [
+        ":app",
+        ":dist_index_html",
+        ":tailwind_css",
+        "//ui/src/theme:theme_css",
+        "//ui/src/workers:editor_worker",
+        "//ui/src/workers:json_worker",
+        "//ui/src/workers:ts_worker",
+    ],
+    visibility = ["//service/cmd:__pkg__"],
+)

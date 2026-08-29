@@ -8,7 +8,7 @@ aspect_gazelle(
     languages = [
         "go",
         "proto",
-        # "js",
+        "js",
     ],
     repo_config = "@bazel_gazelle_go_repository_config//:WORKSPACE",
     with_check = True,

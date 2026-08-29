@@ -70,3 +70,9 @@ build:remote --java_runtime_version=remotejdk_11
 build:remote --tool_java_runtime_version=remotejdk_11
 
 build:remote --define=EXECUTOR=remote
+
+# rules_ts hard-fails any ts_project that doesn't pick a transpiler (see
+# https://docs.aspect.build/rules/aspect_rules_ts/docs/transpiler). Default every
+# ts_project — gazelle-generated ones included — to tsc rather than hand-locking a
+# `transpiler = "tsc"` attr on each target.
+common --@aspect_rules_ts//ts:default_to_tsc_transpiler=true

@@ -1,5 +1,5 @@
 // Wording for CollectionPanel's delete-confirm dialog. Its own module so it is testable:
-// CollectionPanel pulls in `monaco-editor`, unresolvable under the sandboxed vitest run.
+// CollectionPanel pulls in `monaco-editor`, unresolvable under the sandboxed test run.
 import type { ItemWithPath } from "@/lib/format";
 
 export interface DeleteConfirmCopy {

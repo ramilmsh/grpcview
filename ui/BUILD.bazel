@@ -1,82 +1,17 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config")
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load("@npm//ui:vite/package_json.bzl", vite_bin = "bin")
-load("@npm//ui:vitest/package_json.bzl", vitest_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
-filegroup(
-    name = "src",
-    srcs = glob(["src/**/*"]),
+ts_config(
+    name = "tsconfig",
+    src = "tsconfig.json",
+    visibility = [":__subpackages__"],
 )
 
-BUILD_DEPS = [":node_modules/" + d for d in [
-    "@types/node",
-    "@types/react",
-    "@types/react-dom",
-    "@bufbuild/protobuf",
-    "@bufbuild/protoc-gen-es",
-    "@connectrpc/connect",
-    "@connectrpc/connect-query",
-    "@connectrpc/connect-web",
-    "@tanstack/react-query",
-    "react",
-    "react-dom",
-    "@monaco-editor/react",
-    "monaco-editor",
-    "@phosphor-icons/react",
-    "zustand",
-    "clsx",
-    "tailwind-merge",
-    "vite",
-    "@vitejs/plugin-react",
-    "typescript",
-    "vite-plugin-singlefile",
-    "tailwindcss",
-    "postcss",
-    "autoprefixer",
-    "vitest",
-]]
-
-DATA = BUILD_DEPS + [
-    "package.json",
-    "tsconfig.json",
-    "vite.config.ts",
-    "vitest.config.ts",
-    "tailwind.config.js",
-    "postcss.config.js",
-    "index.html",
-    ":src",
-    "//grpcview/v1:grpcviewv1_ts_proto",
-]
-
-vite_bin.vite(
-    name = "ui",
-    srcs = DATA,
-    outs = ["dist/index.html"],
-    args = [
-        "build",
-        "--mode=release",
-    ],
-    chdir = package_name(),
-    visibility = ["//visibility:public"],
-)
-
-# Unit tests for the DOM-free modules (lib/ helpers, the tree component's flatten/
-# selection/keymap/typeahead). vitest is a devDependency only — it never reaches the
-# singlefile release bundle //ui:ui builds.
-vitest_bin.vitest_test(
-    name = "test",
-    args = ["run"],
-    chdir = package_name(),
-    data = DATA,
-)
-
-vite_bin.vite_binary(
-    name = "dev",
-    args = [
-        "--mode=development",
-    ],
-    chdir = package_name(),
-    data = DATA,
-    tags = ["ibazel_notify_changes"],
+# Referenced by every ts_project's transpiler = partial.make(swc, swcrc = "//ui:.swcrc")
+# across ui/src/...; see swc-migration-plan.md.
+exports_files(
+    [".swcrc"],
+    visibility = [":__subpackages__"],
 )

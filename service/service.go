@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -55,7 +56,7 @@ const drainTimeout = 30 * time.Second
 
 func Run(
 	ctx context.Context,
-	indexPage io.ReadCloser,
+	dist fs.FS,
 	opts Options,
 ) error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
@@ -106,15 +107,10 @@ func Run(
 	// Also releases the idle watcher, which blocks on stop for as long as Run has not returned.
 	defer stopOnce()
 
-	indexHtml, err := io.ReadAll(indexPage)
-	if err != nil {
-		return err
-	}
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write(indexHtml)
-	}))
+	// dist holds the built UI flat (index.html, main.js, tailwind.css, main.css, theme.css, the
+	// monaco worker bundles — see //service/cmd:dist) — http.FileServer serves index.html
+	// for "/" and every other file at its own root-relative path unchanged.
+	mux.Handle("/", http.FileServer(http.FS(dist)))
 
 	var handler http.Handler = mux
 	if len(opts.DevOrigins) > 0 {

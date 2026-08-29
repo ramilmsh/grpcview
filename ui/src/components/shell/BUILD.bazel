@@ -1,0 +1,35 @@
+load("@aspect_rules_swc//swc:defs.bzl", "swc")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@bazel_skylib//lib:partial.bzl", "partial")
+
+ts_project(
+    name = "shell",
+    srcs = [
+        "AppShell.tsx",
+        "Rail.tsx",
+        "StatusBar.tsx",
+        "TopBar.tsx",
+    ],
+    # not type-check only (see //ui/src:app's comment).
+    declaration = True,  # keep: sibling ts_project targets type-check @/* path-aliased
+    no_emit = False,  # keep: this repo compiles TS to real JS for esbuild to bundle,
+    # imports against this target's .d.ts output (see //ui/src:app's comment).
+    preserve_jsx = False,
+    resolve_json_module = True,
+    # keep: swc emits the JS; tsc (declaration = True) stays only for
+    # declaration-only type-checking.
+    transpiler = partial.make(
+        swc,
+        swcrc = "//ui:.swcrc",
+    ),
+    tsconfig = "//ui:tsconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//ui:node_modules/@types/react",
+        "//ui:node_modules/clsx",
+        "//ui:node_modules/react",
+        "//ui/src/components/ui",
+        "//ui/src/features/workspace",
+        "//ui/src/lib",
+    ],
+)

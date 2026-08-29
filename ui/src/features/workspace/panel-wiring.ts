@@ -1,7 +1,7 @@
 // The host half of CollectionPanel's two-tier wiring: which collections must be on hand,
 // how the filter box reaches a map of them, and the display-name collision check that
 // panel-tree's pure `panelDropAllowed` deliberately leaves to the host. Its own module so
-// it is testable — CollectionPanel pulls in `monaco-editor`, unresolvable under vitest.
+// it is testable — CollectionPanel pulls in `monaco-editor`, unresolvable under the sandboxed test run.
 import type { CollectionSummary } from "@grpcview/v1/service_pb";
 import {
   childPathOf,
