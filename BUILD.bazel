@@ -33,6 +33,7 @@ bazel_env(
         "go": "@rules_go//go",
         "gazelle": "//tools:gazelle",
         "starpls": TOOLS["starpls"],
+        "ibazel": TOOLS["ibazel"],
     },
 )
 

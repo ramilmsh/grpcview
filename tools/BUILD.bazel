@@ -10,6 +10,7 @@ aspect_gazelle(
         "go",
         "proto",
         "js",
+        "buf",
     ],
     repo_config = "@bazel_gazelle_go_repository_config//:WORKSPACE",
     visibility = ["//:__pkg__"],

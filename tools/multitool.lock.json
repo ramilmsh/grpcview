@@ -71,5 +71,37 @@
         "file": "gh_2.98.0_macOS_arm64/bin/gh"
       }
     ]
+  },
+  "ibazel": {
+    "binaries": [
+      {
+        "kind": "file",
+        "os": "linux",
+        "cpu": "x86_64",
+        "url": "https://github.com/bazelbuild/bazel-watcher/releases/download/v0.33.0/ibazel_linux_amd64",
+        "sha256": "55b3a88185f4c424305eaece9a60192dde10e0fe8d2cab22eaabeee9e5b8caac"
+      },
+      {
+        "kind": "file",
+        "os": "linux",
+        "cpu": "arm64",
+        "url": "https://github.com/bazelbuild/bazel-watcher/releases/download/v0.33.0/ibazel_linux_arm64",
+        "sha256": "f52dbac8f2d32adc7aff9494042fdf5d0c54e5da22b37a9495325686c8dbdb69"
+      },
+      {
+        "kind": "file",
+        "os": "macos",
+        "cpu": "x86_64",
+        "url": "https://github.com/bazelbuild/bazel-watcher/releases/download/v0.33.0/ibazel_darwin_amd64",
+        "sha256": "a0a6d5c9b0e2d06d19e56fac7ad4fd636a63385045598c481b5ebceda60fbd4e"
+      },
+      {
+        "kind": "file",
+        "os": "macos",
+        "cpu": "arm64",
+        "url": "https://github.com/bazelbuild/bazel-watcher/releases/download/v0.33.0/ibazel_darwin_arm64",
+        "sha256": "e7552d3e0921c0a3959bfe874ead0b7364f5013a38b902149f3ef29d2c8bb1d9"
+      }
+    ]
   }
 }
