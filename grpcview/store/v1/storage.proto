@@ -12,7 +12,9 @@ option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/store/v1;grpcviewst
 // grpcview.work.json at the workspace root. Optional; a non-empty collections
 // list wins over discovery.
 message Workspace {
+  // Format version of this file, for forward migration.
   int32 schema_version = 1;
+  // Display name of the workspace.
   string name = 2;
   // Workspace-relative paths or globs ("services/*/requests"); empty means "scan".
   repeated string collections = 3;
@@ -20,10 +22,13 @@ message Workspace {
   // config-derived id. A SET, not an order: precedence is per collection. May
   // not be an Upload, and commit_descriptors here is ignored.
   repeated DescriptorSource sources = 4;
+  // What a new collection in this workspace starts from.
   Defaults defaults = 5;
+  // Bazel invocation settings shared by every collection's Bazel sources.
   BazelConfig bazel = 6;
 }
 
+// Bazel invocation settings shared by every collection's Bazel sources.
 message BazelConfig {
   // Absolute, or relative to the workspace root; empty walks up for MODULE.bazel.
   string root = 1;
@@ -39,16 +44,22 @@ message Defaults {
 
 // grpcview.json at the collection root; doubles as the root folder's config.
 message Collection {
+  // Format version of this file, for forward migration.
   int32 schema_version = 1;
+  // Display name of the collection.
   string name = 2;
-  repeated string items = 3;              // ordered root-level slugs
-  repeated DescriptorSource sources = 4;  // highest priority first
+  // Ordered root-level slugs.
+  repeated string items = 3;
+  // Highest priority first.
+  repeated DescriptorSource sources = 4;
 }
 
 // folder.json inside a (non-root) folder directory.
 message Folder {
+  // This folder's display name and stable slug.
   ItemMeta meta = 1;
-  repeated string items = 2;  // ordered child slugs
+  // Ordered child slugs.
+  repeated string items = 2;
   // TypeScript module feeding the gv.metadata.inherit() chain; inline UTF-8.
   string draft_metadata_script = 3;
 }
@@ -57,8 +68,11 @@ message Folder {
 // NOT here: they are sibling body.ts / metadata.ts files, so they diff by line and
 // work as esbuild entry points. See docs/design/shipped/vscode/phase-2-body-files.md.
 message Request {
+  // This request's display name and stable slug.
   ItemMeta meta = 1;
+  // Fully qualified service name this request calls.
   string service = 2;
+  // Method name on `service` this request calls.
   string method = 3;
   // Ordered display names of the MIDDLEWARE scripts run before the call.
   repeated string middleware = 6;
@@ -69,6 +83,7 @@ message Request {
 // Identity block in every managed tree file: the directory name is the stable
 // slug, this is the display name, so a rename never moves a directory.
 message ItemMeta {
+  // Display name; the directory name (the slug) is the stable identity, this is not.
   string name = 1;
 }
 
@@ -77,9 +92,13 @@ message ItemMeta {
 message DescriptorSource {
   // "upload:<file name>", "reflection:<address>[+tls]" or "bazel:<//pkg:target>".
   string id = 3;
+  // Which kind of source this is.
   oneof source {
+    // A human-uploaded FileDescriptorSet.
     Upload upload = 1;
+    // A live server reflected over the wire.
     Reflection reflection = 2;
+    // A Bazel label that builds its own descriptor set.
     Bazel bazel = 5;
   }
   // Write what this resolves to as a committed sidecar under descriptors/
@@ -90,6 +109,7 @@ message DescriptorSource {
 // A FileDescriptorSet a human handed over. The null-pointer kind: nothing to
 // re-acquire from, so an uncommitted upload's only copy is in local state.
 message Upload {
+  // Identity of this upload; re-uploading under the same name refreshes it.
   string file_name = 1;
   // Root-relative refresh recipe; empty from a browser file picker. Never identity.
   string path = 2;
@@ -98,6 +118,7 @@ message Upload {
 // A build label whose default outputs are descriptor sets — the one kind that can
 // produce its own bytes. Stored canonical ("//pkg:target").
 message Bazel {
+  // Canonical label, e.g. "//pkg:target".
   string label = 1;
 }
 
@@ -108,12 +129,15 @@ message Bazel {
 // share one copy. The two keys stay separate: the id is a stable pointer, which
 // is what makes re-adding a source a refresh; the digest is the content key.
 message DescriptorIndex {
+  // Format version of this file, for forward migration.
   int32 schema_version = 1;
   // One entry per source that has resolved at least once.
   repeated DescriptorIndexEntry entries = 2;
 }
 
+// One resolved source's entry in a DescriptorIndex.
 message DescriptorIndexEntry {
+  // The DescriptorSource.id this entry resolved.
   string source_id = 1;
   // sha256 hex of the blob's bytes, and so its file name.
   string digest = 2;
@@ -128,7 +152,9 @@ message DescriptorIndexEntry {
 // It exists so the merged view can be rebuilt for any mutation without
 // re-dialing, and between refreshes it is the only copy of a source's schema.
 message ResolvedSource {
+  // The DescriptorSource.id this resolved.
   string id = 1;
+  // The resolved schema.
   google.protobuf.FileDescriptorSet descriptor_set = 2;
   // Narrower than "every service in descriptor_set" — see DescriptorIndexEntry.
   repeated string service_names = 3;
@@ -136,13 +162,17 @@ message ResolvedSource {
 
 // A server to reflect schemas from; disk-local, not the wire grpcview.v1.Server.
 message Reflection {
-  string address = 1;  // host:port dial string
+  // host:port dial string.
+  string address = 1;
+  // Dial with TLS.
   bool tls = 2;
 }
 
 // A per-request invoke destination, independent of the schema source.
 // Structurally like Reflection, kept distinct: different concept.
 message Target {
-  string address = 1;  // host:port dial string
+  // host:port dial string.
+  string address = 1;
+  // Dial with TLS.
   bool tls = 2;
 }

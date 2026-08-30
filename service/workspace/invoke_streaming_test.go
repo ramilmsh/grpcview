@@ -39,12 +39,12 @@ func echoTarget(t *testing.T, w Workspace, ctx context.Context, start func(*test
 	return port
 }
 
-func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.InvokeStreamRequest {
+func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.InvokeStreamingRequest {
 	wrapped := make([]string, len(messages))
 	for i, m := range messages {
 		wrapped[i] = tsBody(m)
 	}
-	return &grpcviewv1.InvokeStreamRequest{
+	return &grpcviewv1.InvokeStreamingRequest{
 		Spec: &grpcviewv1.InvokeSpec{
 			Collection: testWorkspace,
 			Service:    echoService,
@@ -55,7 +55,7 @@ func echoStreamReq(port int, method string, messages ...string) *grpcviewv1.Invo
 	}
 }
 
-func collectStream(ctx context.Context, w Workspace, msg *grpcviewv1.InvokeStreamRequest) ([]*grpcviewv1.InvokeStreamingResponse, error) {
+func collectStream(ctx context.Context, w Workspace, msg *grpcviewv1.InvokeStreamingRequest) ([]*grpcviewv1.InvokeStreamingResponse, error) {
 	var frames []*grpcviewv1.InvokeStreamingResponse
 	send := func(resp *grpcviewv1.InvokeStreamingResponse) error {
 		frames = append(frames, resp)

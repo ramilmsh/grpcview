@@ -4,19 +4,78 @@ package grpcview.echo.v1;
 
 option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/echo/v1;grpcviewechov1";
 
-message EchoRequest {
+// Unary's input.
+message UnaryRequest {
+  // Text to echo back.
   string message = 1;
+  // Unused by Unary; ServerStream is the RPC that reads a count.
   int32 count = 2;
 }
 
-message EchoResponse {
+// Unary's output.
+message UnaryResponse {
+  // The input message, echoed.
   string message = 1;
+  // Always 0; Unary has no notion of frame position.
   int32 index = 2;
 }
 
+// ServerStream's input.
+message ServerStreamRequest {
+  // Text to echo back on every frame.
+  string message = 1;
+  // Number of frames to send; <= 0 defaults to 3.
+  int32 count = 2;
+}
+
+// ServerStream's output, one per frame.
+message ServerStreamResponse {
+  // The input message, echoed.
+  string message = 1;
+  // Frame position, starting at 0.
+  int32 index = 2;
+}
+
+// ClientStream's input, one per frame sent by the caller.
+message ClientStreamRequest {
+  // Text folded into the final summary response.
+  string message = 1;
+  // Unused by ClientStream; carried for field-shape symmetry with the other RPCs.
+  int32 count = 2;
+}
+
+// ClientStream's output: a single summary sent after the caller half-closes.
+message ClientStreamResponse {
+  // Summary of every received message, joined.
+  string message = 1;
+  // Count of frames received.
+  int32 index = 2;
+}
+
+// BidiStream's input, one per frame sent by the caller.
+message BidiStreamRequest {
+  // Text to echo back for this frame.
+  string message = 1;
+  // Unused by BidiStream; carried for field-shape symmetry with the other RPCs.
+  int32 count = 2;
+}
+
+// BidiStream's output, one per received frame.
+message BidiStreamResponse {
+  // The input message, echoed.
+  string message = 1;
+  // Frame position, starting at 0.
+  int32 index = 2;
+}
+
+// EchoService exercises invoke end-to-end: one RPC of each streaming kind.
 service EchoService {
-  rpc Unary(EchoRequest) returns (EchoResponse);
-  rpc ServerStream(EchoRequest) returns (stream EchoResponse);
-  rpc ClientStream(stream EchoRequest) returns (EchoResponse);
-  rpc BidiStream(stream EchoRequest) returns (stream EchoResponse);
+  // Echoes the message back once, synchronously.
+  rpc Unary(UnaryRequest) returns (UnaryResponse);
+  // Echoes the message back `count` times, one per stream frame.
+  rpc ServerStream(ServerStreamRequest) returns (stream ServerStreamResponse);
+  // Reads every client frame, then replies once with a summary.
+  rpc ClientStream(stream ClientStreamRequest) returns (ClientStreamResponse);
+  // Echoes back each client frame as it arrives.
+  rpc BidiStream(stream BidiStreamRequest) returns (stream BidiStreamResponse);
 }

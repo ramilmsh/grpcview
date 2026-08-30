@@ -95,10 +95,10 @@ func TestDescribeMethodRendersEchoUnary(t *testing.T) {
 
 	for _, want := range []string{
 		"rpc Unary",
-		"message EchoRequest",
+		"message UnaryRequest",
 		"string message = 1;",
 		"int32 count = 2;",
-		"message EchoResponse",
+		"message UnaryResponse",
 		"int32 index = 2;",
 	} {
 		if !strings.Contains(got.GetProtoText(), want) {
@@ -107,11 +107,11 @@ func TestDescribeMethodRendersEchoUnary(t *testing.T) {
 	}
 
 	files := linkDescribedSet(t, got.GetDescriptorSet())
-	input := findDescribedMessage(t, files, "grpcview.echo.v1.EchoRequest")
+	input := findDescribedMessage(t, files, "grpcview.echo.v1.UnaryRequest")
 	if names := fieldNames(input); strings.Join(names, ",") != "message,count" {
-		t.Errorf("grpcview.echo.v1.EchoRequest fields = %v, want [message count]", names)
+		t.Errorf("grpcview.echo.v1.UnaryRequest fields = %v, want [message count]", names)
 	}
-	findDescribedMessage(t, files, "grpcview.echo.v1.EchoResponse")
+	findDescribedMessage(t, files, "grpcview.echo.v1.UnaryResponse")
 
 	if want := wonBy(t, ws, echoService); got.GetSourceId() != want {
 		t.Errorf("source_id = %q, want %q (the source that won the service)", got.GetSourceId(), want)

@@ -55,7 +55,7 @@ type failingEchoServer struct {
 	echov1.UnimplementedEchoServiceServer
 }
 
-func (failingEchoServer) Unary(context.Context, *echov1.EchoRequest) (*echov1.EchoResponse, error) {
+func (failingEchoServer) Unary(context.Context, *echov1.UnaryRequest) (*echov1.UnaryResponse, error) {
 	return nil, status.Error(codes.PermissionDenied, "denied by test")
 }
 
@@ -153,7 +153,7 @@ func TestInvokeSavedRejectsAMissingSpec(t *testing.T) {
 				t.Fatalf("code = %v (%v), want INVALID_ARGUMENT", code, err)
 			}
 
-			serr := w.InvokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamRequest{Spec: tc.spec}, func(*grpcviewv1.InvokeStreamingResponse) error { return nil })
+			serr := w.InvokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamingRequest{Spec: tc.spec}, func(*grpcviewv1.InvokeStreamingResponse) error { return nil })
 			if code := connect.CodeOf(serr); code != connect.CodeInvalidArgument {
 				t.Fatalf("streaming code = %v (%v), want INVALID_ARGUMENT", code, serr)
 			}
@@ -430,7 +430,7 @@ func TestInvokeSavedStreamingSendsEveryMessage(t *testing.T) {
 		frames = append(frames, resp)
 		return nil
 	}
-	err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamRequest{
+	err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamingRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
 			Collection: testWorkspace,
 			ItemName:   "Upload",
@@ -471,7 +471,7 @@ func TestInvokeSavedStreamingParamsReachTheBody(t *testing.T) {
 		frames = append(frames, resp)
 		return nil
 	}
-	if err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamRequest{
+	if err := w.invokeSavedStream(ctx, &grpcviewv1.InvokeSavedStreamingRequest{
 		Spec: &grpcviewv1.SavedInvokeSpec{
 			Collection: testWorkspace,
 			ItemName:   "Stream",

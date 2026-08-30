@@ -52,8 +52,8 @@ type Workspace interface {
 
 	Invoke(context.Context, *connect.Request[grpcviewv1.InvokeRequest]) (*connect.Response[grpcviewv1.InvokeResponse], error)
 	InvokeSaved(context.Context, *connect.Request[grpcviewv1.InvokeSavedRequest]) (*connect.Response[grpcviewv1.InvokeSavedResponse], error)
-	InvokeStream(context.Context, *grpcviewv1.InvokeStreamRequest, SendFunc) error
-	InvokeSavedStream(context.Context, *grpcviewv1.InvokeSavedStreamRequest, SendFunc) error
+	InvokeStream(context.Context, *grpcviewv1.InvokeStreamingRequest, SendFunc) error
+	InvokeSavedStream(context.Context, *grpcviewv1.InvokeSavedStreamingRequest, SendFunc) error
 
 	DescribeMethod(context.Context, *connect.Request[grpcviewv1.DescribeMethodRequest]) (*connect.Response[grpcviewv1.DescribeMethodResponse], error)
 
@@ -98,7 +98,7 @@ func (r remote) Shutdown(ctx context.Context, req *connect.Request[grpcviewv1.Sh
 	return r.lifecycle.Shutdown(ctx, req)
 }
 
-func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send SendFunc) error {
+func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamingRequest, send SendFunc) error {
 	stream, err := r.WorkspaceServiceClient.InvokeStreaming(ctx, connect.NewRequest(msg))
 	if err != nil {
 		return err
@@ -106,18 +106,39 @@ func (r remote) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRe
 	return drain(stream, send)
 }
 
-func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send SendFunc) error {
+func (r remote) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamingRequest, send SendFunc) error {
 	stream, err := r.WorkspaceServiceClient.InvokeSavedStreaming(ctx, connect.NewRequest(msg))
 	if err != nil {
 		return err
 	}
-	return drain(stream, send)
+	return drainSaved(stream, send)
 }
 
 func drain(stream *connect.ServerStreamForClient[grpcviewv1.InvokeStreamingResponse], send SendFunc) error {
 	defer stream.Close()
 	for stream.Receive() {
 		if err := send(stream.Msg()); err != nil {
+			return err
+		}
+	}
+	return stream.Err()
+}
+
+// drainSaved is drain's counterpart for InvokeSavedStreaming, whose wire response type is
+// distinct from InvokeStreaming's (same shape, separate proto messages) — converts each frame
+// to the internal InvokeStreamingResponse shape every SendFunc caller already expects.
+func drainSaved(stream *connect.ServerStreamForClient[grpcviewv1.InvokeSavedStreamingResponse], send SendFunc) error {
+	defer stream.Close()
+	for stream.Receive() {
+		frame := stream.Msg()
+		out := &grpcviewv1.InvokeStreamingResponse{}
+		switch ev := frame.GetEvent().(type) {
+		case *grpcviewv1.InvokeSavedStreamingResponse_Message:
+			out.Event = &grpcviewv1.InvokeStreamingResponse_Message{Message: ev.Message}
+		case *grpcviewv1.InvokeSavedStreamingResponse_Result:
+			out.Event = &grpcviewv1.InvokeStreamingResponse_Result{Result: ev.Result}
+		}
+		if err := send(out); err != nil {
 			return err
 		}
 	}
@@ -264,7 +285,7 @@ func (c *reconnecting) URL() string {
 	return c.url
 }
 
-func (c *reconnecting) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send SendFunc) error {
+func (c *reconnecting) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamingRequest, send SendFunc) error {
 	var delivered bool
 	wrapped := func(frame *grpcviewv1.InvokeStreamingResponse) error {
 		delivered = true
@@ -275,7 +296,7 @@ func (c *reconnecting) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeS
 		func() bool { return delivered }, false)
 }
 
-func (c *reconnecting) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send SendFunc) error {
+func (c *reconnecting) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamingRequest, send SendFunc) error {
 	var delivered bool
 	wrapped := func(frame *grpcviewv1.InvokeStreamingResponse) error {
 		delivered = true

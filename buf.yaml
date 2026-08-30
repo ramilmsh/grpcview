@@ -6,20 +6,4 @@ modules:
 lint:
   use:
     - STANDARD
-  # A trivial echo service used only for testing invoke end-to-end (AGENTS.md) —
-  # deliberately reuses one request/response pair across all four RPC kinds rather than
-  # naming one of each per STANDARD's RPC_REQUEST_RESPONSE_UNIQUE/*_STANDARD_NAME rules.
-  ignore:
-    - grpcview/echo/v1
-  # WorkspaceService.InvokeStreaming and InvokeSavedStreaming share one InvokeStreamingResponse
-  # (both stream the same frame shape) and keep the shorter, already-established
-  # InvokeStream(Request)/InvokeSavedStream(Request) names rather than buf's
-  # *StreamingRequest/WorkspaceService* preference — a rename here is a wire-schema change
-  # touching every generated client, not a lint-infra config tweak.
-  ignore_only:
-    RPC_REQUEST_RESPONSE_UNIQUE:
-      - grpcview/v1/service.proto
-    RPC_REQUEST_STANDARD_NAME:
-      - grpcview/v1/service.proto
-    RPC_RESPONSE_STANDARD_NAME:
-      - grpcview/v1/service.proto
+    - COMMENTS

@@ -165,7 +165,7 @@ func invokeSaved(ctx context.Context, s Streams, sess session, collection string
 	}
 
 	if target.kind.streaming() {
-		msg := &grpcviewv1.InvokeSavedStreamRequest{Spec: spec}
+		msg := &grpcviewv1.InvokeSavedStreamingRequest{Spec: spec}
 		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 			return sess.InvokeSavedStream(ctx, msg, send)
 		})
@@ -192,7 +192,7 @@ func invokeAdhoc(ctx context.Context, s Streams, sess session, collection string
 	}
 
 	if target.kind.streaming() {
-		msg := &grpcviewv1.InvokeStreamRequest{Spec: spec, Messages: messages}
+		msg := &grpcviewv1.InvokeStreamingRequest{Spec: spec, Messages: messages}
 		return renderStream(s, f.output, target.arg, func(send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 			return sess.InvokeStream(ctx, msg, send)
 		})

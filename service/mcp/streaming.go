@@ -24,8 +24,8 @@ type sendFunc = wire.SendFunc
 // connect cannot build a *connect.ServerStream outside a served request. Satisfied by
 // workspace.Workspace; the seam that makes collect testable without a target.
 type streamer interface {
-	InvokeStream(context.Context, *grpcviewv1.InvokeStreamRequest, sendFunc) error
-	InvokeSavedStream(context.Context, *grpcviewv1.InvokeSavedStreamRequest, sendFunc) error
+	InvokeStream(context.Context, *grpcviewv1.InvokeStreamingRequest, sendFunc) error
+	InvokeSavedStream(context.Context, *grpcviewv1.InvokeSavedStreamingRequest, sendFunc) error
 }
 
 type streamFunc func(context.Context, proto.Message, sendFunc) error

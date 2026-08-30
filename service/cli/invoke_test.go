@@ -42,9 +42,9 @@ type fakeClient struct {
 
 	gotGet         []*grpcviewv1.GetRequest
 	gotSaved       []*grpcviewv1.InvokeSavedRequest
-	gotSavedStream []*grpcviewv1.InvokeSavedStreamRequest
+	gotSavedStream []*grpcviewv1.InvokeSavedStreamingRequest
 	gotAdhoc       []*grpcviewv1.InvokeRequest
-	gotAdhocStream []*grpcviewv1.InvokeStreamRequest
+	gotAdhocStream []*grpcviewv1.InvokeStreamingRequest
 	closed         int
 }
 
@@ -92,12 +92,12 @@ func (f *fakeClient) InvokeSaved(_ context.Context, r *connect.Request[grpcviewv
 	return connect.NewResponse(&grpcviewv1.InvokeSavedResponse{Response: f.response, Resolved: f.resolved}), nil
 }
 
-func (f *fakeClient) InvokeStream(_ context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+func (f *fakeClient) InvokeStream(_ context.Context, msg *grpcviewv1.InvokeStreamingRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	f.gotAdhocStream = append(f.gotAdhocStream, msg)
 	return f.pump(send)
 }
 
-func (f *fakeClient) InvokeSavedStream(_ context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+func (f *fakeClient) InvokeSavedStream(_ context.Context, msg *grpcviewv1.InvokeSavedStreamingRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	f.gotSavedStream = append(f.gotSavedStream, msg)
 	return f.pump(send)
 }

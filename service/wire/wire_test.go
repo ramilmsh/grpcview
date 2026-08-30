@@ -60,7 +60,7 @@ func (s *stub) Get(
 
 func (s *stub) InvokeStreaming(
 	_ context.Context,
-	_ *connect.Request[grpcviewv1.InvokeStreamRequest],
+	_ *connect.Request[grpcviewv1.InvokeStreamingRequest],
 	stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse],
 ) error {
 	s.streams++
@@ -203,7 +203,7 @@ func TestReconnecting_streamsReconnect(t *testing.T) {
 	client := Reconnecting(deadURL(t), func(context.Context) (string, error) { return live, nil })
 
 	got := 0
-	err := client.InvokeStream(context.Background(), &grpcviewv1.InvokeStreamRequest{},
+	err := client.InvokeStream(context.Background(), &grpcviewv1.InvokeStreamingRequest{},
 		func(*grpcviewv1.InvokeStreamingResponse) error { got++; return nil })
 	if err != nil {
 		t.Fatalf("InvokeStream = %v", err)

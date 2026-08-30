@@ -125,21 +125,37 @@ func (w Workspace) InvokeSaved(ctx context.Context, request *connect.Request[grp
 	return connect.NewResponse(&grpcviewv1.InvokeSavedResponse{Response: out}), nil
 }
 
-func (w Workspace) InvokeSavedStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
-	return w.invokeSavedStream(ctx, request.Msg, stream.Send)
+func (w Workspace) InvokeSavedStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeSavedStreamingRequest], stream *connect.ServerStream[grpcviewv1.InvokeSavedStreamingResponse]) error {
+	return w.invokeSavedStream(ctx, request.Msg, adaptSavedSend(stream.Send))
 }
 
-func (w Workspace) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+func (w Workspace) InvokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamingRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	return w.invokeSavedStream(ctx, msg, send)
 }
 
-func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+func (w Workspace) InvokeStream(ctx context.Context, msg *grpcviewv1.InvokeStreamingRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	spec := specFrom(msg.GetSpec())
 	spec.recordHistory = true
 	return w.streamInvoke(ctx, spec, msg.GetMessages(), send)
 }
 
-func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
+// adaptSavedSend converts the internal InvokeStreamingResponse frames streamInvoke produces
+// into the wire-distinct InvokeSavedStreamingResponse the InvokeSavedStreaming RPC sends —
+// same shape, separate proto types so buf's request/response uniqueness rule holds.
+func adaptSavedSend(send func(*grpcviewv1.InvokeSavedStreamingResponse) error) func(*grpcviewv1.InvokeStreamingResponse) error {
+	return func(frame *grpcviewv1.InvokeStreamingResponse) error {
+		out := &grpcviewv1.InvokeSavedStreamingResponse{}
+		switch ev := frame.GetEvent().(type) {
+		case *grpcviewv1.InvokeStreamingResponse_Message:
+			out.Event = &grpcviewv1.InvokeSavedStreamingResponse_Message{Message: ev.Message}
+		case *grpcviewv1.InvokeStreamingResponse_Result:
+			out.Event = &grpcviewv1.InvokeSavedStreamingResponse_Result{Result: ev.Result}
+		}
+		return send(out)
+	}
+}
+
+func (w Workspace) invokeSavedStream(ctx context.Context, msg *grpcviewv1.InvokeSavedStreamingRequest, send func(*grpcviewv1.InvokeStreamingResponse) error) error {
 	if err := checkSavedSpec(msg.GetSpec()); err != nil {
 		return err
 	}

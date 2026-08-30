@@ -1,5 +1,6 @@
 load("@aspect_rules_ts//ts:proto.bzl", "ts_proto_library")
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_buf//buf:defs.bzl", "buf_lint_test")
 load("@rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
@@ -27,4 +28,10 @@ ts_proto_library(
     node_modules = "//:node_modules",
     proto = ":grpcviewstorev1_proto",
     proto_srcs = ["storage.proto"],
+)
+
+buf_lint_test(
+    name = "grpcviewstorev1_proto_lint",
+    config = "//:buf.yaml",
+    targets = [":grpcviewstorev1_proto"],
 )

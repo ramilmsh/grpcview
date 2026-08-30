@@ -11,82 +11,266 @@ import type { Message } from "@bufbuild/protobuf";
 export declare const file_grpcview_echo_v1_echo: GenFile;
 
 /**
- * @generated from message grpcview.echo.v1.EchoRequest
+ * Unary's input.
+ *
+ * @generated from message grpcview.echo.v1.UnaryRequest
  */
-export declare type EchoRequest = Message<"grpcview.echo.v1.EchoRequest"> & {
+export declare type UnaryRequest = Message<"grpcview.echo.v1.UnaryRequest"> & {
   /**
+   * Text to echo back.
+   *
    * @generated from field: string message = 1;
    */
   message: string;
 
   /**
+   * Unused by Unary; ServerStream is the RPC that reads a count.
+   *
    * @generated from field: int32 count = 2;
    */
   count: number;
 };
 
 /**
- * Describes the message grpcview.echo.v1.EchoRequest.
- * Use `create(EchoRequestSchema)` to create a new message.
+ * Describes the message grpcview.echo.v1.UnaryRequest.
+ * Use `create(UnaryRequestSchema)` to create a new message.
  */
-export declare const EchoRequestSchema: GenMessage<EchoRequest>;
+export declare const UnaryRequestSchema: GenMessage<UnaryRequest>;
 
 /**
- * @generated from message grpcview.echo.v1.EchoResponse
+ * Unary's output.
+ *
+ * @generated from message grpcview.echo.v1.UnaryResponse
  */
-export declare type EchoResponse = Message<"grpcview.echo.v1.EchoResponse"> & {
+export declare type UnaryResponse = Message<"grpcview.echo.v1.UnaryResponse"> & {
   /**
+   * The input message, echoed.
+   *
    * @generated from field: string message = 1;
    */
   message: string;
 
   /**
+   * Always 0; Unary has no notion of frame position.
+   *
    * @generated from field: int32 index = 2;
    */
   index: number;
 };
 
 /**
- * Describes the message grpcview.echo.v1.EchoResponse.
- * Use `create(EchoResponseSchema)` to create a new message.
+ * Describes the message grpcview.echo.v1.UnaryResponse.
+ * Use `create(UnaryResponseSchema)` to create a new message.
  */
-export declare const EchoResponseSchema: GenMessage<EchoResponse>;
+export declare const UnaryResponseSchema: GenMessage<UnaryResponse>;
 
 /**
+ * ServerStream's input.
+ *
+ * @generated from message grpcview.echo.v1.ServerStreamRequest
+ */
+export declare type ServerStreamRequest = Message<"grpcview.echo.v1.ServerStreamRequest"> & {
+  /**
+   * Text to echo back on every frame.
+   *
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * Number of frames to send; <= 0 defaults to 3.
+   *
+   * @generated from field: int32 count = 2;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message grpcview.echo.v1.ServerStreamRequest.
+ * Use `create(ServerStreamRequestSchema)` to create a new message.
+ */
+export declare const ServerStreamRequestSchema: GenMessage<ServerStreamRequest>;
+
+/**
+ * ServerStream's output, one per frame.
+ *
+ * @generated from message grpcview.echo.v1.ServerStreamResponse
+ */
+export declare type ServerStreamResponse = Message<"grpcview.echo.v1.ServerStreamResponse"> & {
+  /**
+   * The input message, echoed.
+   *
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * Frame position, starting at 0.
+   *
+   * @generated from field: int32 index = 2;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message grpcview.echo.v1.ServerStreamResponse.
+ * Use `create(ServerStreamResponseSchema)` to create a new message.
+ */
+export declare const ServerStreamResponseSchema: GenMessage<ServerStreamResponse>;
+
+/**
+ * ClientStream's input, one per frame sent by the caller.
+ *
+ * @generated from message grpcview.echo.v1.ClientStreamRequest
+ */
+export declare type ClientStreamRequest = Message<"grpcview.echo.v1.ClientStreamRequest"> & {
+  /**
+   * Text folded into the final summary response.
+   *
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * Unused by ClientStream; carried for field-shape symmetry with the other RPCs.
+   *
+   * @generated from field: int32 count = 2;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message grpcview.echo.v1.ClientStreamRequest.
+ * Use `create(ClientStreamRequestSchema)` to create a new message.
+ */
+export declare const ClientStreamRequestSchema: GenMessage<ClientStreamRequest>;
+
+/**
+ * ClientStream's output: a single summary sent after the caller half-closes.
+ *
+ * @generated from message grpcview.echo.v1.ClientStreamResponse
+ */
+export declare type ClientStreamResponse = Message<"grpcview.echo.v1.ClientStreamResponse"> & {
+  /**
+   * Summary of every received message, joined.
+   *
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * Count of frames received.
+   *
+   * @generated from field: int32 index = 2;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message grpcview.echo.v1.ClientStreamResponse.
+ * Use `create(ClientStreamResponseSchema)` to create a new message.
+ */
+export declare const ClientStreamResponseSchema: GenMessage<ClientStreamResponse>;
+
+/**
+ * BidiStream's input, one per frame sent by the caller.
+ *
+ * @generated from message grpcview.echo.v1.BidiStreamRequest
+ */
+export declare type BidiStreamRequest = Message<"grpcview.echo.v1.BidiStreamRequest"> & {
+  /**
+   * Text to echo back for this frame.
+   *
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * Unused by BidiStream; carried for field-shape symmetry with the other RPCs.
+   *
+   * @generated from field: int32 count = 2;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message grpcview.echo.v1.BidiStreamRequest.
+ * Use `create(BidiStreamRequestSchema)` to create a new message.
+ */
+export declare const BidiStreamRequestSchema: GenMessage<BidiStreamRequest>;
+
+/**
+ * BidiStream's output, one per received frame.
+ *
+ * @generated from message grpcview.echo.v1.BidiStreamResponse
+ */
+export declare type BidiStreamResponse = Message<"grpcview.echo.v1.BidiStreamResponse"> & {
+  /**
+   * The input message, echoed.
+   *
+   * @generated from field: string message = 1;
+   */
+  message: string;
+
+  /**
+   * Frame position, starting at 0.
+   *
+   * @generated from field: int32 index = 2;
+   */
+  index: number;
+};
+
+/**
+ * Describes the message grpcview.echo.v1.BidiStreamResponse.
+ * Use `create(BidiStreamResponseSchema)` to create a new message.
+ */
+export declare const BidiStreamResponseSchema: GenMessage<BidiStreamResponse>;
+
+/**
+ * EchoService exercises invoke end-to-end: one RPC of each streaming kind.
+ *
  * @generated from service grpcview.echo.v1.EchoService
  */
 export declare const EchoService: GenService<{
   /**
+   * Echoes the message back once, synchronously.
+   *
    * @generated from rpc grpcview.echo.v1.EchoService.Unary
    */
   unary: {
     methodKind: "unary";
-    input: typeof EchoRequestSchema;
-    output: typeof EchoResponseSchema;
+    input: typeof UnaryRequestSchema;
+    output: typeof UnaryResponseSchema;
   },
   /**
+   * Echoes the message back `count` times, one per stream frame.
+   *
    * @generated from rpc grpcview.echo.v1.EchoService.ServerStream
    */
   serverStream: {
     methodKind: "server_streaming";
-    input: typeof EchoRequestSchema;
-    output: typeof EchoResponseSchema;
+    input: typeof ServerStreamRequestSchema;
+    output: typeof ServerStreamResponseSchema;
   },
   /**
+   * Reads every client frame, then replies once with a summary.
+   *
    * @generated from rpc grpcview.echo.v1.EchoService.ClientStream
    */
   clientStream: {
     methodKind: "client_streaming";
-    input: typeof EchoRequestSchema;
-    output: typeof EchoResponseSchema;
+    input: typeof ClientStreamRequestSchema;
+    output: typeof ClientStreamResponseSchema;
   },
   /**
+   * Echoes back each client frame as it arrives.
+   *
    * @generated from rpc grpcview.echo.v1.EchoService.BidiStream
    */
   bidiStream: {
     methodKind: "bidi_streaming";
-    input: typeof EchoRequestSchema;
-    output: typeof EchoResponseSchema;
+    input: typeof BidiStreamRequestSchema;
+    output: typeof BidiStreamResponseSchema;
   },
 }>;
 

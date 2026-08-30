@@ -29,7 +29,7 @@ func describedEcho(t *testing.T) *grpcviewv1.DescribeMethodResponse {
 		Package: proto.String("grpcview.echo.v1"),
 		Syntax:  proto.String("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{{
-			Name: proto.String("EchoRequest"),
+			Name: proto.String("UnaryRequest"),
 			Field: []*descriptorpb.FieldDescriptorProto{{
 				Name:   proto.String("message"),
 				Number: proto.Int32(1),
@@ -43,7 +43,7 @@ func describedEcho(t *testing.T) *grpcviewv1.DescribeMethodResponse {
 		t.Fatalf("marshal the fixture descriptor set: %v", err)
 	}
 	return &grpcviewv1.DescribeMethodResponse{
-		ProtoText:     "rpc Unary ( EchoRequest ) returns ( EchoResponse );\n",
+		ProtoText:     "rpc Unary ( UnaryRequest ) returns ( UnaryResponse );\n",
 		DescriptorSet: raw,
 		SourceId:      "reflection:127.0.0.1:50055",
 	}
@@ -95,8 +95,8 @@ func TestDescribe(t *testing.T) {
 		if len(set.GetFile()) != 1 || set.GetFile()[0].GetName() != "grpcview/echo/v1/echo.proto" {
 			t.Errorf("parsed set = %v, want the one fixture file", set.GetFile())
 		}
-		if msgs := set.GetFile()[0].GetMessageType(); len(msgs) != 1 || msgs[0].GetName() != "EchoRequest" {
-			t.Errorf("messages = %v, want EchoRequest", msgs)
+		if msgs := set.GetFile()[0].GetMessageType(); len(msgs) != 1 || msgs[0].GetName() != "UnaryRequest" {
+			t.Errorf("messages = %v, want UnaryRequest", msgs)
 		}
 	})
 

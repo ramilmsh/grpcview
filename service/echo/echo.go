@@ -32,14 +32,14 @@ func Register(s *grpc.Server) {
 	reflection.Register(s)
 }
 
-func (*Server) Unary(_ context.Context, req *echov1.EchoRequest) (*echov1.EchoResponse, error) {
-	return &echov1.EchoResponse{
+func (*Server) Unary(_ context.Context, req *echov1.UnaryRequest) (*echov1.UnaryResponse, error) {
+	return &echov1.UnaryResponse{
 		Message: "echo: " + req.GetMessage(),
 		Index:   0,
 	}, nil
 }
 
-func (*Server) ServerStream(req *echov1.EchoRequest, stream grpc.ServerStreamingServer[echov1.EchoResponse]) error {
+func (*Server) ServerStream(req *echov1.ServerStreamRequest, stream grpc.ServerStreamingServer[echov1.ServerStreamResponse]) error {
 	ctx := stream.Context()
 
 	n := req.GetCount()
@@ -56,7 +56,7 @@ func (*Server) ServerStream(req *echov1.EchoRequest, stream grpc.ServerStreaming
 				return err
 			}
 		}
-		if err := stream.Send(&echov1.EchoResponse{
+		if err := stream.Send(&echov1.ServerStreamResponse{
 			Message: fmt.Sprintf("echo #%d: %s", i, req.GetMessage()),
 			Index:   i,
 		}); err != nil {
@@ -67,7 +67,7 @@ func (*Server) ServerStream(req *echov1.EchoRequest, stream grpc.ServerStreaming
 	return nil
 }
 
-func (*Server) ClientStream(stream grpc.ClientStreamingServer[echov1.EchoRequest, echov1.EchoResponse]) error {
+func (*Server) ClientStream(stream grpc.ClientStreamingServer[echov1.ClientStreamRequest, echov1.ClientStreamResponse]) error {
 	var msgs []string
 	for {
 		req, err := stream.Recv()
@@ -81,13 +81,13 @@ func (*Server) ClientStream(stream grpc.ClientStreamingServer[echov1.EchoRequest
 	}
 
 	k := len(msgs)
-	return stream.SendAndClose(&echov1.EchoResponse{
+	return stream.SendAndClose(&echov1.ClientStreamResponse{
 		Message: fmt.Sprintf("received %d messages: %s", k, strings.Join(msgs, ", ")),
 		Index:   int32(k),
 	})
 }
 
-func (*Server) BidiStream(stream grpc.BidiStreamingServer[echov1.EchoRequest, echov1.EchoResponse]) error {
+func (*Server) BidiStream(stream grpc.BidiStreamingServer[echov1.BidiStreamRequest, echov1.BidiStreamResponse]) error {
 	ctx := stream.Context()
 
 	for i := int32(0); ; i++ {
@@ -103,7 +103,7 @@ func (*Server) BidiStream(stream grpc.BidiStreamingServer[echov1.EchoRequest, ec
 				return err
 			}
 		}
-		if err := stream.Send(&echov1.EchoResponse{
+		if err := stream.Send(&echov1.BidiStreamResponse{
 			Message: "echo: " + req.GetMessage(),
 			Index:   i,
 		}); err != nil {

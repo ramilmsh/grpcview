@@ -8,11 +8,17 @@ import "grpcview/v1/workspace.proto";
 
 option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1";
 
+// Appends at LOWEST priority, or refreshes in place when the id already exists.
 message AddDescriptorSourceRequest {
+  // Collection to add the source to.
   string collection = 1;
+  // Which kind of source to add.
   oneof source {
+    // Raw descriptor bytes, uploaded directly.
     bytes descriptor_set = 2;
+    // A live server to reflect from.
     Server reflection = 3;
+    // A Bazel label that builds its own descriptor set.
     Bazel bazel = 6;
   }
   // Identity of a descriptor_set upload; re-uploading the same name refreshes it.
@@ -24,122 +30,186 @@ message AddDescriptorSourceRequest {
   bool commit_descriptors = 5;
 }
 
+// The collection's tree after the source was added.
 message AddDescriptorSourceResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Removes one descriptor source from a collection.
 message RemoveDescriptorSourceRequest {
+  // Collection to remove the source from.
   string collection = 1;
+  // DescriptorSource.id to remove.
   string id = 2;
 }
 
+// The collection's tree after the source was removed.
 message RemoveDescriptorSourceResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Re-resolves one descriptor source in place.
 message RefreshDescriptorSourceRequest {
+  // Collection the source belongs to.
   string collection = 1;
+  // DescriptorSource.id to refresh.
   string id = 2;
 }
 
+// The collection's tree after the source was refreshed.
 message RefreshDescriptorSourceResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Sets the priority order of a collection's descriptor sources.
 message ReorderDescriptorSourcesRequest {
+  // Collection whose sources to reorder.
   string collection = 1;
   // Every DescriptorSource.id in priority order — earlier wins; must be a permutation.
   repeated string ids = 2;
 }
 
+// The collection's tree after reordering.
 message ReorderDescriptorSourcesResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Moves one source's descriptors between the committed sidecar and local state.
 message SetDescriptorSourceCommitRequest {
+  // Collection the source belongs to.
   string collection = 1;
+  // DescriptorSource.id to change.
   string id = 2;
+  // See DescriptorSource.commit_descriptors.
   bool commit = 3;
 }
 
+// The collection's tree after the change.
 message SetDescriptorSourceCommitResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Creates a folder at a given path in the tree.
 message CreateFolderRequest {
+  // Collection to create the folder in.
   string collection = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the new folder.
   string item_name = 3;
 }
 
+// The collection's tree after the folder was created.
 message CreateFolderResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Creates a saved request at a given path in the tree.
 message CreateRequestRequest {
+  // Collection to create the request in.
   string collection = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the new request.
   string item_name = 3;
+  // Fully qualified service name the request calls.
   string service = 4;
+  // Method name on `service` the request calls.
   string method = 5;
 }
 
+// The collection's tree after the request was created.
 message CreateRequestResponse {
+  // The collection's tree.
   Collection collection = 1;
   // Non-fatal: the request was created. Says what about it will not work yet, e.g.
   // a streaming method, which invoke rejects with Unimplemented.
   repeated string warnings = 2;
 }
 
+// Deletes a request or folder from the tree.
 message DeleteRequestRequest {
+  // Collection to delete from.
   string collection = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the item to delete.
   string item_name = 3;
 }
 
+// The collection's tree after the deletion.
 message DeleteRequestResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Partial update to a saved request; every field but the address is optional.
 message UpdateRequestRequest {
+  // Collection the request belongs to.
   string collection = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the request to update.
   string item_name = 3;
+  // New fully qualified service name.
   optional string service = 4;
+  // New method name.
   optional string method = 5;
+  // New draft body.
   optional string draft_body = 6;
+  // New display name.
   optional string name = 8;
   // Set-flag: true replaces `middleware` (empty clears it), false/unset leaves it.
   optional bool update_middleware = 9;
+  // New ordered display names of the MIDDLEWARE scripts.
   repeated string middleware = 10;
   // TypeScript module; empty-but-present clears it.
   optional string draft_metadata_script = 12;
   // Set-flag: true replaces `target` (nil clears it), false/unset leaves it.
   optional bool update_target = 13;
+  // New invoke target.
   optional Server target = 14;
 }
 
+// The collection's tree after the update.
 message UpdateRequestResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Partial update to a folder; every field but the address is optional.
 message UpdateFolderRequest {
+  // Collection the folder belongs to.
   string collection = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the folder to update.
   string item_name = 3;
   // TypeScript module feeding the gv.metadata.inherit() chain; empty clears it.
   optional string draft_metadata_script = 4;
+  // New display name.
   optional string name = 5;
 }
 
+// The collection's tree after the update.
 message UpdateFolderResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
 // A move into the moved folder's own subtree, or onto an existing name, fails.
 message MoveItemRequest {
+  // Collection the item belongs to.
   string collection = 1;
+  // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the item to move.
   string item_name = 3;
   // Destination parent; empty is the root, the current parent means a pure reorder.
   repeated string new_path = 4;
@@ -147,44 +217,58 @@ message MoveItemRequest {
   optional string before = 5;
 }
 
+// The collection's tree after the move.
 message MoveItemResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Reads one collection's full tree.
 message GetRequest {
+  // Collection to read.
   string collection = 1;
 }
 
+// The requested collection's tree.
 message GetResponse {
+  // The requested collection's tree.
   Collection collection = 1;
 }
 
+// Lists every collection in the workspace, cheaply.
 message ListCollectionsRequest {}
 
+// One collection's manifest, without its tree.
 message CollectionSummary {
   // Workspace-relative path that addresses this collection; "." is the root.
   string id = 1;
   // Display name, never the id — five collections may all be called "requests".
   string name = 2;
+  // Number of descriptor sources configured on this collection.
   int32 source_count = 3;
   // Why this collection could not be summarized; a broken one is a visible row.
   string error = 4;
 }
 
+// Every collection in the workspace, plus its trust state.
 message ListCollectionsResponse {
   // Absolute workspace root, so a caller with a cwd of its own (the CLI) can
   // resolve that cwd against the workspace it is talking to.
   string root = 1;
+  // Every collection found in the workspace.
   repeated CollectionSummary collections = 2;
   // Whether this root is trusted. Trust gates ONLY the source kinds that EXECUTE
   // (a bazel label); reflection and uploads resolve regardless.
   bool trusted = 3;
 }
 
+// Trusts or un-trusts the workspace root.
 message SetWorkspaceTrustRequest {
+  // New trust state.
   bool trusted = 1;
 }
 
+// The workspace's trust state after the change.
 message SetWorkspaceTrustResponse {
   // The resulting state, so a client never has to guess whether the flip took.
   bool trusted = 1;
@@ -194,6 +278,7 @@ message SetWorkspaceTrustResponse {
 // input, since the label validator cannot check a query expression.
 message ListBazelTargetsRequest {}
 
+// The workspace's descriptor-set-producing labels.
 message ListBazelTargetsResponse {
   // Canonical labels, sorted, deduped. A SUGGESTION list: the field stays free
   // text, because an unknown rule can still produce a descriptor set.
@@ -208,11 +293,16 @@ message ListBazelTargetsResponse {
 message WorkspaceModule {
   // Workspace-relative, slash-separated: "example/scripts/uuid.ts".
   string path = 1;
+  // File contents.
   string content = 2;
 }
 
+// Lists every importable TypeScript module in the workspace.
 message ListWorkspaceModulesRequest {}
+
+// Every importable TypeScript module in the workspace.
 message ListWorkspaceModulesResponse {
+  // Every importable module in the workspace.
   repeated WorkspaceModule modules = 1;
 }
 
@@ -225,7 +315,9 @@ message CreateCollectionRequest {
   string name = 2;
 }
 
+// The newly created collection's tree.
 message CreateCollectionResponse {
+  // The newly created collection's tree.
   Collection collection = 1;
 }
 
@@ -242,19 +334,27 @@ message UpdateCollectionRequest {
   optional string new_collection = 3;
 }
 
+// The collection's tree after the update.
 message UpdateCollectionResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
 // Everything an ad-hoc invoke needs except the client payload — the one thing
 // the unary and streaming forms disagree about.
 message InvokeSpec {
+  // Collection the request's schema and target resolve against.
   string collection = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the saved request whose middleware/schema context to use;
+  // empty for a schema-only ad-hoc call.
   string item_name = 3;
+  // Fully qualified service name to call.
   string service = 4;
+  // Method name on `service` to call.
   string method = 5;
+  // Request metadata (headers), as a struct.
   google.protobuf.Struct metadata = 6;
   // Unset defaults to the collection's first reflection source.
   optional Server target = 7;
@@ -264,6 +364,7 @@ message InvokeSpec {
 
 // Executes a unary RPC carrying the caller's own, possibly unsaved, body.
 message InvokeRequest {
+  // What to call, and against which target.
   InvokeSpec spec = 1;
   // The request message as a JSON object, or a TypeScript module default-exporting
   // one — valid JSON is already valid TS, so both forms parse. Quote 64-bit ints:
@@ -271,12 +372,15 @@ message InvokeRequest {
   string body = 2;
 }
 
+// The result of a unary invoke.
 message InvokeResponse {
+  // The call's outcome.
   Request.Response response = 1;
 }
 
 // All client messages are supplied up-front: connect-web cannot stream a body.
-message InvokeStreamRequest {
+message InvokeStreamingRequest {
+  // What to call, and against which target.
   InvokeSpec spec = 1;
   // Client bodies as JSON text, in send order; empty defaults to one "{}".
   repeated string messages = 2;
@@ -285,17 +389,22 @@ message InvokeStreamRequest {
 // Zero or more `message` frames, then exactly one terminal `result`. The invoked
 // call's gRPC status is reported in `result`, not as a Connect stream error.
 message InvokeStreamingResponse {
+  // Which kind of frame this is.
   oneof event {
+    // A frame the invoked call sent or received, in wire order.
     bytes message = 1;
+    // The terminal, and only, result frame.
     Request.Response result = 2;
   }
 }
 
 // Addresses the request SAVED at path/item_name and says how to run it once.
 message SavedInvokeSpec {
+  // Collection the saved request belongs to.
   string collection = 1;
   // Parent-folder display-name path, outermost first; empty at the top level.
   repeated string path = 2;
+  // Display name of the saved request to run.
   string item_name = 3;
   // This run's gv.request.params.
   google.protobuf.Struct params = 4;
@@ -309,38 +418,63 @@ message SavedInvokeSpec {
 
 // Runs the request SAVED at path/item_name, resolved server-side.
 message InvokeSavedRequest {
+  // Which saved request to run, and how.
   SavedInvokeSpec spec = 1;
   // Resolve and evaluate everything, send nothing.
   bool dry_run = 2;
 }
 
 // No dry_run: a dry run reports one resolved request, which is the unary shape.
-message InvokeSavedStreamRequest {
+message InvokeSavedStreamingRequest {
+  // Which saved request to run, and how.
   SavedInvokeSpec spec = 1;
+}
+
+// Zero or more `message` frames, then exactly one terminal `result`. The invoked
+// call's gRPC status is reported in `result`, not as a Connect stream error.
+message InvokeSavedStreamingResponse {
+  // Which kind of frame this is.
+  oneof event {
+    // A frame the invoked call sent or received, in wire order.
+    bytes message = 1;
+    // The terminal, and only, result frame.
+    Request.Response result = 2;
+  }
 }
 
 // Exactly one of `response` (a real call) and `resolved` (a dry run) is set.
 message InvokeSavedResponse {
+  // Set only for a real (non-dry-run) call.
   Request.Response response = 1;
+  // Set only when the request was a dry run.
   optional ResolvedRequest resolved = 2;
 }
 
 // What a dry run reports: what would have been sent, post-middleware, nothing dialed.
 message ResolvedRequest {
+  // Fully qualified service name that would have been called.
   string service = 1;
+  // Method name that would have been called.
   string method = 2;
+  // Server that would have been dialed.
   Server target = 3;
+  // Client bodies that would have been sent, post-middleware, as JSON text.
   repeated string messages = 4;
+  // Request metadata that would have been sent.
   google.protobuf.Struct metadata = 5;
 }
 
+// Describes one RPC method and its message shapes, from already-resolved schema.
 message DescribeMethodRequest {
+  // Collection whose resolved schema to read.
   string collection = 1;
   // Fully qualified, e.g. "echo.v1.EchoService"; method is its own name, "Unary".
   string service = 2;
+  // Method name on `service` to describe.
   string method = 3;
 }
 
+// The method, its input and output messages, and every type they reference.
 message DescribeMethodResponse {
   // The method, its input and output messages, and every type they reference.
   string proto_text = 1;
@@ -348,44 +482,65 @@ message DescribeMethodResponse {
   bytes descriptor_set = 2;
   // The source it was read from, e.g. "reflection:localhost:9000".
   string source_id = 3;
+  // Whether the client sends more than one message.
   bool client_streaming = 4;
+  // Whether the server sends more than one message.
   bool server_streaming = 5;
   // Why invoking this method would fail today; empty when it is invocable. Set for
   // every streaming method, which invoke rejects with Unimplemented.
   string not_invocable_reason = 6;
 }
 
+// Creates an empty script; use UpdateScript to fill in the source.
 message CreateScriptRequest {
+  // Collection to create the script in.
   string collection = 1;
+  // Collection-relative path for the new script, e.g. "scripts/uuid.ts".
   string path = 2;
 }
 
+// The collection's tree after the script was created.
 message CreateScriptResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
 // Partial update: `path` addresses the script, `new_path` renames it (a rename is a file move).
 message UpdateScriptRequest {
+  // Collection the script belongs to.
   string collection = 1;
+  // Path of the script to update, as it is now.
   string path = 2;
+  // New source; unset leaves it unchanged.
   optional string source = 3;
+  // New path, i.e. a rename; unset leaves it unchanged.
   optional string new_path = 4;
 }
 
+// The collection's tree after the update.
 message UpdateScriptResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Deletes a script. Requests still listing it as middleware keep the dangling
+// reference and fail when invoked, so clear it from them first.
 message DeleteScriptRequest {
+  // Collection the script belongs to.
   string collection = 1;
+  // Path of the script to delete.
   string path = 2;
 }
 
+// The collection's tree after the deletion.
 message DeleteScriptResponse {
+  // The collection's tree.
   Collection collection = 1;
 }
 
+// Runs a script in a fresh isolated instance: no capabilities, no collection state.
 message RunScriptRequest {
+  // Collection the run is scoped to.
   string collection = 1;
   // A source with `export default` is compiled as an entry and its default export is
   // called; anything else is evaluated as a scratchpad and its last expression is the
@@ -395,13 +550,19 @@ message RunScriptRequest {
   optional string script = 4;
 }
 
+// One console line emitted by a running script.
 message ScriptLog {
-  string level = 1; // debug | log | warn | error
+  // debug | log | warn | error
+  string level = 1;
+  // Logged text.
   string message = 2;
 }
 
+// An uncaught error from a running script.
 message ScriptError {
+  // Error message.
   string message = 1;
+  // Guest stack trace, unparsed.
   string stack = 2;
   // Source line parsed from the guest backtrace; 0 when unknown.
   int32 line = 3;
@@ -411,10 +572,14 @@ message ScriptError {
 message RunScriptResponse {
   // JSON text; unset when the script returned undefined.
   optional string value = 1;
+  // Console output, in emission order.
   repeated ScriptLog logs = 2;
+  // Set when the script threw or timed out.
   optional ScriptError error = 3;
 }
 
+// The RPC surface for reflecting schemas, managing a collection's tree, and
+// invoking calls against it.
 service WorkspaceService {
   // Appends at LOWEST priority, or refreshes in place when the id already exists.
   rpc AddDescriptorSource(AddDescriptorSourceRequest) returns (AddDescriptorSourceResponse);
@@ -475,11 +640,11 @@ service WorkspaceService {
   // Returns the status, response body, request/response metadata and latency.
   rpc Invoke(InvokeRequest) returns (InvokeResponse);
   // Handles any streaming kind, modeled as server-streaming.
-  rpc InvokeStreaming(InvokeStreamRequest) returns (stream InvokeStreamingResponse);
+  rpc InvokeStreaming(InvokeStreamingRequest) returns (stream InvokeStreamingResponse);
   // Reports a status the target returned in the response, never as an error.
   rpc InvokeSaved(InvokeSavedRequest) returns (InvokeSavedResponse);
   // InvokeSaved for any streaming kind.
-  rpc InvokeSavedStreaming(InvokeSavedStreamRequest) returns (stream InvokeStreamingResponse);
+  rpc InvokeSavedStreaming(InvokeSavedStreamingRequest) returns (stream InvokeSavedStreamingResponse);
   // Answers from already-resolved definitions, so it works with the target down.
   // Doc comments survive only if the winning source carried them.
   rpc DescribeMethod(DescribeMethodRequest) returns (DescribeMethodResponse);
@@ -499,40 +664,57 @@ service WorkspaceService {
 // last hour's code from one serving this build. A version STRING cannot: an unstamped
 // build links "dev" for every rebuild.
 message ServerExecutable {
+  // Absolute path to the running binary.
   string path = 1;
+  // Binary's mtime, unix seconds.
   int64 modified_unix = 2;
+  // Binary's size in bytes.
   int64 size = 3;
 }
 
+// Takes no arguments: answers for whichever server receives the call.
 message ServerInfoRequest {}
 
+// Identity of this server and the build it is running.
 message ServerInfoResponse {
   // Absolute, and the field the whole registration design turns on: a client verifies
   // it matches the root it resolved before trusting anything else the server says.
   string workspace_root = 1;
+  // OS process id.
   int32 pid = 2;
+  // Bound TCP port.
   int32 port = 3;
+  // cli.version this build was stamped with.
   string version = 4;
+  // The running binary's identity.
   ServerExecutable executable = 5;
   // Zero when the server never idles out, which is every hand-run one.
   google.protobuf.Duration idle_timeout = 6;
 }
 
+// Takes no arguments: exits the server answering the call.
 message ShutdownRequest {}
 
+// Empty: Shutdown returns only after the server has stopped accepting.
 message ShutdownResponse {}
 
 // One registered server as the answering one sees it. The registration fields are read off
 // the file; everything else is what that server itself answered, so a row that is not
 // running carries only what the file claimed.
 message ServerEntry {
+  // Absolute workspace root this server serves.
   string workspace_root = 1;
+  // Bound TCP port.
   int32 port = 2;
+  // OS process id.
   int32 pid = 3;
+  // cli.version this build was stamped with.
   string version = 4;
+  // The running binary's identity.
   ServerExecutable executable = 5;
   // Zero when it never idles out, which is every hand-run one.
   google.protobuf.Duration idle_timeout = 6;
+  // When the process started, unix seconds.
   int64 started_unix = 7;
   // A registration is a hint: false means nothing answered on that port, or what did
   // reports another root. The file outliving its process is the ordinary case.
@@ -544,19 +726,23 @@ message ServerEntry {
   bool skewed = 10;
 }
 
+// Takes no arguments: lists every registration on this machine for this user.
 message ListServersRequest {}
 
+// Every server registration on this machine.
 message ListServersResponse {
   // Every registration on this machine for this user, ordered by workspace root.
   repeated ServerEntry servers = 1;
 }
 
+// Asks another workspace's server to exit.
 message StopServerRequest {
   // Absolute, and matched against the registration rather than against a port: a port is
   // reused, a root is the identity.
   string workspace_root = 1;
 }
 
+// Empty: StopServer returns only after the target server has exited.
 message StopServerResponse {}
 
 // Server lifecycle, deliberately NOT part of WorkspaceService: it is a property of the

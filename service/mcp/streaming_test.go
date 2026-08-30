@@ -51,11 +51,11 @@ func (f *fakeStreamer) run(ctx context.Context, send sendFunc) error {
 	return f.err
 }
 
-func (f *fakeStreamer) InvokeStream(ctx context.Context, _ *grpcviewv1.InvokeStreamRequest, send sendFunc) error {
+func (f *fakeStreamer) InvokeStream(ctx context.Context, _ *grpcviewv1.InvokeStreamingRequest, send sendFunc) error {
 	return f.run(ctx, send)
 }
 
-func (f *fakeStreamer) InvokeSavedStream(ctx context.Context, _ *grpcviewv1.InvokeSavedStreamRequest, send sendFunc) error {
+func (f *fakeStreamer) InvokeSavedStream(ctx context.Context, _ *grpcviewv1.InvokeSavedStreamingRequest, send sendFunc) error {
 	return f.run(ctx, send)
 }
 
@@ -76,7 +76,7 @@ func TestCollectFramesThenResult(t *testing.T) {
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{
 		msgFrame(`{"n":1}`), msgFrame(`{"n":2}`), resultFrame(0),
 	}}
-	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamRequest{}, f, defaultCaps)
+	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamingRequest{}, f, defaultCaps)
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestCollectFramesThenResult(t *testing.T) {
 
 func TestCollectResultWithNoFrames(t *testing.T) {
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{resultFrame(5)}}
-	agg, err := drainFake(t, "InvokeSavedStreaming", &grpcviewv1.InvokeSavedStreamRequest{}, f, defaultCaps)
+	agg, err := drainFake(t, "InvokeSavedStreaming", &grpcviewv1.InvokeSavedStreamingRequest{}, f, defaultCaps)
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestCollectResultWithNoFrames(t *testing.T) {
 
 func TestCollectFramesWithNoResult(t *testing.T) {
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{msgFrame(`{"n":1}`)}}
-	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamRequest{}, f, defaultCaps)
+	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamingRequest{}, f, defaultCaps)
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestCollectFrameCap(t *testing.T) {
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{
 		msgFrame(`{"n":1}`), msgFrame(`{"n":2}`), msgFrame(`{"n":3}`), msgFrame(`{"n":4}`),
 	}}
-	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamRequest{}, f,
+	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamingRequest{}, f,
 		caps{frames: 2, bytes: 1 << 20, deadline: time.Minute})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
@@ -154,7 +154,7 @@ func TestCollectByteCap(t *testing.T) {
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{
 		msgFrame(`{"n":1}`), msgFrame(`{"n":2}`), msgFrame(`{"n":3}`),
 	}}
-	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamRequest{}, f,
+	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamingRequest{}, f,
 		caps{frames: 100, bytes: 10, deadline: time.Minute})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
@@ -195,7 +195,7 @@ func TestCollectDeadline(t *testing.T) {
 
 func TestCollectPassesNonJSONFrameThrough(t *testing.T) {
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{msgFrame("not json at all")}}
-	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamRequest{}, f, defaultCaps)
+	agg, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamingRequest{}, f, defaultCaps)
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestCollectPassesNonJSONFrameThrough(t *testing.T) {
 func TestCollectSurfacesStreamerError(t *testing.T) {
 	want := errors.New("target refused the connection")
 	f := &fakeStreamer{frames: []*grpcviewv1.InvokeStreamingResponse{msgFrame(`{"n":1}`)}, err: want}
-	if _, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamRequest{}, f, defaultCaps); !errors.Is(err, want) {
+	if _, err := drainFake(t, "InvokeStreaming", &grpcviewv1.InvokeStreamingRequest{}, f, defaultCaps); !errors.Is(err, want) {
 		t.Fatalf("collect error = %v, want %v", err, want)
 	}
 }

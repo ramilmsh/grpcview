@@ -182,7 +182,7 @@ func (w Workspace) Invoke(ctx context.Context, request *connect.Request[grpcview
 	return connect.NewResponse(&grpcviewv1.InvokeResponse{Response: out}), nil
 }
 
-func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
+func (w Workspace) InvokeStreaming(ctx context.Context, request *connect.Request[grpcviewv1.InvokeStreamingRequest], stream *connect.ServerStream[grpcviewv1.InvokeStreamingResponse]) error {
 	spec := specFrom(request.Msg.GetSpec())
 	spec.recordHistory = true
 	return w.streamInvoke(ctx, spec, request.Msg.GetMessages(), stream.Send)

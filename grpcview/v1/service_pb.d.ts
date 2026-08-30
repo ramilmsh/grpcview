@@ -13,31 +13,43 @@ import type { Duration } from "@bufbuild/protobuf/wkt";
 export declare const file_grpcview_v1_service: GenFile;
 
 /**
+ * Appends at LOWEST priority, or refreshes in place when the id already exists.
+ *
  * @generated from message grpcview.v1.AddDescriptorSourceRequest
  */
 export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescriptorSourceRequest"> & {
   /**
+   * Collection to add the source to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Which kind of source to add.
+   *
    * @generated from oneof grpcview.v1.AddDescriptorSourceRequest.source
    */
   source: {
     /**
+     * Raw descriptor bytes, uploaded directly.
+     *
      * @generated from field: bytes descriptor_set = 2;
      */
     value: Uint8Array;
     case: "descriptorSet";
   } | {
     /**
+     * A live server to reflect from.
+     *
      * @generated from field: grpcview.v1.Server reflection = 3;
      */
     value: Server;
     case: "reflection";
   } | {
     /**
+     * A Bazel label that builds its own descriptor set.
+     *
      * @generated from field: grpcview.v1.Bazel bazel = 6;
      */
     value: Bazel;
@@ -74,10 +86,14 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
 export declare const AddDescriptorSourceRequestSchema: GenMessage<AddDescriptorSourceRequest>;
 
 /**
+ * The collection's tree after the source was added.
+ *
  * @generated from message grpcview.v1.AddDescriptorSourceResponse
  */
 export declare type AddDescriptorSourceResponse = Message<"grpcview.v1.AddDescriptorSourceResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -90,15 +106,21 @@ export declare type AddDescriptorSourceResponse = Message<"grpcview.v1.AddDescri
 export declare const AddDescriptorSourceResponseSchema: GenMessage<AddDescriptorSourceResponse>;
 
 /**
+ * Removes one descriptor source from a collection.
+ *
  * @generated from message grpcview.v1.RemoveDescriptorSourceRequest
  */
 export declare type RemoveDescriptorSourceRequest = Message<"grpcview.v1.RemoveDescriptorSourceRequest"> & {
   /**
+   * Collection to remove the source from.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * DescriptorSource.id to remove.
+   *
    * @generated from field: string id = 2;
    */
   id: string;
@@ -111,10 +133,14 @@ export declare type RemoveDescriptorSourceRequest = Message<"grpcview.v1.RemoveD
 export declare const RemoveDescriptorSourceRequestSchema: GenMessage<RemoveDescriptorSourceRequest>;
 
 /**
+ * The collection's tree after the source was removed.
+ *
  * @generated from message grpcview.v1.RemoveDescriptorSourceResponse
  */
 export declare type RemoveDescriptorSourceResponse = Message<"grpcview.v1.RemoveDescriptorSourceResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -127,15 +153,21 @@ export declare type RemoveDescriptorSourceResponse = Message<"grpcview.v1.Remove
 export declare const RemoveDescriptorSourceResponseSchema: GenMessage<RemoveDescriptorSourceResponse>;
 
 /**
+ * Re-resolves one descriptor source in place.
+ *
  * @generated from message grpcview.v1.RefreshDescriptorSourceRequest
  */
 export declare type RefreshDescriptorSourceRequest = Message<"grpcview.v1.RefreshDescriptorSourceRequest"> & {
   /**
+   * Collection the source belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * DescriptorSource.id to refresh.
+   *
    * @generated from field: string id = 2;
    */
   id: string;
@@ -148,10 +180,14 @@ export declare type RefreshDescriptorSourceRequest = Message<"grpcview.v1.Refres
 export declare const RefreshDescriptorSourceRequestSchema: GenMessage<RefreshDescriptorSourceRequest>;
 
 /**
+ * The collection's tree after the source was refreshed.
+ *
  * @generated from message grpcview.v1.RefreshDescriptorSourceResponse
  */
 export declare type RefreshDescriptorSourceResponse = Message<"grpcview.v1.RefreshDescriptorSourceResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -164,10 +200,14 @@ export declare type RefreshDescriptorSourceResponse = Message<"grpcview.v1.Refre
 export declare const RefreshDescriptorSourceResponseSchema: GenMessage<RefreshDescriptorSourceResponse>;
 
 /**
+ * Sets the priority order of a collection's descriptor sources.
+ *
  * @generated from message grpcview.v1.ReorderDescriptorSourcesRequest
  */
 export declare type ReorderDescriptorSourcesRequest = Message<"grpcview.v1.ReorderDescriptorSourcesRequest"> & {
   /**
+   * Collection whose sources to reorder.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
@@ -187,10 +227,14 @@ export declare type ReorderDescriptorSourcesRequest = Message<"grpcview.v1.Reord
 export declare const ReorderDescriptorSourcesRequestSchema: GenMessage<ReorderDescriptorSourcesRequest>;
 
 /**
+ * The collection's tree after reordering.
+ *
  * @generated from message grpcview.v1.ReorderDescriptorSourcesResponse
  */
 export declare type ReorderDescriptorSourcesResponse = Message<"grpcview.v1.ReorderDescriptorSourcesResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -203,20 +247,28 @@ export declare type ReorderDescriptorSourcesResponse = Message<"grpcview.v1.Reor
 export declare const ReorderDescriptorSourcesResponseSchema: GenMessage<ReorderDescriptorSourcesResponse>;
 
 /**
+ * Moves one source's descriptors between the committed sidecar and local state.
+ *
  * @generated from message grpcview.v1.SetDescriptorSourceCommitRequest
  */
 export declare type SetDescriptorSourceCommitRequest = Message<"grpcview.v1.SetDescriptorSourceCommitRequest"> & {
   /**
+   * Collection the source belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * DescriptorSource.id to change.
+   *
    * @generated from field: string id = 2;
    */
   id: string;
 
   /**
+   * See DescriptorSource.commit_descriptors.
+   *
    * @generated from field: bool commit = 3;
    */
   commit: boolean;
@@ -229,10 +281,14 @@ export declare type SetDescriptorSourceCommitRequest = Message<"grpcview.v1.SetD
 export declare const SetDescriptorSourceCommitRequestSchema: GenMessage<SetDescriptorSourceCommitRequest>;
 
 /**
+ * The collection's tree after the change.
+ *
  * @generated from message grpcview.v1.SetDescriptorSourceCommitResponse
  */
 export declare type SetDescriptorSourceCommitResponse = Message<"grpcview.v1.SetDescriptorSourceCommitResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -245,20 +301,28 @@ export declare type SetDescriptorSourceCommitResponse = Message<"grpcview.v1.Set
 export declare const SetDescriptorSourceCommitResponseSchema: GenMessage<SetDescriptorSourceCommitResponse>;
 
 /**
+ * Creates a folder at a given path in the tree.
+ *
  * @generated from message grpcview.v1.CreateFolderRequest
  */
 export declare type CreateFolderRequest = Message<"grpcview.v1.CreateFolderRequest"> & {
   /**
+   * Collection to create the folder in.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
 
   /**
+   * Display name of the new folder.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
@@ -271,10 +335,14 @@ export declare type CreateFolderRequest = Message<"grpcview.v1.CreateFolderReque
 export declare const CreateFolderRequestSchema: GenMessage<CreateFolderRequest>;
 
 /**
+ * The collection's tree after the folder was created.
+ *
  * @generated from message grpcview.v1.CreateFolderResponse
  */
 export declare type CreateFolderResponse = Message<"grpcview.v1.CreateFolderResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -287,30 +355,42 @@ export declare type CreateFolderResponse = Message<"grpcview.v1.CreateFolderResp
 export declare const CreateFolderResponseSchema: GenMessage<CreateFolderResponse>;
 
 /**
+ * Creates a saved request at a given path in the tree.
+ *
  * @generated from message grpcview.v1.CreateRequestRequest
  */
 export declare type CreateRequestRequest = Message<"grpcview.v1.CreateRequestRequest"> & {
   /**
+   * Collection to create the request in.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
 
   /**
+   * Display name of the new request.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
 
   /**
+   * Fully qualified service name the request calls.
+   *
    * @generated from field: string service = 4;
    */
   service: string;
 
   /**
+   * Method name on `service` the request calls.
+   *
    * @generated from field: string method = 5;
    */
   method: string;
@@ -323,10 +403,14 @@ export declare type CreateRequestRequest = Message<"grpcview.v1.CreateRequestReq
 export declare const CreateRequestRequestSchema: GenMessage<CreateRequestRequest>;
 
 /**
+ * The collection's tree after the request was created.
+ *
  * @generated from message grpcview.v1.CreateRequestResponse
  */
 export declare type CreateRequestResponse = Message<"grpcview.v1.CreateRequestResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -347,20 +431,28 @@ export declare type CreateRequestResponse = Message<"grpcview.v1.CreateRequestRe
 export declare const CreateRequestResponseSchema: GenMessage<CreateRequestResponse>;
 
 /**
+ * Deletes a request or folder from the tree.
+ *
  * @generated from message grpcview.v1.DeleteRequestRequest
  */
 export declare type DeleteRequestRequest = Message<"grpcview.v1.DeleteRequestRequest"> & {
   /**
+   * Collection to delete from.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
 
   /**
+   * Display name of the item to delete.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
@@ -373,10 +465,14 @@ export declare type DeleteRequestRequest = Message<"grpcview.v1.DeleteRequestReq
 export declare const DeleteRequestRequestSchema: GenMessage<DeleteRequestRequest>;
 
 /**
+ * The collection's tree after the deletion.
+ *
  * @generated from message grpcview.v1.DeleteRequestResponse
  */
 export declare type DeleteRequestResponse = Message<"grpcview.v1.DeleteRequestResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -389,40 +485,56 @@ export declare type DeleteRequestResponse = Message<"grpcview.v1.DeleteRequestRe
 export declare const DeleteRequestResponseSchema: GenMessage<DeleteRequestResponse>;
 
 /**
+ * Partial update to a saved request; every field but the address is optional.
+ *
  * @generated from message grpcview.v1.UpdateRequestRequest
  */
 export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestRequest"> & {
   /**
+   * Collection the request belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
 
   /**
+   * Display name of the request to update.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
 
   /**
+   * New fully qualified service name.
+   *
    * @generated from field: optional string service = 4;
    */
   service?: string | undefined;
 
   /**
+   * New method name.
+   *
    * @generated from field: optional string method = 5;
    */
   method?: string | undefined;
 
   /**
+   * New draft body.
+   *
    * @generated from field: optional string draft_body = 6;
    */
   draftBody?: string | undefined;
 
   /**
+   * New display name.
+   *
    * @generated from field: optional string name = 8;
    */
   name?: string | undefined;
@@ -435,6 +547,8 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
   updateMiddleware?: boolean | undefined;
 
   /**
+   * New ordered display names of the MIDDLEWARE scripts.
+   *
    * @generated from field: repeated string middleware = 10;
    */
   middleware: string[];
@@ -454,6 +568,8 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
   updateTarget?: boolean | undefined;
 
   /**
+   * New invoke target.
+   *
    * @generated from field: optional grpcview.v1.Server target = 14;
    */
   target?: Server | undefined;
@@ -466,10 +582,14 @@ export declare type UpdateRequestRequest = Message<"grpcview.v1.UpdateRequestReq
 export declare const UpdateRequestRequestSchema: GenMessage<UpdateRequestRequest>;
 
 /**
+ * The collection's tree after the update.
+ *
  * @generated from message grpcview.v1.UpdateRequestResponse
  */
 export declare type UpdateRequestResponse = Message<"grpcview.v1.UpdateRequestResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -482,20 +602,28 @@ export declare type UpdateRequestResponse = Message<"grpcview.v1.UpdateRequestRe
 export declare const UpdateRequestResponseSchema: GenMessage<UpdateRequestResponse>;
 
 /**
+ * Partial update to a folder; every field but the address is optional.
+ *
  * @generated from message grpcview.v1.UpdateFolderRequest
  */
 export declare type UpdateFolderRequest = Message<"grpcview.v1.UpdateFolderRequest"> & {
   /**
+   * Collection the folder belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
 
   /**
+   * Display name of the folder to update.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
@@ -508,6 +636,8 @@ export declare type UpdateFolderRequest = Message<"grpcview.v1.UpdateFolderReque
   draftMetadataScript?: string | undefined;
 
   /**
+   * New display name.
+   *
    * @generated from field: optional string name = 5;
    */
   name?: string | undefined;
@@ -520,10 +650,14 @@ export declare type UpdateFolderRequest = Message<"grpcview.v1.UpdateFolderReque
 export declare const UpdateFolderRequestSchema: GenMessage<UpdateFolderRequest>;
 
 /**
+ * The collection's tree after the update.
+ *
  * @generated from message grpcview.v1.UpdateFolderResponse
  */
 export declare type UpdateFolderResponse = Message<"grpcview.v1.UpdateFolderResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -542,16 +676,22 @@ export declare const UpdateFolderResponseSchema: GenMessage<UpdateFolderResponse
  */
 export declare type MoveItemRequest = Message<"grpcview.v1.MoveItemRequest"> & {
   /**
+   * Collection the item belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Parent-folder display-name path, outermost first; empty at the top level.
+   *
    * @generated from field: repeated string path = 2;
    */
   path: string[];
 
   /**
+   * Display name of the item to move.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
@@ -578,10 +718,14 @@ export declare type MoveItemRequest = Message<"grpcview.v1.MoveItemRequest"> & {
 export declare const MoveItemRequestSchema: GenMessage<MoveItemRequest>;
 
 /**
+ * The collection's tree after the move.
+ *
  * @generated from message grpcview.v1.MoveItemResponse
  */
 export declare type MoveItemResponse = Message<"grpcview.v1.MoveItemResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -594,10 +738,14 @@ export declare type MoveItemResponse = Message<"grpcview.v1.MoveItemResponse"> &
 export declare const MoveItemResponseSchema: GenMessage<MoveItemResponse>;
 
 /**
+ * Reads one collection's full tree.
+ *
  * @generated from message grpcview.v1.GetRequest
  */
 export declare type GetRequest = Message<"grpcview.v1.GetRequest"> & {
   /**
+   * Collection to read.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
@@ -610,10 +758,14 @@ export declare type GetRequest = Message<"grpcview.v1.GetRequest"> & {
 export declare const GetRequestSchema: GenMessage<GetRequest>;
 
 /**
+ * The requested collection's tree.
+ *
  * @generated from message grpcview.v1.GetResponse
  */
 export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
   /**
+   * The requested collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -626,6 +778,8 @@ export declare type GetResponse = Message<"grpcview.v1.GetResponse"> & {
 export declare const GetResponseSchema: GenMessage<GetResponse>;
 
 /**
+ * Lists every collection in the workspace, cheaply.
+ *
  * @generated from message grpcview.v1.ListCollectionsRequest
  */
 export declare type ListCollectionsRequest = Message<"grpcview.v1.ListCollectionsRequest"> & {
@@ -638,6 +792,8 @@ export declare type ListCollectionsRequest = Message<"grpcview.v1.ListCollection
 export declare const ListCollectionsRequestSchema: GenMessage<ListCollectionsRequest>;
 
 /**
+ * One collection's manifest, without its tree.
+ *
  * @generated from message grpcview.v1.CollectionSummary
  */
 export declare type CollectionSummary = Message<"grpcview.v1.CollectionSummary"> & {
@@ -656,6 +812,8 @@ export declare type CollectionSummary = Message<"grpcview.v1.CollectionSummary">
   name: string;
 
   /**
+   * Number of descriptor sources configured on this collection.
+   *
    * @generated from field: int32 source_count = 3;
    */
   sourceCount: number;
@@ -675,6 +833,8 @@ export declare type CollectionSummary = Message<"grpcview.v1.CollectionSummary">
 export declare const CollectionSummarySchema: GenMessage<CollectionSummary>;
 
 /**
+ * Every collection in the workspace, plus its trust state.
+ *
  * @generated from message grpcview.v1.ListCollectionsResponse
  */
 export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectionsResponse"> & {
@@ -687,6 +847,8 @@ export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectio
   root: string;
 
   /**
+   * Every collection found in the workspace.
+   *
    * @generated from field: repeated grpcview.v1.CollectionSummary collections = 2;
    */
   collections: CollectionSummary[];
@@ -707,10 +869,14 @@ export declare type ListCollectionsResponse = Message<"grpcview.v1.ListCollectio
 export declare const ListCollectionsResponseSchema: GenMessage<ListCollectionsResponse>;
 
 /**
+ * Trusts or un-trusts the workspace root.
+ *
  * @generated from message grpcview.v1.SetWorkspaceTrustRequest
  */
 export declare type SetWorkspaceTrustRequest = Message<"grpcview.v1.SetWorkspaceTrustRequest"> & {
   /**
+   * New trust state.
+   *
    * @generated from field: bool trusted = 1;
    */
   trusted: boolean;
@@ -723,6 +889,8 @@ export declare type SetWorkspaceTrustRequest = Message<"grpcview.v1.SetWorkspace
 export declare const SetWorkspaceTrustRequestSchema: GenMessage<SetWorkspaceTrustRequest>;
 
 /**
+ * The workspace's trust state after the change.
+ *
  * @generated from message grpcview.v1.SetWorkspaceTrustResponse
  */
 export declare type SetWorkspaceTrustResponse = Message<"grpcview.v1.SetWorkspaceTrustResponse"> & {
@@ -756,6 +924,8 @@ export declare type ListBazelTargetsRequest = Message<"grpcview.v1.ListBazelTarg
 export declare const ListBazelTargetsRequestSchema: GenMessage<ListBazelTargetsRequest>;
 
 /**
+ * The workspace's descriptor-set-producing labels.
+ *
  * @generated from message grpcview.v1.ListBazelTargetsResponse
  */
 export declare type ListBazelTargetsResponse = Message<"grpcview.v1.ListBazelTargetsResponse"> & {
@@ -797,6 +967,8 @@ export declare type WorkspaceModule = Message<"grpcview.v1.WorkspaceModule"> & {
   path: string;
 
   /**
+   * File contents.
+   *
    * @generated from field: string content = 2;
    */
   content: string;
@@ -809,6 +981,8 @@ export declare type WorkspaceModule = Message<"grpcview.v1.WorkspaceModule"> & {
 export declare const WorkspaceModuleSchema: GenMessage<WorkspaceModule>;
 
 /**
+ * Lists every importable TypeScript module in the workspace.
+ *
  * @generated from message grpcview.v1.ListWorkspaceModulesRequest
  */
 export declare type ListWorkspaceModulesRequest = Message<"grpcview.v1.ListWorkspaceModulesRequest"> & {
@@ -821,10 +995,14 @@ export declare type ListWorkspaceModulesRequest = Message<"grpcview.v1.ListWorks
 export declare const ListWorkspaceModulesRequestSchema: GenMessage<ListWorkspaceModulesRequest>;
 
 /**
+ * Every importable TypeScript module in the workspace.
+ *
  * @generated from message grpcview.v1.ListWorkspaceModulesResponse
  */
 export declare type ListWorkspaceModulesResponse = Message<"grpcview.v1.ListWorkspaceModulesResponse"> & {
   /**
+   * Every importable module in the workspace.
+   *
    * @generated from field: repeated grpcview.v1.WorkspaceModule modules = 1;
    */
   modules: WorkspaceModule[];
@@ -865,10 +1043,14 @@ export declare type CreateCollectionRequest = Message<"grpcview.v1.CreateCollect
 export declare const CreateCollectionRequestSchema: GenMessage<CreateCollectionRequest>;
 
 /**
+ * The newly created collection's tree.
+ *
  * @generated from message grpcview.v1.CreateCollectionResponse
  */
 export declare type CreateCollectionResponse = Message<"grpcview.v1.CreateCollectionResponse"> & {
   /**
+   * The newly created collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -918,10 +1100,14 @@ export declare type UpdateCollectionRequest = Message<"grpcview.v1.UpdateCollect
 export declare const UpdateCollectionRequestSchema: GenMessage<UpdateCollectionRequest>;
 
 /**
+ * The collection's tree after the update.
+ *
  * @generated from message grpcview.v1.UpdateCollectionResponse
  */
 export declare type UpdateCollectionResponse = Message<"grpcview.v1.UpdateCollectionResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -941,6 +1127,8 @@ export declare const UpdateCollectionResponseSchema: GenMessage<UpdateCollection
  */
 export declare type InvokeSpec = Message<"grpcview.v1.InvokeSpec"> & {
   /**
+   * Collection the request's schema and target resolve against.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
@@ -953,21 +1141,30 @@ export declare type InvokeSpec = Message<"grpcview.v1.InvokeSpec"> & {
   path: string[];
 
   /**
+   * Display name of the saved request whose middleware/schema context to use;
+   * empty for a schema-only ad-hoc call.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
 
   /**
+   * Fully qualified service name to call.
+   *
    * @generated from field: string service = 4;
    */
   service: string;
 
   /**
+   * Method name on `service` to call.
+   *
    * @generated from field: string method = 5;
    */
   method: string;
 
   /**
+   * Request metadata (headers), as a struct.
+   *
    * @generated from field: google.protobuf.Struct metadata = 6;
    */
   metadata?: JsonObject | undefined;
@@ -1000,6 +1197,8 @@ export declare const InvokeSpecSchema: GenMessage<InvokeSpec>;
  */
 export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
   /**
+   * What to call, and against which target.
+   *
    * @generated from field: grpcview.v1.InvokeSpec spec = 1;
    */
   spec?: InvokeSpec | undefined;
@@ -1021,10 +1220,14 @@ export declare type InvokeRequest = Message<"grpcview.v1.InvokeRequest"> & {
 export declare const InvokeRequestSchema: GenMessage<InvokeRequest>;
 
 /**
+ * The result of a unary invoke.
+ *
  * @generated from message grpcview.v1.InvokeResponse
  */
 export declare type InvokeResponse = Message<"grpcview.v1.InvokeResponse"> & {
   /**
+   * The call's outcome.
+   *
    * @generated from field: grpcview.v1.Request.Response response = 1;
    */
   response?: Request_Response | undefined;
@@ -1039,10 +1242,12 @@ export declare const InvokeResponseSchema: GenMessage<InvokeResponse>;
 /**
  * All client messages are supplied up-front: connect-web cannot stream a body.
  *
- * @generated from message grpcview.v1.InvokeStreamRequest
+ * @generated from message grpcview.v1.InvokeStreamingRequest
  */
-export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamRequest"> & {
+export declare type InvokeStreamingRequest = Message<"grpcview.v1.InvokeStreamingRequest"> & {
   /**
+   * What to call, and against which target.
+   *
    * @generated from field: grpcview.v1.InvokeSpec spec = 1;
    */
   spec?: InvokeSpec | undefined;
@@ -1056,10 +1261,10 @@ export declare type InvokeStreamRequest = Message<"grpcview.v1.InvokeStreamReque
 };
 
 /**
- * Describes the message grpcview.v1.InvokeStreamRequest.
- * Use `create(InvokeStreamRequestSchema)` to create a new message.
+ * Describes the message grpcview.v1.InvokeStreamingRequest.
+ * Use `create(InvokeStreamingRequestSchema)` to create a new message.
  */
-export declare const InvokeStreamRequestSchema: GenMessage<InvokeStreamRequest>;
+export declare const InvokeStreamingRequestSchema: GenMessage<InvokeStreamingRequest>;
 
 /**
  * Zero or more `message` frames, then exactly one terminal `result`. The invoked
@@ -1069,16 +1274,22 @@ export declare const InvokeStreamRequestSchema: GenMessage<InvokeStreamRequest>;
  */
 export declare type InvokeStreamingResponse = Message<"grpcview.v1.InvokeStreamingResponse"> & {
   /**
+   * Which kind of frame this is.
+   *
    * @generated from oneof grpcview.v1.InvokeStreamingResponse.event
    */
   event: {
     /**
+     * A frame the invoked call sent or received, in wire order.
+     *
      * @generated from field: bytes message = 1;
      */
     value: Uint8Array;
     case: "message";
   } | {
     /**
+     * The terminal, and only, result frame.
+     *
      * @generated from field: grpcview.v1.Request.Response result = 2;
      */
     value: Request_Response;
@@ -1099,6 +1310,8 @@ export declare const InvokeStreamingResponseSchema: GenMessage<InvokeStreamingRe
  */
 export declare type SavedInvokeSpec = Message<"grpcview.v1.SavedInvokeSpec"> & {
   /**
+   * Collection the saved request belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
@@ -1111,6 +1324,8 @@ export declare type SavedInvokeSpec = Message<"grpcview.v1.SavedInvokeSpec"> & {
   path: string[];
 
   /**
+   * Display name of the saved request to run.
+   *
    * @generated from field: string item_name = 3;
    */
   itemName: string;
@@ -1157,6 +1372,8 @@ export declare const SavedInvokeSpecSchema: GenMessage<SavedInvokeSpec>;
  */
 export declare type InvokeSavedRequest = Message<"grpcview.v1.InvokeSavedRequest"> & {
   /**
+   * Which saved request to run, and how.
+   *
    * @generated from field: grpcview.v1.SavedInvokeSpec spec = 1;
    */
   spec?: SavedInvokeSpec | undefined;
@@ -1178,20 +1395,59 @@ export declare const InvokeSavedRequestSchema: GenMessage<InvokeSavedRequest>;
 /**
  * No dry_run: a dry run reports one resolved request, which is the unary shape.
  *
- * @generated from message grpcview.v1.InvokeSavedStreamRequest
+ * @generated from message grpcview.v1.InvokeSavedStreamingRequest
  */
-export declare type InvokeSavedStreamRequest = Message<"grpcview.v1.InvokeSavedStreamRequest"> & {
+export declare type InvokeSavedStreamingRequest = Message<"grpcview.v1.InvokeSavedStreamingRequest"> & {
   /**
+   * Which saved request to run, and how.
+   *
    * @generated from field: grpcview.v1.SavedInvokeSpec spec = 1;
    */
   spec?: SavedInvokeSpec | undefined;
 };
 
 /**
- * Describes the message grpcview.v1.InvokeSavedStreamRequest.
- * Use `create(InvokeSavedStreamRequestSchema)` to create a new message.
+ * Describes the message grpcview.v1.InvokeSavedStreamingRequest.
+ * Use `create(InvokeSavedStreamingRequestSchema)` to create a new message.
  */
-export declare const InvokeSavedStreamRequestSchema: GenMessage<InvokeSavedStreamRequest>;
+export declare const InvokeSavedStreamingRequestSchema: GenMessage<InvokeSavedStreamingRequest>;
+
+/**
+ * Zero or more `message` frames, then exactly one terminal `result`. The invoked
+ * call's gRPC status is reported in `result`, not as a Connect stream error.
+ *
+ * @generated from message grpcview.v1.InvokeSavedStreamingResponse
+ */
+export declare type InvokeSavedStreamingResponse = Message<"grpcview.v1.InvokeSavedStreamingResponse"> & {
+  /**
+   * Which kind of frame this is.
+   *
+   * @generated from oneof grpcview.v1.InvokeSavedStreamingResponse.event
+   */
+  event: {
+    /**
+     * A frame the invoked call sent or received, in wire order.
+     *
+     * @generated from field: bytes message = 1;
+     */
+    value: Uint8Array;
+    case: "message";
+  } | {
+    /**
+     * The terminal, and only, result frame.
+     *
+     * @generated from field: grpcview.v1.Request.Response result = 2;
+     */
+    value: Request_Response;
+    case: "result";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message grpcview.v1.InvokeSavedStreamingResponse.
+ * Use `create(InvokeSavedStreamingResponseSchema)` to create a new message.
+ */
+export declare const InvokeSavedStreamingResponseSchema: GenMessage<InvokeSavedStreamingResponse>;
 
 /**
  * Exactly one of `response` (a real call) and `resolved` (a dry run) is set.
@@ -1200,11 +1456,15 @@ export declare const InvokeSavedStreamRequestSchema: GenMessage<InvokeSavedStrea
  */
 export declare type InvokeSavedResponse = Message<"grpcview.v1.InvokeSavedResponse"> & {
   /**
+   * Set only for a real (non-dry-run) call.
+   *
    * @generated from field: grpcview.v1.Request.Response response = 1;
    */
   response?: Request_Response | undefined;
 
   /**
+   * Set only when the request was a dry run.
+   *
    * @generated from field: optional grpcview.v1.ResolvedRequest resolved = 2;
    */
   resolved?: ResolvedRequest | undefined;
@@ -1223,26 +1483,36 @@ export declare const InvokeSavedResponseSchema: GenMessage<InvokeSavedResponse>;
  */
 export declare type ResolvedRequest = Message<"grpcview.v1.ResolvedRequest"> & {
   /**
+   * Fully qualified service name that would have been called.
+   *
    * @generated from field: string service = 1;
    */
   service: string;
 
   /**
+   * Method name that would have been called.
+   *
    * @generated from field: string method = 2;
    */
   method: string;
 
   /**
+   * Server that would have been dialed.
+   *
    * @generated from field: grpcview.v1.Server target = 3;
    */
   target?: Server | undefined;
 
   /**
+   * Client bodies that would have been sent, post-middleware, as JSON text.
+   *
    * @generated from field: repeated string messages = 4;
    */
   messages: string[];
 
   /**
+   * Request metadata that would have been sent.
+   *
    * @generated from field: google.protobuf.Struct metadata = 5;
    */
   metadata?: JsonObject | undefined;
@@ -1255,10 +1525,14 @@ export declare type ResolvedRequest = Message<"grpcview.v1.ResolvedRequest"> & {
 export declare const ResolvedRequestSchema: GenMessage<ResolvedRequest>;
 
 /**
+ * Describes one RPC method and its message shapes, from already-resolved schema.
+ *
  * @generated from message grpcview.v1.DescribeMethodRequest
  */
 export declare type DescribeMethodRequest = Message<"grpcview.v1.DescribeMethodRequest"> & {
   /**
+   * Collection whose resolved schema to read.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
@@ -1271,6 +1545,8 @@ export declare type DescribeMethodRequest = Message<"grpcview.v1.DescribeMethodR
   service: string;
 
   /**
+   * Method name on `service` to describe.
+   *
    * @generated from field: string method = 3;
    */
   method: string;
@@ -1283,6 +1559,8 @@ export declare type DescribeMethodRequest = Message<"grpcview.v1.DescribeMethodR
 export declare const DescribeMethodRequestSchema: GenMessage<DescribeMethodRequest>;
 
 /**
+ * The method, its input and output messages, and every type they reference.
+ *
  * @generated from message grpcview.v1.DescribeMethodResponse
  */
 export declare type DescribeMethodResponse = Message<"grpcview.v1.DescribeMethodResponse"> & {
@@ -1308,11 +1586,15 @@ export declare type DescribeMethodResponse = Message<"grpcview.v1.DescribeMethod
   sourceId: string;
 
   /**
+   * Whether the client sends more than one message.
+   *
    * @generated from field: bool client_streaming = 4;
    */
   clientStreaming: boolean;
 
   /**
+   * Whether the server sends more than one message.
+   *
    * @generated from field: bool server_streaming = 5;
    */
   serverStreaming: boolean;
@@ -1333,15 +1615,21 @@ export declare type DescribeMethodResponse = Message<"grpcview.v1.DescribeMethod
 export declare const DescribeMethodResponseSchema: GenMessage<DescribeMethodResponse>;
 
 /**
+ * Creates an empty script; use UpdateScript to fill in the source.
+ *
  * @generated from message grpcview.v1.CreateScriptRequest
  */
 export declare type CreateScriptRequest = Message<"grpcview.v1.CreateScriptRequest"> & {
   /**
+   * Collection to create the script in.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Collection-relative path for the new script, e.g. "scripts/uuid.ts".
+   *
    * @generated from field: string path = 2;
    */
   path: string;
@@ -1354,10 +1642,14 @@ export declare type CreateScriptRequest = Message<"grpcview.v1.CreateScriptReque
 export declare const CreateScriptRequestSchema: GenMessage<CreateScriptRequest>;
 
 /**
+ * The collection's tree after the script was created.
+ *
  * @generated from message grpcview.v1.CreateScriptResponse
  */
 export declare type CreateScriptResponse = Message<"grpcview.v1.CreateScriptResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -1376,21 +1668,29 @@ export declare const CreateScriptResponseSchema: GenMessage<CreateScriptResponse
  */
 export declare type UpdateScriptRequest = Message<"grpcview.v1.UpdateScriptRequest"> & {
   /**
+   * Collection the script belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Path of the script to update, as it is now.
+   *
    * @generated from field: string path = 2;
    */
   path: string;
 
   /**
+   * New source; unset leaves it unchanged.
+   *
    * @generated from field: optional string source = 3;
    */
   source?: string | undefined;
 
   /**
+   * New path, i.e. a rename; unset leaves it unchanged.
+   *
    * @generated from field: optional string new_path = 4;
    */
   newPath?: string | undefined;
@@ -1403,10 +1703,14 @@ export declare type UpdateScriptRequest = Message<"grpcview.v1.UpdateScriptReque
 export declare const UpdateScriptRequestSchema: GenMessage<UpdateScriptRequest>;
 
 /**
+ * The collection's tree after the update.
+ *
  * @generated from message grpcview.v1.UpdateScriptResponse
  */
 export declare type UpdateScriptResponse = Message<"grpcview.v1.UpdateScriptResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -1419,15 +1723,22 @@ export declare type UpdateScriptResponse = Message<"grpcview.v1.UpdateScriptResp
 export declare const UpdateScriptResponseSchema: GenMessage<UpdateScriptResponse>;
 
 /**
+ * Deletes a script. Requests still listing it as middleware keep the dangling
+ * reference and fail when invoked, so clear it from them first.
+ *
  * @generated from message grpcview.v1.DeleteScriptRequest
  */
 export declare type DeleteScriptRequest = Message<"grpcview.v1.DeleteScriptRequest"> & {
   /**
+   * Collection the script belongs to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
 
   /**
+   * Path of the script to delete.
+   *
    * @generated from field: string path = 2;
    */
   path: string;
@@ -1440,10 +1751,14 @@ export declare type DeleteScriptRequest = Message<"grpcview.v1.DeleteScriptReque
 export declare const DeleteScriptRequestSchema: GenMessage<DeleteScriptRequest>;
 
 /**
+ * The collection's tree after the deletion.
+ *
  * @generated from message grpcview.v1.DeleteScriptResponse
  */
 export declare type DeleteScriptResponse = Message<"grpcview.v1.DeleteScriptResponse"> & {
   /**
+   * The collection's tree.
+   *
    * @generated from field: grpcview.v1.Collection collection = 1;
    */
   collection?: Collection | undefined;
@@ -1456,10 +1771,14 @@ export declare type DeleteScriptResponse = Message<"grpcview.v1.DeleteScriptResp
 export declare const DeleteScriptResponseSchema: GenMessage<DeleteScriptResponse>;
 
 /**
+ * Runs a script in a fresh isolated instance: no capabilities, no collection state.
+ *
  * @generated from message grpcview.v1.RunScriptRequest
  */
 export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> & {
   /**
+   * Collection the run is scoped to.
+   *
    * @generated from field: string collection = 1;
    */
   collection: string;
@@ -1488,6 +1807,8 @@ export declare type RunScriptRequest = Message<"grpcview.v1.RunScriptRequest"> &
 export declare const RunScriptRequestSchema: GenMessage<RunScriptRequest>;
 
 /**
+ * One console line emitted by a running script.
+ *
  * @generated from message grpcview.v1.ScriptLog
  */
 export declare type ScriptLog = Message<"grpcview.v1.ScriptLog"> & {
@@ -1499,6 +1820,8 @@ export declare type ScriptLog = Message<"grpcview.v1.ScriptLog"> & {
   level: string;
 
   /**
+   * Logged text.
+   *
    * @generated from field: string message = 2;
    */
   message: string;
@@ -1511,15 +1834,21 @@ export declare type ScriptLog = Message<"grpcview.v1.ScriptLog"> & {
 export declare const ScriptLogSchema: GenMessage<ScriptLog>;
 
 /**
+ * An uncaught error from a running script.
+ *
  * @generated from message grpcview.v1.ScriptError
  */
 export declare type ScriptError = Message<"grpcview.v1.ScriptError"> & {
   /**
+   * Error message.
+   *
    * @generated from field: string message = 1;
    */
   message: string;
 
   /**
+   * Guest stack trace, unparsed.
+   *
    * @generated from field: string stack = 2;
    */
   stack: string;
@@ -1552,11 +1881,15 @@ export declare type RunScriptResponse = Message<"grpcview.v1.RunScriptResponse">
   value?: string | undefined;
 
   /**
+   * Console output, in emission order.
+   *
    * @generated from field: repeated grpcview.v1.ScriptLog logs = 2;
    */
   logs: ScriptLog[];
 
   /**
+   * Set when the script threw or timed out.
+   *
    * @generated from field: optional grpcview.v1.ScriptError error = 3;
    */
   error?: ScriptError | undefined;
@@ -1577,16 +1910,22 @@ export declare const RunScriptResponseSchema: GenMessage<RunScriptResponse>;
  */
 export declare type ServerExecutable = Message<"grpcview.v1.ServerExecutable"> & {
   /**
+   * Absolute path to the running binary.
+   *
    * @generated from field: string path = 1;
    */
   path: string;
 
   /**
+   * Binary's mtime, unix seconds.
+   *
    * @generated from field: int64 modified_unix = 2;
    */
   modifiedUnix: bigint;
 
   /**
+   * Binary's size in bytes.
+   *
    * @generated from field: int64 size = 3;
    */
   size: bigint;
@@ -1599,6 +1938,8 @@ export declare type ServerExecutable = Message<"grpcview.v1.ServerExecutable"> &
 export declare const ServerExecutableSchema: GenMessage<ServerExecutable>;
 
 /**
+ * Takes no arguments: answers for whichever server receives the call.
+ *
  * @generated from message grpcview.v1.ServerInfoRequest
  */
 export declare type ServerInfoRequest = Message<"grpcview.v1.ServerInfoRequest"> & {
@@ -1611,6 +1952,8 @@ export declare type ServerInfoRequest = Message<"grpcview.v1.ServerInfoRequest">
 export declare const ServerInfoRequestSchema: GenMessage<ServerInfoRequest>;
 
 /**
+ * Identity of this server and the build it is running.
+ *
  * @generated from message grpcview.v1.ServerInfoResponse
  */
 export declare type ServerInfoResponse = Message<"grpcview.v1.ServerInfoResponse"> & {
@@ -1623,21 +1966,29 @@ export declare type ServerInfoResponse = Message<"grpcview.v1.ServerInfoResponse
   workspaceRoot: string;
 
   /**
+   * OS process id.
+   *
    * @generated from field: int32 pid = 2;
    */
   pid: number;
 
   /**
+   * Bound TCP port.
+   *
    * @generated from field: int32 port = 3;
    */
   port: number;
 
   /**
+   * cli.version this build was stamped with.
+   *
    * @generated from field: string version = 4;
    */
   version: string;
 
   /**
+   * The running binary's identity.
+   *
    * @generated from field: grpcview.v1.ServerExecutable executable = 5;
    */
   executable?: ServerExecutable | undefined;
@@ -1657,6 +2008,8 @@ export declare type ServerInfoResponse = Message<"grpcview.v1.ServerInfoResponse
 export declare const ServerInfoResponseSchema: GenMessage<ServerInfoResponse>;
 
 /**
+ * Takes no arguments: exits the server answering the call.
+ *
  * @generated from message grpcview.v1.ShutdownRequest
  */
 export declare type ShutdownRequest = Message<"grpcview.v1.ShutdownRequest"> & {
@@ -1669,6 +2022,8 @@ export declare type ShutdownRequest = Message<"grpcview.v1.ShutdownRequest"> & {
 export declare const ShutdownRequestSchema: GenMessage<ShutdownRequest>;
 
 /**
+ * Empty: Shutdown returns only after the server has stopped accepting.
+ *
  * @generated from message grpcview.v1.ShutdownResponse
  */
 export declare type ShutdownResponse = Message<"grpcview.v1.ShutdownResponse"> & {
@@ -1689,26 +2044,36 @@ export declare const ShutdownResponseSchema: GenMessage<ShutdownResponse>;
  */
 export declare type ServerEntry = Message<"grpcview.v1.ServerEntry"> & {
   /**
+   * Absolute workspace root this server serves.
+   *
    * @generated from field: string workspace_root = 1;
    */
   workspaceRoot: string;
 
   /**
+   * Bound TCP port.
+   *
    * @generated from field: int32 port = 2;
    */
   port: number;
 
   /**
+   * OS process id.
+   *
    * @generated from field: int32 pid = 3;
    */
   pid: number;
 
   /**
+   * cli.version this build was stamped with.
+   *
    * @generated from field: string version = 4;
    */
   version: string;
 
   /**
+   * The running binary's identity.
+   *
    * @generated from field: grpcview.v1.ServerExecutable executable = 5;
    */
   executable?: ServerExecutable | undefined;
@@ -1721,6 +2086,8 @@ export declare type ServerEntry = Message<"grpcview.v1.ServerEntry"> & {
   idleTimeout?: Duration | undefined;
 
   /**
+   * When the process started, unix seconds.
+   *
    * @generated from field: int64 started_unix = 7;
    */
   startedUnix: bigint;
@@ -1756,6 +2123,8 @@ export declare type ServerEntry = Message<"grpcview.v1.ServerEntry"> & {
 export declare const ServerEntrySchema: GenMessage<ServerEntry>;
 
 /**
+ * Takes no arguments: lists every registration on this machine for this user.
+ *
  * @generated from message grpcview.v1.ListServersRequest
  */
 export declare type ListServersRequest = Message<"grpcview.v1.ListServersRequest"> & {
@@ -1768,6 +2137,8 @@ export declare type ListServersRequest = Message<"grpcview.v1.ListServersRequest
 export declare const ListServersRequestSchema: GenMessage<ListServersRequest>;
 
 /**
+ * Every server registration on this machine.
+ *
  * @generated from message grpcview.v1.ListServersResponse
  */
 export declare type ListServersResponse = Message<"grpcview.v1.ListServersResponse"> & {
@@ -1786,6 +2157,8 @@ export declare type ListServersResponse = Message<"grpcview.v1.ListServersRespon
 export declare const ListServersResponseSchema: GenMessage<ListServersResponse>;
 
 /**
+ * Asks another workspace's server to exit.
+ *
  * @generated from message grpcview.v1.StopServerRequest
  */
 export declare type StopServerRequest = Message<"grpcview.v1.StopServerRequest"> & {
@@ -1805,6 +2178,8 @@ export declare type StopServerRequest = Message<"grpcview.v1.StopServerRequest">
 export declare const StopServerRequestSchema: GenMessage<StopServerRequest>;
 
 /**
+ * Empty: StopServer returns only after the target server has exited.
+ *
  * @generated from message grpcview.v1.StopServerResponse
  */
 export declare type StopServerResponse = Message<"grpcview.v1.StopServerResponse"> & {
@@ -1817,6 +2192,9 @@ export declare type StopServerResponse = Message<"grpcview.v1.StopServerResponse
 export declare const StopServerResponseSchema: GenMessage<StopServerResponse>;
 
 /**
+ * The RPC surface for reflecting schemas, managing a collection's tree, and
+ * invoking calls against it.
+ *
  * @generated from service grpcview.v1.WorkspaceService
  */
 export declare const WorkspaceService: GenService<{
@@ -2037,7 +2415,7 @@ export declare const WorkspaceService: GenService<{
    */
   invokeStreaming: {
     methodKind: "server_streaming";
-    input: typeof InvokeStreamRequestSchema;
+    input: typeof InvokeStreamingRequestSchema;
     output: typeof InvokeStreamingResponseSchema;
   },
   /**
@@ -2057,8 +2435,8 @@ export declare const WorkspaceService: GenService<{
    */
   invokeSavedStreaming: {
     methodKind: "server_streaming";
-    input: typeof InvokeSavedStreamRequestSchema;
-    output: typeof InvokeStreamingResponseSchema;
+    input: typeof InvokeSavedStreamingRequestSchema;
+    output: typeof InvokeSavedStreamingResponseSchema;
   },
   /**
    * Answers from already-resolved definitions, so it works with the target down.

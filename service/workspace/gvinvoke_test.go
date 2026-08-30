@@ -76,7 +76,7 @@ func TestGvInvokeFromStreamingPath(t *testing.T) {
   const b = await invoke("B", { id: 3 });
   return { message: "S-ok=" + b.ok + "-body=" + b.body.message, count: 1 };
 }`
-	frames, err := collectStream(ctx, w, &grpcviewv1.InvokeStreamRequest{
+	frames, err := collectStream(ctx, w, &grpcviewv1.InvokeStreamingRequest{
 		Spec: &grpcviewv1.InvokeSpec{
 			Collection: testWorkspace,
 			Service:    echoService,

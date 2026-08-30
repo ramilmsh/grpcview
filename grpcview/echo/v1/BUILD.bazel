@@ -1,5 +1,6 @@
 load("@aspect_rules_ts//ts:proto.bzl", "ts_proto_library")
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@rules_buf//buf:defs.bzl", "buf_lint_test")
 load("@rules_go//proto:def.bzl", "go_proto_library")
 
 # gazelle:go_grpc_compilers @rules_go//proto:go_proto,@rules_go//proto:go_grpc_v2
@@ -27,4 +28,10 @@ ts_proto_library(
     node_modules = "//:node_modules",
     proto = ":grpcviewechov1_proto",
     proto_srcs = ["echo.proto"],
+)
+
+buf_lint_test(
+    name = "grpcviewechov1_proto_lint",
+    config = "//:buf.yaml",
+    targets = [":grpcviewechov1_proto"],
 )

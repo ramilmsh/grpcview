@@ -23,11 +23,15 @@ export declare const file_grpcview_store_v1_storage: GenFile;
  */
 export declare type Workspace = Message<"grpcview.store.v1.Workspace"> & {
   /**
+   * Format version of this file, for forward migration.
+   *
    * @generated from field: int32 schema_version = 1;
    */
   schemaVersion: number;
 
   /**
+   * Display name of the workspace.
+   *
    * @generated from field: string name = 2;
    */
   name: string;
@@ -49,11 +53,15 @@ export declare type Workspace = Message<"grpcview.store.v1.Workspace"> & {
   sources: DescriptorSource[];
 
   /**
+   * What a new collection in this workspace starts from.
+   *
    * @generated from field: grpcview.store.v1.Defaults defaults = 5;
    */
   defaults?: Defaults | undefined;
 
   /**
+   * Bazel invocation settings shared by every collection's Bazel sources.
+   *
    * @generated from field: grpcview.store.v1.BazelConfig bazel = 6;
    */
   bazel?: BazelConfig | undefined;
@@ -66,6 +74,8 @@ export declare type Workspace = Message<"grpcview.store.v1.Workspace"> & {
 export declare const WorkspaceSchema: GenMessage<Workspace>;
 
 /**
+ * Bazel invocation settings shared by every collection's Bazel sources.
+ *
  * @generated from message grpcview.store.v1.BazelConfig
  */
 export declare type BazelConfig = Message<"grpcview.store.v1.BazelConfig"> & {
@@ -117,24 +127,28 @@ export declare const DefaultsSchema: GenMessage<Defaults>;
  */
 export declare type Collection = Message<"grpcview.store.v1.Collection"> & {
   /**
+   * Format version of this file, for forward migration.
+   *
    * @generated from field: int32 schema_version = 1;
    */
   schemaVersion: number;
 
   /**
+   * Display name of the collection.
+   *
    * @generated from field: string name = 2;
    */
   name: string;
 
   /**
-   * ordered root-level slugs
+   * Ordered root-level slugs.
    *
    * @generated from field: repeated string items = 3;
    */
   items: string[];
 
   /**
-   * highest priority first
+   * Highest priority first.
    *
    * @generated from field: repeated grpcview.store.v1.DescriptorSource sources = 4;
    */
@@ -154,12 +168,14 @@ export declare const CollectionSchema: GenMessage<Collection>;
  */
 export declare type Folder = Message<"grpcview.store.v1.Folder"> & {
   /**
+   * This folder's display name and stable slug.
+   *
    * @generated from field: grpcview.store.v1.ItemMeta meta = 1;
    */
   meta?: ItemMeta | undefined;
 
   /**
-   * ordered child slugs
+   * Ordered child slugs.
    *
    * @generated from field: repeated string items = 2;
    */
@@ -188,16 +204,22 @@ export declare const FolderSchema: GenMessage<Folder>;
  */
 export declare type Request = Message<"grpcview.store.v1.Request"> & {
   /**
+   * This request's display name and stable slug.
+   *
    * @generated from field: grpcview.store.v1.ItemMeta meta = 1;
    */
   meta?: ItemMeta | undefined;
 
   /**
+   * Fully qualified service name this request calls.
+   *
    * @generated from field: string service = 2;
    */
   service: string;
 
   /**
+   * Method name on `service` this request calls.
+   *
    * @generated from field: string method = 3;
    */
   method: string;
@@ -231,6 +253,8 @@ export declare const RequestSchema: GenMessage<Request>;
  */
 export declare type ItemMeta = Message<"grpcview.store.v1.ItemMeta"> & {
   /**
+   * Display name; the directory name (the slug) is the stable identity, this is not.
+   *
    * @generated from field: string name = 1;
    */
   name: string;
@@ -257,22 +281,30 @@ export declare type DescriptorSource = Message<"grpcview.store.v1.DescriptorSour
   id: string;
 
   /**
+   * Which kind of source this is.
+   *
    * @generated from oneof grpcview.store.v1.DescriptorSource.source
    */
   source: {
     /**
+     * A human-uploaded FileDescriptorSet.
+     *
      * @generated from field: grpcview.store.v1.Upload upload = 1;
      */
     value: Upload;
     case: "upload";
   } | {
     /**
+     * A live server reflected over the wire.
+     *
      * @generated from field: grpcview.store.v1.Reflection reflection = 2;
      */
     value: Reflection;
     case: "reflection";
   } | {
     /**
+     * A Bazel label that builds its own descriptor set.
+     *
      * @generated from field: grpcview.store.v1.Bazel bazel = 5;
      */
     value: Bazel;
@@ -302,6 +334,8 @@ export declare const DescriptorSourceSchema: GenMessage<DescriptorSource>;
  */
 export declare type Upload = Message<"grpcview.store.v1.Upload"> & {
   /**
+   * Identity of this upload; re-uploading under the same name refreshes it.
+   *
    * @generated from field: string file_name = 1;
    */
   fileName: string;
@@ -328,6 +362,8 @@ export declare const UploadSchema: GenMessage<Upload>;
  */
 export declare type Bazel = Message<"grpcview.store.v1.Bazel"> & {
   /**
+   * Canonical label, e.g. "//pkg:target".
+   *
    * @generated from field: string label = 1;
    */
   label: string;
@@ -351,6 +387,8 @@ export declare const BazelSchema: GenMessage<Bazel>;
  */
 export declare type DescriptorIndex = Message<"grpcview.store.v1.DescriptorIndex"> & {
   /**
+   * Format version of this file, for forward migration.
+   *
    * @generated from field: int32 schema_version = 1;
    */
   schemaVersion: number;
@@ -370,10 +408,14 @@ export declare type DescriptorIndex = Message<"grpcview.store.v1.DescriptorIndex
 export declare const DescriptorIndexSchema: GenMessage<DescriptorIndex>;
 
 /**
+ * One resolved source's entry in a DescriptorIndex.
+ *
  * @generated from message grpcview.store.v1.DescriptorIndexEntry
  */
 export declare type DescriptorIndexEntry = Message<"grpcview.store.v1.DescriptorIndexEntry"> & {
   /**
+   * The DescriptorSource.id this entry resolved.
+   *
    * @generated from field: string source_id = 1;
    */
   sourceId: string;
@@ -411,11 +453,15 @@ export declare const DescriptorIndexEntrySchema: GenMessage<DescriptorIndexEntry
  */
 export declare type ResolvedSource = Message<"grpcview.store.v1.ResolvedSource"> & {
   /**
+   * The DescriptorSource.id this resolved.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * The resolved schema.
+   *
    * @generated from field: google.protobuf.FileDescriptorSet descriptor_set = 2;
    */
   descriptorSet?: FileDescriptorSet | undefined;
@@ -441,13 +487,15 @@ export declare const ResolvedSourceSchema: GenMessage<ResolvedSource>;
  */
 export declare type Reflection = Message<"grpcview.store.v1.Reflection"> & {
   /**
-   * host:port dial string
+   * host:port dial string.
    *
    * @generated from field: string address = 1;
    */
   address: string;
 
   /**
+   * Dial with TLS.
+   *
    * @generated from field: bool tls = 2;
    */
   tls: boolean;
@@ -467,13 +515,15 @@ export declare const ReflectionSchema: GenMessage<Reflection>;
  */
 export declare type Target = Message<"grpcview.store.v1.Target"> & {
   /**
-   * host:port dial string
+   * host:port dial string.
    *
    * @generated from field: string address = 1;
    */
   address: string;
 
   /**
+   * Dial with TLS.
+   *
    * @generated from field: bool tls = 2;
    */
   tls: boolean;

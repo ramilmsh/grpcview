@@ -16,7 +16,7 @@ export default async (): Promise<RequestMessage> => (
     method: "InvokeStreaming",
   },
   // A streaming body's `messages` are the client frames, in send order. Here
-  // there is one: the InvokeStreamRequest the middle call receives.
+  // there is one: the InvokeStreamingRequest the middle call receives.
   messages: [
     JSON.stringify({
       spec: {

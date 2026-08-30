@@ -18,16 +18,22 @@ export declare const file_grpcview_v1_workspace: GenFile;
  */
 export declare type Status = Message$1<"grpcview.v1.Status"> & {
   /**
+   * Canonical gRPC status code.
+   *
    * @generated from field: int32 code = 1;
    */
   code: number;
 
   /**
+   * Human-readable status message.
+   *
    * @generated from field: string message = 2;
    */
   message: string;
 
   /**
+   * Structured error details, as attached by the server.
+   *
    * @generated from field: repeated google.protobuf.Any details = 3;
    */
   details: Any[];
@@ -40,6 +46,8 @@ export declare type Status = Message$1<"grpcview.v1.Status"> & {
 export declare const StatusSchema: GenMessage<Status>;
 
 /**
+ * A dial target for an RPC.
+ *
  * @generated from message grpcview.v1.Server
  */
 export declare type Server = Message$1<"grpcview.v1.Server"> & {
@@ -51,6 +59,8 @@ export declare type Server = Message$1<"grpcview.v1.Server"> & {
   address: string;
 
   /**
+   * Present dials with TLS.
+   *
    * @generated from field: optional grpcview.v1.Server.TLS tls = 2;
    */
   tls?: Server_TLS | undefined;
@@ -63,6 +73,8 @@ export declare type Server = Message$1<"grpcview.v1.Server"> & {
 export declare const ServerSchema: GenMessage<Server>;
 
 /**
+ * Marker for a TLS-secured Server; presence, not fields, is the signal.
+ *
  * @generated from message grpcview.v1.Server.TLS
  */
 export declare type Server_TLS = Message$1<"grpcview.v1.Server.TLS"> & {
@@ -75,15 +87,21 @@ export declare type Server_TLS = Message$1<"grpcview.v1.Server.TLS"> & {
 export declare const Server_TLSSchema: GenMessage<Server_TLS>;
 
 /**
+ * A protobuf message type, as reflected from a schema source.
+ *
  * @generated from message grpcview.v1.Message
  */
 export declare type Message = Message$1<"grpcview.v1.Message"> & {
   /**
+   * Proto package, e.g. "grpcview.echo.v1".
+   *
    * @generated from field: string package = 1;
    */
   package: string;
 
   /**
+   * Unqualified message name.
+   *
    * @generated from field: string name = 2;
    */
   name: string;
@@ -103,30 +121,42 @@ export declare type Message = Message$1<"grpcview.v1.Message"> & {
 export declare const MessageSchema: GenMessage<Message>;
 
 /**
+ * An RPC method, as reflected from a schema source.
+ *
  * @generated from message grpcview.v1.Method
  */
 export declare type Method = Message$1<"grpcview.v1.Method"> & {
   /**
+   * Unqualified method name.
+   *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
+   * Input message type.
+   *
    * @generated from field: grpcview.v1.Message input = 2;
    */
   input?: Message | undefined;
 
   /**
+   * Output message type.
+   *
    * @generated from field: grpcview.v1.Message output = 3;
    */
   output?: Message | undefined;
 
   /**
+   * Whether the client sends more than one message.
+   *
    * @generated from field: bool client_streaming = 4;
    */
   clientStreaming: boolean;
 
   /**
+   * Whether the server sends more than one message.
+   *
    * @generated from field: bool server_streaming = 5;
    */
   serverStreaming: boolean;
@@ -139,20 +169,28 @@ export declare type Method = Message$1<"grpcview.v1.Method"> & {
 export declare const MethodSchema: GenMessage<Method>;
 
 /**
+ * A gRPC service, as reflected from a schema source.
+ *
  * @generated from message grpcview.v1.Service
  */
 export declare type Service = Message$1<"grpcview.v1.Service"> & {
   /**
+   * Proto package, e.g. "grpcview.echo.v1".
+   *
    * @generated from field: string package = 1;
    */
   package: string;
 
   /**
+   * Unqualified service name.
+   *
    * @generated from field: string name = 2;
    */
   name: string;
 
   /**
+   * Every RPC method on this service.
+   *
    * @generated from field: repeated grpcview.v1.Method methods = 3;
    */
   methods: Method[];
@@ -186,22 +224,30 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
   id: string;
 
   /**
+   * Which kind of source this is.
+   *
    * @generated from oneof grpcview.v1.DescriptorSource.source
    */
   source: {
     /**
+     * A human-uploaded FileDescriptorSet.
+     *
      * @generated from field: grpcview.v1.Upload upload = 1;
      */
     value: Upload;
     case: "upload";
   } | {
     /**
+     * A live server reflected over the wire.
+     *
      * @generated from field: grpcview.v1.Server reflection = 2;
      */
     value: Server;
     case: "reflection";
   } | {
     /**
+     * A Bazel label that builds its own descriptor set.
+     *
      * @generated from field: grpcview.v1.Bazel bazel = 7;
      */
     value: Bazel;
@@ -209,6 +255,8 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
   } | { case: undefined; value?: undefined };
 
   /**
+   * What this source last resolved to; unset before the first resolve.
+   *
    * @generated from field: grpcview.v1.Resolved resolved = 4;
    */
   resolved?: Resolved | undefined;
@@ -244,6 +292,8 @@ export declare const DescriptorSourceSchema: GenMessage<DescriptorSource>;
  */
 export declare type Upload = Message$1<"grpcview.v1.Upload"> & {
   /**
+   * Identity of this upload; re-uploading under the same name refreshes it.
+   *
    * @generated from field: string file_name = 1;
    */
   fileName: string;
@@ -271,6 +321,8 @@ export declare const UploadSchema: GenMessage<Upload>;
  */
 export declare type Bazel = Message$1<"grpcview.v1.Bazel"> & {
   /**
+   * Canonical label, e.g. "//pkg:target".
+   *
    * @generated from field: string label = 1;
    */
   label: string;
@@ -283,15 +335,21 @@ export declare type Bazel = Message$1<"grpcview.v1.Bazel"> & {
 export declare const BazelSchema: GenMessage<Bazel>;
 
 /**
+ * What one source last resolved to.
+ *
  * @generated from message grpcview.v1.Resolved
  */
 export declare type Resolved = Message$1<"grpcview.v1.Resolved"> & {
   /**
+   * Number of files in the resolved descriptor set.
+   *
    * @generated from field: int32 file_count = 1;
    */
   fileCount: number;
 
   /**
+   * Every fully-qualified service name the resolved descriptor set defines.
+   *
    * @generated from field: repeated string service_names = 2;
    */
   serviceNames: string[];
@@ -318,10 +376,14 @@ export declare type Resolved = Message$1<"grpcview.v1.Resolved"> & {
 export declare const ResolvedSchema: GenMessage<Resolved>;
 
 /**
+ * A directory of Items — folders and requests — in the tree.
+ *
  * @generated from message grpcview.v1.Folder
  */
 export declare type Folder = Message$1<"grpcview.v1.Folder"> & {
   /**
+   * Ordered children.
+   *
    * @generated from field: repeated grpcview.v1.Item items = 1;
    */
   items: Item[];
@@ -341,15 +403,21 @@ export declare type Folder = Message$1<"grpcview.v1.Folder"> & {
 export declare const FolderSchema: GenMessage<Folder>;
 
 /**
+ * One past invocation of a request, as recorded server-side.
+ *
  * @generated from message grpcview.v1.History
  */
 export declare type History = Message$1<"grpcview.v1.History"> & {
   /**
+   * What was sent.
+   *
    * @generated from field: grpcview.v1.History.Request request = 1;
    */
   request?: History_Request | undefined;
 
   /**
+   * What came back.
+   *
    * @generated from field: grpcview.v1.History.Response response = 2;
    */
   response?: History_Response | undefined;
@@ -362,25 +430,35 @@ export declare type History = Message$1<"grpcview.v1.History"> & {
 export declare const HistorySchema: GenMessage<History>;
 
 /**
+ * What was sent.
+ *
  * @generated from message grpcview.v1.History.Request
  */
 export declare type History_Request = Message$1<"grpcview.v1.History.Request"> & {
   /**
+   * Fully qualified service name called.
+   *
    * @generated from field: string service = 1;
    */
   service: string;
 
   /**
+   * Method name on `service` called.
+   *
    * @generated from field: string method = 2;
    */
   method: string;
 
   /**
+   * Body sent, as protojson bytes.
+   *
    * @generated from field: bytes body = 3;
    */
   body: Uint8Array;
 
   /**
+   * Request metadata (headers) sent.
+   *
    * @generated from field: google.protobuf.Struct metadata = 4;
    */
   metadata?: JsonObject | undefined;
@@ -393,30 +471,42 @@ export declare type History_Request = Message$1<"grpcview.v1.History.Request"> &
 export declare const History_RequestSchema: GenMessage<History_Request>;
 
 /**
+ * What came back.
+ *
  * @generated from message grpcview.v1.History.Response
  */
 export declare type History_Response = Message$1<"grpcview.v1.History.Response"> & {
   /**
+   * Final gRPC status.
+   *
    * @generated from field: grpcview.v1.Status status = 1;
    */
   status?: Status | undefined;
 
   /**
+   * Body received, as protojson bytes.
+   *
    * @generated from field: bytes response = 2;
    */
   response: Uint8Array;
 
   /**
+   * Response metadata (trailers) received.
+   *
    * @generated from field: google.protobuf.Struct metadata = 3;
    */
   metadata?: JsonObject | undefined;
 
   /**
+   * Wall-clock duration of the call.
+   *
    * @generated from field: google.protobuf.Duration latency = 4;
    */
   latency?: Duration | undefined;
 
   /**
+   * When the call was made.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 5;
    */
   timestamp?: Timestamp | undefined;
@@ -429,30 +519,42 @@ export declare type History_Response = Message$1<"grpcview.v1.History.Response">
 export declare const History_ResponseSchema: GenMessage<History_Response>;
 
 /**
+ * A saved request in the tree, addressable and invocable independently of any one run.
+ *
  * @generated from message grpcview.v1.Request
  */
 export declare type Request = Message$1<"grpcview.v1.Request"> & {
   /**
+   * Display name.
+   *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
+   * Fully qualified service name this request calls.
+   *
    * @generated from field: string service = 2;
    */
   service: string;
 
   /**
+   * Method name on `service` this request calls.
+   *
    * @generated from field: string method = 3;
    */
   method: string;
 
   /**
+   * The request message as a JSON object, or a TypeScript module default-exporting one.
+   *
    * @generated from field: string draft_body = 4;
    */
   draftBody: string;
 
   /**
+   * Most recent first.
+   *
    * @generated from field: repeated grpcview.v1.History history = 6;
    */
   history: History[];
@@ -486,35 +588,49 @@ export declare type Request = Message$1<"grpcview.v1.Request"> & {
 export declare const RequestSchema: GenMessage<Request>;
 
 /**
+ * A live invoke's outcome — richer than History.Response, which is what got persisted.
+ *
  * @generated from message grpcview.v1.Request.Response
  */
 export declare type Request_Response = Message$1<"grpcview.v1.Request.Response"> & {
   /**
+   * Final gRPC status.
+   *
    * @generated from field: grpcview.v1.Status status = 1;
    */
   status?: Status | undefined;
 
   /**
+   * Body received, as protojson bytes.
+   *
    * @generated from field: bytes response = 2;
    */
   response: Uint8Array;
 
   /**
+   * Request metadata (headers) sent.
+   *
    * @generated from field: google.protobuf.Struct request_metadata = 3;
    */
   requestMetadata?: JsonObject | undefined;
 
   /**
+   * Response metadata (trailers) received.
+   *
    * @generated from field: google.protobuf.Struct response_metadata = 4;
    */
   responseMetadata?: JsonObject | undefined;
 
   /**
+   * Wall-clock duration of the call.
+   *
    * @generated from field: google.protobuf.Duration latency = 5;
    */
   latency?: Duration | undefined;
 
   /**
+   * When the call was made.
+   *
    * @generated from field: google.protobuf.Timestamp timestamp = 6;
    */
   timestamp?: Timestamp | undefined;
@@ -527,10 +643,14 @@ export declare type Request_Response = Message$1<"grpcview.v1.Request.Response">
 export declare const Request_ResponseSchema: GenMessage<Request_Response>;
 
 /**
+ * One entry in a Folder: either a nested Folder or a Request.
+ *
  * @generated from message grpcview.v1.Item
  */
 export declare type Item = Message$1<"grpcview.v1.Item"> & {
   /**
+   * Display name.
+   *
    * @generated from field: string name = 1;
    */
   name: string;
@@ -544,16 +664,22 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
   slug: string;
 
   /**
+   * Which kind of item this is.
+   *
    * @generated from oneof grpcview.v1.Item.content
    */
   content: {
     /**
+     * Present when this item is a folder.
+     *
      * @generated from field: grpcview.v1.Folder folder = 2;
      */
     value: Folder;
     case: "folder";
   } | {
     /**
+     * Present when this item is a saved request.
+     *
      * @generated from field: grpcview.v1.Request request = 3;
      */
     value: Request;
@@ -581,6 +707,8 @@ export declare type Script = Message$1<"grpcview.v1.Script"> & {
   path: string;
 
   /**
+   * File contents.
+   *
    * @generated from field: string source = 2;
    */
   source: string;
@@ -593,10 +721,14 @@ export declare type Script = Message$1<"grpcview.v1.Script"> & {
 export declare const ScriptSchema: GenMessage<Script>;
 
 /**
+ * A collection: its tree, its schema sources, and its scripts.
+ *
  * @generated from message grpcview.v1.Collection
  */
 export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   /**
+   * Display name.
+   *
    * @generated from field: string name = 1;
    */
   name: string;
@@ -610,11 +742,15 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   id: string;
 
   /**
+   * Root of the tree.
+   *
    * @generated from field: grpcview.v1.Item item = 2;
    */
   item?: Item | undefined;
 
   /**
+   * Priority-ordered schema sources.
+   *
    * @generated from field: repeated grpcview.v1.DescriptorSource sources = 3;
    */
   sources: DescriptorSource[];
@@ -627,6 +763,8 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   services: Service[];
 
   /**
+   * Scripts saved under this collection's scripts/ directory.
+   *
    * @generated from field: repeated grpcview.v1.Script scripts = 5;
    */
   scripts: Script[];
@@ -653,16 +791,22 @@ export declare const CollectionSchema: GenMessage<Collection>;
  */
 export enum SourceOrigin {
   /**
+   * Unset; never a valid origin on a resolved DescriptorSource.
+   *
    * @generated from enum value: SOURCE_ORIGIN_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
+   * Defined in the collection's own grpcview.json.
+   *
    * @generated from enum value: SOURCE_ORIGIN_COLLECTION = 1;
    */
   COLLECTION = 1,
 
   /**
+   * Defined in the workspace manifest, referenced here by id.
+   *
    * @generated from enum value: SOURCE_ORIGIN_WORKSPACE = 2;
    */
   WORKSPACE = 2,

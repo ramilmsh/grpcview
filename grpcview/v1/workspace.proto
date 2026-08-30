@@ -11,37 +11,56 @@ option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1";
 
 // Copy of google.rpc.Status: rules_ts cannot import google/rpc/status.proto.
 message Status {
+  // Canonical gRPC status code.
   int32                        code    = 1;
+  // Human-readable status message.
   string                       message = 2;
+  // Structured error details, as attached by the server.
   repeated google.protobuf.Any details = 3;
 }
 
+// A dial target for an RPC.
 message Server {
+  // Marker for a TLS-secured Server; presence, not fields, is the signal.
   message TLS {}
 
   // Dial string, host:port.
   string address = 1;
+  // Present dials with TLS.
   optional TLS tls = 2;
 }
 
+// A protobuf message type, as reflected from a schema source.
 message Message {
+  // Proto package, e.g. "grpcview.echo.v1".
   string                          package = 1;
+  // Unqualified message name.
   string                          name    = 2;
   // Proto file path defining this message, e.g. proto/foo/v1/foo.proto.
   string                          file    = 4;
 }
 
+// An RPC method, as reflected from a schema source.
 message Method {
+  // Unqualified method name.
   string  name             = 1;
+  // Input message type.
   Message input            = 2;
+  // Output message type.
   Message output           = 3;
+  // Whether the client sends more than one message.
   bool    client_streaming = 4;
+  // Whether the server sends more than one message.
   bool    server_streaming = 5;
 }
 
+// A gRPC service, as reflected from a schema source.
 message Service {
+  // Proto package, e.g. "grpcview.echo.v1".
   string          package = 1;
+  // Unqualified service name.
   string          name    = 2;
+  // Every RPC method on this service.
   repeated Method methods = 3;
   // First reflection source serving it — the default invoke target; unset if none.
   optional Server source  = 4;
@@ -50,8 +69,11 @@ message Service {
 // Where a source's config lives: this collection's grpcview.json, or the
 // workspace manifest with the collection holding only a reference by id.
 enum SourceOrigin {
+  // Unset; never a valid origin on a resolved DescriptorSource.
   SOURCE_ORIGIN_UNSPECIFIED = 0;
+  // Defined in the collection's own grpcview.json.
   SOURCE_ORIGIN_COLLECTION  = 1;
+  // Defined in the workspace manifest, referenced here by id.
   SOURCE_ORIGIN_WORKSPACE   = 2;
 }
 
@@ -61,12 +83,17 @@ message DescriptorSource {
   // adding an existing id refreshes that source in place.
   string id = 3;
 
+  // Which kind of source this is.
   oneof source {
+    // A human-uploaded FileDescriptorSet.
     Upload upload     = 1;
+    // A live server reflected over the wire.
     Server reflection = 2;
+    // A Bazel label that builds its own descriptor set.
     Bazel  bazel      = 7;
   }
 
+  // What this source last resolved to; unset before the first resolve.
   Resolved resolved = 4;
 
   // Read-only: server-set, ignored on input. No RPC edits a WORKSPACE source's
@@ -81,6 +108,7 @@ message DescriptorSource {
 
 // The descriptor bytes are never sent to the client, only this file name.
 message Upload {
+  // Identity of this upload; re-uploading under the same name refreshes it.
   string file_name = 1;
   // Root-relative refresh recipe; empty when the bytes came from a browser file
   // picker. Never identity — the file name is, so a git mv edits this recipe.
@@ -90,11 +118,15 @@ message Upload {
 // A canonical bazel label whose default outputs are descriptor sets. Unlike an
 // upload it can PRODUCE its bytes: refreshing it builds the label.
 message Bazel {
+  // Canonical label, e.g. "//pkg:target".
   string label = 1;
 }
 
+// What one source last resolved to.
 message Resolved {
+  // Number of files in the resolved descriptor set.
   int32           file_count        = 1;
+  // Every fully-qualified service name the resolved descriptor set defines.
   repeated string service_names     = 2;
   // Subset of service_names whose descriptors the collection takes from here.
   repeated string won_service_names = 3;
@@ -102,43 +134,72 @@ message Resolved {
   string          error             = 4;
 }
 
+// A directory of Items — folders and requests — in the tree.
 message Folder {
+  // Ordered children.
   repeated Item items = 1;
   // TypeScript module feeding the gv.metadata.inherit() ancestor chain.
   string draft_metadata_script = 2;
 }
 
+// One past invocation of a request, as recorded server-side.
 message History {
+  // What was sent.
   message Request {
+    // Fully qualified service name called.
     string                 service  = 1;
+    // Method name on `service` called.
     string                 method   = 2;
+    // Body sent, as protojson bytes.
     bytes                  body     = 3;
+    // Request metadata (headers) sent.
     google.protobuf.Struct metadata = 4;
   }
+  // What came back.
   message Response {
+    // Final gRPC status.
     Status                    status    = 1;
+    // Body received, as protojson bytes.
     bytes                     response  = 2;
+    // Response metadata (trailers) received.
     google.protobuf.Struct    metadata  = 3;
+    // Wall-clock duration of the call.
     google.protobuf.Duration  latency   = 4;
+    // When the call was made.
     google.protobuf.Timestamp timestamp = 5;
   }
+  // What was sent.
   Request                   request   = 1;
+  // What came back.
   Response                  response  = 2;
 }
 
+// A saved request in the tree, addressable and invocable independently of any one run.
 message Request {
+  // A live invoke's outcome — richer than History.Response, which is what got persisted.
   message Response {
+    // Final gRPC status.
     Status                    status            = 1;
+    // Body received, as protojson bytes.
     bytes                     response          = 2;
+    // Request metadata (headers) sent.
     google.protobuf.Struct    request_metadata  = 3;
+    // Response metadata (trailers) received.
     google.protobuf.Struct    response_metadata = 4;
+    // Wall-clock duration of the call.
     google.protobuf.Duration  latency           = 5;
+    // When the call was made.
     google.protobuf.Timestamp timestamp         = 6;
   }
+  // Display name.
   string                    name              = 1;
+  // Fully qualified service name this request calls.
   string                    service           = 2;
+  // Method name on `service` this request calls.
   string                    method            = 3;
+  // The request message as a JSON object, or a TypeScript module default-exporting one.
   string                    draft_body        = 4;
+  // Most recent first.
   repeated History          history           = 6;
   // Ordered display names of the MIDDLEWARE scripts run before the call.
   repeated string           middleware        = 7;
@@ -148,13 +209,18 @@ message Request {
   optional Server           target                = 10;
 }
 
+// One entry in a Folder: either a nested Folder or a Request.
 message Item {
+  // Display name.
   string  name    = 1;
   // Stable on-disk directory name: identity, not an address. A rename never
   // changes it, so UI state is keyed by it. Empty on the synthetic root item.
   string  slug    = 4;
+  // Which kind of item this is.
   oneof content {
+    // Present when this item is a folder.
     Folder  folder  = 2;
+    // Present when this item is a saved request.
     Request request = 3;
   }
 }
@@ -163,18 +229,24 @@ message Item {
 message Script {
   // Collection-relative, slash-separated, with the extension: "scripts/uuid.ts".
   string path   = 1;
+  // File contents.
   string source = 2;
 }
 
+// A collection: its tree, its schema sources, and its scripts.
 message Collection {
+  // Display name.
   string                    name     = 1;
   // Workspace-relative path this collection is addressed by; "." is the root.
   // Addressing only, never written to disk: the id IS the disk location.
   string                    id       = 7;
+  // Root of the tree.
   Item                      item     = 2;
+  // Priority-ordered schema sources.
   repeated DescriptorSource sources  = 3;
   // Derived by the priority merge: one entry per fully-qualified service.
   repeated Service          services = 4;
+  // Scripts saved under this collection's scripts/ directory.
   repeated Script           scripts  = 5;
   // Merged, deduped FileDescriptorSet; derived and cached, never persisted.
   bytes                     descriptor_set = 6;

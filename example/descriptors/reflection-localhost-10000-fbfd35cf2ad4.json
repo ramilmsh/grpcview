@@ -1988,13 +1988,8 @@
             "enumType": [],
             "extensionRange": [],
             "oneofDecl": [],
-            "reservedRange": [
-              {
-                "start": 1,
-                "end": 2
-              }
-            ],
-            "reservedName": ["refresh"]
+            "reservedRange": [],
+            "reservedName": []
           },
           {
             "name": "CollectionSummary",
@@ -2436,7 +2431,7 @@
             "reservedName": []
           },
           {
-            "name": "InvokeStreamRequest",
+            "name": "InvokeStreamingRequest",
             "field": [
               {
                 "name": "spec",
@@ -2597,7 +2592,7 @@
             "reservedName": []
           },
           {
-            "name": "InvokeSavedStreamRequest",
+            "name": "InvokeSavedStreamingRequest",
             "field": [
               {
                 "name": "spec",
@@ -2613,6 +2608,39 @@
             "enumType": [],
             "extensionRange": [],
             "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "InvokeSavedStreamingResponse",
+            "field": [
+              {
+                "name": "message",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BYTES",
+                "oneofIndex": 0,
+                "jsonName": "message"
+              },
+              {
+                "name": "result",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.Request.Response",
+                "oneofIndex": 0,
+                "jsonName": "result"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [
+              {
+                "name": "event"
+              }
+            ],
             "reservedRange": [],
             "reservedName": []
           },
@@ -3214,6 +3242,151 @@
             "oneofDecl": [],
             "reservedRange": [],
             "reservedName": []
+          },
+          {
+            "name": "ServerEntry",
+            "field": [
+              {
+                "name": "workspace_root",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "workspaceRoot"
+              },
+              {
+                "name": "port",
+                "number": 2,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "port"
+              },
+              {
+                "name": "pid",
+                "number": 3,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT32",
+                "jsonName": "pid"
+              },
+              {
+                "name": "version",
+                "number": 4,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "version"
+              },
+              {
+                "name": "executable",
+                "number": 5,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.ServerExecutable",
+                "jsonName": "executable"
+              },
+              {
+                "name": "idle_timeout",
+                "number": 6,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".google.protobuf.Duration",
+                "jsonName": "idleTimeout"
+              },
+              {
+                "name": "started_unix",
+                "number": 7,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_INT64",
+                "jsonName": "startedUnix"
+              },
+              {
+                "name": "running",
+                "number": 8,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "running"
+              },
+              {
+                "name": "current",
+                "number": 9,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "current"
+              },
+              {
+                "name": "skewed",
+                "number": 10,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_BOOL",
+                "jsonName": "skewed"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ListServersRequest",
+            "field": [],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "ListServersResponse",
+            "field": [
+              {
+                "name": "servers",
+                "number": 1,
+                "label": "LABEL_REPEATED",
+                "type": "TYPE_MESSAGE",
+                "typeName": ".grpcview.v1.ServerEntry",
+                "jsonName": "servers"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "StopServerRequest",
+            "field": [
+              {
+                "name": "workspace_root",
+                "number": 1,
+                "label": "LABEL_OPTIONAL",
+                "type": "TYPE_STRING",
+                "jsonName": "workspaceRoot"
+              }
+            ],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
+          },
+          {
+            "name": "StopServerResponse",
+            "field": [],
+            "extension": [],
+            "nestedType": [],
+            "enumType": [],
+            "extensionRange": [],
+            "oneofDecl": [],
+            "reservedRange": [],
+            "reservedName": []
           }
         ],
         "enumType": [],
@@ -3318,7 +3491,7 @@
               },
               {
                 "name": "InvokeStreaming",
-                "inputType": ".grpcview.v1.InvokeStreamRequest",
+                "inputType": ".grpcview.v1.InvokeStreamingRequest",
                 "outputType": ".grpcview.v1.InvokeStreamingResponse",
                 "serverStreaming": true
               },
@@ -3329,8 +3502,8 @@
               },
               {
                 "name": "InvokeSavedStreaming",
-                "inputType": ".grpcview.v1.InvokeSavedStreamRequest",
-                "outputType": ".grpcview.v1.InvokeStreamingResponse",
+                "inputType": ".grpcview.v1.InvokeSavedStreamingRequest",
+                "outputType": ".grpcview.v1.InvokeSavedStreamingResponse",
                 "serverStreaming": true
               },
               {
@@ -3372,6 +3545,16 @@
                 "name": "Shutdown",
                 "inputType": ".grpcview.v1.ShutdownRequest",
                 "outputType": ".grpcview.v1.ShutdownResponse"
+              },
+              {
+                "name": "ListServers",
+                "inputType": ".grpcview.v1.ListServersRequest",
+                "outputType": ".grpcview.v1.ListServersResponse"
+              },
+              {
+                "name": "StopServer",
+                "inputType": ".grpcview.v1.StopServerRequest",
+                "outputType": ".grpcview.v1.StopServerResponse"
               }
             ]
           }
