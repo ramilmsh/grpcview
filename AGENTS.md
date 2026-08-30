@@ -1,111 +1,51 @@
 # Project Overview
 
-`grpcview` is a gRPC client — a Postman-like tool for exploring and calling
-gRPC services: reflects a server's schema, lets you author requests, invokes
-them, from a single self-contained binary.
+`grpcview` is a gRPC client — a Bruno/Postman/Insomnia-like tool for exploring, calling and testing APIs, except lazer-focused on gRPC services.
 
-Core decision: **requests are authored as TypeScript.** A body is a typed TS
-object literal, checked in-browser against the method's input message;
-metadata is authored the same way; both are *evaluated* in a sandboxed JS
-engine at invoke time, so they can call user scripts.
+This client is released a single statically linked binary (similar to grpcui). The binary contains:
 
-**TypeScript is the authoring affordance, not the contract: a body is
-protojson**, accepted everywhere a body is. See
-[`docs/design/request-body-contract.md`](docs/design/request-body-contract.md).
+1. The go server itself + cli and mcp clients
+2. The frontend files (preprocessed React application)
+3. WASM distribution of quickjs, which executes the javascript
 
-## Project Stage
+All of those external components are embeded
 
-No users yet — pre-release. **Simplicity over backwards compatibility.** No
-migrations/compat shims/`reserved` markers. Delete dead code on sight.
+## Project Stage - Pre-release
 
-## Documentation
+There are NO live users yet, NO live deployments, NO need for backwards compatibility/migrations/upgade paths and so on. Do NOT use deprecated and reserved keywords in protobuf, no incompatibility is possible
 
-**Be terse.** Every doc in this repo (this file, nested `AGENTS.md`s, `docs/design/`) states
-facts, not narration — no preamble, no restating what the code already shows, no hedging.
-Prefer a `file.go:line` pointer over a paragraph.
+## Conventions
 
-This file covers what's cross-cutting. Domain detail lives in an `AGENTS.md` next to the
-code it describes (see Directory Structure below) — check there before duplicating
-something here.
+**Be terse.** Always find the shortest way to say something.
 
 ## Working in this repo
 
-- **Bazel workspace. Never run bare `go build`/`test`/`run`/`mod`** — they
-  reach the network, hang, can wedge git.
-- `.envrc` sets `GOPROXY=off` — offline by default; a network-wanting
-  command is buggy, not missing a dependency.
-- Default shell is fish; for bash syntax use `bash -c '...'`.
-- **`bazel clean --expunge` is not a fix** — Bazel is hermetic, no stale
-  cache. Retry, or `bazel fetch @broken_repo`; a repo hook pauses to confirm.
-- **Never push without explicit per-push approval** — trunk-based (commit
-  straight to `trunk`, no feature branches) does not mean auto-push.
-  Committing locally is fine; leave the push for the user to request, even
-  when a prior push was approved — that approval doesn't carry over.
+- **Bazel workspace. Never run bare `go` compiler, everything is available via bazel**.
+- **`bazel clean --expunge` is not a fix** — Bazel is hermetic, and correct, it has no stale cache. Treat "bazel cache is stale" hypothesis similarly to "compiler has a bug" hypothesis. Not impossible, but very rare. Retry, or `bazel fetch @broken_repo`; a repo hook pauses to confirm.
+- **When shipping ship straight to trunk** - no feature branches, I'm the only developer
+- **Never push without explicit per-push approval** — I want to review every line of code you add, NEVER push without explicitly being asked to do so
 
 ## Delegating to background agents
 
-Main thread orchestrates/verifies/commits; agents write code. Cache-read
-cost scales ~`1300 × turns²`: scope an agent to ~40 turns, pre-load context
-(paste excerpts/paths, don't make it grep), cap verify loop at 2 tries then
-report and stop, one reviewer handed `git diff` directly, `effort` one
-tier below the session's (floor `medium`), verify via CLI unless UI-only.
-
-False-pass traps: a new `.go` file not in `BUILD.bazel` `srcs` isn't
-compiled; Bazel caches test results — use `--nocache_test_results` and
-check the count changed.
+When working on a task, do NOT execute the task in the main conversation thread, always split it into parts and delegate execution to background agents
 
 ## Verify through MCP or the CLI, not the browser
 
-**MCP first, CLI second, browser last** — all three share the backend
-without a browser session's per-check cost. CLI covers what MCP doesn't:
-shell/exit-code checks, incremental streaming (MCP drains and caps the
-whole stream), the CLI's own argv/flag surface.
-
-**`example/` reflects grpcview's own workspace server (`:10000`) and its
-descriptors are committed** — after a `.proto` change the snapshot is
-stale until `sources refresh`; verifying a server-side change means
-killing whichever daemon holds `:10000` (`grpcview shutdown`). **A CLI
-check leaves a daemon running** by design; add `--in-process` when it
-must not outlive itself.
-
-Browser is last resort: rendering, Monaco behavior, tree keyboard/mouse/
-DnD, focus/layout, zustand/query-cache state — a `ui/`-only change is a UI
-bug by definition. Say which surface you used.
+**MCP first, CLI second, browser last** — all three share the backend, any backend bug can be debugged identically by either, but MCP and CLI are much faster
 
 ## Architecture
 
-- **Frontend** (`ui/`): React 18 + TS SPA, Vite, single HTML file,
-  embedded into the Go binary. See `ui/AGENTS.md`.
-- **Backend** (`service/`): Go server, `WorkspaceService` over Connect
-  (h2c) — reflection, invoke, disk persistence, scripting.
-- **Store** (`service/store/`): filesystem-backed collection, protojson
-  tree; on-disk schema (`grpcview.store.v1`) decoupled from wire
-  (`grpcview.v1`), bridged by `convert.go`. See `service/store/AGENTS.md`.
-- **Scripting** (`service/scripting/`): QuickJS-WASM (wazero), user JS/TS.
-  Network always on; filesystem deny-by-default behind a `Grant`
-  (`node:fs`); sources bundled with esbuild first. Request-authoring
-  contract (body/metadata scripts, `grpcview:` modules, import sigils) is
-  in `service/workspace/AGENTS.md`.
+- **Frontend** (`ui/`): Written in React, with extensive use of monaco editor. It uses generated tanquery hooks to communicate with backend. Uses esbuild for preprocessing
+- **Backend** (`service/`): Go server, implements all the core functionality (from invoking requests to running scripts), no meangful logic must exist outside of it
+- **Store** (`service/store/`): Storage layer for the workspace information. It is currently implemented to store files on disk marshalled as protojson, in order to improve readability and make it easy to commit them to a shared repository.
+- **Scripting** (`service/scripting/`): Is the scripting engine, which executes copious amount of javascript involved in preparing requests. It is backed by quickjs (compiled to WASM) with wazero for execution. It is meant to incrementally emulate nodejs/browser runtime, as more functionality is added. For now, it only supports `fetch` API
 
 ## Build System (Bazel)
 
 ```bash
-bazel build //service/cmd            # host arch
-bazel build //service/cmd:release    # all four published arches
-bazel build //...
-bazel test //...
-bazel run //service/cmd/dev          # dev backend, -port 10000
-bazel run //ui:dev                   # frontend dev server
-bazel run //grpcview/v1:grpcviewv1_ts_proto.copy   # regen TS proto types
+bazel test //... # to verify that everything works, it rebuilds any affected artifact and reruns any affected test. It is meant to be the only verification you need that everything builds and all tests pass
+bazel run //service/cmd # to run the binary
 ```
-
-`//service/cmd` aliases `//service/cmd:grpcview`. `:release` is a filegroup
-over one `go_cross_binary` per `RELEASE_PLATFORMS` entry — locate outputs
-with `bazel cquery --output=files`, not a guessed path. Embedded UI is
-pinned to `@platforms//host` (else the cross transition rebuilds the vite
-bundle per arch and rollup's native binding fails to resolve).
-`grpcviewv1_ts_proto.copy` copies regenerated `.d.ts` into the source
-tree; runtime `_pb` modules are bazel-generated, not committed.
 
 Releasing: `tools/AGENTS.md`. Frontend-specific gates (typecheck/vitest/bundle): `ui/AGENTS.md`.
 
