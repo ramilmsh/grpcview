@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef } from "react";
 // Direct import, NOT useMonaco(): that returns null until @monaco-editor/react's loader has run,
 // which happens on the first editor mount — the coupling this hook exists to remove.
-// theme/monaco-nocturne.ts does loader.config({ monaco }), so this is the loader's own instance.
+// theme/monaco-theme.ts does loader.config({ monaco }), so this is the loader's own instance.
 import * as monaco from "monaco-editor";
 import type * as Monaco from "monaco-editor";
 // Side-effect import: the virtual `@bufbuild/protobuf` d.ts the generated `_pb.ts` files

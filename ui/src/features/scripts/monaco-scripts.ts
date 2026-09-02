@@ -1,5 +1,5 @@
 // Configures the shared Monaco `typescriptDefaults` for the Scripts scratchpad as a
-// side effect on import. Inert unless the TS worker is bundled — see theme/monaco-nocturne.ts.
+// side effect on import. Inert unless the TS worker is bundled — see theme/monaco-theme.ts.
 import * as monaco from "monaco-editor";
 import type * as Monaco from "monaco-editor";
 // Vite's `?raw` suffix has no esbuild equivalent, so the vendored dayjs .d.ts

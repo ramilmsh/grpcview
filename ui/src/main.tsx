@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { startKeepalive } from "./lib/keepalive";
-import "./theme/monaco-nocturne";
+import "./theme/monaco-theme";
 
 // The CSS cascade (tailwind.css, then the theme layer in ./theme/theme.css) is
 // assembled by separate esbuild/tailwindcss passes and linked from index.html —

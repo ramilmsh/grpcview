@@ -5,7 +5,7 @@ import {
   type OnMount,
 } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
-import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
+import { MONACO_THEME } from "@/theme/monaco-theme";
 // Side-effect import: global TS defaults. Our own TS_MODEL_URI keeps this model distinct.
 import "@/features/scripts/monaco-scripts";
 // Side-effect import: virtual `@bufbuild/protobuf` d.ts the generated `_pb.ts` files need.
@@ -459,7 +459,7 @@ export function Editor({
     <MonacoEditor
       path={TS_MODEL_URI}
       language="typescript"
-      theme={NOCTURNE_MONACO_THEME}
+      theme={MONACO_THEME}
       defaultValue={data}
       onMount={onMount}
       onChange={(v: string | undefined) => {

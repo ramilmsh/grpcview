@@ -47,8 +47,6 @@ bazel test //... # to verify that everything works, it rebuilds any affected art
 bazel run //service/cmd # to run the binary
 ```
 
-Releasing: `tools/AGENTS.md`. Frontend-specific gates (typecheck/vitest/bundle): `ui/AGENTS.md`.
-
 ## Directory Structure
 
 ```

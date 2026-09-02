@@ -20,7 +20,7 @@ import {
   useRunScript,
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
-import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
+import { MONACO_THEME } from "@/theme/monaco-theme";
 import { SCRATCH_PATH } from "./monaco-scripts";
 import type { Script } from "@grpcview/v1/workspace_pb";
 import type { RunScriptResponse } from "@grpcview/v1/service_pb";
@@ -307,7 +307,7 @@ export function ScriptDetail({ script }: { script: Script }) {
           <MonacoEditor
             path={SCRATCH_PATH}
             language="typescript"
-            theme={NOCTURNE_MONACO_THEME}
+            theme={MONACO_THEME}
             value={draft.source}
             onChange={(v: string | undefined) => draft.setSource(v ?? "")}
             onMount={draft.onMount}

@@ -1,11 +1,11 @@
 import { Editor as MonacoEditor } from "@monaco-editor/react";
-import { NOCTURNE_MONACO_THEME } from "@/theme/monaco-nocturne";
+import { MONACO_THEME } from "@/theme/monaco-theme";
 
 export function JsonViewer({ value }: { value: string }) {
   return (
     <MonacoEditor
       language="json"
-      theme={NOCTURNE_MONACO_THEME}
+      theme={MONACO_THEME}
       value={value}
       options={{
         readOnly: true,

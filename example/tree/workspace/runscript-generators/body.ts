@@ -2,7 +2,6 @@ import { requestId } from "#/scripts/ids";
 import { stamp } from "#/scripts/stamp";
 
 export default async (): Promise<RequestMessage> => (
-// grpcview:script start
 {
   collection: "example",
   // `requestId` and `stamp` are files in this collection, imported by path.
@@ -15,5 +14,4 @@ export default async (): Promise<RequestMessage> => (
   // straight back in the response.
   source: JSON.stringify(`${requestId("gv")} at ${stamp()}`),
 }
-// grpcview:script end
 )

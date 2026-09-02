@@ -3,7 +3,10 @@ load("//ui:defs.bzl", "ts_project")
 
 ts_project(
     name = "theme",
-    srcs = ["monaco-nocturne.ts"],
+    srcs = [
+        "monaco-theme.ts",
+        "theme.json",
+    ],
     declaration = True,
     no_emit = False,
     preserve_jsx = False,
