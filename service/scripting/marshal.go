@@ -74,6 +74,7 @@ func buildInputPrelude(in Input) string {
 	var b strings.Builder
 	b.WriteString(preludeHelpers)
 	b.WriteString(netFetchPrelude)
+	b.WriteString(cryptoPrelude)
 
 	req := in.Request
 	if req.Metadata == nil {
