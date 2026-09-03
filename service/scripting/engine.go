@@ -340,6 +340,7 @@ func sinkFromContext(ctx context.Context) *logCollector {
 
 func registerHostModule(ctx context.Context, rt wazero.Runtime) error {
 	reqParams := []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}
+	countParams := []api.ValueType{api.ValueTypeI32}
 	ptrResult := []api.ValueType{api.ValueTypeI32}
 	_, err := rt.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
@@ -351,6 +352,9 @@ func registerHostModule(ctx context.Context, rt wazero.Runtime) error {
 		NewFunctionBuilder().
 		WithGoModuleFunction(api.GoModuleFunc(hostInvoke), reqParams, ptrResult).
 		Export("host_invoke").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(hostRandom), countParams, ptrResult).
+		Export("host_random").
 		NewFunctionBuilder().
 		WithGoModuleFunction(api.GoModuleFunc(hostConsole),
 			[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32},

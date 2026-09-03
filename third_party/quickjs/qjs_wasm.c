@@ -37,6 +37,7 @@
  *   uint8_t* host_fs_read(const uint8_t* req, int req_len)   -> result ptr
  *   uint8_t* host_net_fetch(const uint8_t* req, int req_len) -> result ptr
  *   uint8_t* host_invoke(const uint8_t* req, int req_len)    -> result ptr
+ *   uint8_t* host_random(int n)                              -> result ptr (JSON int array)
  *   void     host_console(int level, const uint8_t* msg, int len) - fire-and-forget sink
  *
  * Enforcement (grant + scope + syscall) lives entirely in the Go host functions,
@@ -74,6 +75,12 @@ extern uint8_t *host_net_fetch(const uint8_t *req, int req_len);
  * this file — this shim only marshals/unmarshals, same as fs and fetch. */
 __attribute__((import_module("env"), import_name("host_invoke")))
 extern uint8_t *host_invoke(const uint8_t *req, int req_len);
+
+/* crypto.getRandomValues's bridge: n is the requested byte count; the host writes real
+ * entropy (Go's crypto/rand, NOT the deterministic Math.random PRNG) and returns it as a
+ * JSON array of byte values, same result envelope as fs/fetch/invoke. */
+__attribute__((import_module("env"), import_name("host_random")))
+extern uint8_t *host_random(int n);
 
 /* Fire-and-forget log sink: no result envelope. console output cannot meaningfully
  * fail in a way a script should catch, so it returns void and the Go host buffers it. */
@@ -161,6 +168,17 @@ static JSValue js_host_invoke(JSContext *ctx, JSValueConst this_val, int argc, J
     return unpack_host_result(ctx, res);
 }
 
+/* crypto.getRandomValues(n) Layer-B shim: n is a byte count (int), not a buffer — no
+ * guest memory to pass through, unlike fs/fetch/invoke's string args. */
+static JSValue js_host_random(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    if (argc < 1) return JS_ThrowTypeError(ctx, "random: byte count required");
+    int32_t n;
+    if (JS_ToInt32(ctx, &n, argv[0]) < 0) return JS_EXCEPTION; /* ToInt32 already threw */
+    uint8_t *res = host_random(n);
+    return unpack_host_result(ctx, res);
+}
+
 /* console sink Layer-B shim: __grpcview_console(level:int, message:string). The JS
  * `console` object (level mapping + argument formatting) is assembled in the Go-side
  * prelude; this shim only forwards the already-formatted line to the host import. */
@@ -199,6 +217,8 @@ static void register_globals(JSContext *ctx) {
                       JS_NewCFunction(ctx, js_host_net_fetch, "__grpcview_net_fetch", 1));
     JS_SetPropertyStr(ctx, g, "__grpcview_invoke",
                       JS_NewCFunction(ctx, js_host_invoke, "__grpcview_invoke", 1));
+    JS_SetPropertyStr(ctx, g, "__grpcview_random",
+                      JS_NewCFunction(ctx, js_host_random, "__grpcview_random", 1));
     JS_SetPropertyStr(ctx, g, "__grpcview_console",
                       JS_NewCFunction(ctx, js_console, "__grpcview_console", 2));
     JS_FreeValue(ctx, g);

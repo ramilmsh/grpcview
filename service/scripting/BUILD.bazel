@@ -19,6 +19,7 @@ go_library(
         "npm.go",
         "pool.go",
         "profiles.go",
+        "random.go",
         "sourcemap.go",
     ],
     embedsrcs = ["quickjs.wasm"] + glob(["npm/**"]),

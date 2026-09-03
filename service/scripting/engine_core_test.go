@@ -2,7 +2,9 @@ package scripting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -367,6 +369,67 @@ import { params } from "grpcview:request";
 	if _, err := e.RunScenario(context.Background(), src, Grant{}, in); err == nil ||
 		!strings.Contains(err.Error(), "capability not granted") {
 		t.Fatalf("ungranted fs: got %v, want a Gate 1 denial", err)
+	}
+}
+
+func TestCryptoGetRandomValues(t *testing.T) {
+	e := newEngine(t)
+	res, err := e.RunScenario(context.Background(), `Array.from(crypto.getRandomValues(new Uint8Array(16)))`, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var got []int
+	if err := json.Unmarshal(res.Value, &got); err != nil {
+		t.Fatalf("unmarshal %s: %v", res.Value, err)
+	}
+	if len(got) != 16 {
+		t.Fatalf("len = %d, want 16", len(got))
+	}
+	allZero := true
+	for _, v := range got {
+		if v != 0 {
+			allZero = false
+		}
+	}
+	if allZero {
+		t.Fatalf("all 16 bytes were zero, want real entropy")
+	}
+}
+
+// The actual regression test: unlike Math.random()/Date.now() (deliberately deterministic
+// per fresh sandbox instance, see engine.go), crypto.getRandomValues must draw real entropy
+// that differs across separate runs.
+func TestCryptoGetRandomValuesVariesAcrossRuns(t *testing.T) {
+	e := newEngine(t)
+	const src = `Array.from(crypto.getRandomValues(new Uint8Array(16)))`
+	res1, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+	res2, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+	if err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+	if string(res1.Value) == string(res2.Value) {
+		t.Fatalf("two separate runs drew identical bytes: %s", res1.Value)
+	}
+}
+
+func TestCryptoGetRandomValuesRejectsOversizedRequest(t *testing.T) {
+	e := newEngine(t)
+	src := fmt.Sprintf(`crypto.getRandomValues(new Uint8Array(%d))`, maxRandomBytes+1)
+	_, err := e.RunScenario(context.Background(), src, Grant{}, Input{})
+	if err == nil || !strings.Contains(err.Error(), "exceeds limit") {
+		t.Fatalf("oversized request: got %v, want an 'exceeds limit' throw", err)
+	}
+}
+
+func TestCryptoGetRandomValuesRejectsFloatArray(t *testing.T) {
+	e := newEngine(t)
+	_, err := e.RunScenario(context.Background(),
+		`crypto.getRandomValues(new Float64Array(4))`, Grant{}, Input{})
+	if err == nil || !strings.Contains(err.Error(), "integer TypedArray") {
+		t.Fatalf("Float64Array: got %v, want an 'integer TypedArray' throw", err)
 	}
 }
 
