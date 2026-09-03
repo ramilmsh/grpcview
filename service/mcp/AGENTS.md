@@ -17,3 +17,4 @@
 - **`run_script` hands the calling agent arbitrary JS with `fetch` enabled** — a known,
   unmitigated exposure. Runs in the daemon, not the MCP child; writes serialize on one
   `Collection.mu` like every other verb.
+- `initialize`'s `instructions` field is set in `mcp.go` (`instructions` const), not left nil.

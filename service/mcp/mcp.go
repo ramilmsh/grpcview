@@ -22,6 +22,14 @@ type Options struct {
 	Version    string
 }
 
+// Sent as `instructions` in MCP's initialize response.
+const instructions = "grpcview is a gRPC client: browse reflected services and their schemas, " +
+	"manage a workspace tree of collections, folders and requests, and invoke calls (unary, " +
+	"saved, or streaming). A scripting system supports creating, updating, deleting and running " +
+	"scripts, with the grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request " +
+	"modules importable from scripts and request bodies. Call get_collection first to see the " +
+	"current tree, services and scripts."
+
 // Run takes its backend rather than opening one, because which process owns the collection is
 // the CLI's decision and it is the same decision for every verb: normally the workspace daemon,
 // so an agent's writes and the UI's go through one process and one Collection.mu. The MCP
@@ -35,9 +43,9 @@ func Run(ctx context.Context, opts Options, ws wire.Workspace) error {
 		return fmt.Errorf("mcp: load service descriptor: %w", err)
 	}
 
-	server, raw := gosdk.NewServer("grpcview", opts.Version)
+	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "grpcview", Version: opts.Version}, &mcpsdk.ServerOptions{Instructions: instructions})
 
-	s := &shim{MCPServer: raw, collection: opts.Collection, service: sd}
+	s := &shim{MCPServer: gosdk.Wrap(server), collection: opts.Collection, service: sd}
 
 	gen.RegisterService(s, sd, trimHeavyFields(newHandler(ws)), gen.RegisterServiceOptions{
 		NewMessage:      newMessage,
