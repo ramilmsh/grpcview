@@ -13,6 +13,10 @@ var npmRegistry embed.FS
 
 const npmRegistryRoot = "npm"
 
+// MaterializeNpmRegistry extracts the embedded npm registry to a fresh temp directory and
+// returns its root. Caller must os.RemoveAll it when done.
+func MaterializeNpmRegistry() (string, error) { return materializeNpmRegistry() }
+
 func materializeNpmRegistry() (string, error) {
 	root, err := os.MkdirTemp("", "grpcview-npm-")
 	if err != nil {

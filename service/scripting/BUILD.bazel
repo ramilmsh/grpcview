@@ -11,6 +11,7 @@ go_library(
     name = "scripting",
     srcs = [
         "bundler.go",
+        "codegen_bundle.go",
         "engine.go",
         "entry.go",
         "invoke.go",
@@ -22,7 +23,11 @@ go_library(
         "random.go",
         "sourcemap.go",
     ],
-    embedsrcs = ["quickjs.wasm"] + glob(["npm/**"]),
+    embedsrcs = [
+        "codegen_entry.js",
+        "codegen_polyfill.js",
+        "quickjs.wasm",
+    ] + glob(["npm/**"]),
     importpath = "codeberg.org/ramilmsh/grpcview/service/scripting",
     visibility = ["//visibility:public"],
     deps = [

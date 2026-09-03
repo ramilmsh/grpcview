@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -134,6 +135,13 @@ func (i *Instance) mapErr(ctx context.Context, err error) error {
 	return fmt.Errorf("scripting: guest trap: %w", err)
 }
 
+// NewContext creates the instance's JSContext with the given heap limit. Call once per
+// instance; exported for callers that keep one context warm across many Eval calls (see
+// service/scripting/codegen).
+func (i *Instance) NewContext(ctx context.Context, memLimitBytes uint64) error {
+	return i.newContext(ctx, memLimitBytes)
+}
+
 func (i *Instance) newContext(ctx context.Context, memLimitBytes uint64) error {
 	rets, err := i.newCtx.Call(ctx, memLimitBytes)
 	if err != nil {
@@ -216,6 +224,16 @@ func (i *Instance) callResult(ctx context.Context, asJSON bool) (uint8, []byte, 
 	out := make([]byte, len(payload))
 	copy(out, payload)
 	return tag, out, nil
+}
+
+// Eval runs src against the instance's current JSContext (see NewContext), pumping pending
+// microtasks until it settles, and decodes the result as JSON. Not safe for concurrent use.
+func (i *Instance) Eval(ctx context.Context, src string) (json.RawMessage, error) {
+	tag, payload, err := i.evalRaw(ctx, src, true, true)
+	if err != nil {
+		return nil, err
+	}
+	return decodeResult(tag, payload)
 }
 
 func (i *Instance) evalRaw(ctx context.Context, src string, async, asJSON bool) (uint8, []byte, error) {

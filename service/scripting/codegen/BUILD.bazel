@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "codegen",
+    srcs = ["pool.go"],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/scripting/codegen",
+    visibility = ["//visibility:public"],
+    deps = ["//service/scripting"],
+)
+
+go_test(
+    name = "codegen_test",
+    srcs = ["pool_test.go"],
+    embed = [":codegen"],
+    deps = [
+        "//grpcview/echo/v1:grpcviewechov1_go_proto",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)
