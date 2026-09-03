@@ -648,12 +648,15 @@ service WorkspaceService {
   // Answers from already-resolved definitions, so it works with the target down.
   // Doc comments survive only if the winning source carried them.
   rpc DescribeMethod(DescribeMethodRequest) returns (DescribeMethodResponse);
-  // Uses a fresh isolated instance: no capabilities, no collection state.
+  // Uses a fresh isolated instance: no capabilities, no collection state. Source can
+  // import grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
   rpc RunScript(RunScriptRequest) returns (RunScriptResponse);
-  // Creates it empty; use UpdateScript to fill in the source.
+  // Creates it empty; use UpdateScript to fill in the source, which can import
+  // grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
   rpc CreateScript(CreateScriptRequest) returns (CreateScriptResponse);
   // Partial update: an omitted field is left unchanged. Renaming onto an existing
-  // script's path fails.
+  // script's path fails. Source can import grpcview:invoke, grpcview:assert,
+  // grpcview:metadata and grpcview:request.
   rpc UpdateScript(UpdateScriptRequest) returns (UpdateScriptResponse);
   // Requests still listing it as middleware keep the dangling reference and fail when
   // invoked, so clear it from them first.

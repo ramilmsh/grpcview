@@ -225,7 +225,8 @@ message Item {
   }
 }
 
-// A .ts file under the collection's scripts/ directory.
+// A .ts file under the collection's scripts/ directory. Source can import
+// grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
 message Script {
   // Collection-relative, slash-separated, with the extension: "scripts/uuid.ts".
   string path   = 1;

@@ -694,7 +694,8 @@ export declare type Item = Message$1<"grpcview.v1.Item"> & {
 export declare const ItemSchema: GenMessage<Item>;
 
 /**
- * A .ts file under the collection's scripts/ directory.
+ * A .ts file under the collection's scripts/ directory. Source can import
+ * grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
  *
  * @generated from message grpcview.v1.Script
  */

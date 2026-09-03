@@ -9,11 +9,13 @@ proto_descriptor_set(
 go_library(
     name = "mcp",
     srcs = [
+        "collection.go",
         "descriptor.go",
         "dispatch.go",
         "mcp.go",
         "schema.go",
         "streaming.go",
+        "trim.go",
     ],
     # keep
     embedsrcs = [":descriptor_set"],

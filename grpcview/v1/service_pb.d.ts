@@ -2450,7 +2450,8 @@ export declare const WorkspaceService: GenService<{
     output: typeof DescribeMethodResponseSchema;
   },
   /**
-   * Uses a fresh isolated instance: no capabilities, no collection state.
+   * Uses a fresh isolated instance: no capabilities, no collection state. Source can
+   * import grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.RunScript
    */
@@ -2460,7 +2461,8 @@ export declare const WorkspaceService: GenService<{
     output: typeof RunScriptResponseSchema;
   },
   /**
-   * Creates it empty; use UpdateScript to fill in the source.
+   * Creates it empty; use UpdateScript to fill in the source, which can import
+   * grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
    */
@@ -2471,7 +2473,8 @@ export declare const WorkspaceService: GenService<{
   },
   /**
    * Partial update: an omitted field is left unchanged. Renaming onto an existing
-   * script's path fails.
+   * script's path fails. Source can import grpcview:invoke, grpcview:assert,
+   * grpcview:metadata and grpcview:request.
    *
    * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
    */

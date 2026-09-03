@@ -152,20 +152,23 @@ export const invokeSaved: typeof WorkspaceService["method"]["invokeSaved"];
  */
 export const describeMethod: typeof WorkspaceService["method"]["describeMethod"];
 /**
- * Uses a fresh isolated instance: no capabilities, no collection state.
+ * Uses a fresh isolated instance: no capabilities, no collection state. Source can
+ * import grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.RunScript
  */
 export const runScript: typeof WorkspaceService["method"]["runScript"];
 /**
- * Creates it empty; use UpdateScript to fill in the source.
+ * Creates it empty; use UpdateScript to fill in the source, which can import
+ * grpcview:invoke, grpcview:assert, grpcview:metadata and grpcview:request.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.CreateScript
  */
 export const createScript: typeof WorkspaceService["method"]["createScript"];
 /**
  * Partial update: an omitted field is left unchanged. Renaming onto an existing
- * script's path fails.
+ * script's path fails. Source can import grpcview:invoke, grpcview:assert,
+ * grpcview:metadata and grpcview:request.
  *
  * @generated from rpc grpcview.v1.WorkspaceService.UpdateScript
  */
