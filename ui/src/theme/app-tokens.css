@@ -36,6 +36,15 @@
   content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px; width: 3px;
   border-radius: 0 3px 3px 0; background: var(--color-accent);
 }
+/* rail button tooltip — pure CSS, no component; label comes from data-tooltip */
+.rail-btn::after {
+  content: attr(data-tooltip); position: absolute; left: calc(100% + 9px); top: 50%;
+  transform: translateY(-50%) translateX(-4px); padding: 4px 8px; border-radius: var(--radius-sm);
+  background: var(--panel-2); color: var(--color-text); font-size: 12px; white-space: nowrap;
+  box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transition: opacity .12s, transform .12s;
+  z-index: 20;
+}
+.rail-btn:hover::after, .rail-btn:focus-visible::after { opacity: 1; transform: translateY(-50%) translateX(0); }
 
 /* subtabs (request/response panes) */
 .subtab {

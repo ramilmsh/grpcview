@@ -145,6 +145,30 @@ function remapKeyedState(
   };
 }
 
+// Removes every tab whose key is in `keys`, then — only if the active tab was among
+// them — hands activation to the nearest survivor: forward first, then back. Same rule
+// closeTab always used for its one key, generalized so the batch variants agree with it.
+function closeMatching(
+  s: Pick<UIState, "openTabs" | "activeKey">,
+  keys: ReadonlySet<string>,
+): Pick<UIState, "openTabs" | "activeKey"> {
+  if (keys.size === 0) return s;
+  const openTabs = s.openTabs.filter((t) => !keys.has(t.key));
+  let activeKey = s.activeKey;
+  if (activeKey !== null && keys.has(activeKey)) {
+    const idx = s.openTabs.findIndex((t) => t.key === activeKey);
+    const next =
+      s.openTabs.slice(idx + 1).find((t) => !keys.has(t.key)) ??
+      s.openTabs
+        .slice(0, idx)
+        .reverse()
+        .find((t) => !keys.has(t.key)) ??
+      null;
+    activeKey = next ? next.key : null;
+  }
+  return { openTabs, activeKey };
+}
+
 interface UIState {
   activeView: ActiveView;
   // The collection the scoped views address, or null when nothing has been chosen yet.
@@ -171,6 +195,11 @@ interface UIState {
   setActiveCollection: (id: string) => void;
   openTab: (item: ItemWithPath) => void;
   closeTab: (key: string) => void;
+  // The tab strip's context menu, batch variants of closeTab. Each picks the same
+  // nearest-survivor active tab closeTab would.
+  closeOtherTabs: (key: string) => void;
+  closeTabsToRight: (key: string) => void;
+  closeAllTabs: () => void;
   // `collection` is optional only because a caller that has no tab in hand (there is
   // one: clearing to null) cannot supply it. Pass it whenever it is known — that is
   // what stops anyone parsing a collection out of `key`.
@@ -254,17 +283,27 @@ export const useUIStore = create<UIState>()((set) => ({
     });
   },
 
-  closeTab: (key) =>
+  closeTab: (key) => set((s) => closeMatching(s, new Set([key]))),
+
+  closeOtherTabs: (key) =>
+    set((s) =>
+      closeMatching(
+        s,
+        new Set(s.openTabs.filter((t) => t.key !== key).map((t) => t.key)),
+      ),
+    ),
+
+  closeTabsToRight: (key) =>
     set((s) => {
       const idx = s.openTabs.findIndex((t) => t.key === key);
-      const openTabs = s.openTabs.filter((t) => t.key !== key);
-      let activeKey = s.activeKey;
-      if (s.activeKey === key) {
-        const next = openTabs[idx] ?? openTabs[idx - 1] ?? null;
-        activeKey = next ? next.key : null;
-      }
-      return { openTabs, activeKey };
+      if (idx === -1) return {};
+      return closeMatching(
+        s,
+        new Set(s.openTabs.slice(idx + 1).map((t) => t.key)),
+      );
     }),
+
+  closeAllTabs: () => set({ openTabs: [], activeKey: null }),
 
   setActiveKey: (activeKey, collection) => {
     if (collection === undefined) {

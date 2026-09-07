@@ -1,9 +1,12 @@
+import { useState } from "react";
 import clsx from "clsx";
 import { X } from "@/components/ui/icons";
-import { useUIStore } from "@/lib/ui-store";
+import { Menu } from "@/components/ui/Menu";
+import { useUIStore, type OpenTab } from "@/lib/ui-store";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { useActiveWorkspace, useRootItems } from "@/lib/workspace-query";
 import { findByKey, methodKind, resolveMethod } from "@/lib/format";
+import { tabMenuItems, type TabMenuActions } from "./tab-menu";
 
 // RequestTabs is the open-request tab strip. Frontend-only state; no persistence.
 export function RequestTabs() {
@@ -13,6 +16,21 @@ export function RequestTabs() {
   const activeKey = useUIStore((s) => s.activeKey);
   const setActiveKey = useUIStore((s) => s.setActiveKey);
   const closeTab = useUIStore((s) => s.closeTab);
+  const closeOtherTabs = useUIStore((s) => s.closeOtherTabs);
+  const closeTabsToRight = useUIStore((s) => s.closeTabsToRight);
+  const closeAllTabs = useUIStore((s) => s.closeAllTabs);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    tab: OpenTab;
+  } | null>(null);
+
+  const menuActions: TabMenuActions = {
+    close: closeTab,
+    closeOthers: closeOtherTabs,
+    closeToTheRight: closeTabsToRight,
+    closeAll: closeAllTabs,
+  };
 
   if (openTabs.length === 0) return null;
 
@@ -55,6 +73,10 @@ export function RequestTabs() {
             // The collection rides on the tab, so activating one in another collection
             // switches to it without anyone parsing a collection out of the key.
             onClick={() => setActiveKey(tab.key, tab.collection)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, tab });
+            }}
           >
             <MethodKindTag kind={kind} />
             {/* Live name, not the stored one: the key is slug-based, so a rename no
@@ -71,6 +93,17 @@ export function RequestTabs() {
           </div>
         );
       })}
+
+      {/* Keyed on the summon point plus the tab so a second right-click remounts. */}
+      {menu ? (
+        <Menu
+          key={`${menu.x},${menu.y},${menu.tab.key}`}
+          x={menu.x}
+          y={menu.y}
+          items={tabMenuItems(menu.tab, openTabs, menuActions)}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
     </div>
   );
 }
