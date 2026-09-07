@@ -395,3 +395,79 @@ describe("moveSubtree: descendants of a moved folder", () => {
     expect(drafts[unrelated]).toEqual({ body: "b", metadata: "" });
   });
 });
+
+// closeTab, closeOtherTabs and closeTabsToRight all pick the same nearest-survivor
+// active tab; a fourth fixture ("a", "b", "c", "d") makes forward-vs-backward visible.
+describe("closing tabs", () => {
+  const A = "./a";
+  const B = "./b";
+  const C = "./c";
+  const D = "./d";
+
+  beforeEach(() => {
+    useUIStore.setState({
+      openTabs: [tab(A, "A"), tab(B, "B"), tab(C, "C"), tab(D, "D")],
+      activeKey: B,
+    });
+  });
+
+  it("closeTab on the active tab activates its right neighbor", () => {
+    useUIStore.getState().closeTab(B);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([A, C, D]);
+    expect(s.activeKey).toBe(C);
+  });
+
+  it("closeTab on the active LAST tab falls back to its left neighbor", () => {
+    useUIStore.setState({ activeKey: D });
+    useUIStore.getState().closeTab(D);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([A, B, C]);
+    expect(s.activeKey).toBe(C);
+  });
+
+  it("closeTab on an inactive tab leaves the active tab alone", () => {
+    useUIStore.getState().closeTab(C);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([A, B, D]);
+    expect(s.activeKey).toBe(B);
+  });
+
+  it("closeOtherTabs leaves only the target tab, which becomes active", () => {
+    useUIStore.getState().closeOtherTabs(C);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([C]);
+    expect(s.activeKey).toBe(C);
+  });
+
+  it("closeOtherTabs on the already-active tab keeps it active", () => {
+    useUIStore.getState().closeOtherTabs(B);
+    expect(useUIStore.getState().activeKey).toBe(B);
+  });
+
+  it("closeTabsToRight drops every tab after the target, keeping the target", () => {
+    useUIStore.getState().closeTabsToRight(B);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([A, B]);
+    expect(s.activeKey).toBe(B);
+  });
+
+  it("closeTabsToRight activates the target when the active tab was to its right", () => {
+    useUIStore.setState({ activeKey: D });
+    useUIStore.getState().closeTabsToRight(B);
+    expect(useUIStore.getState().activeKey).toBe(B);
+  });
+
+  it("closeTabsToRight leaves the active tab alone when it is at or left of the target", () => {
+    useUIStore.setState({ activeKey: A });
+    useUIStore.getState().closeTabsToRight(B);
+    expect(useUIStore.getState().activeKey).toBe(A);
+  });
+
+  it("closeAllTabs empties the strip and clears the active tab", () => {
+    useUIStore.getState().closeAllTabs();
+    const s = useUIStore.getState();
+    expect(s.openTabs).toEqual([]);
+    expect(s.activeKey).toBeNull();
+  });
+});

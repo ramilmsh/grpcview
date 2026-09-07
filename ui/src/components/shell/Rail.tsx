@@ -34,7 +34,8 @@ export function Rail() {
         <button
           key={view}
           className={clsx("rail-btn", activeView === view && "on")}
-          title={title}
+          aria-label={title}
+          data-tooltip={title}
           onClick={() => setView(view)}
         >
           {icon}
