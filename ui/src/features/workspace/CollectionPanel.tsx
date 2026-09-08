@@ -292,16 +292,24 @@ export function CollectionPanel() {
           placeholder="Filter requests…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setFilter("");
+          }}
         />
-        <IconButton title="New folder" onClick={() => setNewFolderParent(null)}>
-          <FolderPlus />
-        </IconButton>
         <IconButton
-          title="New request"
+          aria-label="Add Request"
+          data-tooltip="Add Request"
           onClick={() => setPickerParent(null)}
           disabled={services.length === 0}
         >
           <Plus />
+        </IconButton>
+        <IconButton
+          aria-label="Create Folder"
+          data-tooltip="Create Folder"
+          onClick={() => setNewFolderParent(null)}
+        >
+          <FolderPlus />
         </IconButton>
       </div>
 
