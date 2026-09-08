@@ -89,9 +89,22 @@ const danglingReference = (id: string): DescriptorSource =>
     commitDescriptors: false,
   }) as unknown as DescriptorSource;
 
-const row = (s: DescriptorSource, index = 0, count = 1, busy = false): string =>
+const row = (
+  s: DescriptorSource,
+  index = 0,
+  count = 1,
+  busy = false,
+  refreshing = false,
+): string =>
   renderToStaticMarkup(
-    <SourceRow source={s} index={index} count={count} busy={busy} cb={cb} />,
+    <SourceRow
+      source={s}
+      index={index}
+      count={count}
+      busy={busy}
+      refreshing={refreshing}
+      cb={cb}
+    />,
   );
 
 describe("sourceKind", () => {
@@ -272,6 +285,20 @@ describe("the commit toggle", () => {
     const markup = row(reflection("localhost:50051"), 0, 3, true);
     // Five controls: commit, raise, lower, refresh, remove.
     expect(markup.split('disabled=""')).toHaveLength(6);
+  });
+
+  // The bug this pins: `refreshing` names ONE row's own in-flight refresh, never a sibling's —
+  // a row must not lock up because some OTHER row was told to refresh.
+  it("locks itself and spins on its own refresh, unrelated to `busy`", () => {
+    const markup = row(reflection("localhost:50051"), 0, 3, false, true);
+    expect(markup.split('disabled=""')).toHaveLength(6);
+    expect(markup).toContain("spin");
+  });
+
+  it("stays fully enabled, with a static icon, when it is not the row refreshing", () => {
+    const markup = row(reflection("localhost:50051"), 0, 3, false, false);
+    expect(markup).not.toContain('disabled=""');
+    expect(markup).not.toContain("spin");
   });
 });
 
