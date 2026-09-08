@@ -18,6 +18,7 @@ export function RequestTabs() {
   const setActiveKey = useUIStore((s) => s.setActiveKey);
   const closeTab = useUIStore((s) => s.closeTab);
   const closeOtherTabs = useUIStore((s) => s.closeOtherTabs);
+  const closeTabsToLeft = useUIStore((s) => s.closeTabsToLeft);
   const closeTabsToRight = useUIStore((s) => s.closeTabsToRight);
   const closeAllTabs = useUIStore((s) => s.closeAllTabs);
   const [menu, setMenu] = useState<{
@@ -29,6 +30,7 @@ export function RequestTabs() {
   const menuActions: TabMenuActions = {
     close: closeTab,
     closeOthers: closeOtherTabs,
+    closeToTheLeft: closeTabsToLeft,
     closeToTheRight: closeTabsToRight,
     closeAll: closeAllTabs,
   };
@@ -61,9 +63,13 @@ export function RequestTabs() {
             className={clsx("flex items-center gap-[8px]")}
             style={{
               padding: "0 14px",
+              // Fixed, not min/max: every tab must render at the exact same width
+              // regardless of title length, so the strip's rhythm doesn't jump
+              // per-request; the name span below does the eliding.
+              width: 160,
+              flex: "0 0 auto",
               fontSize: 13,
               cursor: "pointer",
-              whiteSpace: "nowrap",
               color: active ? "var(--color-text)" : "var(--color-neutral-400)",
               borderRight: "1px solid var(--line)",
               borderBottom: active
@@ -87,11 +93,23 @@ export function RequestTabs() {
               <MethodKindTag kind={kind} />
             )}
             {/* Live name, not the stored one: the key is slug-based, so a rename no
-                longer rewrites the tab. tab.name only covers a deleted item. */}
-            {item?.item.name ?? tab.name}
+                longer rewrites the tab. tab.name only covers a deleted item. flex:1 +
+                minWidth:0 is what lets a flex child ellipsize instead of forcing the row
+                to grow — the same convention as request-tree.tsx's row label. */}
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item?.item.name ?? tab.name}
+            </span>
             <X
               size={12}
-              style={{ opacity: 0.5 }}
+              style={{ opacity: 0.5, flex: "none" }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.key);

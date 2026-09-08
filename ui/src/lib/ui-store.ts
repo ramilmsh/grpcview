@@ -207,6 +207,7 @@ interface UIState {
   // The tab strip's context menu, batch variants of closeTab. Each picks the same
   // nearest-survivor active tab closeTab would.
   closeOtherTabs: (key: string) => void;
+  closeTabsToLeft: (key: string) => void;
   closeTabsToRight: (key: string) => void;
   closeAllTabs: () => void;
   // `collection` is optional only because a caller that has no tab in hand (there is
@@ -306,6 +307,16 @@ export const useUIStore = create<UIState>()((set) => ({
         new Set(s.openTabs.filter((t) => t.key !== key).map((t) => t.key)),
       ),
     ),
+
+  closeTabsToLeft: (key) =>
+    set((s) => {
+      const idx = s.openTabs.findIndex((t) => t.key === key);
+      if (idx === -1) return {};
+      return closeMatching(
+        s,
+        new Set(s.openTabs.slice(0, idx).map((t) => t.key)),
+      );
+    }),
 
   closeTabsToRight: (key) =>
     set((s) => {

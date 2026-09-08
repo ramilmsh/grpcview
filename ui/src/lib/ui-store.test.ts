@@ -439,8 +439,9 @@ describe("moveSubtree: descendants of a moved folder", () => {
   });
 });
 
-// closeTab, closeOtherTabs and closeTabsToRight all pick the same nearest-survivor
-// active tab; a fourth fixture ("a", "b", "c", "d") makes forward-vs-backward visible.
+// closeTab, closeOtherTabs, closeTabsToLeft and closeTabsToRight all pick the same
+// nearest-survivor active tab; a fourth fixture ("a", "b", "c", "d") makes
+// forward-vs-backward visible.
 describe("closing tabs", () => {
   const A = "./a";
   const B = "./b";
@@ -486,6 +487,25 @@ describe("closing tabs", () => {
   it("closeOtherTabs on the already-active tab keeps it active", () => {
     useUIStore.getState().closeOtherTabs(B);
     expect(useUIStore.getState().activeKey).toBe(B);
+  });
+
+  it("closeTabsToLeft drops every tab before the target, keeping the target", () => {
+    useUIStore.getState().closeTabsToLeft(B);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([B, C, D]);
+    expect(s.activeKey).toBe(B);
+  });
+
+  it("closeTabsToLeft activates the target when the active tab was to its left", () => {
+    useUIStore.setState({ activeKey: A });
+    useUIStore.getState().closeTabsToLeft(B);
+    expect(useUIStore.getState().activeKey).toBe(B);
+  });
+
+  it("closeTabsToLeft leaves the active tab alone when it is at or right of the target", () => {
+    useUIStore.setState({ activeKey: D });
+    useUIStore.getState().closeTabsToLeft(B);
+    expect(useUIStore.getState().activeKey).toBe(D);
   });
 
   it("closeTabsToRight drops every tab after the target, keeping the target", () => {

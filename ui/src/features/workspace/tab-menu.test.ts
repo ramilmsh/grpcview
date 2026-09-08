@@ -15,6 +15,7 @@ const spies = (): TabMenuActions &
   Record<keyof TabMenuActions, ReturnType<typeof fn>> => ({
   close: fn(),
   closeOthers: fn(),
+  closeToTheLeft: fn(),
   closeToTheRight: fn(),
   closeAll: fn(),
 });
@@ -23,7 +24,7 @@ const labels = (items: { label: string }[]): string[] =>
   items.map((i) => i.label);
 
 describe("tabMenuItems", () => {
-  it("always offers all four actions, in order", () => {
+  it("always offers all five actions, in order", () => {
     const items = tabMenuItems(
       tab("b"),
       [tab("a"), tab("b"), tab("c")],
@@ -32,6 +33,7 @@ describe("tabMenuItems", () => {
     expect(labels(items)).toEqual([
       "Close",
       "Close others",
+      "Close to the left",
       "Close to the right",
       "Close all",
     ]);
@@ -48,8 +50,10 @@ describe("tabMenuItems", () => {
     items[1].onSelect();
     items[2].onSelect();
     items[3].onSelect();
+    items[4].onSelect();
     expect(actions.close).toHaveBeenCalledWith("b");
     expect(actions.closeOthers).toHaveBeenCalledWith("b");
+    expect(actions.closeToTheLeft).toHaveBeenCalledWith("b");
     expect(actions.closeToTheRight).toHaveBeenCalledWith("b");
     expect(actions.closeAll).toHaveBeenCalledWith();
   });
@@ -59,16 +63,25 @@ describe("tabMenuItems", () => {
     expect(items[1].disabled).toBe(true);
   });
 
-  it("disables Close to the right on the last tab", () => {
+  it("disables Close to the left on the first tab", () => {
     const items = tabMenuItems(
-      tab("c"),
+      tab("a"),
       [tab("a"), tab("b"), tab("c")],
       spies(),
     );
     expect(items[2].disabled).toBe(true);
   });
 
-  it("leaves both enabled on a middle tab among several", () => {
+  it("disables Close to the right on the last tab", () => {
+    const items = tabMenuItems(
+      tab("c"),
+      [tab("a"), tab("b"), tab("c")],
+      spies(),
+    );
+    expect(items[3].disabled).toBe(true);
+  });
+
+  it("leaves all three enabled on a middle tab among several", () => {
     const items = tabMenuItems(
       tab("b"),
       [tab("a"), tab("b"), tab("c")],
@@ -76,11 +89,13 @@ describe("tabMenuItems", () => {
     );
     expect(items[1].disabled).toBeUndefined();
     expect(items[2].disabled).toBeUndefined();
+    expect(items[3].disabled).toBeUndefined();
   });
 
   it("separates Close all from the rest", () => {
     const items = tabMenuItems(tab("a"), [tab("a")], spies());
     expect(items.map((i) => i.separatorBefore ?? false)).toEqual([
+      false,
       false,
       false,
       false,
