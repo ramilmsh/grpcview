@@ -52,6 +52,7 @@ function render(
       indent={8}
       rowHeight={22}
       onRowClick={() => {}}
+      onRowDoubleClick={() => {}}
       onTwistieClick={() => {}}
       onContextMenu={() => {}}
       onDragStart={() => {}}
@@ -87,6 +88,7 @@ describe("TreeRow: drag and drop chrome", () => {
         indent={8}
         rowHeight={22}
         onRowClick={() => {}}
+        onRowDoubleClick={() => {}}
         onTwistieClick={() => {}}
         onContextMenu={() => {}}
         onDragStart={() => {}}

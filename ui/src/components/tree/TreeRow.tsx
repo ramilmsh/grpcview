@@ -38,6 +38,7 @@ interface TreeRowProps<T> {
   indent: number;
   rowHeight: number;
   onRowClick: (ev: React.MouseEvent) => void;
+  onRowDoubleClick: () => void;
   onTwistieClick: (ev: React.MouseEvent) => void;
   onContextMenu: (ev: React.MouseEvent) => void;
   // Only dragstart is per-row; the rest are delegated to the container.
@@ -64,6 +65,7 @@ export function TreeRow<T>({
   indent,
   rowHeight,
   onRowClick,
+  onRowDoubleClick,
   onTwistieClick,
   onContextMenu,
   onDragStart,
@@ -164,6 +166,7 @@ export function TreeRow<T>({
       aria-selected={selected}
       title={tooltip}
       onClick={onRowClick}
+      onDoubleClick={onRowDoubleClick}
       onContextMenu={onContextMenu}
       // Not draggable while renaming: drag-selecting inside the input must work.
       draggable={!renaming}

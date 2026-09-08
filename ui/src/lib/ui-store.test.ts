@@ -1,11 +1,13 @@
 import { beforeEach, describe, it } from "node:test";
 import { expect } from "expect";
+import type { Item } from "@grpcview/v1/workspace_pb";
 import {
   useUIStore,
   type Draft,
   type InvokeState,
   type OpenTab,
 } from "./ui-store";
+import type { ItemWithPath } from "./format";
 
 // Keys are "<collection id>/<slug path>" (see format.ts's itemKey), so every fixture
 // here is a slug key. Only a MOVE ever changes one — a rename leaves the slug alone,
@@ -16,11 +18,13 @@ const OTHER = "./users/admin/ban";
 
 // Every fixture key lives in the "." collection, and OpenTab now carries that id
 // alongside the key: a collection id may contain slashes, so it is never parsed out of
-// the key.
+// the key. Every fixture here is a request tab — moveSubtree/closing don't care about
+// `kind`, so folder tabs get their own coverage in the "opening a tab" describe below.
 const tab = (key: string, name: string): OpenTab => ({
   key,
   name,
   collection: ".",
+  kind: "request",
 });
 
 const seed = (): void => {
@@ -72,6 +76,44 @@ describe("the active collection", () => {
   });
 });
 
+describe("openTab", () => {
+  beforeEach(() => {
+    useUIStore.setState({ openTabs: [], activeKey: null });
+  });
+
+  const requestItem: ItemWithPath = {
+    item: {
+      name: "GetUser",
+      slug: "get-user",
+      content: { case: "request", value: {} },
+    } as unknown as Item,
+    collection: ".",
+    path: [],
+    slugPath: [],
+  };
+
+  const folderItem: ItemWithPath = {
+    item: {
+      name: "Users",
+      slug: "users",
+      content: { case: "folder", value: { items: [] } },
+    } as unknown as Item,
+    collection: ".",
+    path: [],
+    slugPath: [],
+  };
+
+  it("opens a request item as a request-kind tab", () => {
+    useUIStore.getState().openTab(requestItem);
+    expect(useUIStore.getState().openTabs[0].kind).toBe("request");
+  });
+
+  it("opens a folder item as a folder-kind tab", () => {
+    useUIStore.getState().openTab(folderItem);
+    expect(useUIStore.getState().openTabs[0].kind).toBe("folder");
+  });
+});
+
 // A collection id is the FIRST segment of every key (itemKey), so moving the directory
 // rewrites every one of them — the same prefix remap a move does, one level up.
 describe("renameCollection", () => {
@@ -89,6 +131,7 @@ describe("renameCollection", () => {
     key,
     name,
     collection,
+    kind: "request",
   });
 
   beforeEach(() => {

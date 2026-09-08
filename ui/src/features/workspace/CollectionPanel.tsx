@@ -41,7 +41,6 @@ import {
   panelDropParentItem,
 } from "./panel-wiring";
 import { MethodPickerModal } from "./MethodPickerModal";
-import { FolderMetadataDialog } from "./FolderMetadataDialog";
 import { deleteConfirmCopy } from "./delete-confirm";
 import {
   collectionMenuItems,
@@ -84,9 +83,6 @@ export function CollectionPanel() {
     ItemWithPath | null | undefined
   >(undefined);
   const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
-  const [metadataFolder, setMetadataFolder] = useState<ItemWithPath | null>(
-    null,
-  );
   const [newCollection, setNewCollection] = useState(false);
   const treeRef = useRef<TreeHandle<PanelNode>>(null);
   // Empty `nodes` = a right-click on the panel's empty space, i.e. the collection root.
@@ -240,7 +236,12 @@ export function CollectionPanel() {
     },
     // A row's own trash button names exactly that one row, not the selection.
     onDelete: (item) => setConfirm([item]),
-    onEditMetadata: setMetadataFolder,
+    // Opens the folder's Metadata tab the same way a request row's own click does —
+    // a single click on the row itself can't: a folder row is always expandable, so a
+    // click toggles it rather than firing the tree's onOpen (dispatch.ts's "Enter on a
+    // folder toggles rather than 'opening' it, as in VS Code"). A double-click reaches
+    // this same tab through onOpen below; this button is the discoverable trigger.
+    onEditMetadata: openTab,
   };
   const renderRow = (node: PanelNode, state: TreeRowState): ReactNode =>
     renderPanelRow(node, state, rowCallbacks);
@@ -257,7 +258,7 @@ export function CollectionPanel() {
     newCollection: () => setNewCollection(true),
     startRename: (item) => treeRef.current?.startRename(itemKey(item)),
     requestDelete: (items) => setConfirm(pruneNestedSelections(items)),
-    editFolderMetadata: setMetadataFolder,
+    editFolderMetadata: openTab,
   };
 
   const deleteCopy = deleteConfirmCopy(confirm);
@@ -454,13 +455,6 @@ export function CollectionPanel() {
         services={services}
         onClose={() => setPickerParent(undefined)}
         onSelect={onPick}
-      />
-
-      {/* Keyed by the open folder's identity so a fresh instance mounts per open. */}
-      <FolderMetadataDialog
-        key={metadataFolder ? itemKey(metadataFolder) : "none"}
-        folder={metadataFolder}
-        onClose={() => setMetadataFolder(null)}
       />
 
       <Dialog

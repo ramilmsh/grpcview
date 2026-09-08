@@ -15,6 +15,10 @@ A hand-rolled, domain-agnostic tree — `features/workspace/` supplies the gRPC 
   quarters (outer = between-rows, middle half = into), a leaf splits in half. A multi-row
   move is **sequenced** (each call chained off the previous `onSuccess`) — order becomes
   persisted sibling order.
+- A single click on an expandable row toggles it rather than firing `onOpen` (VS Code
+  style, dispatch.ts); a double-click fires `onOpen` regardless — the row's only real
+  "open a folder" gesture. `isRepeatedClick` (Tree.tsx) swallows the second click of
+  that gesture so the toggle doesn't flip twice first.
 - **Identity hazard: `itemKey` is path+name derived** — rename/move changes an item's key
   (and descendants'). Any such mutation must call `moveSubtree(oldKey, newKey, newName)`,
   the one remapper of every keyed UI-store field.

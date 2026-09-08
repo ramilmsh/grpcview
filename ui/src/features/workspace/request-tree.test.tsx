@@ -382,6 +382,7 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
           indent={8}
           rowHeight={22}
           onRowClick={() => {}}
+          onRowDoubleClick={() => {}}
           onTwistieClick={() => {}}
           onContextMenu={() => {}}
           onDragStart={() => {}}

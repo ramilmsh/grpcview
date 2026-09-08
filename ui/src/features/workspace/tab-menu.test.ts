@@ -4,7 +4,12 @@ import { expect } from "expect";
 import type { OpenTab } from "@/lib/ui-store";
 import { tabMenuItems, type TabMenuActions } from "./tab-menu";
 
-const tab = (key: string): OpenTab => ({ key, name: key, collection: "." });
+const tab = (key: string): OpenTab => ({
+  key,
+  name: key,
+  collection: ".",
+  kind: "request",
+});
 
 const spies = (): TabMenuActions &
   Record<keyof TabMenuActions, ReturnType<typeof fn>> => ({

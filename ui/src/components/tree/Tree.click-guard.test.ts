@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "expect";
-import { isRightClickGesture } from "./Tree";
+import { isRepeatedClick, isRightClickGesture } from "./Tree";
 
 const IS_MAC = true;
 const NOT_MAC = false;
@@ -42,5 +42,19 @@ describe("isRightClickGesture: macOS ctrl+click", () => {
     expect(isRightClickGesture({ button: 0, ctrlKey: true }, NOT_MAC)).toBe(
       false,
     );
+  });
+});
+
+describe("isRepeatedClick: the second click of a double-click", () => {
+  it("is false for a standalone click", () => {
+    expect(isRepeatedClick({ detail: 1 })).toBe(false);
+  });
+
+  it("is true for the click's second firing — a double-click's first click event", () => {
+    expect(isRepeatedClick({ detail: 2 })).toBe(true);
+  });
+
+  it("is true for a triple-click too", () => {
+    expect(isRepeatedClick({ detail: 3 })).toBe(true);
   });
 });

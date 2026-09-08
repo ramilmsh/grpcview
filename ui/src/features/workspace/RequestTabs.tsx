@@ -2,6 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { X } from "@/components/ui/icons";
 import { Menu } from "@/components/ui/Menu";
+import { TreeIcon } from "@/components/tree/icon-map";
 import { useUIStore, type OpenTab } from "@/lib/ui-store";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { useActiveWorkspace, useRootItems } from "@/lib/workspace-query";
@@ -78,7 +79,13 @@ export function RequestTabs() {
               setMenu({ x: e.clientX, y: e.clientY, tab });
             }}
           >
-            <MethodKindTag kind={kind} />
+            {/* The tree's own icon resolver (icon-map.tsx), not a hand-drawn copy — the
+                same "folder" token request-tree.tsx assigns a folder row. */}
+            {tab.kind === "folder" ? (
+              <TreeIcon token="folder" />
+            ) : (
+              <MethodKindTag kind={kind} />
+            )}
             {/* Live name, not the stored one: the key is slug-based, so a rename no
                 longer rewrites the tab. tab.name only covers a deleted item. */}
             {item?.item.name ?? tab.name}
