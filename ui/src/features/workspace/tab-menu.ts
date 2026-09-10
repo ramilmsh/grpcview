@@ -6,6 +6,7 @@ import type { OpenTab } from "@/lib/ui-store";
 export interface TabMenuActions {
   close(key: string): void;
   closeOthers(key: string): void;
+  closeToTheLeft(key: string): void;
   closeToTheRight(key: string): void;
   closeAll(): void;
 }
@@ -22,6 +23,11 @@ export function tabMenuItems(
       label: "Close others",
       disabled: tabs.length <= 1,
       onSelect: () => actions.closeOthers(tab.key),
+    },
+    {
+      label: "Close to the left",
+      disabled: index === -1 || index === 0,
+      onSelect: () => actions.closeToTheLeft(tab.key),
     },
     {
       label: "Close to the right",

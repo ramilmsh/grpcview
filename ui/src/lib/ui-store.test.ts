@@ -1,11 +1,13 @@
 import { beforeEach, describe, it } from "node:test";
 import { expect } from "expect";
+import type { Item } from "@grpcview/v1/workspace_pb";
 import {
   useUIStore,
   type Draft,
   type InvokeState,
   type OpenTab,
 } from "./ui-store";
+import type { ItemWithPath } from "./format";
 
 // Keys are "<collection id>/<slug path>" (see format.ts's itemKey), so every fixture
 // here is a slug key. Only a MOVE ever changes one — a rename leaves the slug alone,
@@ -16,11 +18,13 @@ const OTHER = "./users/admin/ban";
 
 // Every fixture key lives in the "." collection, and OpenTab now carries that id
 // alongside the key: a collection id may contain slashes, so it is never parsed out of
-// the key.
+// the key. Every fixture here is a request tab — moveSubtree/closing don't care about
+// `kind`, so folder tabs get their own coverage in the "opening a tab" describe below.
 const tab = (key: string, name: string): OpenTab => ({
   key,
   name,
   collection: ".",
+  kind: "request",
 });
 
 const seed = (): void => {
@@ -72,6 +76,44 @@ describe("the active collection", () => {
   });
 });
 
+describe("openTab", () => {
+  beforeEach(() => {
+    useUIStore.setState({ openTabs: [], activeKey: null });
+  });
+
+  const requestItem: ItemWithPath = {
+    item: {
+      name: "GetUser",
+      slug: "get-user",
+      content: { case: "request", value: {} },
+    } as unknown as Item,
+    collection: ".",
+    path: [],
+    slugPath: [],
+  };
+
+  const folderItem: ItemWithPath = {
+    item: {
+      name: "Users",
+      slug: "users",
+      content: { case: "folder", value: { items: [] } },
+    } as unknown as Item,
+    collection: ".",
+    path: [],
+    slugPath: [],
+  };
+
+  it("opens a request item as a request-kind tab", () => {
+    useUIStore.getState().openTab(requestItem);
+    expect(useUIStore.getState().openTabs[0].kind).toBe("request");
+  });
+
+  it("opens a folder item as a folder-kind tab", () => {
+    useUIStore.getState().openTab(folderItem);
+    expect(useUIStore.getState().openTabs[0].kind).toBe("folder");
+  });
+});
+
 // A collection id is the FIRST segment of every key (itemKey), so moving the directory
 // rewrites every one of them — the same prefix remap a move does, one level up.
 describe("renameCollection", () => {
@@ -89,6 +131,7 @@ describe("renameCollection", () => {
     key,
     name,
     collection,
+    kind: "request",
   });
 
   beforeEach(() => {
@@ -396,8 +439,9 @@ describe("moveSubtree: descendants of a moved folder", () => {
   });
 });
 
-// closeTab, closeOtherTabs and closeTabsToRight all pick the same nearest-survivor
-// active tab; a fourth fixture ("a", "b", "c", "d") makes forward-vs-backward visible.
+// closeTab, closeOtherTabs, closeTabsToLeft and closeTabsToRight all pick the same
+// nearest-survivor active tab; a fourth fixture ("a", "b", "c", "d") makes
+// forward-vs-backward visible.
 describe("closing tabs", () => {
   const A = "./a";
   const B = "./b";
@@ -443,6 +487,25 @@ describe("closing tabs", () => {
   it("closeOtherTabs on the already-active tab keeps it active", () => {
     useUIStore.getState().closeOtherTabs(B);
     expect(useUIStore.getState().activeKey).toBe(B);
+  });
+
+  it("closeTabsToLeft drops every tab before the target, keeping the target", () => {
+    useUIStore.getState().closeTabsToLeft(B);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([B, C, D]);
+    expect(s.activeKey).toBe(B);
+  });
+
+  it("closeTabsToLeft activates the target when the active tab was to its left", () => {
+    useUIStore.setState({ activeKey: A });
+    useUIStore.getState().closeTabsToLeft(B);
+    expect(useUIStore.getState().activeKey).toBe(B);
+  });
+
+  it("closeTabsToLeft leaves the active tab alone when it is at or right of the target", () => {
+    useUIStore.setState({ activeKey: D });
+    useUIStore.getState().closeTabsToLeft(B);
+    expect(useUIStore.getState().activeKey).toBe(D);
   });
 
   it("closeTabsToRight drops every tab after the target, keeping the target", () => {

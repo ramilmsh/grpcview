@@ -29,6 +29,10 @@ export interface OpenTab {
   // out of it: a collection id may itself contain slashes ("services/payments/requests"),
   // so key.split("/")[0] is not the collection and nothing may pretend otherwise.
   collection: string;
+  // Request and folder tabs render different working areas (RequestWorkspace vs.
+  // FolderWorkspace) and different tab-strip icons. A plain field, not a full union: the
+  // two kinds carry identical fields today, so there is nothing per-variant to narrow into.
+  kind: "request" | "folder";
 }
 
 export interface Draft {
@@ -67,6 +71,7 @@ interface KeyedSlices {
   openTabs: OpenTab[];
   activeKey: string | null;
   drafts: Record<string, Draft | undefined>;
+  folderDrafts: Record<string, string | undefined>;
   invokes: Record<string, InvokeState | undefined>;
   treeSelection: readonly string[];
   treeFocused: string | null;
@@ -138,6 +143,7 @@ function remapKeyedState(
     openTabs: tabsChanged ? openTabs : s.openTabs,
     activeKey: rekeyOne(s.activeKey),
     drafts: rekey(s.drafts),
+    folderDrafts: rekey(s.folderDrafts),
     invokes: rekey(s.invokes),
     treeSelection: selectionChanged ? treeSelection : s.treeSelection,
     treeFocused: rekeyOne(s.treeFocused),
@@ -178,6 +184,9 @@ interface UIState {
   openTabs: OpenTab[];
   activeKey: string | null;
   drafts: Record<string, Draft | undefined>;
+  // Folder tabs' metadata-script buffer, keyed like `drafts` — its own slice rather than a
+  // Draft, since a folder has no body/messages/target to go with it.
+  folderDrafts: Record<string, string | undefined>;
   invokes: Record<string, InvokeState | undefined>;
   requestSubtab: RequestSubtab;
   responseSubtab: ResponseSubtab;
@@ -198,6 +207,7 @@ interface UIState {
   // The tab strip's context menu, batch variants of closeTab. Each picks the same
   // nearest-survivor active tab closeTab would.
   closeOtherTabs: (key: string) => void;
+  closeTabsToLeft: (key: string) => void;
   closeTabsToRight: (key: string) => void;
   closeAllTabs: () => void;
   // `collection` is optional only because a caller that has no tab in hand (there is
@@ -218,6 +228,9 @@ interface UIState {
 
   seedDraft: (key: string, draft: Draft) => void;
   setDraft: (key: string, patch: Partial<Draft>) => void;
+
+  seedFolderDraft: (key: string, metadata: string) => void;
+  setFolderDraft: (key: string, metadata: string) => void;
 
   setInvoke: (key: string, state: InvokeState) => void;
 
@@ -244,6 +257,7 @@ export const useUIStore = create<UIState>()((set) => ({
   openTabs: [],
   activeKey: null,
   drafts: {},
+  folderDrafts: {},
   invokes: {},
   requestSubtab: "message",
   responseSubtab: "messages",
@@ -273,6 +287,7 @@ export const useUIStore = create<UIState>()((set) => ({
         key,
         name: item.item.name,
         collection: item.collection,
+        kind: item.item.content.case === "folder" ? "folder" : "request",
       };
       return {
         openTabs: exists ? s.openTabs : [...s.openTabs, tab],
@@ -292,6 +307,16 @@ export const useUIStore = create<UIState>()((set) => ({
         new Set(s.openTabs.filter((t) => t.key !== key).map((t) => t.key)),
       ),
     ),
+
+  closeTabsToLeft: (key) =>
+    set((s) => {
+      const idx = s.openTabs.findIndex((t) => t.key === key);
+      if (idx === -1) return {};
+      return closeMatching(
+        s,
+        new Set(s.openTabs.slice(0, idx).map((t) => t.key)),
+      );
+    }),
 
   closeTabsToRight: (key) =>
     set((s) => {
@@ -352,6 +377,16 @@ export const useUIStore = create<UIState>()((set) => ({
       const prev = s.drafts[key] ?? { body: "{}", metadata: "" };
       return { drafts: { ...s.drafts, [key]: { ...prev, ...patch } } };
     }),
+
+  seedFolderDraft: (key, metadata) =>
+    set((s) =>
+      s.folderDrafts[key] !== undefined
+        ? {}
+        : { folderDrafts: { ...s.folderDrafts, [key]: metadata } },
+    ),
+
+  setFolderDraft: (key, metadata) =>
+    set((s) => ({ folderDrafts: { ...s.folderDrafts, [key]: metadata } })),
 
   setInvoke: (key, state) =>
     set((s) => ({ invokes: { ...s.invokes, [key]: state } })),

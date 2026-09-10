@@ -84,6 +84,15 @@ export function isRightClickGesture(
   return ev.button === 2 || (isMac && ev.ctrlKey);
 }
 
+// The second click of a double-click reaches the DOM as its own `click` (detail 2)
+// before `dblclick` fires. Left alone, that click would toggle an expandable row
+// shut again right after the first click's `detail: 1` toggled it open — a flicker
+// on every double-click, not just the ones a host wires a dblclick action onto.
+// eslint-disable-next-line react-refresh/only-export-components
+export function isRepeatedClick(ev: { detail: number }): boolean {
+  return ev.detail > 1;
+}
+
 // `.tree` has no height or overflow of its own, so its clientHeight is the full
 // content height rather than the visible window.
 function findScrollport(el: HTMLElement): HTMLElement {
@@ -273,6 +282,8 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   const handleRowClick = (row: TreeRowModel<T>, ev: React.MouseEvent): void => {
     // A row mid-rename swallows its own click, modified or not.
     if (row.id === renamingId) return;
+    // See isRepeatedClick: an expandable row must not toggle twice on a double-click.
+    if (row.expandable && isRepeatedClick(ev)) return;
 
     const mods: ClickMods = {
       shiftKey: ev.shiftKey,
@@ -282,6 +293,15 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     applyActions(
       applyRowClick(row, mods, { flat, focused, selection, anchor }),
     );
+  };
+
+  // A real activation, same as a leaf row's single-click `open` — dispatch.ts never
+  // emits that for an expandable row (it toggles instead, VS-Code style), so this is
+  // the only way one fires onOpen. Guarded like handleRowClick: a mid-rename dblclick
+  // is someone double-clicking the input to select a word, not the row.
+  const handleRowDoubleClick = (row: TreeRowModel<T>): void => {
+    if (row.id === renamingId) return;
+    onOpen?.(row.node);
   };
 
   const handleTwistieClick = (
@@ -541,6 +561,7 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           indent={indent}
           rowHeight={rowHeight}
           onRowClick={(ev) => handleRowClick(row, ev)}
+          onRowDoubleClick={() => handleRowDoubleClick(row)}
           onTwistieClick={(ev) => handleTwistieClick(row, ev)}
           onContextMenu={(ev) => handleContextMenu(row, ev)}
           onDragStart={(ev) => handleDragStart(row, ev)}

@@ -36,15 +36,20 @@
   content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px; width: 3px;
   border-radius: 0 3px 3px 0; background: var(--color-accent);
 }
-/* rail button tooltip — pure CSS, no component; label comes from data-tooltip */
-.rail-btn::after {
-  content: attr(data-tooltip); position: absolute; left: calc(100% + 9px); top: 50%;
-  transform: translateY(-50%) translateX(-4px); padding: 4px 8px; border-radius: var(--radius-sm);
+/* hover tooltip — pure CSS, no component; label comes from data-tooltip. Delayed so a
+   quick mouse-pass over a row of buttons doesn't flash a tooltip on each one; position is
+   per-caller (rail buttons sit flush against the app's left edge, toolbar icons don't). */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip); position: absolute; padding: 4px 8px; border-radius: var(--radius-sm);
   background: var(--panel-2); color: var(--color-text); font-size: 12px; white-space: nowrap;
   box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transition: opacity .12s, transform .12s;
   z-index: 20;
 }
-.rail-btn:hover::after, .rail-btn:focus-visible::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+[data-tooltip]:hover::after, [data-tooltip]:focus-visible::after { opacity: 1; transition-delay: .35s; }
+
+.rail-btn::after { left: calc(100% + 9px); top: 50%; transform: translateY(-50%) translateX(-4px); }
+.rail-btn:hover::after, .rail-btn:focus-visible::after { transform: translateY(-50%) translateX(0); }
 
 /* subtabs (request/response panes) */
 .subtab {
@@ -151,6 +156,9 @@
 }
 .iconbtn:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-neutral-100); }
 .iconbtn:disabled { color: var(--color-neutral-600); cursor: default; }
+/* toolbar icons tooltip below, not to the side — see the shared [data-tooltip] rule above */
+.iconbtn::after { top: calc(100% + 7px); left: 50%; transform: translateX(-50%) translateY(-4px); }
+.iconbtn:hover::after, .iconbtn:focus-visible::after { transform: translateX(-50%) translateY(0); }
 
 /* status dots */
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
