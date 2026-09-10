@@ -128,12 +128,19 @@ export function SourcesView() {
     reorderDescriptorSources.mutate({ collection, ids });
   };
 
+  // Refresh is excluded here and tracked per row instead (below): it targets one source id,
+  // so one refresh in flight must not lock every OTHER row's controls too.
   const busy =
     addDescriptorSource.isPending ||
     removeDescriptorSource.isPending ||
-    refreshDescriptorSource.isPending ||
     reorderDescriptorSources.isPending ||
     setDescriptorSourceCommit.isPending;
+
+  // The id the in-flight refresh mutation was called with — react-query keeps a pending
+  // mutation's `variables` around, so this needs no state of its own to know WHICH row asked.
+  const refreshingId = refreshDescriptorSource.isPending
+    ? refreshDescriptorSource.variables?.id
+    : undefined;
 
   const activeError =
     [
@@ -230,6 +237,7 @@ export function SourcesView() {
                 index={i}
                 count={sources.length}
                 busy={busy}
+                refreshing={refreshingId === s.id}
                 cb={{
                   onMove: move,
                   onRefresh: (src) =>

@@ -196,14 +196,21 @@ export function SourceRow({
   index,
   count,
   busy,
+  refreshing,
   cb,
 }: {
   source: DescriptorSource;
   index: number;
   count: number;
+  // Pending add/remove/reorder/commit — these touch the list itself, so they lock every row.
   busy: boolean;
+  // This row's OWN refresh is in flight. Never true for a row other than the one clicked;
+  // a sibling's refresh must not lock this row (that was the bug).
+  refreshing: boolean;
   cb: SourceRowCallbacks;
 }) {
+  // Only this row disables on its own refresh — busy alone would relock every row again.
+  const rowBusy = busy || refreshing;
   const kind = sourceKind(s);
   const label = sourceLabel(s);
   const info = contribution(s);
@@ -311,12 +318,12 @@ export function SourceRow({
           s.commitDescriptors ? COMMITTED_LABEL : LOCAL_LABEL
         } — click to ${s.commitDescriptors ? "stop committing them" : "commit them"}`}
         onClick={() => cb.onSetCommit(s, !s.commitDescriptors)}
-        disabled={busy}
+        disabled={rowBusy}
         style={{
           gap: 5,
           background: "transparent",
           border: "1px solid transparent",
-          cursor: busy ? "default" : "pointer",
+          cursor: rowBusy ? "default" : "pointer",
           ...commitStyle,
         }}
       >
@@ -332,7 +339,7 @@ export function SourceRow({
           title="Raise priority"
           aria-label={`Raise priority of ${label}`}
           onClick={() => cb.onMove(index, index - 1)}
-          disabled={busy || index === 0}
+          disabled={rowBusy || index === 0}
         >
           <CaretUp size={14} />
         </IconButton>
@@ -340,18 +347,18 @@ export function SourceRow({
           title="Lower priority"
           aria-label={`Lower priority of ${label}`}
           onClick={() => cb.onMove(index, index + 1)}
-          disabled={busy || index === count - 1}
+          disabled={rowBusy || index === count - 1}
         >
           <CaretDown size={14} />
         </IconButton>
       </div>
       <IconButton
-        title={refreshTitle(s)}
-        aria-label={`Refresh ${label}`}
+        title={refreshing ? "Refreshing…" : refreshTitle(s)}
+        aria-label={refreshing ? `Refreshing ${label}` : `Refresh ${label}`}
         onClick={() => cb.onRefresh(s)}
-        disabled={busy}
+        disabled={rowBusy}
       >
-        <ArrowClockwise size={15} />
+        <ArrowClockwise size={15} className={refreshing ? "spin" : undefined} />
       </IconButton>
       <IconButton
         title={
@@ -361,7 +368,7 @@ export function SourceRow({
         }
         aria-label={`Remove ${label}`}
         onClick={() => cb.onRemove(s)}
-        disabled={busy}
+        disabled={rowBusy}
       >
         <Trash size={15} />
       </IconButton>
