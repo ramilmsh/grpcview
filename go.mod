@@ -3,7 +3,7 @@ module codeberg.org/ramilmsh/grpcview
 go 1.26.1
 
 require (
-	connectrpc.com/connect v1.20.0
+	connectrpc.com/connect v1.21.0
 	connectrpc.com/cors v0.1.0
 	connectrpc.com/grpcreflect v1.3.0
 	github.com/jhump/protoreflect v1.18.0
