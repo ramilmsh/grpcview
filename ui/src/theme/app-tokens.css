@@ -237,6 +237,27 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 .freshopt:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
 .freshopt.on { color: var(--color-accent); border-color: var(--color-accent-700); background: var(--color-accent-900); }
 
+/* ── add-source dialog: mode cards (features/sources/AddSourceModal.tsx) ── */
+
+/* one accordion card per source kind; .on marks the expanded one */
+.mode-card {
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--panel-2); overflow: hidden;
+}
+.mode-card.on { border-color: var(--color-accent-700); }
+.mode-card-head {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px;
+  background: transparent; border: none; cursor: pointer; text-align: left;
+  font: inherit; font-size: 14px; color: var(--color-text);
+}
+.mode-card-head:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.mode-card-head .caret { margin-left: auto; color: var(--color-neutral-600); flex: none; }
+.mode-card-body { padding: 0 13px 13px; display: flex; flex-direction: column; gap: 11px; }
+
+/* the commit-descriptors checkbox, shared below all three mode cards: a top border sets it
+   off as its own section rather than belonging to whichever card is expanded */
+.commit-field { padding-top: 9px; border-top: 1px solid var(--line); }
+
 /* ── context menu (components/ui/Menu.tsx) ── */
 
 /* behavior-only backdrop variant (Backdrop's `transparent`): the card places itself */
