@@ -17,6 +17,7 @@ ts_project(
     deps = [
         "//grpcview/v1:grpcviewv1_proto_ts",
         "//ui:node_modules/@types/react",
+        "//ui:node_modules/clsx",
         "//ui:node_modules/react",
         "//ui/src/components/ui",
         "//ui/src/lib",
