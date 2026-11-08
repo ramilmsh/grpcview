@@ -85,3 +85,17 @@ common --aspects=//tools/lint:linters.bzl%shellcheck
 common --aspects=//tools/lint:linters.bzl%buf
 common --output_groups=+rules_lint_human
 common --@aspect_rules_lint//lint:fail_on_violation
+
+# Shared across worktrees (`~` is expanded by Bazel), size-capped.
+common --disk_cache=~/.cache/bazel-disk
+common --experimental_disk_cache_gc_max_size=40G
+
+# One server per worktree; don't keep idle ones resident.
+startup --max_idle_secs=900
+
+# Linux dev: build/test on BuildBuddy RBE, download only what `bazel run` needs.
+# Needs `common --remote_header=x-buildbuddy-api-key=...` in ~/.bazelrc.
+common:linux --config=remote-linux-amd64
+common:linux --remote_download_minimal
+# bazel_env's tool symlinks (.envrc PATH) must resolve to local files.
+common:linux --remote_download_regex=.*/bazel_env-opt/.*

@@ -28,7 +28,7 @@ sh_binary(
 )
 
 # Not sh_binary: these are invoked by path (--workspace_status_command, gopackagesdriver,
-# and release.sh's `tools/version.sh`), never as a Bazel target. sh_library exists purely
+# release.sh's `tools/version.sh`, prune_output_bases.sh by hand), never as a Bazel target. sh_library exists purely
 # so the shellcheck lint aspect has something to visit.
 sh_library(
     name = "version",
@@ -43,6 +43,11 @@ sh_library(
 sh_library(
     name = "gopackagesdriver",
     srcs = ["gopackagesdriver.sh"],
+)
+
+sh_library(
+    name = "prune_output_bases",
+    srcs = ["prune_output_bases.sh"],
 )
 
 go_proto_compiler(
