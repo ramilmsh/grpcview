@@ -24,3 +24,12 @@ uninstall` deletes only binaries by default; `--purge` also deletes `wsroot.Conf
 Versions stamp into `cli.version`: an exact `vX.Y.Z` tag on HEAD wins, else a Go
 pseudo-version, dirty worktree gets `+dirty`. `.bazelrc` omits `--stamp` — unstamped builds
 leave `cli.version` at `dev`.
+
+# Worktrees & disk
+
+- `--disk_cache=~/.cache/bazel-disk` is shared by every worktree, GC-capped at 40G.
+- On linux, `.bazelrc` builds/tests on BuildBuddy RBE with `--remote_download_minimal`;
+  `bazel-bin` mostly holds no real files. Needs
+  `common --remote_header=x-buildbuddy-api-key=...` in `~/.bazelrc`.
+- Each worktree gets its own output base, left behind when the worktree is removed;
+  `tools/prune_output_bases.sh [--dry-run]` deletes the orphans.

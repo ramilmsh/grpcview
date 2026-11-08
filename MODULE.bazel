@@ -16,7 +16,7 @@ bazel_dep(name = "hermetic_cc_toolchain", version = "4.2.0")
 # Forced on in .bazelrc (build:macos) over hermetic_cc_toolchain's zig darwin toolchain,
 # which can't compile for macOS. Declared directly so .bazelrc's canonical-name reference
 # to its cc toolchains stays valid.
-bazel_dep(name = "apple_support", version = "1.24.2")
+bazel_dep(name = "apple_support", version = "2.3.0")
 
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 
