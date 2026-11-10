@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/cors v0.1.0
-	connectrpc.com/grpcreflect v1.3.0
+	connectrpc.com/grpcreflect v1.3.1
 	github.com/jhump/protoreflect v1.18.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20260430225748-67e0bd25a988
