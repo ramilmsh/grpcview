@@ -137,9 +137,7 @@ func (b Builder) DescriptorSets(ctx context.Context, label string) ([]*descripto
 	if _, err := b.run(ctx, runCtx, timeout, canon, "build", nil, targets...); err != nil {
 		return nil, err
 	}
-	// cquery takes ONE expression, so the closure is unioned into it; `bazel build` takes patterns and
-	// gets them as separate arguments. Same configuration in both, see commonArgs.
-	stdout, err := b.run(ctx, runCtx, timeout, canon, "cquery", []string{"--output=files"}, strings.Join(targets, " + "))
+	stdout, err := b.run(ctx, runCtx, timeout, canon, "cquery", cqueryFlags, cqueryExpr(targets))
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +172,22 @@ func (b Builder) DescriptorSets(ctx context.Context, label string) ([]*descripto
 		sets = append(sets, set)
 	}
 	return sets, nil
+}
+
+// Not --output=files, for two reasons. It lists aspect outputs too, and .bazelrc may apply aspects to
+// every command (lint's .out and .exit_code files are not descriptor sets); target.files is the
+// target's own default outputs only. And it lists the target in EVERY configuration in the graph,
+// most of which the build never wrote; config(…, target) keeps only the top-level one the build used
+// (same flags in both, see commonArgs).
+//
+// f.path is the exec path: bazel-out/… for a generated file, workspace-relative for a main-repo source
+// file, so both resolve against the bazel root.
+var cqueryFlags = []string{"--output=starlark", `--starlark:expr="\n".join([f.path for f in target.files.to_list()])`}
+
+// cquery takes ONE expression, so the closure is unioned into it; `bazel build` takes patterns and
+// gets them as separate arguments.
+func cqueryExpr(targets []string) string {
+	return "config(" + strings.Join(targets, " + ") + ", target)"
 }
 
 // Deliberately exact rather than something like `.*proto.*`: go_proto_library and cc_proto_library
