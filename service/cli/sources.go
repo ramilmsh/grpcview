@@ -137,12 +137,14 @@ func bazelSourceCount(n int) string {
 
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	var tls, commit bool
+	var position uint32
 
 	cmd := &cobra.Command{
 		Use:   "add <host:port>|<file.binpb>|//pkg:target",
 		Short: "Add a reflection target, a descriptor-set file, or a bazel label as a definition source",
 		Long: "Add one definition source at LOWEST priority, so adding never moves an\n" +
-			"existing service to a different source — `sources reorder` is what does that.\n\n" +
+			"existing service to a different source — `sources reorder` is what does that.\n" +
+			"--position inserts it at that priority index instead (0 = top, wins conflicts).\n\n" +
 			"The argument decides the kind, and the first test is the filesystem: an argument\n" +
 			"that stats as a file is uploaded as a FileDescriptorSet, one that does not and\n" +
 			"begins with `//` or `@` is a bazel LABEL, and anything else is dialed as a\n" +
@@ -185,6 +187,9 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("position") {
+				msg.Position = &position
+			}
 			if msg.GetBazel() != nil {
 				useBuildTimeout(cmd, g)
 			}
@@ -195,6 +200,8 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		"dial the reflection target over TLS; it is part of the source's identity, so the same address with and without it are two sources")
 	cmd.Flags().BoolVar(&commit, "commit-descriptors", false,
 		"commit what this source resolves to, as a protojson sidecar in the collection, instead of caching it in local state; `sources commit` toggles it afterwards")
+	cmd.Flags().Uint32Var(&position, "position", 0,
+		"priority index to insert a NEW source at, 0 being the top; unset appends at the lowest priority, and a re-add keeps its existing priority")
 
 	return cmd
 }

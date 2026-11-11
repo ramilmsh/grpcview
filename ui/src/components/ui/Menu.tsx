@@ -69,19 +69,20 @@ export function Menu({
   y,
   items,
   onClose,
+  align = "start",
 }: {
   x: number;
   y: number;
   items: readonly MenuItem[];
   onClose: () => void;
+  // "end": x is the card's RIGHT edge — a dropdown hung right-aligned under its anchor.
+  align?: "start" | "end";
 }): ReactNode {
   const cardRef = useRef<HTMLDivElement>(null);
   const idPrefix = useId();
   const domIdFor = (index: number): string => `${idPrefix}item-${index}`;
 
-  const [highlighted, setHighlighted] = useState<number | null>(() =>
-    stepMenuIndex(items, null, 1),
-  );
+  const [highlighted, setHighlighted] = useState<number | null>(null);
 
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -90,7 +91,7 @@ export function Menu({
     const rect = card.getBoundingClientRect();
     setPos(
       menuPosition({
-        x,
+        x: align === "end" ? x - rect.width : x,
         y,
         width: rect.width,
         height: rect.height,
@@ -98,7 +99,7 @@ export function Menu({
         viewportHeight: window.innerHeight,
       }),
     );
-  }, [x, y, items.length]);
+  }, [x, y, align, items.length]);
 
   // Holding focus is what keeps Escape from also reaching the tree's own handler.
   // Not rAF: rAF never fires in the hidden tab the browser-verification harness uses.

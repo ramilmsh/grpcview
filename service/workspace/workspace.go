@@ -265,7 +265,10 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 		src.CommitDescriptors = true
 	}
 
-	sources := upsertSource(slices.Clone(ws.GetSources()), src)
+	sources, err := upsertSource(slices.Clone(ws.GetSources()), src, request.Msg.Position)
+	if err != nil {
+		return nil, err
+	}
 	if err := w.putDescriptorState(ctx, coll, sources, map[string]*resolvedSource{src.GetId(): fresh}); err != nil {
 		return nil, err
 	}

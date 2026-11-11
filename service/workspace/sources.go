@@ -433,13 +433,22 @@ func (w Workspace) putDescriptorState(
 	return nil
 }
 
-func upsertSource(sources []*grpcviewv1.DescriptorSource, src *grpcviewv1.DescriptorSource) []*grpcviewv1.DescriptorSource {
+// upsertSource refreshes an existing id in place, at its existing priority, or inserts a new one at
+// position (nil appends at lowest priority). A position past the end is InvalidArgument.
+func upsertSource(sources []*grpcviewv1.DescriptorSource, src *grpcviewv1.DescriptorSource, position *uint32) ([]*grpcviewv1.DescriptorSource, error) {
 	i := slices.IndexFunc(sources, func(s *grpcviewv1.DescriptorSource) bool { return s.GetId() == src.GetId() })
-	if i == -1 {
-		return append(sources, src)
+	if i != -1 {
+		sources[i] = src
+		return sources, nil
 	}
-	sources[i] = src
-	return sources
+	if position == nil {
+		return append(sources, src), nil
+	}
+	if int(*position) > len(sources) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"position %d is past the end of %d sources", *position, len(sources)))
+	}
+	return slices.Insert(sources, int(*position), src), nil
 }
 
 func reorderSources(sources []*grpcviewv1.DescriptorSource, ids []string) ([]*grpcviewv1.DescriptorSource, error) {

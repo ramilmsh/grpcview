@@ -77,6 +77,14 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
    * @generated from field: bool commit_descriptors = 5;
    */
   commitDescriptors: boolean;
+
+  /**
+   * Priority index a NEW source is inserted at: 0 is the top (wins conflicts). Unset appends at
+   * the lowest priority. Past the end is InvalidArgument. A re-add keeps its existing priority.
+   *
+   * @generated from field: optional uint32 position = 8;
+   */
+  position?: number | undefined;
 };
 
 /**

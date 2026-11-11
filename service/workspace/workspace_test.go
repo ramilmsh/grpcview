@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1201,5 +1202,60 @@ func TestReorderKeepsAReferenceShared(t *testing.T) {
 	assertBareReference(t, w, cid, id)
 	if text := manifestText(t, w, cid); !strings.Contains(text, fmt.Sprintf("127.0.0.1:%d", own)) {
 		t.Errorf("the collection's own source lost its config:\n%s", text)
+	}
+}
+
+func TestAddDescriptorSourcePosition(t *testing.T) {
+	w := newTestWorkspace(t)
+	ctx := context.Background()
+	ensureWorkspace(t, w, ctx)
+	set := fileDescriptorSet(t, "grpc/health/v1/health.proto")
+
+	add := func(name string, position *uint32) (*grpcviewv1.Collection, error) {
+		req := descriptorSetAddReq(set)
+		req.FileName = name
+		req.Position = position
+		resp, err := w.AddDescriptorSource(ctx, connect.NewRequest(req))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Msg.GetCollection(), nil
+	}
+	ids := func(c *grpcviewv1.Collection) []string { return sourceIDsOf(c.GetSources()) }
+	top := uint32(0)
+
+	if _, err := add("a.binpb", nil); err != nil {
+		t.Fatalf("add a: %v", err)
+	}
+	if _, err := add("b.binpb", nil); err != nil {
+		t.Fatalf("add b: %v", err)
+	}
+	got, err := add("c.binpb", &top)
+	if err != nil {
+		t.Fatalf("add c at top: %v", err)
+	}
+	if want := []string{"upload:c.binpb", "upload:a.binpb", "upload:b.binpb"}; !slices.Equal(ids(got), want) {
+		t.Fatalf("after adding c at top: %v, want %v", ids(got), want)
+	}
+
+	// A re-add is a refresh: it keeps its priority whatever position says.
+	if got, err = add("b.binpb", &top); err != nil {
+		t.Fatalf("re-add b: %v", err)
+	}
+	if want := []string{"upload:c.binpb", "upload:a.binpb", "upload:b.binpb"}; !slices.Equal(ids(got), want) {
+		t.Fatalf("re-adding b moved it: %v, want %v", ids(got), want)
+	}
+
+	far := uint32(9)
+	if _, err := add("d.binpb", &far); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("position past the end: got %v, want InvalidArgument", err)
+	}
+
+	reloaded, err := w.Get(ctx, connect.NewRequest(&grpcviewv1.GetRequest{Collection: testWorkspace}))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if want := []string{"upload:c.binpb", "upload:a.binpb", "upload:b.binpb"}; !slices.Equal(ids(reloaded.Msg.GetCollection()), want) {
+		t.Fatalf("persisted order %v, want %v", ids(reloaded.Msg.GetCollection()), want)
 	}
 }

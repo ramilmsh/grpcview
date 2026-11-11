@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Plus, Warning } from "@/components/ui/icons";
+import { CaretDown, Warning } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Menu } from "@/components/ui/Menu";
 import {
   useActiveWorkspace,
   useCollections,
@@ -9,7 +10,12 @@ import {
   useWorkspaceMutations,
 } from "@/lib/workspace-query";
 import type { DescriptorSource } from "@grpcview/v1/workspace_pb";
-import { AddSourceModal } from "./AddSourceModal";
+import {
+  AddSourceCard,
+  type DraftCommon,
+  type DraftSubmit,
+} from "./AddSourceCard";
+import { DRAFT_KINDS, KIND_META, type DraftKind } from "./add-source-draft";
 import { removeConsequence, SourceRow, sourceLabel } from "./source-row";
 
 // One presentation for both of this view's banners — the mutation error and the trust
@@ -57,7 +63,12 @@ export function SourcesView() {
   } = useWorkspaceMutations();
   const { trusted } = useCollections();
   const setWorkspaceTrust = useSetWorkspaceTrust();
-  const [modalOpen, setModalOpen] = useState(false);
+  // The one draft, by type; null = none. Picking a type while one is open switches it.
+  const [draft, setDraft] = useState<DraftKind | null>(null);
+  // The type menu, anchored right-aligned under the "Add source" button.
+  const [typeMenu, setTypeMenu] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [confirm, setConfirm] = useState<DescriptorSource | null>(null);
 
   // The trust prompt is shown only when a bazel source is actually in the list, NOT on every
@@ -68,47 +79,33 @@ export function SourcesView() {
   const untrustedBuild =
     !trusted && sources.some((s) => s.source.case === "bazel");
 
-  const onAdd = (address: string, tls: boolean, commitDescriptors: boolean) => {
-    addDescriptorSource.mutate(
-      {
-        collection,
-        source: {
-          case: "reflection",
-          value: { address, tls: tls ? {} : undefined },
-        },
-        commitDescriptors,
-      },
-      { onSuccess: () => setModalOpen(false) },
-    );
-  };
-
-  // No `path`: that field is a refresh recipe the CLI records, and a browser has a file
-  // picker, not a filesystem. A bazel label needs none — it knows how to produce its bytes.
-  const onAddBazel = (label: string, commitDescriptors: boolean) => {
-    addDescriptorSource.mutate(
-      {
-        collection,
-        source: { case: "bazel", value: { label } },
-        commitDescriptors,
-      },
-      { onSuccess: () => setModalOpen(false) },
-    );
-  };
-
-  const onAddDescriptorSet = (
-    bytes: Uint8Array,
-    fileName: string,
-    commitDescriptors: boolean,
+  // No `path` on an upload: that field is a refresh recipe the CLI records, and a browser has a
+  // file picker, not a filesystem. A bazel label needs none — it knows how to produce its bytes.
+  const onAdd = (
+    d: DraftSubmit,
+    { commitDescriptors, position }: DraftCommon,
   ) => {
-    addDescriptorSource.mutate(
-      {
-        collection,
-        source: { case: "descriptorSet", value: bytes },
-        fileName,
-        commitDescriptors,
-      },
-      { onSuccess: () => setModalOpen(false) },
-    );
+    const base = { collection, commitDescriptors, position };
+    const req =
+      d.kind === "reflection"
+        ? {
+            ...base,
+            source: {
+              case: "reflection" as const,
+              value: { address: d.address, tls: d.tls ? {} : undefined },
+            },
+          }
+        : d.kind === "bazel"
+          ? {
+              ...base,
+              source: { case: "bazel" as const, value: { label: d.label } },
+            }
+          : {
+              ...base,
+              source: { case: "descriptorSet" as const, value: d.bytes },
+              fileName: d.fileName,
+            };
+    addDescriptorSource.mutate(req, { onSuccess: () => setDraft(null) });
   };
 
   const doRemove = () => {
@@ -176,11 +173,16 @@ export function SourcesView() {
         <Button
           variant="primary"
           className="ml-auto"
-          style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}
-          onClick={() => setModalOpen(true)}
+          style={{ padding: "6px 11px 6px 13px", fontSize: 13, gap: 7 }}
+          aria-haspopup="menu"
+          aria-expanded={typeMenu !== null}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setTypeMenu({ x: r.right, y: r.bottom + 4 });
+          }}
         >
-          <Plus size={14} />
           Add source
+          <CaretDown size={12} />
         </Button>
       </div>
 
@@ -220,14 +222,29 @@ export function SourcesView() {
           </Banner>
         )}
 
-        {sources.length === 0 ? (
-          <div
-            className="text-muted"
-            style={{ fontSize: 13, padding: "16px 0", lineHeight: 1.6 }}
-          >
-            No definition sources yet. Add a server-reflection target, a bazel
-            label, or upload a descriptor set to load its services and schemas.
+        {draft && (
+          <div style={{ maxWidth: 720, marginBottom: 12 }}>
+            <AddSourceCard
+              kind={draft}
+              sourceLabels={sources.map(sourceLabel)}
+              pending={addDescriptorSource.isPending}
+              onCancel={() => setDraft(null)}
+              onSubmit={onAdd}
+            />
           </div>
+        )}
+
+        {sources.length === 0 ? (
+          !draft && (
+            <div
+              className="text-muted"
+              style={{ fontSize: 13, padding: "16px 0", lineHeight: 1.6 }}
+            >
+              No definition sources yet. Add a server-reflection target, a bazel
+              label, or upload a descriptor set to load its services and
+              schemas.
+            </div>
+          )
         ) : (
           <div className="flex flex-col" style={{ gap: 8, maxWidth: 720 }}>
             {sources.map((s, i) => (
@@ -256,14 +273,18 @@ export function SourcesView() {
         )}
       </div>
 
-      <AddSourceModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onAddReflection={onAdd}
-        onAddBazel={onAddBazel}
-        onAddDescriptorSet={onAddDescriptorSet}
-        pending={addDescriptorSource.isPending}
-      />
+      {typeMenu && (
+        <Menu
+          x={typeMenu.x}
+          y={typeMenu.y}
+          align="end"
+          items={DRAFT_KINDS.map((k) => ({
+            label: KIND_META[k].menu,
+            onSelect: () => setDraft(k),
+          }))}
+          onClose={() => setTypeMenu(null)}
+        />
+      )}
 
       <Dialog
         open={confirm !== null}

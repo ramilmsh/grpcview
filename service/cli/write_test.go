@@ -1132,3 +1132,19 @@ func TestWriteRPCFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestSourcesAddPosition(t *testing.T) {
+	fc := newFake()
+	out, errOut, code := runCLI(fc, "", "sources", "add", "localhost:50055")
+	assertSilent(t, out, errOut, code)
+	if got := onlyAdd(t, fc); got.Position != nil {
+		t.Errorf("position = %d, want unset: no flag appends at the lowest priority", got.GetPosition())
+	}
+
+	fc = newFake()
+	out, errOut, code = runCLI(fc, "", "sources", "add", "localhost:50055", "--position", "0")
+	assertSilent(t, out, errOut, code)
+	if got := onlyAdd(t, fc); got.Position == nil || got.GetPosition() != 0 {
+		t.Errorf("position = %v, want 0 set explicitly", got.Position)
+	}
+}

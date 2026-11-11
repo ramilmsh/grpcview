@@ -28,6 +28,9 @@ message AddDescriptorSourceRequest {
   string path = 7;
   // See DescriptorSource.commit_descriptors.
   bool commit_descriptors = 5;
+  // Priority index a NEW source is inserted at: 0 is the top (wins conflicts). Unset appends at
+  // the lowest priority. Past the end is InvalidArgument. A re-add keeps its existing priority.
+  optional uint32 position = 8;
 }
 
 // The collection's tree after the source was added.

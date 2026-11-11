@@ -56,5 +56,6 @@ export const Stack = Ph.Stack as unknown as Icon;
 export const Stop = Ph.Stop as unknown as Icon;
 export const Trash = Ph.Trash as unknown as Icon;
 export const TreeStructure = Ph.TreeStructure as unknown as Icon;
+export const UploadSimple = Ph.UploadSimple as unknown as Icon;
 export const Warning = Ph.Warning as unknown as Icon;
 export const X = Ph.X as unknown as Icon;

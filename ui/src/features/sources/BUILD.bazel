@@ -4,8 +4,9 @@ load("//ui:defs.bzl", "ts_project")
 ts_project(
     name = "sources",
     srcs = [
-        "AddSourceModal.tsx",
+        "AddSourceCard.tsx",
         "SourcesView.tsx",
+        "add-source-draft.ts",
         "source-row.tsx",
     ],
     declaration = True,
@@ -27,7 +28,7 @@ ts_project(
     name = "sources_tests",
     testonly = True,
     srcs = [
-        "add-source-modal.test.tsx",
+        "add-source-draft.test.ts",
         "source-row.test.tsx",
     ],
     declaration = True,

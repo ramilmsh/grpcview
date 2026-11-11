@@ -55,7 +55,7 @@ source to define a file/serve a service wins); nothing persisted.
 Order is precedence only, never recency. Identity is config-derived (`store.SourceID`:
 `reflection:<address>[+tls]`, `upload:<file name>`, `bazel:<canonical label>`, computed in
 `service/store/sources.go`); re-adding refreshes in place, new ones append at lowest
-priority. No resolved definitions → `FailedPrecondition`. A service's dial target is
+priority unless `AddDescriptorSourceRequest.position` names an index. No resolved definitions → `FailedPrecondition`. A service's dial target is
 independent of who won its descriptors — `Service.source` is the first *reflection* source
 serving it; `resolveTarget` honors a per-request override first.
 

@@ -3,6 +3,7 @@ package workspace
 import (
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/jhump/protoreflect/desc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -224,16 +225,36 @@ func TestUpsertSourceRefreshesInPlace(t *testing.T) {
 	srcAt := func(id string) *grpcviewv1.DescriptorSource {
 		return &grpcviewv1.DescriptorSource{Id: id}
 	}
+	pos := func(p uint32) *uint32 { return &p }
 	sources := []*grpcviewv1.DescriptorSource{srcAt("upload:a.binpb"), srcAt("reflection:x:1")}
 
-	sources = upsertSource(sources, srcAt("upload:a.binpb"))
-	if len(sources) != 2 || sources[0].GetId() != "upload:a.binpb" {
-		t.Fatalf("re-adding the same id must refresh in place, got %v", sourceIDsOf(sources))
+	sources, err := upsertSource(sources, srcAt("upload:a.binpb"), pos(1))
+	if err != nil || len(sources) != 2 || sources[0].GetId() != "upload:a.binpb" {
+		t.Fatalf("re-adding the same id must refresh in place, ignoring position, got %v (%v)", sourceIDsOf(sources), err)
 	}
 
-	sources = upsertSource(sources, srcAt("upload:b.binpb"))
-	if len(sources) != 3 || sources[2].GetId() != "upload:b.binpb" {
-		t.Fatalf("a new source must append at lowest priority, got %v", sourceIDsOf(sources))
+	sources, err = upsertSource(sources, srcAt("upload:b.binpb"), nil)
+	if err != nil || len(sources) != 3 || sources[2].GetId() != "upload:b.binpb" {
+		t.Fatalf("a new source with no position must append at lowest priority, got %v (%v)", sourceIDsOf(sources), err)
+	}
+
+	sources, err = upsertSource(sources, srcAt("upload:top.binpb"), pos(0))
+	if err != nil || len(sources) != 4 || sources[0].GetId() != "upload:top.binpb" {
+		t.Fatalf("position 0 must insert at the top, got %v (%v)", sourceIDsOf(sources), err)
+	}
+
+	sources, err = upsertSource(sources, srcAt("upload:mid.binpb"), pos(2))
+	if err != nil || len(sources) != 5 || sources[2].GetId() != "upload:mid.binpb" {
+		t.Fatalf("position 2 must insert at index 2, got %v (%v)", sourceIDsOf(sources), err)
+	}
+
+	sources, err = upsertSource(sources, srcAt("upload:end.binpb"), pos(5))
+	if err != nil || len(sources) != 6 || sources[5].GetId() != "upload:end.binpb" {
+		t.Fatalf("position == len must append, got %v (%v)", sourceIDsOf(sources), err)
+	}
+
+	if _, err := upsertSource(sources, srcAt("upload:far.binpb"), pos(7)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a position past the end must be InvalidArgument, got %v", err)
 	}
 }
 

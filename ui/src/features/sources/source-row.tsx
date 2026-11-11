@@ -173,11 +173,19 @@ export function removeConsequence(s: DescriptorSource): string {
 
 // A bazel source EXECUTES to produce its bytes, which is why it gets the tool and not another
 // file icon — the same distinction the trust gate is about.
-const KIND_ICON: Record<SourceKind, typeof PlugsConnected> = {
+// Shared with the add-source draft card, so a draft wears the icon its row will.
+export const KIND_ICON: Record<SourceKind, typeof PlugsConnected> = {
   reflection: PlugsConnected,
   descriptorSet: FileArchive,
   bazel: Hammer,
   reference: LinkBreak,
+};
+
+export const KIND_TINT: Record<SourceKind, string> = {
+  reflection: "var(--ok)",
+  descriptorSet: "var(--color-neutral-400)",
+  bazel: "var(--color-accent)",
+  reference: "var(--warn)",
 };
 
 const BAZEL_TITLE =
@@ -222,15 +230,7 @@ export function SourceRow({
         ? "var(--color-neutral-500)"
         : "var(--color-neutral-600)";
   const KindIcon = KIND_ICON[kind];
-  const kindIconColor = failed
-    ? "var(--err-fg)"
-    : kind === "reflection"
-      ? "var(--ok)"
-      : kind === "bazel"
-        ? "var(--color-accent)"
-        : kind === "reference"
-          ? "var(--warn)"
-          : "var(--color-neutral-400)";
+  const kindIconColor = failed ? "var(--err-fg)" : KIND_TINT[kind];
   // The recipe, on the one kind that has one to show and can lose it. Short by construction
   // (workspace-root-relative), so it rides the existing secondary line.
   const recipe = refreshRecipe(s);
