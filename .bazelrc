@@ -77,14 +77,15 @@ build:remote --define=EXECUTOR=remote
 # `transpiler = "tsc"` attr on each target.
 common --@aspect_rules_ts//ts:default_to_tsc_transpiler=true
 
-# Lint aspects run on every build/test; findings fail the action. `+` makes the extra
-# output group additive — replacing the default output groups outright would mean e.g.
-# `bazel build //service/cmd` stops producing the actual binary.
+# Lint aspects run on every build/test; findings in main-repo targets fail the build. No
+# --@aspect_rules_lint//lint:fail_on_violation: linters.bzl's wrappers fail on the recorded
+# exit codes instead, so external repos built top-level aren't linted into failure. `+` makes
+# the extra output group additive — replacing the default output groups outright would mean
+# e.g. `bazel build //service/cmd` stops producing the actual binary.
 common --aspects=//tools/lint:linters.bzl%eslint
 common --aspects=//tools/lint:linters.bzl%shellcheck
 common --aspects=//tools/lint:linters.bzl%buf
 common --output_groups=+rules_lint_human
-common --@aspect_rules_lint//lint:fail_on_violation
 
 # Shared across worktrees (`~` is expanded by Bazel), size-capped.
 common --disk_cache=~/.cache/bazel-disk

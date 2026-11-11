@@ -74,7 +74,7 @@ per collection, kept warm across daemon requests.
 ## The bazel kind, and workspace trust
 
 A `Bazel{label}` refresh **builds**: `bazel query` for the descriptor-set closure, `bazel
-build`, `bazel cquery --output=files` — argv slices, never a shell string; downstream it
+build`, `bazel cquery` (starlark `target.files`, top-level config only) — argv slices, never a shell string; downstream it
 behaves like an upload (no dial target). Adding one is a combobox pick, not free-typed.
 
 Gated on **workspace trust** (VS Code's model, since a build runs arbitrary repo code):

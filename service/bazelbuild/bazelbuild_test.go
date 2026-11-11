@@ -203,7 +203,7 @@ exit 0
 	}
 	wantQuery := `query --output=label --order_output=no --curses=no --color=no --noshow_progress -- kind("^(proto_library|proto_descriptor_set) rule$", deps(//pkg:pkg))`
 	wantBuild := "build --curses=no --color=no --noshow_progress -- //pkg:pkg"
-	wantCquery := "cquery --output=files --curses=no --color=no --noshow_progress -- //pkg:pkg"
+	wantCquery := `cquery --output=starlark --starlark:expr="\n".join([f.path for f in target.files.to_list()]) --curses=no --color=no --noshow_progress -- config(//pkg:pkg, target)`
 	if lines[0] != wantQuery {
 		t.Errorf("query argv = %q, want %q", lines[0], wantQuery)
 	}
@@ -259,12 +259,53 @@ exit 0
 		t.Fatalf("bazel was invoked %d times, want 3: %q", len(lines), lines)
 	}
 	wantBuild := "build --curses=no --color=no --noshow_progress -- //pkg:pkg @protobuf//src/google/protobuf:any_proto"
-	wantCquery := "cquery --output=files --curses=no --color=no --noshow_progress -- //pkg:pkg + @protobuf//src/google/protobuf:any_proto"
+	wantCquery := `cquery --output=starlark --starlark:expr="\n".join([f.path for f in target.files.to_list()]) --curses=no --color=no --noshow_progress -- config(//pkg:pkg + @protobuf//src/google/protobuf:any_proto, target)`
 	if lines[1] != wantBuild {
 		t.Errorf("build argv = %q, want %q", lines[1], wantBuild)
 	}
 	if lines[2] != wantCquery {
 		t.Errorf("cquery argv = %q, want %q", lines[2], wantCquery)
+	}
+}
+
+// The starlark expression and the config(…, target) wrapper must each reach bazel as ONE argv element:
+// no shell is involved, so a split or an extra layer of quoting would be a different expression.
+// target.files rather than --output=files keeps aspect outputs out; config(…, target) keeps the
+// target's copies in other configurations out.
+func TestDescriptorSetsCqueryArgv(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "out", "own.bin"), setBytes(t, "a.proto"))
+
+	log := filepath.Join(root, "argv.log")
+	binary := fakeBazel(t, `
+case "$1" in
+query) echo '@protobuf//src/google/protobuf:any_proto' ;;
+cquery)
+  for a in "$@"; do printf '%s\0' "$a"; done > `+shquote(log)+`
+  echo out/own.bin
+  ;;
+esac
+exit 0
+`)
+
+	if _, err := (Builder{Binary: binary, Root: root}).DescriptorSets(context.Background(), "//pkg"); err != nil {
+		t.Fatalf("DescriptorSets: %v", err)
+	}
+	raw, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00")
+	want := []string{
+		"cquery",
+		"--output=starlark",
+		`--starlark:expr="\n".join([f.path for f in target.files.to_list()])`,
+		"--curses=no", "--color=no", "--noshow_progress",
+		"--",
+		"config(//pkg:pkg + @protobuf//src/google/protobuf:any_proto, target)",
+	}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("cquery argv =\n%q\nwant\n%q", got, want)
 	}
 }
 
