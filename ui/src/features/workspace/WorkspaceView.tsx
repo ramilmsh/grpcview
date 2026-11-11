@@ -3,6 +3,7 @@ import { CollectionPanel } from "./CollectionPanel";
 import { RequestTabs } from "./RequestTabs";
 import { RequestWorkspace } from "./RequestWorkspace";
 import { FolderWorkspace } from "./FolderWorkspace";
+import { NewRequestPage } from "./NewRequestPage";
 
 export function WorkspaceView() {
   const openTabs = useUIStore((s) => s.openTabs);
@@ -17,7 +18,9 @@ export function WorkspaceView() {
         style={{ flex: 1, minWidth: 0, minHeight: 0 }}
       >
         <RequestTabs />
-        {activeTab?.kind === "folder" ? (
+        {activeTab?.kind === "newRequest" ? (
+          <NewRequestPage />
+        ) : activeTab?.kind === "folder" ? (
           <FolderWorkspace />
         ) : (
           <RequestWorkspace />

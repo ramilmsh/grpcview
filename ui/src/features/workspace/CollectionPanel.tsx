@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { MagnifyingGlass, FolderPlus, Plus } from "@/components/ui/icons";
-import type { Service, Method } from "@grpcview/v1/workspace_pb";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -18,11 +17,9 @@ import {
   childPathOf,
   itemKey,
   pruneNestedSelections,
-  serviceName,
   slugKeyIn,
   type ItemWithPath,
 } from "@/lib/format";
-import type { RequestRowCallbacks } from "./request-tree";
 import {
   panelItems,
   panelNodeId,
@@ -30,7 +27,9 @@ import {
   renderPanelRow,
   usePanelTreeAdapter,
   type PanelNode,
+  type PanelRowCallbacks,
 } from "./panel-tree";
+import { NewRequestRow } from "./NewRequestRow";
 import {
   collectionForNodeId,
   collectionsToQuery,
@@ -40,7 +39,6 @@ import {
   panelDropCollection,
   panelDropParentItem,
 } from "./panel-wiring";
-import { MethodPickerModal } from "./MethodPickerModal";
 import { deleteConfirmCopy } from "./delete-confirm";
 import {
   collectionMenuItems,
@@ -54,18 +52,16 @@ export function CollectionPanel() {
   // collection listing, so "" is the unreachable pre-gate value rather than a default.
   const collection = activeCollection ?? "";
   const { collections } = useCollections();
-  const {
-    createFolder,
-    createRequest,
-    deleteRequest,
-    updateRequest,
-    updateFolder,
-    moveItem,
-  } = useWorkspaceMutations();
+  const { createFolder, deleteRequest, updateRequest, updateFolder, moveItem } =
+    useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
+  const openRequestDraft = useUIStore((s) => s.openRequestDraft);
+  const setRequestDraft = useUIStore((s) => s.setRequestDraft);
+  const requestDraft = useUIStore((s) => s.requestDraft);
   const setActiveCollection = useUIStore((s) => s.setActiveCollection);
   const activeKey = useUIStore((s) => s.activeKey);
   const moveSubtree = useUIStore((s) => s.moveSubtree);
+  const closeSubtree = useUIStore((s) => s.closeSubtree);
   const treeExpanded = useUIStore((s) => s.treeExpanded);
   const setTreeExpanded = useUIStore((s) => s.setTreeExpanded);
   const treeSelection = useUIStore((s) => s.treeSelection);
@@ -77,9 +73,6 @@ export function CollectionPanel() {
   const [folderName, setFolderName] = useState("");
   // undefined = dialog closed, null = collection root, a folder = inside it.
   const [newFolderParent, setNewFolderParent] = useState<
-    ItemWithPath | null | undefined
-  >(undefined);
-  const [pickerParent, setPickerParent] = useState<
     ItemWithPath | null | undefined
   >(undefined);
   const [confirm, setConfirm] = useState<ItemWithPath[]>([]);
@@ -109,6 +102,7 @@ export function CollectionPanel() {
     collections,
     itemsByCollection,
     activeCollection,
+    draft: requestDraft,
   });
   // Untiered, the sole collection IS the active one (resolveActiveCollection), and these are
   // the tree's roots. Unfiltered, because the empty state asks what the collection HOLDS.
@@ -133,15 +127,17 @@ export function CollectionPanel() {
     setNewFolderParent(undefined);
   };
 
-  const onPick = (service: Service, method: Method) => {
-    createRequest.mutate({
-      collection,
-      path: childPathOf(pickerParent ?? null),
-      itemName: method.name,
-      service: serviceName(service),
-      method: method.name,
-    });
-    setPickerParent(undefined);
+  // The one "New request" draft: a tab plus a placeholder row in `parent`. Re-triggering
+  // it only moves the row. A folder's own collection, which in the tier need not be the
+  // active one. The filter is cleared and the path opened so the row is on screen.
+  const newRequestIn = (parent: ItemWithPath | null) => {
+    const target = parent?.collection ?? collection;
+    openRequestDraft(target, childPathOf(parent));
+    setFilter("");
+    const open = new Set(treeExpanded);
+    if (tiered) open.add(target);
+    if (parent) open.add(itemKey(parent));
+    setTreeExpanded(open);
   };
 
   // Addressed at the ITEM's own collection, not the active one: with the tier on screen, the
@@ -161,12 +157,21 @@ export function CollectionPanel() {
   };
 
   const doDelete = () => {
+    // mutateAsync, not mutate's per-call onSuccess: that fires only for the LAST of several
+    // concurrent calls. Tabs close only once the delete succeeds; a failure keeps them, and is
+    // swallowed here exactly as mutate would (the mutation's own state still records it).
     for (const item of confirm) {
-      deleteRequest.mutate({
-        collection: item.collection,
-        path: item.path,
-        itemName: item.item.name,
-      });
+      const key = itemKey(item);
+      deleteRequest
+        .mutateAsync({
+          collection: item.collection,
+          path: item.path,
+          itemName: item.item.name,
+        })
+        .then(
+          () => closeSubtree(key),
+          () => {},
+        );
     }
     setConfirm([]);
   };
@@ -227,13 +232,10 @@ export function CollectionPanel() {
     if (parentItem) expandFolder(parentItem);
   };
 
-  const rowCallbacks: RequestRowCallbacks = {
+  const rowCallbacks: PanelRowCallbacks = {
     services,
     onStartRename: (item) => treeRef.current?.startRename(itemKey(item)),
-    onNewRequestUnder: (folder) => {
-      setPickerParent(folder);
-      expandFolder(folder);
-    },
+    onNewRequestUnder: newRequestIn,
     // A row's own trash button names exactly that one row, not the selection.
     onDelete: (item) => setConfirm([item]),
     // Opens the folder's Metadata tab the same way a request row's own click does —
@@ -242,15 +244,13 @@ export function CollectionPanel() {
     // folder toggles rather than 'opening' it, as in VS Code"). A double-click reaches
     // this same tab through onOpen below; this button is the discoverable trigger.
     onEditMetadata: openTab,
+    renderDraft: () => <NewRequestRow />,
   };
   const renderRow = (node: PanelNode, state: TreeRowState): ReactNode =>
     renderPanelRow(node, state, rowCallbacks);
 
   const menuActions: CollectionMenuActions = {
-    newRequest: (parent) => {
-      setPickerParent(parent);
-      if (parent) expandFolder(parent);
-    },
+    newRequest: newRequestIn,
     newFolder: (parent) => {
       setNewFolderParent(parent);
       if (parent) expandFolder(parent);
@@ -299,7 +299,7 @@ export function CollectionPanel() {
         <IconButton
           aria-label="Add Request"
           data-tooltip="Add Request"
-          onClick={() => setPickerParent(null)}
+          onClick={() => newRequestIn(null)}
           disabled={services.length === 0}
         >
           <Plus />
@@ -353,7 +353,9 @@ export function CollectionPanel() {
 
         {/* Untiered only: with the tier on, panel-tree already puts a status row under each
             collection, so a panel-wide empty state would speak for collections it cannot see. */}
-        {!tiered && soloItems.length === 0 ? (
+        {!tiered &&
+        soloItems.length === 0 &&
+        requestDraft?.collection !== collections[0]?.id ? (
           <div
             className="text-muted"
             style={{ fontSize: 12, padding: "16px 6px", lineHeight: 1.6 }}
@@ -391,6 +393,8 @@ export function CollectionPanel() {
             }}
             onRenameCommit={(node, next) => {
               if (node.kind === "item") doRename(node.item, next);
+              // F2 on the draft row: the tree's own rename box names it too.
+              else if (node.kind === "draft") setRequestDraft({ name: next });
             }}
             onDelete={onTreeDelete}
             onMove={onTreeMove}
@@ -398,10 +402,15 @@ export function CollectionPanel() {
             canDrop={(dragged, to) =>
               panelCanDrop(dragged, to, { tiered, itemsByCollection: loaded })
             }
+            // The draft row hosts its own name input, which must drag-select.
+            canDrag={(node) => node.kind !== "draft"}
             // clientX/clientY, not pageX/pageY: .menu is position: fixed.
-            onContextMenu={(nodes, ev) =>
-              setMenu({ x: ev.clientX, y: ev.clientY, nodes })
-            }
+            // The draft row has no menu: it is not an item, and must not read as the
+            // empty-space one either.
+            onContextMenu={(nodes, ev) => {
+              if (nodes.some((n) => n.kind === "draft")) return;
+              setMenu({ x: ev.clientX, y: ev.clientY, nodes });
+            }}
             aria-label="Collection"
           />
         )}
@@ -457,13 +466,6 @@ export function CollectionPanel() {
           onClose={() => setMenu(null)}
         />
       ) : null}
-
-      <MethodPickerModal
-        open={pickerParent !== undefined}
-        services={services}
-        onClose={() => setPickerParent(undefined)}
-        onSelect={onPick}
-      />
 
       <Dialog
         open={confirm.length > 0}

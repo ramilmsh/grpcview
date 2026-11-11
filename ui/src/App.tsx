@@ -4,7 +4,11 @@ import { transport } from "@/lib/client";
 import { AppShell } from "@/components/shell/AppShell";
 import { Centered } from "@/components/ui/Centered";
 import { useUIStore } from "@/lib/ui-store";
-import { useActiveWorkspace, useCollections } from "@/lib/workspace-query";
+import {
+  useActiveWorkspace,
+  useCloseStaleTabs,
+  useCollections,
+} from "@/lib/workspace-query";
 import {
   useGvInvokeTypes,
   useWorkspaceModuleTypes,
@@ -39,6 +43,8 @@ function CurrentView() {
   // Above the early returns and outside the view switch: the Scripts view can import
   // "grpcview:invoke" too, so these types cannot be owned by the body editor.
   useGvInvokeTypes();
+  // Also above the gates: a tab can outlive its item whatever view is on screen.
+  useCloseStaleTabs();
   // Same reasoning: an import ("@/…" or "#/…") is legal from any script surface too.
   useWorkspaceModuleTypes();
   // Daemons are machine-scope, not collection-scope: this has to work in a workspace with

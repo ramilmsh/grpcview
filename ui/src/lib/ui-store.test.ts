@@ -2,6 +2,7 @@ import { beforeEach, describe, it } from "node:test";
 import { expect } from "expect";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import {
+  NEW_REQUEST_KEY,
   useUIStore,
   type Draft,
   type InvokeState,
@@ -527,10 +528,62 @@ describe("closing tabs", () => {
     expect(useUIStore.getState().activeKey).toBe(A);
   });
 
+  it("closeTabs closes every named tab, falling back like closeTab", () => {
+    useUIStore.getState().closeTabs([B, C]);
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).toEqual([A, D]);
+    expect(s.activeKey).toBe(D);
+  });
+
+  it("closeTabs with nothing to close changes nothing", () => {
+    const before = useUIStore.getState().openTabs;
+    useUIStore.getState().closeTabs([]);
+    useUIStore.getState().closeTabs(["./nope"]);
+    expect(useUIStore.getState().openTabs).toBe(before);
+  });
+
   it("closeAllTabs empties the strip and clears the active tab", () => {
     useUIStore.getState().closeAllTabs();
     const s = useUIStore.getState();
     expect(s.openTabs).toEqual([]);
     expect(s.activeKey).toBeNull();
+  });
+});
+
+describe("closeSubtree", () => {
+  beforeEach(() => {
+    useUIStore.setState({
+      openTabs: [
+        tab("./a", "A"),
+        { ...tab("./users", "users"), kind: "folder" },
+        tab("./users/get", "get"),
+        tab("./users/admin/ban", "ban"),
+        tab("./users2", "users2"),
+        { ...tab(NEW_REQUEST_KEY, "New request"), kind: "newRequest" },
+      ],
+      activeKey: "./users/get",
+    });
+  });
+
+  it("closes a folder's own tab and every tab under it, at any depth", () => {
+    useUIStore.getState().closeSubtree("./users");
+    expect(useUIStore.getState().openTabs.map((t) => t.key)).toEqual([
+      "./a",
+      "./users2",
+      NEW_REQUEST_KEY,
+    ]);
+  });
+
+  it("hands activation to the nearest survivor, as closeTab does", () => {
+    useUIStore.getState().closeSubtree("./users");
+    expect(useUIStore.getState().activeKey).toBe("./users2");
+  });
+
+  it("closes just the one tab for a request", () => {
+    useUIStore.getState().closeSubtree("./users/admin/ban");
+    const s = useUIStore.getState();
+    expect(s.openTabs.map((t) => t.key)).not.toContain("./users/admin/ban");
+    expect(s.openTabs).toHaveLength(5);
+    expect(s.activeKey).toBe("./users/get");
   });
 });

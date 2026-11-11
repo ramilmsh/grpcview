@@ -8,7 +8,8 @@ import { Tree } from "@/components/tree/Tree";
 import { flatten } from "@/components/tree/flatten";
 import type { TreeAdapter, TreeRowState } from "@/components/tree/types";
 import { itemKey, type ItemWithPath } from "@/lib/format";
-import { requestTreeItem, type RequestRowCallbacks } from "./request-tree";
+import { NEW_REQUEST_KEY } from "@/lib/ui-store";
+import { requestTreeItem } from "./request-tree";
 import {
   EMPTY_LABEL,
   LOADING_LABEL,
@@ -19,6 +20,7 @@ import {
   panelTreeAdapter,
   renderPanelRow,
   type PanelNode,
+  type PanelRowCallbacks,
 } from "./panel-tree";
 
 // Local fixture builders rather than the ones in format.test.ts / request-tree.test.tsx:
@@ -522,12 +524,13 @@ describe("panelDropAllowed", () => {
 // renderPanelRow declines the two portable tiers, which TreeRow must then render from
 // getTreeItem — the affordance the collection tier depends on.
 describe("renderPanelRow", () => {
-  const cb: RequestRowCallbacks = {
+  const cb: PanelRowCallbacks = {
     services: [],
     onStartRename: () => {},
     onNewRequestUnder: () => {},
     onDelete: () => {},
     onEditMetadata: () => {},
+    renderDraft: () => "DRAFT-ROW",
   };
   const state: TreeRowState = {
     focused: false,
@@ -542,6 +545,12 @@ describe("renderPanelRow", () => {
   it("returns null for a collection row and for a status row", () => {
     expect(renderPanelRow(collectionNode(payments), state, cb)).toBeNull();
     expect(renderPanelRow(statusNode(PAY), state, cb)).toBeNull();
+  });
+
+  it("hands the draft row to the host", () => {
+    expect(renderPanelRow({ kind: "draft", collection: PAY }, state, cb)).toBe(
+      "DRAFT-ROW",
+    );
   });
 
   it("returns row content for an item", () => {
@@ -586,5 +595,82 @@ describe("renderPanelRow", () => {
       }),
     );
     expect(markup).toContain(LOADING_LABEL);
+  });
+});
+
+// The draft row sits where CreateRequest will put the request: LAST among the target
+// folder's children, since the store appends a new slug to the folder's order.
+describe("draft placeholder row", () => {
+  const ids = (adapter: TreeAdapter<PanelNode>, parent?: PanelNode) =>
+    (adapter.getChildren(parent) as PanelNode[]).map(panelNodeId);
+  const calls = itemKey(payItems[1]);
+  const admin = itemKey(payItems[1].children![1]);
+
+  it("is absent without a draft", () => {
+    expect(ids(soloAdapter())).not.toContain(NEW_REQUEST_KEY);
+  });
+
+  it("goes last at the root, untiered", () => {
+    const adapter = panelTreeAdapter({
+      collections: [payments],
+      itemsByCollection: new Map([[PAY, payItems]]),
+      activeCollection: PAY,
+      draft: { collection: PAY, folder: [] },
+    });
+    expect(ids(adapter)).toEqual([
+      itemKey(payItems[0]),
+      calls,
+      NEW_REQUEST_KEY,
+    ]);
+  });
+
+  it("goes last inside its folder, after a subfolder too", () => {
+    const adapter = panelTreeAdapter({
+      collections: [payments],
+      itemsByCollection: new Map([[PAY, payItems]]),
+      activeCollection: PAY,
+      draft: { collection: PAY, folder: ["Calls"] },
+    });
+    const callsNode = nodeOf(adapter, calls);
+    expect(ids(adapter, callsNode)).toEqual([
+      itemKey(payItems[1].children![0]),
+      admin,
+      NEW_REQUEST_KEY,
+    ]);
+    const draft = nodeOf(adapter, NEW_REQUEST_KEY);
+    expect(adapter.getParent?.(draft)).toBe(callsNode);
+    expect(adapter.getCollapsibleState(draft)).toBe("none");
+    // Nowhere else.
+    expect(ids(adapter)).not.toContain(NEW_REQUEST_KEY);
+  });
+
+  it("only in its own collection, and replaces the empty row there", () => {
+    const adapter = panelTreeAdapter({
+      collections: twoCollections,
+      itemsByCollection: new Map([
+        [PAY, payItems],
+        [LEDGER, []],
+      ]),
+      activeCollection: LEDGER,
+      draft: { collection: LEDGER, folder: [] },
+    });
+    expect(ids(adapter, nodeOf(adapter, LEDGER))).toEqual([NEW_REQUEST_KEY]);
+    expect(ids(adapter, nodeOf(adapter, PAY))).not.toContain(NEW_REQUEST_KEY);
+  });
+
+  it("is never a drop neighbour", () => {
+    const adapter = panelTreeAdapter({
+      collections: [payments],
+      itemsByCollection: new Map([[PAY, payItems]]),
+      activeCollection: PAY,
+      draft: { collection: PAY, folder: [] },
+    });
+    expect(
+      panelDropAllowed(
+        [itemNode(payItems[0])],
+        { parent: null, before: nodeOf(adapter, NEW_REQUEST_KEY) },
+        { tiered: false },
+      ),
+    ).toBe(false);
   });
 });

@@ -46,3 +46,14 @@ export function MethodKindTag({
     </span>
   );
 }
+
+// A method-kind slot before any method is chosen (a draft request): a dashed "?".
+export function DraftKindTag({ kind }: { kind: MethodKind | null }) {
+  return kind ? (
+    <MethodKindTag kind={kind} />
+  ) : (
+    <span className="mtag mt-none" aria-label="No method yet">
+      ?
+    </span>
+  );
+}

@@ -87,6 +87,9 @@ export interface TreeProps<T> {
   onMove?(nodes: T[], to: { parent: T | null; before?: T }): void;
   onContextMenu?(nodes: T[], ev: React.MouseEvent): void;
   canDrop?(dragged: T[], to: { parent: T | null; before?: T }): boolean;
+  // Default true. A row that hosts its own text input (an inline create box) opts out, so
+  // drag-selecting inside the input works — as a row mid-rename does.
+  canDrag?(node: T): boolean;
 
   indent?: number; // default 8
   rowHeight?: number; // default 22

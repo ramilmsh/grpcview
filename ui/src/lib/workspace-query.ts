@@ -1,5 +1,5 @@
 // connect-query data layer: every server read/write goes through here.
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   useQuery,
   useMutation,
@@ -50,11 +50,13 @@ import {
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
 import type {
   CollectionSummary,
+  GetResponse,
   WorkspaceModule,
 } from "@grpcview/v1/service_pb";
 import type { Collection, Server } from "@grpcview/v1/workspace_pb";
 import { rootItemsOf, type ItemWithPath } from "./format";
 import { resolveActiveCollection } from "./active-collection";
+import { staleTabKeys } from "./stale-tabs";
 import { useUIStore } from "./ui-store";
 
 export const firstReflectionSource = (ws?: Collection): Server | null => {
@@ -326,6 +328,54 @@ export function useCollectionItems(
   }
   cache.current = { signature, map };
   return map;
+}
+
+// Closes the tabs of items deleted behind the UI's back (CLI, MCP, another browser tab), by
+// checking every open tab against its collection's cached Get whenever either cache changes.
+//
+// - Only a Get in status "success" counts: one not fetched, still loading or errored says
+//   nothing, so a cold start closes nothing.
+// - Never while any mutation is pending. A move (and a collection rename) seeds the Get cache
+//   with the new tree BEFORE moveSubtree/renameCollection remaps the tab keys, and the remap
+//   runs synchronously in the same step that settles the mutation. So "nothing pending" is
+//   exactly the moment cache and keys agree.
+// - Deferred to a microtask: a cache event can fire mid-render, and closing a tab is a store
+//   write. The check reads the cache and store when it runs, never a captured snapshot.
+export function useCloseStaleTabs(): void {
+  const qc = useQueryClient();
+  const transport = useTransport();
+  useEffect(() => {
+    let queued = false;
+    const check = (): void => {
+      queued = false;
+      if (qc.isMutating() > 0) return;
+      const { openTabs, closeTabs } = useUIStore.getState();
+      const loaded = new Map<string, ItemWithPath[]>();
+      for (const id of new Set(openTabs.map((t) => t.collection))) {
+        const state = qc.getQueryState<GetResponse>(
+          keyForCollection(transport, id),
+        );
+        const collection =
+          state?.status === "success" ? state.data?.collection : undefined;
+        if (collection)
+          loaded.set(id, rootItemsOf(collection.item, collection.id || id));
+      }
+      const stale = staleTabKeys(openTabs, loaded);
+      if (stale.length > 0) closeTabs(stale);
+    };
+    const schedule = (): void => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(check);
+    };
+    schedule();
+    const offQueries = qc.getQueryCache().subscribe(schedule);
+    const offMutations = qc.getMutationCache().subscribe(schedule);
+    return () => {
+      offQueries();
+      offMutations();
+    };
+  }, [qc, transport]);
 }
 
 // Seeds the Get cache off `res.collection.id`, never off the id the caller happened to

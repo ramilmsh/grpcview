@@ -147,6 +147,8 @@
 .mt-ss { background: rgba(91, 191, 151, .16); color: var(--ok); }
 .mt-cs { background: var(--warn-bg); color: var(--warn); }
 .mt-bd { background: var(--color-accent-2-900); color: var(--color-accent-2-300); }
+/* no method chosen yet (a draft); the dashed border takes the padding's place, same box */
+.mt-none { background: transparent; color: var(--color-neutral-500); border: 1px dashed var(--color-neutral-600); padding: 0 3px; }
 
 /* small square icon buttons */
 .iconbtn {

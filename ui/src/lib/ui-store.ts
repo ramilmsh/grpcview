@@ -32,7 +32,29 @@ export interface OpenTab {
   // Request and folder tabs render different working areas (RequestWorkspace vs.
   // FolderWorkspace) and different tab-strip icons. A plain field, not a full union: the
   // two kinds carry identical fields today, so there is nothing per-variant to narrow into.
-  kind: "request" | "folder";
+  // "newRequest" is the one unsaved draft tab (NEW_REQUEST_KEY); it names no item.
+  kind: "request" | "folder" | "newRequest";
+}
+
+// The draft tab's key, and its placeholder tree row's id. NUL cannot appear in a directory
+// name, so no item key or collection id equals it, and with no "/" in it no key remap can
+// touch it.
+export const NEW_REQUEST_KEY = "\u0000new-request";
+
+// The "New request" draft: one tab plus one placeholder tree row. Never persisted; lives
+// exactly as long as its tab. Pending/error live here, not in a mutation hook, because
+// both the row (Enter) and the page (button) submit it.
+export interface RequestDraft {
+  collection: string;
+  // Display-name path of the target folder; [] is the collection root.
+  folder: string[];
+  // Bumped on every (re)open, so the row's name input refocuses after a re-target.
+  seq: number;
+  query: string;
+  method: { service: string; method: string } | null;
+  name: string;
+  pending: boolean;
+  error: string | null;
 }
 
 export interface Draft {
@@ -78,20 +100,20 @@ interface KeyedSlices {
   treeExpanded: ReadonlySet<string>;
 }
 
+// Whether `key` is `root` itself or one of its descendants. The trailing "/" (itemKey's slug
+// separator) is what stops a sibling slug "foo2" being swept up by "foo". The one subtree
+// test: the key remap below and closeSubtree both use it.
+const inSubtree = (key: string, root: string): boolean =>
+  key === root || key.startsWith(`${root}/`);
+
 function remapKeyedState(
   s: KeyedSlices,
   oldKey: string,
   newKey: string,
 ): Partial<KeyedSlices> {
   if (oldKey === newKey) return {};
-  const prefix = `${oldKey}/`;
-  const remap = (key: string): string | null => {
-    if (key === oldKey) return newKey;
-    // The trailing "/" (itemKey's slug separator) is what stops a sibling slug
-    // "foo2" being swept up by a move of "foo".
-    if (key.startsWith(prefix)) return newKey + key.slice(oldKey.length);
-    return null;
-  };
+  const remap = (key: string): string | null =>
+    inSubtree(key, oldKey) ? newKey + key.slice(oldKey.length) : null;
   const rekey = <T>(
     m: Record<string, T | undefined>,
   ): Record<string, T | undefined> => {
@@ -155,10 +177,11 @@ function remapKeyedState(
 // them — hands activation to the nearest survivor: forward first, then back. Same rule
 // closeTab always used for its one key, generalized so the batch variants agree with it.
 function closeMatching(
-  s: Pick<UIState, "openTabs" | "activeKey">,
+  s: Pick<UIState, "openTabs" | "activeKey" | "requestDraft">,
   keys: ReadonlySet<string>,
-): Pick<UIState, "openTabs" | "activeKey"> {
-  if (keys.size === 0) return s;
+): Pick<UIState, "openTabs" | "activeKey" | "requestDraft"> {
+  // Nothing open to close: the same state back, so the store does not notify.
+  if (!s.openTabs.some((t) => keys.has(t.key))) return s;
   const openTabs = s.openTabs.filter((t) => !keys.has(t.key));
   let activeKey = s.activeKey;
   if (activeKey !== null && keys.has(activeKey)) {
@@ -172,7 +195,9 @@ function closeMatching(
       null;
     activeKey = next ? next.key : null;
   }
-  return { openTabs, activeKey };
+  // Closing the draft's tab discards the draft.
+  const requestDraft = keys.has(NEW_REQUEST_KEY) ? null : s.requestDraft;
+  return { openTabs, activeKey, requestDraft };
 }
 
 interface UIState {
@@ -188,6 +213,8 @@ interface UIState {
   // Draft, since a folder has no body/messages/target to go with it.
   folderDrafts: Record<string, string | undefined>;
   invokes: Record<string, InvokeState | undefined>;
+  // Non-null exactly while the NEW_REQUEST_KEY tab is open.
+  requestDraft: RequestDraft | null;
   requestSubtab: RequestSubtab;
   responseSubtab: ResponseSubtab;
 
@@ -210,6 +237,15 @@ interface UIState {
   closeTabsToLeft: (key: string) => void;
   closeTabsToRight: (key: string) => void;
   closeAllTabs: () => void;
+  // closeTab for many keys at once, e.g. the tabs of items deleted outside the UI.
+  closeTabs: (keys: readonly string[]) => void;
+  // Closes the tab of `key` and of everything under it: what a delete of that item leaves.
+  closeSubtree: (key: string) => void;
+  // Opens (or re-targets) the one "New request" draft tab, keeping what was typed.
+  openRequestDraft: (collection: string, folder: string[]) => void;
+  setRequestDraft: (patch: Partial<RequestDraft>) => void;
+  // Swaps the draft tab, in place, for the request it created, activates and selects it.
+  commitRequestDraft: (item: ItemWithPath) => void;
   // `collection` is optional only because a caller that has no tab in hand (there is
   // one: clearing to null) cannot supply it. Pass it whenever it is known — that is
   // what stops anyone parsing a collection out of `key`.
@@ -259,6 +295,7 @@ export const useUIStore = create<UIState>()((set) => ({
   drafts: {},
   folderDrafts: {},
   invokes: {},
+  requestDraft: null,
   requestSubtab: "message",
   responseSubtab: "messages",
   selectedScript: null,
@@ -328,7 +365,97 @@ export const useUIStore = create<UIState>()((set) => ({
       );
     }),
 
-  closeAllTabs: () => set({ openTabs: [], activeKey: null }),
+  closeAllTabs: () =>
+    set({ openTabs: [], activeKey: null, requestDraft: null }),
+
+  closeTabs: (keys) => set((s) => closeMatching(s, new Set(keys))),
+
+  closeSubtree: (key) =>
+    set((s) =>
+      closeMatching(
+        s,
+        new Set(
+          s.openTabs.filter((t) => inSubtree(t.key, key)).map((t) => t.key),
+        ),
+      ),
+    ),
+
+  openRequestDraft: (collection, folder) => {
+    writeStoredCollection(collection);
+    set((s) => {
+      const requestDraft: RequestDraft = s.requestDraft
+        ? {
+            ...s.requestDraft,
+            collection,
+            folder,
+            seq: s.requestDraft.seq + 1,
+            error: null,
+          }
+        : {
+            collection,
+            folder,
+            seq: 0,
+            query: "",
+            method: null,
+            name: "",
+            pending: false,
+            error: null,
+          };
+      const tab: OpenTab = {
+        key: NEW_REQUEST_KEY,
+        name: "New request",
+        collection,
+        kind: "newRequest",
+      };
+      const exists = s.openTabs.some((t) => t.key === NEW_REQUEST_KEY);
+      return {
+        requestDraft,
+        openTabs: exists
+          ? s.openTabs.map((t) => (t.key === NEW_REQUEST_KEY ? tab : t))
+          : [...s.openTabs, tab],
+        activeKey: NEW_REQUEST_KEY,
+        activeCollection: collection,
+        activeView: "workspace",
+        // The placeholder row is selected, like any row being worked on.
+        treeSelection: [NEW_REQUEST_KEY],
+        treeFocused: NEW_REQUEST_KEY,
+      };
+    });
+  },
+
+  setRequestDraft: (patch) =>
+    set((s) =>
+      s.requestDraft ? { requestDraft: { ...s.requestDraft, ...patch } } : {},
+    ),
+
+  commitRequestDraft: (item) => {
+    const key = itemKey(item);
+    writeStoredCollection(item.collection);
+    set((s) => {
+      const tab: OpenTab = {
+        key,
+        name: item.item.name,
+        collection: item.collection,
+        kind: "request",
+      };
+      const rest = s.openTabs.filter((t) => t.key !== key);
+      const at = rest.findIndex((t) => t.key === NEW_REQUEST_KEY);
+      const openTabs =
+        at === -1
+          ? [...rest, tab]
+          : [...rest.slice(0, at), tab, ...rest.slice(at + 1)];
+      return {
+        openTabs,
+        activeKey: key,
+        activeCollection: item.collection,
+        activeView: "workspace",
+        requestDraft: null,
+        // What a click on the new row would do: select it.
+        treeSelection: [key],
+        treeFocused: key,
+      };
+    });
+  },
 
   setActiveKey: (activeKey, collection) => {
     if (collection === undefined) {
@@ -354,10 +481,15 @@ export const useUIStore = create<UIState>()((set) => ({
         tabsChanged = true;
         return { ...t, collection: newId };
       });
+      const requestDraft =
+        s.requestDraft?.collection === oldId
+          ? { ...s.requestDraft, collection: newId }
+          : s.requestDraft;
       return {
         ...patch,
         openTabs: tabsChanged ? openTabs : s.openTabs,
         activeCollection: newId,
+        requestDraft,
       };
     });
   },

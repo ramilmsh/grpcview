@@ -122,6 +122,7 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     onRenameCommit,
     onMove,
     canDrop,
+    canDrag,
     activeId = null,
     indent = 8,
     rowHeight = 22,
@@ -550,6 +551,7 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
           dropTarget={dropState?.rowId === row.id ? dropState.zone : null}
           dropDepth={dropState?.rowId === row.id ? dropState.res.depth : 0}
           dragging={dragIds?.includes(row.id) ?? false}
+          draggable={canDrag?.(row.node) ?? true}
           renameSiblings={
             row.id === renamingId ? siblingLabelsFor(row) : NO_SIBLINGS
           }

@@ -32,6 +32,8 @@ interface TreeRowProps<T> {
   // The depth the between-rows indicator line is indented to.
   dropDepth: number;
   dragging: boolean;
+  // Default true; see TreeProps.canDrag.
+  draggable?: boolean;
   renameSiblings: readonly string[];
   onRenameCommit: (next: string) => void;
   onRenameCancel: () => void;
@@ -59,6 +61,7 @@ export function TreeRow<T>({
   dropTarget,
   dropDepth,
   dragging,
+  draggable = true,
   renameSiblings,
   onRenameCommit,
   onRenameCancel,
@@ -169,7 +172,7 @@ export function TreeRow<T>({
       onDoubleClick={onRowDoubleClick}
       onContextMenu={onContextMenu}
       // Not draggable while renaming: drag-selecting inside the input must work.
-      draggable={!renaming}
+      draggable={draggable && !renaming}
       onDragStart={onDragStart}
     >
       {/* A real element, not a ::before: .treerow.on::before is already taken and a

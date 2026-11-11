@@ -5,11 +5,7 @@ import type { CollectionSummary } from "@grpcview/v1/service_pb";
 import type { Item } from "@grpcview/v1/workspace_pb";
 import { Tree } from "@/components/tree/Tree";
 import { findByKey, type ItemWithPath } from "@/lib/format";
-import {
-  renderRequestRow,
-  requestTreeAdapter,
-  type RequestRowCallbacks,
-} from "./request-tree";
+import { renderRequestRow, requestTreeAdapter } from "./request-tree";
 import {
   EMPTY_LABEL,
   LOADING_LABEL,
@@ -18,6 +14,7 @@ import {
   renderPanelRow,
   STATUS_SEPARATOR,
   type PanelNode,
+  type PanelRowCallbacks,
 } from "./panel-tree";
 import {
   collectionForNodeId,
@@ -105,12 +102,13 @@ const bothLoaded: ReadonlyMap<string, ItemWithPath[]> = new Map([
   [LEDGER, ledgerItems],
 ]);
 
-const cb: RequestRowCallbacks = {
+const cb: PanelRowCallbacks = {
   services: [],
   onStartRename: () => {},
   onNewRequestUnder: () => {},
   onDelete: () => {},
   onEditMetadata: () => {},
+  renderDraft: () => null,
 };
 
 // A row scanner, not an HTML parser: TreeRow renders `class` first on every row, which is

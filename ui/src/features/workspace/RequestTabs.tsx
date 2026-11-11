@@ -4,10 +4,12 @@ import { X } from "@/components/ui/icons";
 import { Menu } from "@/components/ui/Menu";
 import { TreeIcon } from "@/components/tree/icon-map";
 import { useUIStore, type OpenTab } from "@/lib/ui-store";
-import { MethodKindTag } from "@/components/ui/Tag";
+import { DraftKindTag, MethodKindTag } from "@/components/ui/Tag";
 import { useActiveWorkspace, useRootItems } from "@/lib/workspace-query";
 import { findByKey, methodKind, resolveMethod } from "@/lib/format";
 import { tabMenuItems, type TabMenuActions } from "./tab-menu";
+import { draftTitle } from "./new-request-draft";
+import { useRequestDraft } from "./useRequestDraft";
 
 // RequestTabs is the open-request tab strip. Frontend-only state; no persistence.
 export function RequestTabs() {
@@ -21,6 +23,7 @@ export function RequestTabs() {
   const closeTabsToLeft = useUIStore((s) => s.closeTabsToLeft);
   const closeTabsToRight = useUIStore((s) => s.closeTabsToRight);
   const closeAllTabs = useUIStore((s) => s.closeAllTabs);
+  const { draft, kind: draftKind } = useRequestDraft();
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
@@ -89,6 +92,8 @@ export function RequestTabs() {
                 same "folder" token request-tree.tsx assigns a folder row. */}
             {tab.kind === "folder" ? (
               <TreeIcon token="folder" />
+            ) : tab.kind === "newRequest" ? (
+              <DraftKindTag kind={draftKind} />
             ) : (
               <MethodKindTag kind={kind} />
             )}
@@ -103,9 +108,13 @@ export function RequestTabs() {
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
+                // Italic marks the one unsaved draft tab.
+                fontStyle: tab.kind === "newRequest" ? "italic" : undefined,
               }}
             >
-              {item?.item.name ?? tab.name}
+              {tab.kind === "newRequest"
+                ? draftTitle(draft?.name ?? "")
+                : (item?.item.name ?? tab.name)}
             </span>
             <X
               size={12}

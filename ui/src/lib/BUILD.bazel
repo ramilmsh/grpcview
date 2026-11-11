@@ -9,6 +9,7 @@ ts_project(
         "editor-debug.ts",
         "format.ts",
         "keepalive.ts",
+        "stale-tabs.ts",
         "ui-store.ts",
         "workspace-query.ts",
     ],
@@ -39,6 +40,7 @@ ts_project(
     srcs = [
         "active-collection.test.ts",
         "format.test.ts",
+        "stale-tabs.test.ts",
         "ui-store.test.ts",
         "workspace-query.test.ts",
     ],

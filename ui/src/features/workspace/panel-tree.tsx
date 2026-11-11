@@ -6,6 +6,7 @@ import type {
   TreeRowState,
 } from "@/components/tree/types";
 import { itemKey, type ItemWithPath } from "@/lib/format";
+import { NEW_REQUEST_KEY } from "@/lib/ui-store";
 import {
   renderRequestRow,
   requestTreeItem,
@@ -20,13 +21,24 @@ export type PanelNode =
   | { kind: "item"; item: ItemWithPath }
   // A collection whose Get has not landed (or failed, or came back empty): the host
   // resolves that promise and re-renders, so the tree only ever sees a synchronous row.
-  | { kind: "status"; collection: string; label: string };
+  | { kind: "status"; collection: string; label: string }
+  // The "New request" draft's placeholder row: the one draft, at the spot the request it
+  // creates will occupy. Its content is the host's (renderDraft), not this module's.
+  | { kind: "draft"; collection: string };
+
+// Where the draft's placeholder row goes: a collection and the display-name path of the
+// folder in it ([] = its root).
+export interface PanelDraftTarget {
+  collection: string;
+  folder: readonly string[];
+}
 
 // Joins a status row's id to its collection. Exported so the panel can TEST for it when
 // resolving which collection a row id belongs to, rather than spelling the byte twice.
 export const STATUS_SEPARATOR = "\u0000";
 
 export const LOADING_LABEL = "Loading…";
+export const DRAFT_LABEL = "New request";
 export const EMPTY_LABEL = "No requests yet";
 
 // Ids must be unique across the whole flatten pass (flatten.ts:39-47 throws on a
@@ -40,6 +52,9 @@ export const EMPTY_LABEL = "No requests yet";
 //     pruneNestedSelections uses). A printable separator would not do: a collection
 //     whose path happened to be "x status" would collide with collection "x"'s status
 //     row.
+//   - The draft row's id is NEW_REQUEST_KEY, which STARTS with NUL, so it equals no item
+//     key, collection id or status id (each starts with a non-empty collection id). It is
+//     also the draft tab's key, which is what makes `activeId` highlight the row.
 // A collision would therefore be a loud crash rather than silent corruption, but the
 // argument above is why one cannot happen in the first place.
 export const panelNodeId = (node: PanelNode): string => {
@@ -50,6 +65,8 @@ export const panelNodeId = (node: PanelNode): string => {
       return itemKey(node.item);
     case "status":
       return node.collection + STATUS_SEPARATOR + "status";
+    case "draft":
+      return NEW_REQUEST_KEY;
   }
 };
 
@@ -62,6 +79,7 @@ export const panelNodeCollection = (node: PanelNode): string => {
     case "item":
       return node.item.collection;
     case "status":
+    case "draft":
       return node.collection;
   }
 };
@@ -74,6 +92,8 @@ export const panelNodeLabel = (node: PanelNode): string => {
       return node.item.item.name;
     case "status":
       return node.label;
+    case "draft":
+      return DRAFT_LABEL;
   }
 };
 
@@ -95,6 +115,10 @@ export interface PanelTreeInput {
   // is a "Loading…" status row rather than an empty collection.
   itemsByCollection: ReadonlyMap<string, ItemWithPath[]>;
   activeCollection: string | null;
+  // The draft's placeholder row, or none. Positioned LAST among its folder's children:
+  // the store's createItem appends a new item's slug to the folder's order, and the tree
+  // shows items in that order unsorted.
+  draft?: PanelDraftTarget | null;
 }
 
 // The tooltip disambiguates two collections that share a display name, which the id
@@ -106,6 +130,7 @@ export function panelTreeAdapter(
   input: PanelTreeInput,
 ): TreeAdapter<PanelNode> {
   const { collections, itemsByCollection, activeCollection } = input;
+  const draft = input.draft ?? null;
   const tiered = panelTiered(collections);
 
   // Built eagerly, exactly as request-tree's buildParentIndex walks its roots: every
@@ -124,6 +149,29 @@ export function panelTreeAdapter(
     if (parent) parentById.set(id, parent);
   };
 
+  const draftNode = (parent: PanelNode | undefined): PanelNode => {
+    const node: PanelNode = {
+      kind: "draft",
+      collection: draft?.collection ?? "",
+    };
+    register(node, [], parent);
+    return node;
+  };
+
+  // `nodes` plus the draft row when it targets the folder at `path` in `collection`.
+  const withDraft = (
+    nodes: PanelNode[],
+    collection: string,
+    path: readonly string[],
+    parent: PanelNode | undefined,
+  ): PanelNode[] =>
+    draft !== null &&
+    draft.collection === collection &&
+    draft.folder.length === path.length &&
+    draft.folder.every((segment, i) => segment === path[i])
+      ? [...nodes, draftNode(parent)]
+      : nodes;
+
   const itemNode = (
     item: ItemWithPath,
     parent: PanelNode | undefined,
@@ -132,7 +180,18 @@ export function panelTreeAdapter(
     const children = (item.children ?? []).map((child) =>
       itemNode(child, node),
     );
-    register(node, children, parent);
+    register(
+      node,
+      item.item.content.case === "folder"
+        ? withDraft(
+            children,
+            item.collection,
+            [...item.path, item.item.name],
+            node,
+          )
+        : children,
+      parent,
+    );
     return node;
   };
 
@@ -155,8 +214,14 @@ export function panelTreeAdapter(
     if (c.error) return [statusNode(c.id, c.error, parent)];
     const items = itemsByCollection.get(c.id);
     if (items === undefined) return [statusNode(c.id, LOADING_LABEL, parent)];
-    if (items.length === 0) return [statusNode(c.id, EMPTY_LABEL, parent)];
-    return items.map((item) => itemNode(item, parent));
+    const nodes = withDraft(
+      items.map((item) => itemNode(item, parent)),
+      c.id,
+      [],
+      parent,
+    );
+    if (nodes.length === 0) return [statusNode(c.id, EMPTY_LABEL, parent)];
+    return nodes;
   };
 
   const roots: PanelNode[] = tiered
@@ -165,8 +230,13 @@ export function panelTreeAdapter(
         register(node, collectionChildren(c, node), undefined);
         return node;
       })
-    : (itemsByCollection.get(collections[0].id) ?? []).map((item) =>
-        itemNode(item, undefined),
+    : withDraft(
+        (itemsByCollection.get(collections[0].id) ?? []).map((item) =>
+          itemNode(item, undefined),
+        ),
+        collections[0].id,
+        [],
+        undefined,
       );
 
   return {
@@ -186,6 +256,7 @@ export function panelTreeAdapter(
         case "item":
           return node.item.item.content.case === "folder" ? "expanded" : "none";
         case "status":
+        case "draft":
           return "none";
       }
     },
@@ -208,6 +279,8 @@ export function panelTreeAdapter(
           return requestTreeItem(node.item);
         case "status":
           return { label: node.label, kind: "status" };
+        case "draft":
+          return { label: DRAFT_LABEL, kind: "draft" };
       }
     },
 
@@ -218,22 +291,47 @@ export function panelTreeAdapter(
 export function usePanelTreeAdapter(
   input: PanelTreeInput,
 ): TreeAdapter<PanelNode> {
-  const { collections, itemsByCollection, activeCollection } = input;
+  const { collections, itemsByCollection, activeCollection, draft } = input;
+  // Keyed on the target's parts, not the object: the draft slice is replaced on every
+  // keystroke in its name (keeping its `folder` array), and the adapter must not be
+  // rebuilt for one.
+  const draftCollection = draft?.collection;
+  const draftFolder = draft?.folder;
   return useMemo(
     () =>
-      panelTreeAdapter({ collections, itemsByCollection, activeCollection }),
-    [collections, itemsByCollection, activeCollection],
+      panelTreeAdapter({
+        collections,
+        itemsByCollection,
+        activeCollection,
+        draft:
+          draftCollection === undefined || draftFolder === undefined
+            ? null
+            : { collection: draftCollection, folder: draftFolder },
+      }),
+    [
+      collections,
+      itemsByCollection,
+      activeCollection,
+      draftCollection,
+      draftFolder,
+    ],
   );
 }
 
 // Returns null for the two portable tiers, declining them back to the tree's own
 // getTreeItem renderer (TreeRow.tsx) — which is what keeps the collection tier usable
 // by a VS Code TreeProvider while the item tier stays rich.
+export interface PanelRowCallbacks extends RequestRowCallbacks {
+  // The draft row's content; the host owns it (it reads the store and submits).
+  renderDraft: () => ReactNode;
+}
+
 export function renderPanelRow(
   node: PanelNode,
   state: TreeRowState,
-  cb: RequestRowCallbacks,
+  cb: PanelRowCallbacks,
 ): ReactNode {
+  if (node.kind === "draft") return cb.renderDraft();
   if (node.kind !== "item") return null;
   return renderRequestRow(node.item, state, cb);
 }
@@ -250,8 +348,9 @@ export function panelDropAllowed(
   const items = panelItems(dragged);
   if (items.length === 0 || items.length !== dragged.length) return false;
 
-  // Nothing goes inside a "Loading…" / error / empty placeholder.
-  if (to.parent?.kind === "status") return false;
+  // Nothing goes inside a "Loading…" / error / empty placeholder, nor next to the draft
+  // row, which names nothing a MoveItem `before` could address.
+  if (to.parent?.kind === "status" || to.before?.kind === "draft") return false;
 
   // Which collection the drop lands in. With the tier present, a null parent is the
   // tree root — the space BETWEEN collection rows — which names no collection, so
