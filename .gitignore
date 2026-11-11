@@ -5,3 +5,4 @@ node_modules/
 # Personal, per-user Claude Code overrides.
 .claude/settings.local.json
 .pnpm-store
+.DS_Store
