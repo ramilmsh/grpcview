@@ -269,16 +269,16 @@ describe("the commit toggle", () => {
 
   it("warns on an UNCOMMITTED upload, whose only copy is then local state", () => {
     const markup = row(upload("api.binpb"));
-    expect(markup).toContain("var(--warn)");
+    expect(markup).toContain("var(--v-warn)");
     expect(markup).toContain(
       "a clone of this repo has no schema for it at all",
     );
     // Committed, the warning is gone and nothing about an upload is special.
     const committed = row(upload("api.binpb", "", { commitDescriptors: true }));
-    expect(committed).not.toContain("var(--warn)");
+    expect(committed).not.toContain("var(--v-warn)");
     expect(committed).not.toContain("has no schema for it at all");
     // A reflection source is never warned about: it can be re-fetched from its address.
-    expect(row(reflection("localhost:50051"))).not.toContain("var(--warn)");
+    expect(row(reflection("localhost:50051"))).not.toContain("var(--v-warn)");
   });
 
   it("is disabled with every other control while a mutation is in flight", () => {

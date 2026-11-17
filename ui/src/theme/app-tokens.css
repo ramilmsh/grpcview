@@ -1,49 +1,48 @@
-/* App layer — the workspace-only tokens and component classes on top of Nocturne. */
+/* App layer — workspace-only tokens and component classes on top of the v4 base (nocturne.css). */
 
 :root {
   --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --ok: #5bbf97;
-  --ok-bg: rgba(91, 191, 151, 0.14);
-  --err: #d1737d;
-  --err-bg: rgba(209, 115, 125, 0.14);
-  --err-border: rgba(209, 115, 125, 0.35);
-  --err-fg: #f0b8bd;
-  --warn: #d9b46a;
-  --warn-bg: rgba(217, 180, 106, 0.14);
-  --panel: #1b1d2b;
-  --panel-2: #1f2130;
-  --line: var(--color-divider);
-  /* VS Code's workbench.tree.indent: the row indent and the indent-guide pitch both. */
-  --tree-indent: 8px;
+  --ok: var(--v-ok);
+  --ok-bg: var(--v-ok-bg);
+  --ok-border: rgba(16, 185, 129, 0.35);
+  --ok-fg: #6EE7B7;
+  --err: var(--v-err);
+  --err-bg: var(--v-err-bg);
+  --err-border: var(--v-err-ring);
+  --err-fg: #FCA5A5;
+  --warn: var(--v-warn);
+  --warn-bg: var(--v-warn-bg);
+  --warn-border: rgba(245, 158, 11, 0.35);
+  --warn-fg: #FCD34D;
+  --panel: var(--v-panel);
+  --panel-2: var(--v-raised);
+  --line: var(--v-line);
 }
 
 /* thin dark scrollbars to match the ground */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
-::-webkit-scrollbar-thumb { background: #3a3d4d; border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: #4a4e60; background-clip: padding-box; }
+::-webkit-scrollbar-thumb { background: var(--v-hover); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #343A50; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* left rail buttons */
 .rail-btn {
-  width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
-  border-radius: 9px; color: var(--color-neutral-500); font-size: 21px; cursor: pointer;
-  position: relative; transition: color .12s, background .12s;
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--v-r); color: var(--v-text-2); font-size: 20px; cursor: pointer;
+  position: relative; transition: color 120ms ease, background-color 120ms ease;
   background: transparent; border: none;
 }
-.rail-btn:hover { color: var(--color-neutral-200); background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.rail-btn.on { color: var(--color-accent); background: var(--color-accent-900); }
-.rail-btn.on::before {
-  content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--color-accent);
-}
+.rail-btn:hover { color: var(--v-text); background: var(--v-hover); }
+.rail-btn:active { box-shadow: var(--v-btn-press); }
+.rail-btn.on { color: var(--v-text); background: var(--v-accent-tint); }
 /* hover tooltip — pure CSS, no component; label comes from data-tooltip. Delayed so a
    quick mouse-pass over a row of buttons doesn't flash a tooltip on each one; position is
    per-caller (rail buttons sit flush against the app's left edge, toolbar icons don't). */
 [data-tooltip] { position: relative; }
 [data-tooltip]::after {
-  content: attr(data-tooltip); position: absolute; padding: 4px 8px; border-radius: var(--radius-sm);
-  background: var(--panel-2); color: var(--color-text); font-size: 12px; white-space: nowrap;
-  box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transition: opacity .12s, transform .12s;
+  content: attr(data-tooltip); position: absolute; padding: 4px 8px; border-radius: var(--v-r-badge);
+  background: var(--v-raised); color: var(--v-text); font-size: 12px; font-weight: 500; white-space: nowrap;
+  box-shadow: var(--v-popover); opacity: 0; pointer-events: none; transition: opacity .12s, transform .12s;
   z-index: 20;
 }
 [data-tooltip]:hover::after, [data-tooltip]:focus-visible::after { opacity: 1; transition-delay: .35s; }
@@ -51,20 +50,31 @@
 .rail-btn::after { left: calc(100% + 9px); top: 50%; transform: translateY(-50%) translateX(-4px); }
 .rail-btn:hover::after, .rail-btn:focus-visible::after { transform: translateY(-50%) translateX(0); }
 
-/* subtabs (request/response panes) */
+/* subtabs (request/response panes): plain text, a subtle accent underline on the active one */
 .subtab {
-  padding: 9px 13px; font-size: 13px; color: var(--color-neutral-500); cursor: pointer;
+  padding: 10px 11px; font-size: 14px; color: var(--v-text-2); cursor: pointer;
   border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 6px; white-space: nowrap;
   background: transparent; border-left: none; border-right: none; border-top: none;
-  font-family: inherit;
+  font-family: inherit; transition: color 120ms ease, border-color 120ms ease;
 }
-.subtab:hover { color: var(--color-neutral-200); }
-.subtab.on { color: var(--color-text); border-bottom-color: var(--color-accent); }
+.subtab:hover { color: var(--v-text); }
+.subtab.on { color: var(--v-text); border-bottom-color: rgba(99, 102, 241, 0.55); }
+
+/* open-request tabs: pills inside the tab strip */
+.tab {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  height: 34px; margin: 6px 0 6px 6px; padding: 0 8px 0 14px;
+  border-radius: var(--v-r); color: var(--v-text-2); background: transparent; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.tab:hover { background: var(--v-hover); color: var(--v-text); }
+.tab.on { background: var(--v-accent-tint); color: var(--v-text); box-shadow: var(--v-selected); }
 
 /* collection tree rows */
 .treerow {
-  display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px;
-  cursor: pointer; font-size: 13px; color: var(--color-neutral-300); position: relative;
+  display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: var(--v-r);
+  cursor: pointer; font-size: 13px; color: var(--v-text-2); position: relative;
+  transition: background-color 120ms ease, color 120ms ease;
   /* A selection surface, not prose; Safari still needs the -webkit- prefix here. */
   -webkit-user-select: none;
   user-select: none;
@@ -75,36 +85,35 @@
 }
 /* a rename colliding with a visible sibling */
 .treerow input.rename-invalid {
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px var(--err);
+  border-radius: var(--v-r-badge);
+  box-shadow: inset 0 0 0 1px var(--v-err);
 }
-.treerow:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.treerow.on { background: var(--color-accent-900); color: var(--color-text); }
-.treerow.on::before {
-  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
-  border-radius: 2px; background: var(--color-accent);
-}
-.rowmeta { margin-left: auto; }
+.treerow:hover { background: var(--v-hover); color: var(--v-text); }
+.treerow.on { background: var(--v-accent-tint); color: var(--v-text); font-weight: 500; box-shadow: var(--v-selected); }
+/* inactive rows mute their method badge */
+.treerow:not(.on) .mtag { opacity: .55; }
+.rowmeta { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--v-text-2); }
 .rowbtns { display: none; align-items: center; gap: 1px; margin-left: auto; }
 .treerow:hover > .rowbtns { display: flex; }
 .treerow:hover > .rowmeta { display: none; }
 .rowbtn {
-  width: 19px; height: 19px; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; color: var(--color-neutral-500); font-size: 13px;
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--v-r-badge); color: var(--v-text-2); font-size: 13px;
   background: transparent; border: none; cursor: pointer;
 }
-.rowbtn:hover { background: color-mix(in srgb, var(--color-text) 12%, transparent); color: var(--color-text); }
-.rowbtn.danger:hover { background: var(--err-bg); color: var(--err); }
+.rowbtn:hover { background: var(--v-raised); color: var(--v-text); }
+.rowbtn.danger:hover { background: var(--v-err-bg); color: var(--v-err); }
 
-/* selection (.sel), open tab (.on) and focus (.foc) combine; each owns a different property */
-.treerow.sel { background: color-mix(in srgb, var(--color-text) 10%, transparent); }
-.treerow.on.sel { background: var(--color-accent-900); }
-.treerow.foc { box-shadow: inset 0 0 0 1px var(--color-accent); }
+/* selection (.sel), open tab (.on) and focus (.foc) combine; .foc adds an accent ring */
+.treerow.sel { background: var(--v-hover); color: var(--v-text); }
+.treerow.on.sel { background: var(--v-accent-tint); }
+.treerow.foc { box-shadow: inset 0 0 0 1px var(--v-accent); }
+.treerow.on.foc { box-shadow: var(--v-selected), inset 0 0 0 1px var(--v-accent); }
 
-/* indent guides: one 1px rule per ancestor level at --tree-indent pitch; continuous only while rows stack with no vertical gap */
+/* indent guides: one 1px rule per ancestor level, `left` inline (tree/geometry.ts); continuous only while rows stack with no vertical gap */
 .guide {
-  position: absolute; top: 0; bottom: 0; left: calc(var(--i, 0) * var(--tree-indent));
-  width: 1px; background: var(--line); pointer-events: none;
+  position: absolute; top: 0; bottom: 0;
+  width: 1px; background: var(--v-hover); pointer-events: none;
 }
 
 /* drag and drop feedback */
@@ -112,18 +121,17 @@
 
 /* the `.tree` prefix is for specificity over `.treerow.on.sel`, not scoping */
 .tree .treerow.dropinto {
-  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
-  box-shadow: inset 0 0 0 2px var(--color-accent);
+  background: var(--v-accent-tint);
+  box-shadow: inset 0 0 0 1px var(--v-accent);
 }
 
-/* the between-rows indicator, indented to the destination's depth (--drop-depth) */
+/* the between-rows indicator; `left` inline, at the destination depth (tree/geometry.ts) */
 .dropline {
   position: absolute;
-  left: calc(var(--drop-depth, 0) * var(--tree-indent));
   right: 0;
   height: 2px;
   border-radius: 1px;
-  background: var(--color-accent);
+  background: var(--v-accent);
   pointer-events: none;
 }
 .dropline.before { top: -1px; }
@@ -133,31 +141,40 @@
 .tree { outline: none; }
 .tree:focus-visible { outline: none; }
 
-/* source rows (definition sources view) */
-.srcrow { cursor: pointer; transition: background .12s; }
-.srcrow:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
-.srcrow.on { background: var(--color-accent-900); box-shadow: inset 2px 0 0 var(--color-accent); }
+/* source/daemon rows: static raised cards — only the controls inside them react to hover */
+.srcrow { border-radius: var(--v-r); background: var(--v-raised); box-shadow: var(--v-raise); }
+.srcrow.on { box-shadow: var(--v-raise), 0 0 0 1px var(--v-accent); }
+.srcrow.failed { box-shadow: var(--v-raise), 0 0 0 1px var(--v-err); }
+.srcrow.stale { box-shadow: var(--v-raise), 0 0 0 1px var(--v-warn); }
+
+/* a tag that is also a toggle (e.g. a source's commit flag): brightens on hover */
+.tagbtn { border: none; cursor: pointer; transition: filter 120ms ease; }
+.tagbtn:hover:not(:disabled) { filter: brightness(1.3); }
+.tagbtn:disabled { cursor: default; }
 
 /* method-kind tag */
 .mtag {
-  font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .04em;
-  padding: 1px 4px; border-radius: 4px; line-height: 1.5; flex: none;
+  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .02em;
+  min-width: 20px; height: 16px; padding: 0 3px; border-radius: var(--v-r-badge); flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
 }
-.mt-u { background: var(--color-accent-900); color: var(--color-accent-300); }
-.mt-ss { background: rgba(91, 191, 151, .16); color: var(--ok); }
-.mt-cs { background: var(--warn-bg); color: var(--warn); }
-.mt-bd { background: var(--color-accent-2-900); color: var(--color-accent-2-300); }
+.mt-u { background: var(--v-method-unary-bg); color: var(--v-method-unary); }
+.mt-ss { background: var(--v-method-server-streaming-bg); color: var(--v-method-server-streaming); }
+.mt-cs { background: var(--v-method-client-streaming-bg); color: var(--v-method-client-streaming); }
+.mt-bd { background: var(--v-method-bidi-streaming-bg); color: var(--v-method-bidi-streaming); }
 /* no method chosen yet (a draft); the dashed border takes the padding's place, same box */
-.mt-none { background: transparent; color: var(--color-neutral-500); border: 1px dashed var(--color-neutral-600); padding: 0 3px; }
+.mt-none { background: transparent; color: var(--v-text-2); border: 1px dashed var(--v-text-muted); padding: 0 2px; }
 
 /* small square icon buttons */
 .iconbtn {
-  width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 6px; color: var(--color-neutral-400); cursor: pointer; font-size: 16px;
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--v-r); color: var(--v-text-2); cursor: pointer; font-size: 16px;
   background: transparent; border: none;
+  transition: background-color 120ms ease, color 120ms ease, transform 90ms ease, box-shadow 90ms ease;
 }
-.iconbtn:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-neutral-100); }
-.iconbtn:disabled { color: var(--color-neutral-600); cursor: default; }
+.iconbtn:hover:not(:disabled) { background: var(--v-hover); color: var(--v-text); }
+.iconbtn:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--v-btn-press); }
+.iconbtn:disabled { color: var(--v-text-muted); cursor: default; }
 /* toolbar icons tooltip below, not to the side — see the shared [data-tooltip] rule above */
 .iconbtn::after { top: calc(100% + 7px); left: 50%; transform: translateX(-50%) translateY(-4px); }
 .iconbtn:hover::after, .iconbtn:focus-visible::after { transform: translateX(-50%) translateY(0); }
@@ -173,34 +190,39 @@
 
 /* keyboard hint */
 .kbd {
-  font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--line);
-  border-radius: 5px; color: var(--color-neutral-500); background: var(--panel-2);
+  font-family: var(--mono); font-size: 11px; padding: 1px 5px; border: none;
+  border-radius: var(--v-r-badge); color: var(--v-text-2); background: transparent; box-shadow: var(--v-raise);
 }
 
-/* danger button (not in base Nocturne) */
-.btn-danger { border: 1px solid var(--err); color: #eaa1a8; background: transparent; }
-.btn-danger:hover { background: var(--err-bg); color: var(--err-fg); }
+/* danger button: secondary look, error ink; fills red on hover */
+.btn-danger { background: var(--v-raised); color: var(--v-err); box-shadow: var(--v-btn-rim); }
+.btn-danger:hover:not(:disabled) { background: var(--v-err); color: #fff; }
+
+/* log / code viewers */
+.logview {
+  background: var(--v-ground); box-shadow: var(--v-sunken); border-radius: var(--v-r);
+  font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--v-text-2);
+}
 
 /* token pill: the base wraps its text in `{{ }}`; .gen is a clickable generator binding */
 .tok {
-  font-family: var(--mono); font-size: 12px; background: var(--color-accent-900);
-  color: var(--color-accent-300); border: 1px solid var(--color-accent-800); border-radius: 5px;
+  font-family: var(--mono); font-size: 12px; background: var(--v-accent-tint);
+  color: var(--v-accent-ink); border: none; border-radius: var(--v-r-badge);
   padding: 0 5px; white-space: nowrap; display: inline-flex; align-items: center;
 }
 .tok::before { content: "{{\00a0"; opacity: .55; }
 .tok::after { content: "\00a0}}"; opacity: .55; }
 .tok.gen {
-  color: var(--color-accent-2-300); background: var(--color-accent-2-900);
-  border-color: var(--color-accent-2-800); cursor: pointer;
-  border-radius: 5px; padding: 0 5px; font-family: var(--mono); font-size: 12px;
+  color: var(--v-method-server-streaming); background: var(--v-method-server-streaming-bg);
+  cursor: pointer; border-radius: var(--v-r-badge); padding: 0 5px; font-family: var(--mono); font-size: 12px;
 }
-.tok.gen::before { content: "\2192\00a0"; opacity: .8; color: var(--color-accent-2-300); }
+.tok.gen::before { content: "\2192\00a0"; opacity: .8; color: var(--v-method-server-streaming); }
 .tok.gen::after { content: ""; }
 .tok.gen:hover { background: var(--color-accent-2-800); }
 
 /* Monaco inline decoration for a `{{ … }}` token, which carries its own braces */
 .tok-gen-decoration {
-  background: var(--color-accent-2-900);
+  background: var(--v-method-server-streaming-bg);
   box-shadow: inset 0 0 0 1px var(--color-accent-2-800);
   border-radius: 4px;
   color: var(--color-accent-2-100) !important;
@@ -208,23 +230,24 @@
 }
 
 /* bare inline inputs (filter fields, request name) */
-input.bare { background: transparent; border: none; outline: none; color: var(--color-text); font: inherit; width: 100%; }
-input.bare::placeholder { color: var(--color-neutral-600); }
+input.bare { background: transparent; border: none; outline: none; color: var(--v-text); font: inherit; width: 100%; }
+input.bare::placeholder { color: var(--v-text-muted); }
 
 /* ── scripts view — sidebar rows, header digest chip ── */
 
 /* script list rows (Scripts sidebar) */
 .scriptrow {
-  display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 7px;
-  cursor: pointer; font-size: 13px; color: var(--color-neutral-300);
+  display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--v-r);
+  cursor: pointer; font-size: 13px; color: var(--v-text-2);
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.scriptrow:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.scriptrow.on { background: var(--color-accent-900); color: var(--color-text); }
+.scriptrow:hover { background: var(--v-hover); color: var(--v-text); }
+.scriptrow.on { background: var(--v-accent-tint); color: var(--v-text); font-weight: 500; box-shadow: var(--v-selected); }
 
 /* config-digest chip */
 .digest {
-  font-family: var(--mono); font-size: 11px; color: var(--color-neutral-500);
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
+  font-family: var(--mono); font-size: 11px; color: var(--v-text-2);
+  background: var(--v-hover); border: none; border-radius: var(--v-r-badge);
   padding: 1px 6px; white-space: nowrap;
 }
 
@@ -232,12 +255,12 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 
 /* freshness/caching options */
 .freshopt {
-  padding: 6px 11px; font-size: 12px; border-radius: 7px; white-space: nowrap; cursor: pointer;
-  color: var(--color-neutral-400); background: transparent; border: 1px solid transparent;
-  font-family: inherit; transition: color .12s, background .12s, border-color .12s;
+  padding: 6px 11px; font-size: 12px; border-radius: var(--v-r); white-space: nowrap; cursor: pointer;
+  color: var(--v-text-2); background: transparent; border: none;
+  font-family: inherit; transition: color .12s, background-color .12s;
 }
-.freshopt:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.freshopt.on { color: var(--color-accent); border-color: var(--color-accent-700); background: var(--color-accent-900); }
+.freshopt:hover { background: var(--v-hover); color: var(--v-text); }
+.freshopt.on { color: var(--v-text); background: var(--v-accent-tint); box-shadow: var(--v-selected); }
 
 /* ── context menu (components/ui/Menu.tsx) ── */
 
@@ -247,21 +270,22 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 .menu {
   position: fixed; min-width: 176px; max-width: 300px;
   display: flex; flex-direction: column; padding: 4px;
-  border-radius: var(--radius-md);
-  background: var(--panel-2); border: 1px solid var(--line);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  border-radius: var(--v-r-panel);
+  background: var(--v-raised); border: none;
+  box-shadow: var(--v-popover);
 }
 .menuitem {
-  display: flex; align-items: center; padding: 5px 9px; border-radius: 5px;
-  font-family: inherit; font-size: 13px; text-align: left; white-space: nowrap;
-  color: var(--color-neutral-300); background: transparent; border: none; cursor: pointer;
+  display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: var(--v-r);
+  font-family: inherit; font-size: 14px; text-align: left; white-space: nowrap;
+  color: var(--v-text); background: transparent; border: none; cursor: pointer;
 }
 /* one highlight, written by both the arrow keys and hover, so no CSS :hover competes */
-.menuitem.hl { background: color-mix(in srgb, var(--color-text) 10%, transparent); color: var(--color-text); }
-.menuitem.danger.hl { background: var(--err-bg); color: var(--err); }
-.menuitem[aria-disabled="true"] { color: var(--color-neutral-600); cursor: default; }
+.menuitem.hl { background: var(--v-hover); color: var(--v-text); }
+.menuitem.danger { color: var(--v-err); }
+.menuitem.danger.hl { background: var(--v-err-bg); color: var(--v-err); }
+.menuitem[aria-disabled="true"] { color: var(--v-text-muted); cursor: default; }
 .menuitem[aria-disabled="true"].hl { background: transparent; }
-.menusep { height: 1px; margin: 4px 3px; background: var(--line); }
+.menusep { height: 1px; margin: 4px 3px; background: var(--v-line); }
 
 /* ── editable selector (components/ui/Combobox.tsx) ── */
 
@@ -271,16 +295,16 @@ input.bare::placeholder { color: var(--color-neutral-600); }
 .combo-field .input { padding-right: 30px; }
 .combo-caret {
   position: absolute; right: 6px; display: flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; padding: 0; border: none; border-radius: 4px;
-  background: transparent; color: var(--color-neutral-400); cursor: pointer;
+  width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--v-r-badge);
+  background: transparent; color: var(--v-text-2); cursor: pointer;
 }
-.combo-caret:hover { color: var(--color-text); background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.combo-caret:hover { color: var(--v-text); background: var(--v-hover); }
 .combo-list {
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
   display: flex; flex-direction: column; padding: 4px; max-height: 216px; overflow-y: auto;
-  border-radius: var(--radius-md);
-  background: var(--panel-2); border: 1px solid var(--line);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  border-radius: var(--v-r-panel);
+  background: var(--v-raised); border: none;
+  box-shadow: var(--v-popover);
 }
 /* Labels are long and monospaced. They ellipsize rather than wrap or add a second
    scrollbar; each row carries the full text as its tooltip.
@@ -288,7 +312,7 @@ input.bare::placeholder { color: var(--color-neutral-600); }
    past their line-height once enough of them overflow, and a long listing renders as a stack
    of unreadable slivers instead of scrolling. */
 .combo-list .menuitem {
-  display: block; flex: none; font-family: var(--mono); font-size: 12px;
+  display: block; flex: none; height: auto; padding: 7px 12px; font-family: var(--mono); font-size: 12px;
   overflow: hidden; text-overflow: ellipsis;
 }
-.combo-note { padding: 6px 9px; font-size: 12px; color: var(--color-neutral-500); }
+.combo-note { padding: 6px 9px; font-size: 12px; color: var(--v-text-2); }

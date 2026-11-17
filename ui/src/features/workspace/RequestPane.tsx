@@ -48,7 +48,7 @@ export function RequestPane({
       style={{
         width: "50%",
         flex: "none",
-        borderRight: "1px solid var(--line)",
+        borderRight: "1px solid var(--v-line)",
         minWidth: 0,
       }}
     >
@@ -56,9 +56,9 @@ export function RequestPane({
         className="flex items-center"
         style={{
           flex: "none",
-          padding: "0 6px",
-          borderBottom: "1px solid var(--line)",
-          background: "var(--color-bg)",
+          height: 44,
+          padding: "0 8px",
+          borderBottom: "1px solid var(--v-line)",
           overflowX: "auto",
         }}
       >

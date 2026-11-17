@@ -152,10 +152,10 @@ function TypeSection({
               overflow: "auto",
               fontSize: 12.5,
               lineHeight: 1.5,
-              color: "var(--color-neutral-200)",
-              background: "var(--panel-2)",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
+              color: "var(--v-text)",
+              background: "var(--v-ground)",
+              boxShadow: "var(--v-sunken)",
+              borderRadius: "var(--v-r)",
               padding: "10px 12px",
             }}
           >

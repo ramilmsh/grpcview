@@ -40,13 +40,14 @@ export function TargetBar({
     <div
       className="flex items-center gap-[8px]"
       style={{
-        background: "var(--panel-2)",
-        border: "1px solid var(--line)",
-        borderRadius: 8,
-        padding: "6px 10px",
+        height: 38,
+        padding: "0 12px",
+        borderRadius: "var(--v-r)",
+        background: "var(--v-well)",
+        boxShadow: "var(--v-sunken)",
       }}
     >
-      <HardDrives size={15} style={{ color: "var(--color-neutral-500)" }} />
+      <HardDrives size={15} style={{ color: "var(--v-text-2)" }} />
       <input
         className="font-mono"
         value={address}
@@ -59,13 +60,13 @@ export function TargetBar({
           border: "none",
           outline: "none",
           padding: 0,
-          color: "var(--color-text)",
+          color: "var(--v-text)",
           fontSize: 13,
           width: `${Math.max(address.length, 12)}ch`,
         }}
       />
       {unset ? (
-        <span style={{ fontSize: 12, color: "var(--color-neutral-600)" }}>
+        <span style={{ fontSize: 12, color: "var(--v-text-muted)" }}>
           no reflection source — type where this request is sent
         </span>
       ) : null}
@@ -81,8 +82,8 @@ export function TargetBar({
           border: "none",
           cursor: "pointer",
           padding: 0,
-          fontSize: 12,
-          color: "var(--color-neutral-400)",
+          fontSize: 13,
+          color: "var(--v-text-2)",
         }}
       >
         {tls ? (
@@ -90,16 +91,13 @@ export function TargetBar({
             <LockSimple
               weight="fill"
               size={13}
-              style={{ color: "var(--ok)" }}
+              style={{ color: "var(--v-ok)" }}
             />
             TLS
           </>
         ) : (
           <>
-            <LockSimpleOpen
-              size={13}
-              style={{ color: "var(--color-neutral-500)" }}
-            />
+            <LockSimpleOpen size={13} style={{ color: "var(--v-text-2)" }} />
             insecure
           </>
         )}

@@ -43,7 +43,7 @@ export function TreeIcon({
     <Icon
       size={size ?? DEFAULT_SIZE}
       weight={weight}
-      style={{ color: "var(--color-neutral-500)" }}
+      style={{ color: "var(--v-text-2)" }}
     />
   );
 }

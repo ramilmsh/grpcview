@@ -42,11 +42,11 @@ export function RequestTabs() {
 
   return (
     <div
-      className="bg-panel flex items-stretch"
+      className="flex items-center"
       style={{
-        height: 38,
+        height: 46,
         flex: "none",
-        borderBottom: "1px solid var(--line)",
+        borderBottom: "1px solid var(--v-line)",
         overflowX: "auto",
       }}
     >
@@ -63,22 +63,16 @@ export function RequestTabs() {
         return (
           <div
             key={tab.key}
-            className={clsx("flex items-center gap-[8px]")}
+            className={clsx("tab", active && "on")}
             style={{
-              padding: "0 14px",
+              boxSizing: "border-box",
               // Fixed, not min/max: every tab must render at the exact same width
               // regardless of title length, so the strip's rhythm doesn't jump
               // per-request; the name span below does the eliding.
-              width: 160,
+              width: 190,
               flex: "0 0 auto",
               fontSize: 13,
               cursor: "pointer",
-              color: active ? "var(--color-text)" : "var(--color-neutral-400)",
-              borderRight: "1px solid var(--line)",
-              borderBottom: active
-                ? "2px solid var(--color-accent)"
-                : "2px solid transparent",
-              background: active ? "var(--color-bg)" : "transparent",
             }}
             // The collection rides on the tab, so activating one in another collection
             // switches to it without anyone parsing a collection out of the key.

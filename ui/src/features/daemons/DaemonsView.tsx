@@ -17,6 +17,7 @@ import {
 import type { ServerEntry } from "@grpcview/v1/service_pb";
 import { ArrowClockwise, ArrowSquareOut, Stop } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
+import { MainPanel } from "@/components/ui/MainPanel";
 import { Dialog } from "@/components/ui/Dialog";
 import { Tag } from "@/components/ui/Tag";
 import { Centered } from "@/components/ui/Centered";
@@ -43,18 +44,14 @@ function DaemonRow({
 
   return (
     <div
-      className="flex items-center gap-[11px]"
-      style={{
-        padding: "11px 13px",
-        background: "var(--panel-2)",
-        border: "1px solid var(--line)",
-        borderRadius: 9,
-      }}
+      // The same static v4 raised card as a definition source row.
+      className="srcrow flex items-center gap-[14px]"
+      style={{ padding: "14px 16px" }}
     >
       <span
         className="dot"
         style={{
-          background: running ? "var(--ok)" : "var(--color-neutral-600)",
+          background: running ? "var(--v-ok)" : "var(--v-text-muted)",
         }}
         title={
           running
@@ -65,14 +62,14 @@ function DaemonRow({
       <div style={{ minWidth: 0, flex: 1 }}>
         <div
           className="font-mono truncate"
-          style={{ fontSize: 13, color: "var(--color-text)" }}
+          style={{ fontSize: 14, color: "var(--v-text)" }}
           title={entry.workspaceRoot}
         >
           {label}
         </div>
         <div
           className="truncate"
-          style={{ fontSize: 11, color: "var(--color-neutral-600)" }}
+          style={{ fontSize: 12, color: "var(--v-text-2)" }}
           title={entry.workspaceRoot}
         >
           {entry.workspaceRoot}
@@ -81,10 +78,8 @@ function DaemonRow({
       <span
         className="font-mono truncate"
         style={{
-          fontSize: 11,
-          color: running
-            ? "var(--color-neutral-500)"
-            : "var(--color-neutral-600)",
+          fontSize: 12,
+          color: running ? "var(--v-text-2)" : "var(--v-text-muted)",
           flex: "none",
         }}
         title={
@@ -99,8 +94,8 @@ function DaemonRow({
         <span
           className="font-mono truncate"
           style={{
-            fontSize: 11,
-            color: "var(--color-neutral-600)",
+            fontSize: 12,
+            color: "var(--v-text-muted)",
             flex: "none",
           }}
           title="uptime · idle timeout"
@@ -197,27 +192,32 @@ export function DaemonsView() {
   const rows = sortedDaemonRows(query.data?.servers ?? []);
 
   return (
-    <div
-      className="flex flex-col"
-      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
-    >
+    <MainPanel>
       <div
-        className="flex items-center gap-[12px]"
+        className="flex items-start gap-[16px]"
         style={{
           flex: "none",
-          padding: "14px 20px",
-          borderBottom: "1px solid var(--line)",
+          padding: "22px 28px 20px",
+          borderBottom: "1px solid var(--v-line)",
         }}
       >
         <div>
-          <h4 style={{ margin: 0 }}>Daemons</h4>
-          <span className="text-muted" style={{ fontSize: 12 }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Daemons
+          </h1>
+          <p style={{ margin: "4px 0 0", color: "var(--v-text-2)" }}>
             Every grpcview server registered on this machine.
-          </span>
+          </p>
         </div>
         <Button
           className="ml-auto"
-          style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}
           onClick={refresh}
           disabled={query.isFetching}
         >
@@ -226,7 +226,7 @@ export function DaemonsView() {
         </Button>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "14px 20px" }}>
+      <div style={{ flex: 1, overflow: "auto", padding: "20px 28px 32px" }}>
         {query.isPending ? (
           <Centered>Loading…</Centered>
         ) : query.isError ? (
@@ -244,7 +244,7 @@ export function DaemonsView() {
             No grpcview daemons are registered on this machine.
           </div>
         ) : (
-          <div className="flex flex-col" style={{ gap: 8, maxWidth: 820 }}>
+          <div className="flex flex-col" style={{ gap: 10, maxWidth: 880 }}>
             {rows.map((entry) => (
               <DaemonRow
                 key={entry.workspaceRoot}
@@ -283,6 +283,6 @@ export function DaemonsView() {
           </Button>
         </div>
       </Dialog>
-    </div>
+    </MainPanel>
   );
 }

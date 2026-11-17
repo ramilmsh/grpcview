@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import {
   ArrowClockwise,
   CaretDown,
@@ -181,11 +182,12 @@ export const KIND_ICON: Record<SourceKind, typeof PlugsConnected> = {
   reference: LinkBreak,
 };
 
+// v4: every kind's tile is the same neutral chip; only a dangling reference is tinted.
 export const KIND_TINT: Record<SourceKind, string> = {
-  reflection: "var(--ok)",
-  descriptorSet: "var(--color-neutral-400)",
-  bazel: "var(--color-accent)",
-  reference: "var(--warn)",
+  reflection: "var(--v-text)",
+  descriptorSet: "var(--v-text)",
+  bazel: "var(--v-text)",
+  reference: "var(--v-warn)",
 };
 
 const BAZEL_TITLE =
@@ -225,12 +227,12 @@ export function SourceRow({
   const failed = Boolean(s.resolved?.error);
   const toneColor =
     info.tone === "warn"
-      ? "var(--err-fg)"
+      ? "var(--v-err)"
       : info.tone === "ok"
-        ? "var(--color-neutral-500)"
-        : "var(--color-neutral-600)";
+        ? "var(--v-text-2)"
+        : "var(--v-text-muted)";
   const KindIcon = KIND_ICON[kind];
-  const kindIconColor = failed ? "var(--err-fg)" : KIND_TINT[kind];
+  const kindIconColor = failed ? "var(--v-err)" : KIND_TINT[kind];
   // The recipe, on the one kind that has one to show and can lose it. Short by construction
   // (workspace-root-relative), so it rides the existing secondary line.
   const recipe = refreshRecipe(s);
@@ -238,49 +240,57 @@ export function SourceRow({
   // outline is reserved for the case where "off" costs a clone its schema entirely.
   const uncommittedUpload = kind === "descriptorSet" && !s.commitDescriptors;
   const commitStyle = s.commitDescriptors
-    ? {
-        background: "var(--color-neutral-800)",
-        color: "var(--color-neutral-100)",
-      }
+    ? { background: "var(--v-ok-bg)", color: "var(--v-ok)" }
     : uncommittedUpload
-      ? { borderColor: "var(--warn)", color: "var(--warn)" }
-      : { borderColor: "var(--line)", color: "var(--color-neutral-500)" };
+      ? { background: "var(--v-warn-bg)", color: "var(--v-warn)" }
+      : { background: "var(--v-hover)", color: "var(--v-text-2)" };
 
   return (
     <div
-      className="flex items-center gap-[11px]"
-      style={{
-        padding: "11px 13px",
-        background: "var(--panel-2)",
-        border: "1px solid var(--line)",
-        borderRadius: 9,
-      }}
+      // .srcrow: the v4 raised card, static on hover; .failed rings it red.
+      className={clsx(
+        "srcrow flex items-center gap-[14px]",
+        failed && "failed",
+      )}
+      style={{ padding: "14px 16px" }}
     >
       <span
         className="font-mono"
         style={{
-          fontSize: 11,
-          color: "var(--color-neutral-600)",
-          width: "2ch",
+          fontSize: 12,
+          minWidth: 28,
+          flex: "none",
+          color: index === 0 ? "var(--v-text)" : "var(--v-text-2)",
         }}
       >
         {index + 1}
       </span>
-      <KindIcon size={18} style={{ color: kindIconColor }} />
+      <span
+        className="flex items-center justify-center"
+        style={{
+          width: 32,
+          height: 32,
+          flex: "none",
+          borderRadius: "var(--v-r)",
+          background: "var(--v-hover)",
+        }}
+      >
+        <KindIcon size={18} style={{ color: kindIconColor }} />
+      </span>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div
           className="font-mono truncate"
-          style={{ fontSize: 13, color: "var(--color-text)" }}
+          style={{ fontSize: 14, color: "var(--v-text)" }}
           title={label}
         >
           {label}
         </div>
-        <div className="truncate" style={{ fontSize: 11, color: toneColor }}>
+        <div className="truncate" style={{ fontSize: 12, color: toneColor }}>
           {info.text}
           {recipe && (
             <span
               className="font-mono"
-              style={{ color: "var(--color-neutral-600)" }}
+              style={{ color: "var(--v-text-muted)" }}
               title={`Refreshing re-reads this descriptor set from ${recipe}, relative to the workspace root.`}
             >
               {` · ${recipe}`}
@@ -302,30 +312,20 @@ export function SourceRow({
         </Tag>
       )}
       {kind === "reference" && (
-        <span
-          className="tag"
-          title={noDefinitionTitle(s.id)}
-          style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
-        >
+        <span className="tag tag-warn" title={noDefinitionTitle(s.id)}>
           {NO_DEFINITION_LABEL}
         </span>
       )}
       <button
         type="button"
-        className="tag"
+        className="tag tagbtn"
         title={commitTitle(s)}
         aria-label={`Descriptors of ${label} are ${
           s.commitDescriptors ? COMMITTED_LABEL : LOCAL_LABEL
         } — click to ${s.commitDescriptors ? "stop committing them" : "commit them"}`}
         onClick={() => cb.onSetCommit(s, !s.commitDescriptors)}
         disabled={rowBusy}
-        style={{
-          gap: 5,
-          background: "transparent",
-          border: "1px solid transparent",
-          cursor: rowBusy ? "default" : "pointer",
-          ...commitStyle,
-        }}
+        style={{ gap: 5, ...commitStyle }}
       >
         {s.commitDescriptors ? (
           <GitBranch size={11} />

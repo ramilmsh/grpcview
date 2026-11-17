@@ -11,6 +11,7 @@ import { replaceSelection } from "./selection";
 import { TreeRow } from "./TreeRow";
 import { IS_MAC } from "./platform";
 import { keyToIntent, type KeyStroke } from "./keymap";
+import { DEFAULT_INDENT } from "./geometry";
 import {
   applyIntent,
   applyRowClick,
@@ -124,8 +125,8 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
     canDrop,
     canDrag,
     activeId = null,
-    indent = 8,
-    rowHeight = 22,
+    indent = DEFAULT_INDENT,
+    rowHeight = 28,
   } = props;
   const ariaLabel = props["aria-label"];
 

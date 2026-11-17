@@ -13,7 +13,7 @@ import {
 } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
 import { findByKey, methodKind, prettyBody, resolveMethod } from "@/lib/format";
-import { Centered } from "@/components/ui/Centered";
+import { NoRequestOpen } from "./NoRequestOpen";
 import { MethodHeader } from "./MethodHeader";
 import { RequestPane } from "./RequestPane";
 import { ResponsePane } from "./ResponsePane";
@@ -114,7 +114,7 @@ export function RequestWorkspace() {
   const aborters = useRef<Record<string, AbortController>>({});
 
   if (!activeItem || !request || !activeKey) {
-    return <Centered>Select a request to edit and invoke.</Centered>;
+    return <NoRequestOpen />;
   }
 
   const key = activeKey;
@@ -332,7 +332,20 @@ export function RequestWorkspace() {
         input={activeMethod?.input}
         output={activeMethod?.output}
       />
-      <div className="flex" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+      {/* The v4 editor well: request and response sunk into one rounded trough. */}
+      <div
+        className="flex"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          overflow: "hidden",
+          margin: "14px 16px 16px",
+          borderRadius: "var(--v-r-panel)",
+          background: "var(--v-well)",
+          boxShadow: "var(--v-sunken)",
+        }}
+      >
         <RequestPane
           kind={kind}
           body={body}

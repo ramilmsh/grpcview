@@ -55,10 +55,9 @@ export function NoCollection() {
         style={{
           width: 48,
           height: 48,
-          borderRadius: 13,
-          background: "var(--panel-2)",
-          border: "1px solid var(--line)",
-          color: "var(--color-neutral-500)",
+          borderRadius: "var(--v-r)",
+          background: "var(--v-hover)",
+          color: "var(--v-text-2)",
         }}
       >
         <FolderPlus size={24} />
@@ -118,7 +117,6 @@ export function NoCollection() {
         variant="primary"
         onClick={submit}
         disabled={createCollection.isPending}
-        style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}
       >
         <FolderPlus size={14} />
         {createCollection.isPending ? "Creating…" : "Create collection"}

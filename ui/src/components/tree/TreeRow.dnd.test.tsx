@@ -49,8 +49,8 @@ function render(
       renameSiblings={[]}
       onRenameCommit={() => {}}
       onRenameCancel={() => {}}
-      indent={8}
-      rowHeight={22}
+      indent={18}
+      rowHeight={28}
       onRowClick={() => {}}
       onRowDoubleClick={() => {}}
       onTwistieClick={() => {}}
@@ -85,8 +85,8 @@ describe("TreeRow: drag and drop chrome", () => {
         renameSiblings={[]}
         onRenameCommit={() => {}}
         onRenameCancel={() => {}}
-        indent={8}
-        rowHeight={22}
+        indent={18}
+        rowHeight={28}
         onRowClick={() => {}}
         onRowDoubleClick={() => {}}
         onTwistieClick={() => {}}
@@ -112,10 +112,10 @@ describe("TreeRow: drag and drop chrome", () => {
 
   it("a `before`/`after` drop draws a line at that edge, indented to the drop depth", () => {
     expect(render("r", { dropTarget: "before", dropDepth: 1 })).toContain(
-      '<span class="dropline before" style="--drop-depth:1"></span>',
+      '<span class="dropline before" style="left:26px"></span>',
     );
     expect(render("r", { dropTarget: "after", dropDepth: 2 })).toContain(
-      '<span class="dropline after" style="--drop-depth:2"></span>',
+      '<span class="dropline after" style="left:44px"></span>',
     );
   });
 

@@ -8,7 +8,9 @@ import type { TreeRowState } from "@/components/tree/types";
 import type { Item, Service } from "@grpcview/v1/workspace_pb";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
 import {
+  countRequests,
   renderRequestRow,
+  requestTreeItem,
   requestTreeAdapter,
   type RequestRowCallbacks,
 } from "./request-tree";
@@ -336,6 +338,48 @@ describe("request tree rows: active/selected/focused", () => {
   });
 });
 
+describe("countRequests", () => {
+  // Children (3) differ from requests drawn beneath (4): the count is the latter.
+  const w = folder(
+    "W",
+    [],
+    [
+      request("A", ["W"], SERVICE, "SayHello"),
+      folder(
+        "S",
+        ["W"],
+        [
+          request("B", ["W", "S"], SERVICE, "SayHello"),
+          request("C", ["W", "S"], SERVICE, "SayHello"),
+        ],
+      ),
+      request("D", ["W"], SERVICE, "SayHello"),
+    ],
+  );
+
+  it("counts requests recursively, not direct children nor folders", () => {
+    expect(countRequests(w.children)).toBe(4);
+    expect(countRequests([w, request("E", [], SERVICE, "SayHello")])).toBe(5);
+    expect(countRequests([folder("Empty", [], [])])).toBe(0);
+    expect(countRequests(undefined)).toBe(0);
+  });
+
+  it("is what both row tiers show", () => {
+    expect(requestTreeItem(w).description).toBe("4");
+    const markup = renderToStaticMarkup(
+      <Tree
+        adapter={requestTreeAdapter([w])}
+        renderRow={rowRendererWith(noopCallbacks)}
+        expanded={new Set(["./w", "./w/s"])}
+        aria-label="Test tree"
+      />,
+    );
+    const [rowW, , rowS] = rowsOf(markup);
+    expect(rowW.children.find((c) => hasClass(c, "rowmeta"))?.text).toBe("4");
+    expect(rowS.children.find((c) => hasClass(c, "rowmeta"))?.text).toBe("2");
+  });
+});
+
 describe("request tree rows: indent guides", () => {
   it("renders exactly `depth` guide elements per row, and none at the root", () => {
     const markup = renderToStaticMarkup(
@@ -380,7 +424,7 @@ describe("request tree rows: renaming replaces the row content entirely", () => 
           onRenameCommit={() => {}}
           onRenameCancel={() => {}}
           indent={8}
-          rowHeight={22}
+          rowHeight={28}
           onRowClick={() => {}}
           onRowDoubleClick={() => {}}
           onTwistieClick={() => {}}

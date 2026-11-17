@@ -63,9 +63,7 @@ export function MethodHeader({
     <div
       style={{
         flex: "none",
-        padding: "11px 16px 12px",
-        background: "var(--color-bg)",
-        borderBottom: "1px solid var(--line)",
+        padding: "14px 16px 0",
       }}
     >
       <div
@@ -82,9 +80,9 @@ export function MethodHeader({
           title="Click to rename"
           ariaLabel="Request name"
           style={{
-            fontSize: 15,
+            fontSize: 18,
             fontWeight: 600,
-            color: "var(--color-text)",
+            color: "var(--v-text)",
             maxWidth: 240,
             // Shrink priority across this row is set by flex-shrink, not by who comes
             // first: the service/method pair (1000, and inside it the service before the
@@ -97,21 +95,18 @@ export function MethodHeader({
             whiteSpace: "nowrap",
           }}
           inputStyle={{
-            fontSize: 15,
+            fontSize: 18,
             fontWeight: 600,
-            color: "var(--color-text)",
+            color: "var(--v-text)",
             maxWidth: 240,
           }}
         />
         <MethodKindTag kind={kind} />
 
         <div
-          className="flex items-center font-mono"
+          className="flex items-center gap-[4px] font-mono"
           style={{
             fontSize: 13,
-            background: "var(--panel-2)",
-            border: "1px solid var(--line)",
-            borderRadius: 7,
             minWidth: 0,
             flexShrink: 1000,
           }}
@@ -119,10 +114,14 @@ export function MethodHeader({
           <Button
             className="font-mono"
             style={{
-              padding: "4px 9px",
+              height: 32,
+              padding: "0 10px",
               gap: 6,
               fontSize: 13,
-              color: "var(--color-neutral-400)",
+              fontWeight: 400,
+              background: "transparent",
+              boxShadow: "var(--v-raise)",
+              color: "var(--v-text-2)",
               minWidth: 0,
               flexShrink: 1000,
             }}
@@ -131,7 +130,6 @@ export function MethodHeader({
           >
             <span
               style={{
-                color: "var(--color-neutral-500)",
                 minWidth: 0,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -142,15 +140,18 @@ export function MethodHeader({
             </span>
             <CaretDown size={10} style={{ opacity: 0.6, flex: "none" }} />
           </Button>
-          <span style={{ color: "var(--color-neutral-600)" }}>/</span>
+          <span style={{ color: "var(--v-text-muted)" }}>/</span>
           <Button
             className="font-mono"
             style={{
-              padding: "4px 9px",
+              height: 32,
+              padding: "0 10px",
               gap: 6,
               fontSize: 13,
-              fontWeight: 600,
-              color: "var(--color-text)",
+              fontWeight: 500,
+              background: "transparent",
+              boxShadow: "var(--v-raise)",
+              color: "var(--v-text)",
               minWidth: 0,
               flexShrink: 1,
             }}
@@ -190,8 +191,10 @@ export function MethodHeader({
             variant="secondary"
             className="font-mono"
             style={{
-              padding: "4px 9px",
+              height: 32,
+              padding: "0 10px",
               fontSize: 11,
+              fontWeight: 400,
               gap: 6,
               cursor: "default",
               minWidth: 0,
@@ -206,17 +209,12 @@ export function MethodHeader({
             disabled
           >
             {schemaSource?.live === false ? (
-              <FileArchive
-                size={14}
-                style={{ color: "var(--color-neutral-400)" }}
-              />
+              <FileArchive size={14} style={{ color: "var(--v-text-2)" }} />
             ) : (
               <PlugsConnected
                 size={14}
                 style={{
-                  color: schemaSource
-                    ? "var(--ok)"
-                    : "var(--color-neutral-600)",
+                  color: schemaSource ? "var(--v-ok)" : "var(--v-text-muted)",
                 }}
               />
             )}
@@ -232,8 +230,8 @@ export function MethodHeader({
             </span>
           </Button>
           <Button
-            variant="primary"
-            style={{ padding: "6px 16px", fontSize: 14, gap: 7, flex: "none" }}
+            variant="solid"
+            style={{ flex: "none" }}
             onClick={onInvoke}
             disabled={invoking || !canInvoke}
             title={

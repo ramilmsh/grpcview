@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import clsx from "clsx";
 import { CaretDown, CaretRight } from "@/components/ui/icons";
 import type {
@@ -9,11 +9,9 @@ import type {
 } from "./types";
 import { TreeIcon } from "./icon-map";
 import { RenameInput } from "./RenameInput";
+import { TWISTIE_WIDTH, depthLeft, guideLeft, guideLevels } from "./geometry";
 
-// The row shell: indent guides, twistie, drop indicator.
-
-// Reserved on leaf rows too, so folder and leaf labels start at the same x.
-const TWISTIE_WIDTH = 14;
+// The row shell: indent guides, twistie, drop indicator. Geometry is geometry.ts's.
 
 interface TreeRowProps<T> {
   row: TreeRowModel<T>;
@@ -127,8 +125,8 @@ export function TreeRow<T>({
           <span
             className="rowmeta font-mono"
             style={{
-              fontSize: 10,
-              color: "var(--color-neutral-600)",
+              fontSize: 11,
+              color: "var(--v-text-2)",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -157,9 +155,7 @@ export function TreeRow<T>({
       id={domId}
       data-index={dataIndex}
       ref={rowRef}
-      style={
-        { height: rowHeight, "--tree-indent": `${indent}px` } as CSSProperties
-      }
+      style={{ height: rowHeight }}
       role="treeitem"
       aria-level={row.depth + 1}
       aria-posinset={row.posInSet}
@@ -176,16 +172,15 @@ export function TreeRow<T>({
       onDragStart={onDragStart}
     >
       {/* A real element, not a ::before: .treerow.on::before is already taken and a
-          row can be both. --drop-depth is read by the .dropline rules. */}
+          row can be both. Starts at the destination depth's twistie. */}
       {(dropTarget === "before" || dropTarget === "after") && (
         <span
           className={clsx("dropline", dropTarget)}
-          style={{ "--drop-depth": dropDepth } as CSSProperties}
+          style={{ left: depthLeft(dropDepth, indent) }}
         />
       )}
-      {/* --i is read by the .guide rule in app-tokens.css. */}
-      {Array.from({ length: row.depth }, (_, i) => (
-        <span key={i} className="guide" style={{ "--i": i } as CSSProperties} />
+      {guideLevels(row.depth).map((i) => (
+        <span key={i} className="guide" style={{ left: guideLeft(i, indent) }} />
       ))}
       <span
         className="twistie"
@@ -201,15 +196,9 @@ export function TreeRow<T>({
       >
         {row.expandable &&
           (row.expanded ? (
-            <CaretDown
-              size={11}
-              style={{ color: "var(--color-neutral-500)" }}
-            />
+            <CaretDown size={11} style={{ color: "var(--v-text-2)" }} />
           ) : (
-            <CaretRight
-              size={11}
-              style={{ color: "var(--color-neutral-500)" }}
-            />
+            <CaretRight size={11} style={{ color: "var(--v-text-2)" }} />
           ))}
       </span>
       {content}

@@ -12,6 +12,7 @@ ts_project(
         "EditableName.tsx",
         "Input.tsx",
         "Kbd.tsx",
+        "MainPanel.tsx",
         "Menu.tsx",
         "Subtab.tsx",
         "Tag.tsx",

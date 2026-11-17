@@ -17,7 +17,7 @@ import {
   type PickerPane,
 } from "./method-picker";
 
-const muted = { color: "var(--color-neutral-500)" };
+const muted = { color: "var(--v-text-2)" };
 
 // The two-pane service → method body: a search box over a services pane and the selected
 // service's methods. Shared by MethodPickerModal (repointing a request) and
@@ -144,7 +144,7 @@ export function MethodPicker({
       className={searchVariant === "field" ? "input" : "bare"}
       style={
         searchVariant === "field"
-          ? { fontSize: 13, paddingLeft: 30 }
+          ? { fontSize: 14, height: 38, paddingLeft: 34 }
           : { fontSize: 13 }
       }
       placeholder="Search services or methods…"
@@ -164,13 +164,13 @@ export function MethodPicker({
       onKeyDown={onKeyDown}
     >
       {searchVariant === "field" ? (
-        <div style={{ position: "relative", padding: "0 24px 14px" }}>
+        <div style={{ position: "relative", padding: "0 16px 14px" }}>
           <MagnifyingGlass
             size={14}
             style={{
               ...muted,
               position: "absolute",
-              left: 34,
+              left: 28,
               top: "calc(50% - 7px - 7px)",
             }}
           />
@@ -181,7 +181,7 @@ export function MethodPicker({
           className="flex items-center gap-[8px]"
           style={{
             padding: "10px 14px",
-            borderBottom: "1px solid var(--line)",
+            borderBottom: "1px solid var(--v-line)",
           }}
         >
           <MagnifyingGlass size={14} style={muted} />
@@ -195,7 +195,7 @@ export function MethodPicker({
           flex: 1,
           minHeight: 0,
           ...(searchVariant === "field"
-            ? { borderTop: "1px solid var(--line)" }
+            ? { borderTop: "1px solid var(--v-line)" }
             : {}),
         }}
       >
@@ -208,7 +208,9 @@ export function MethodPicker({
             width: "45%",
             overflowY: "auto",
             outline: "none",
-            borderRight: "1px solid var(--line)",
+            padding: 8,
+            boxSizing: "border-box",
+            borderRight: "1px solid var(--v-line)",
           }}
         >
           {shown.length === 0 && (
@@ -229,11 +231,14 @@ export function MethodPicker({
               aria-selected={i === serviceIndex}
               className="treerow"
               style={{
-                borderRadius: 0,
-                padding: "9px 14px",
+                padding: "9px 10px",
+                marginBottom: 2,
                 height: "auto",
                 ...(i === serviceIndex
-                  ? { background: "var(--color-accent-900)" }
+                  ? {
+                      background: "var(--v-accent-tint)",
+                      color: "var(--v-text)",
+                    }
                   : {}),
               }}
               onClick={() => {
@@ -245,13 +250,17 @@ export function MethodPicker({
               <div style={{ minWidth: 0 }}>
                 <div
                   className="truncate"
-                  style={{ fontSize: 13, color: "var(--color-text)" }}
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: "var(--v-text)",
+                  }}
                 >
                   {s.name}
                 </div>
                 <div
                   className="font-mono truncate"
-                  style={{ fontSize: 11, ...muted }}
+                  style={{ fontSize: 12, ...muted }}
                 >
                   {s.package}
                 </div>
@@ -265,7 +274,13 @@ export function MethodPicker({
           role="listbox"
           aria-label="Methods"
           tabIndex={-1}
-          style={{ width: "55%", overflowY: "auto", outline: "none" }}
+          style={{
+            width: "55%",
+            overflowY: "auto",
+            outline: "none",
+            padding: 8,
+            boxSizing: "border-box",
+          }}
         >
           {active ? (
             methods.map((m, i) => {
@@ -281,16 +296,18 @@ export function MethodPicker({
                   aria-selected={picked}
                   className="treerow"
                   style={{
-                    borderRadius: 6,
-                    margin: "2px 6px",
-                    padding: "8px 10px",
-                    height: "auto",
+                    gap: 10,
+                    marginBottom: 2,
+                    padding: "0 10px",
+                    height: 40,
+                    color: "var(--v-text)",
                     boxShadow: picked
-                      ? "inset 0 0 0 1px var(--color-accent)"
+                      ? "inset 0 0 0 1px var(--v-accent)"
                       : undefined,
-                    background:
-                      pane === "methods" && i === methodIndex
-                        ? "color-mix(in srgb, var(--color-text) 8%, transparent)"
+                    background: picked
+                      ? "var(--v-accent-tint)"
+                      : pane === "methods" && i === methodIndex
+                        ? "var(--v-hover)"
                         : undefined,
                   }}
                   onClick={() => onPick(active, m)}
@@ -299,8 +316,8 @@ export function MethodPicker({
                   <span
                     className="font-mono truncate"
                     style={{
-                      fontSize: 12.5,
-                      color: "var(--color-text)",
+                      fontSize: 13,
+                      color: "var(--v-text)",
                       minWidth: 0,
                     }}
                   >
@@ -310,7 +327,7 @@ export function MethodPicker({
                     style={{
                       marginLeft: "auto",
                       flex: "none",
-                      fontSize: 11.5,
+                      fontSize: 12,
                       ...muted,
                     }}
                   >

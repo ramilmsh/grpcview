@@ -20,6 +20,7 @@ ts_project(
         "NewRequestPage.tsx",
         "NewRequestRow.tsx",
         "NoCollection.tsx",
+        "NoRequestOpen.tsx",
         "RenameCollectionDialog.tsx",
         "RequestPane.tsx",
         "RequestTabs.tsx",

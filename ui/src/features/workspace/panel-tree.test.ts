@@ -642,6 +642,9 @@ describe("draft placeholder row", () => {
     expect(adapter.getCollapsibleState(draft)).toBe("none");
     // Nowhere else.
     expect(ids(adapter)).not.toContain(NEW_REQUEST_KEY);
+    // Not counted: Calls draws Charge, Admin/Purge and the draft — its count is the
+    // two saved requests.
+    expect(adapter.getTreeItem(callsNode).description).toBe("2");
   });
 
   it("only in its own collection, and replaces the empty row there", () => {

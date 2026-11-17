@@ -154,9 +154,11 @@ function MiddlewareRow({
       className="flex items-center"
       style={{
         gap: 10,
-        background: "var(--panel-2)",
-        border: `1px solid ${missing ? "var(--err-border)" : "var(--line)"}`,
-        borderRadius: 8,
+        background: "var(--v-raised)",
+        boxShadow: missing
+          ? "var(--v-raise), 0 0 0 1px var(--v-err-ring)"
+          : "var(--v-raise)",
+        borderRadius: "var(--v-r)",
         padding: "9px 11px",
       }}
     >

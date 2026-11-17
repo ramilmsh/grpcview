@@ -26,9 +26,9 @@ export function MethodPickerModal({
         style={{
           width: "min(640px, 100%)",
           height: 520,
-          background: "var(--color-surface)",
-          borderRadius: "var(--radius-lg)",
-          boxShadow: "var(--shadow-lg)",
+          background: "var(--v-raised)",
+          borderRadius: "var(--v-r-panel)",
+          boxShadow: "var(--v-popover)",
           overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
@@ -39,7 +39,7 @@ export function MethodPickerModal({
           className="flex items-center"
           style={{
             padding: "12px 14px",
-            borderBottom: "1px solid var(--line)",
+            borderBottom: "1px solid var(--v-line)",
             gap: 8,
           }}
         >

@@ -3,6 +3,7 @@ import { TransportProvider } from "@connectrpc/connect-query";
 import { transport } from "@/lib/client";
 import { AppShell } from "@/components/shell/AppShell";
 import { Centered } from "@/components/ui/Centered";
+import { MainPanel } from "@/components/ui/MainPanel";
 import { useUIStore } from "@/lib/ui-store";
 import {
   useActiveWorkspace,
@@ -58,11 +59,20 @@ function CurrentView() {
   // the size cap, or the root may be unreadable. Say so, because offering to create one
   // would be advice based on an answer we never got.
   if (error)
-    return <Centered>Could not list this workspace: {error.message}</Centered>;
+    return (
+      <MainPanel>
+        <Centered>Could not list this workspace: {error.message}</Centered>
+      </MainPanel>
+    );
   // Sources and Scripts are equally meaningless without a collection: one gate
   // in front of the switch covers all three views. Two ways to have none — the
   // workspace lists nothing, or the collection we address is not there anymore.
-  if (collections.length === 0 || notFound) return <NoCollection />;
+  if (collections.length === 0 || notFound)
+    return (
+      <MainPanel>
+        <NoCollection />
+      </MainPanel>
+    );
   switch (activeView) {
     case "sources":
       return <SourcesView />;

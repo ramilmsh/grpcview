@@ -55,7 +55,7 @@ export function CollectionPanel() {
   const { createFolder, deleteRequest, updateRequest, updateFolder, moveItem } =
     useWorkspaceMutations();
   const openTab = useUIStore((s) => s.openTab);
-  const openRequestDraft = useUIStore((s) => s.openRequestDraft);
+  const startNewRequest = useUIStore((s) => s.startNewRequest);
   const setRequestDraft = useUIStore((s) => s.setRequestDraft);
   const requestDraft = useUIStore((s) => s.requestDraft);
   const setActiveCollection = useUIStore((s) => s.setActiveCollection);
@@ -69,7 +69,8 @@ export function CollectionPanel() {
   const treeFocused = useUIStore((s) => s.treeFocused);
   const setTreeFocused = useUIStore((s) => s.setTreeFocused);
 
-  const [filter, setFilter] = useState("");
+  const filter = useUIStore((s) => s.treeFilter);
+  const setFilter = useUIStore((s) => s.setTreeFilter);
   const [folderName, setFolderName] = useState("");
   // undefined = dialog closed, null = collection root, a folder = inside it.
   const [newFolderParent, setNewFolderParent] = useState<
@@ -128,17 +129,9 @@ export function CollectionPanel() {
   };
 
   // The one "New request" draft: a tab plus a placeholder row in `parent`. Re-triggering
-  // it only moves the row. A folder's own collection, which in the tier need not be the
-  // active one. The filter is cleared and the path opened so the row is on screen.
-  const newRequestIn = (parent: ItemWithPath | null) => {
-    const target = parent?.collection ?? collection;
-    openRequestDraft(target, childPathOf(parent));
-    setFilter("");
-    const open = new Set(treeExpanded);
-    if (tiered) open.add(target);
-    if (parent) open.add(itemKey(parent));
-    setTreeExpanded(open);
-  };
+  // it only moves the row (see startNewRequest).
+  const newRequestIn = (parent: ItemWithPath | null) =>
+    startNewRequest(collection, parent, tiered);
 
   // Addressed at the ITEM's own collection, not the active one: with the tier on screen, the
   // rows of a collection that is not active are renameable and deletable too.
@@ -265,30 +258,37 @@ export function CollectionPanel() {
 
   return (
     <div
-      className="bg-panel flex flex-col"
+      className="flex flex-col"
       style={{
-        width: 278,
+        width: 324,
         flex: "none",
-        borderRight: "1px solid var(--line)",
+        background: "var(--v-shell)",
         minHeight: 0,
       }}
     >
       <div
         className="flex items-center gap-[8px]"
         style={{
-          height: 40,
+          height: 46,
           flex: "none",
-          padding: "0 12px",
-          borderBottom: "1px solid var(--line)",
+          gap: 4,
+          padding: "0 8px 0 14px",
+          borderBottom: "1px solid var(--v-line)",
         }}
       >
-        <MagnifyingGlass
-          size={14}
-          style={{ color: "var(--color-neutral-500)" }}
-        />
+        <MagnifyingGlass size={14} style={{ color: "var(--v-text-2)" }} />
         <input
           className="bare"
-          style={{ fontSize: 13 }}
+          aria-label="Filter requests"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            height: 32,
+            padding: "0 10px",
+            borderRadius: "var(--v-r)",
+            background: "var(--v-well)",
+            boxShadow: "var(--v-sunken)",
+          }}
           placeholder="Filter requests…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -326,21 +326,21 @@ export function CollectionPanel() {
       >
         <div
           className="flex items-center justify-between"
-          style={{ padding: "2px 6px 6px" }}
+          style={{ padding: "6px 8px 6px" }}
         >
           <span
             style={{
-              fontSize: 10,
-              letterSpacing: ".1em",
+              fontSize: 11,
+              letterSpacing: ".08em",
               textTransform: "uppercase",
-              color: "var(--color-neutral-600)",
+              color: "var(--v-text-2)",
             }}
           >
             {tiered ? "Collections" : "Collection"}
           </span>
           <span
             className="font-mono"
-            style={{ fontSize: 11, color: "var(--color-neutral-600)" }}
+            style={{ fontSize: 11, color: "var(--v-text-2)" }}
           >
             {/* Tiered, this counts COLLECTIONS, not requests: a request total would only
                 cover the collections whose rows are open, so collapsing one would change

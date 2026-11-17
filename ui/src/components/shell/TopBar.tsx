@@ -34,36 +34,30 @@ export function TopBar() {
 
   return (
     <div
-      className="flex items-center gap-[14px] px-[14px] bg-panel"
+      className="flex items-center gap-[14px] px-[16px]"
       style={{
-        height: 46,
+        height: 52,
         flex: "none",
-        borderBottom: "1px solid var(--line)",
+        background: "var(--v-shell)",
       }}
     >
-      <div className="flex items-center gap-[9px]">
+      <div className="flex items-center gap-[10px]">
         <div
           className="flex items-center justify-center"
           style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            background: "var(--color-accent)",
-            color: "#161826",
-            fontSize: 14,
+            width: 28,
+            height: 28,
+            borderRadius: "var(--v-r)",
+            color: "var(--v-text-2)",
+            fontSize: 18,
           }}
         >
           <Broadcast weight="bold" />
         </div>
-        <span
-          className="font-heading"
-          style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-.01em" }}
-        >
-          grpcview
-        </span>
+        <span style={{ fontWeight: 600, fontSize: 16 }}>grpcview</span>
       </div>
 
-      <div style={{ width: 1, height: 20, background: "var(--line)" }} />
+      <div style={{ width: 1, height: 22, background: "var(--v-hover)" }} />
 
       {/* The workspace's collections, and the one always-reachable place a further collection
           is created: switching is UI state (every query key is built from the active id),
@@ -71,19 +65,22 @@ export function TopBar() {
           a dropdown, not a context menu. */}
       <Button
         ref={buttonRef}
-        className="text-neutral-200"
-        style={{ padding: "4px 9px", fontSize: 13, gap: 7 }}
+        style={{
+          height: 32,
+          padding: "0 10px",
+          gap: 6,
+          fontWeight: 400,
+          boxShadow: "var(--v-raise)",
+        }}
         title={collection ?? "No collection"}
         onClick={() => {
           const rect = buttonRef.current?.getBoundingClientRect();
           setMenu({ x: rect?.left ?? 0, y: (rect?.bottom ?? 0) + 4 });
         }}
       >
-        <span className="text-accent" style={{ fontSize: 13 }}>
-          ❯
-        </span>
+        <span>›</span>
         {collectionLabel || "No collection"}
-        <CaretDown size={11} style={{ opacity: 0.5 }} />
+        <CaretDown size={14} />
       </Button>
 
       {menu ? (
@@ -112,19 +109,31 @@ export function TopBar() {
       ) : null}
 
       <div className="ml-auto flex items-center gap-[10px]">
-        <Button
-          variant="secondary"
-          style={{ padding: "4px 10px", fontSize: 12, gap: 7 }}
+        {/* Sunken, not a button-looking button: a search field that opens a palette. */}
+        <button
+          type="button"
+          className="flex items-center gap-[8px]"
+          style={{
+            height: 32,
+            padding: "0 10px",
+            border: "none",
+            borderRadius: "var(--v-r)",
+            background: "var(--v-well)",
+            boxShadow: "var(--v-sunken)",
+            color: "var(--v-text-2)",
+            font: "inherit",
+            cursor: "not-allowed",
+          }}
           title="Search — not available in Phase 1"
           disabled
         >
-          <MagnifyingGlass size={14} />
+          <MagnifyingGlass size={15} />
           Search
           <Kbd>⌘K</Kbd>
-        </Button>
+        </button>
         <span
-          className="flex items-center gap-[6px] font-mono"
-          style={{ fontSize: 12, color: "var(--color-neutral-400)" }}
+          className="flex items-center gap-[8px] font-mono"
+          style={{ fontSize: 13, color: "var(--v-text-2)" }}
           title={
             connected
               ? `Reflection source: ${hostLabel(reflection)}`
@@ -136,7 +145,7 @@ export function TopBar() {
           <span
             className="dot"
             style={{
-              background: connected ? "var(--ok)" : "var(--color-neutral-600)",
+              background: connected ? "var(--v-ok)" : "var(--v-text-muted)",
             }}
           />
           {connected

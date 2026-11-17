@@ -3,6 +3,7 @@ import { BracketsCurly, Plus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { useActiveWorkspace, useCreateScript } from "@/lib/workspace-query";
 import { useUIStore } from "@/lib/ui-store";
+import { MainPanel } from "@/components/ui/MainPanel";
 import { ScriptSidebar } from "./ScriptSidebar";
 import { ScriptDetail } from "./ScriptDetail";
 import { NewScriptDialog } from "./NewScriptDialog";
@@ -43,11 +44,13 @@ export function ScriptsView() {
         onSelect={selectScript}
         onNew={() => setNewOpen(true)}
       />
-      {selected ? (
-        <ScriptDetail key={selected.path} script={selected} />
-      ) : (
-        <ScriptsEmptyState onNew={() => setNewOpen(true)} />
-      )}
+      <MainPanel>
+        {selected ? (
+          <ScriptDetail key={selected.path} script={selected} />
+        ) : (
+          <ScriptsEmptyState onNew={() => setNewOpen(true)} />
+        )}
+      </MainPanel>
       <NewScriptDialog
         open={newOpen}
         onClose={() => setNewOpen(false)}
@@ -77,10 +80,9 @@ function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
         style={{
           width: 48,
           height: 48,
-          borderRadius: 13,
-          background: "var(--panel-2)",
-          border: "1px solid var(--line)",
-          color: "var(--color-neutral-500)",
+          borderRadius: "var(--v-r)",
+          background: "var(--v-hover)",
+          color: "var(--v-text-2)",
         }}
       >
         <BracketsCurly size={24} />
@@ -95,11 +97,7 @@ function ScriptsEmptyState({ onNew }: { onNew: () => void }) {
         Pick a script from the sidebar, or create one to author and test-run it.
         See a script's Capabilities tab for what the runtime enforces.
       </p>
-      <Button
-        variant="primary"
-        onClick={onNew}
-        style={{ padding: "6px 13px", fontSize: 13, gap: 7 }}
-      >
+      <Button variant="primary" onClick={onNew}>
         <Plus size={14} />
         New script
       </Button>

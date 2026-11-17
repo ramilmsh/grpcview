@@ -79,8 +79,9 @@ export function ResponsePane({
             fontSize: 12,
             color: "var(--err-fg)",
             background: "var(--err-bg)",
-            border: "1px solid var(--err-border)",
-            borderRadius: 8,
+            border: "none",
+            boxShadow: "0 0 0 1px var(--v-err-ring)",
+            borderRadius: "var(--v-r)",
             padding: 12,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
@@ -139,8 +140,7 @@ export function ResponsePane({
           style={{
             flex: "none",
             padding: "8px 14px",
-            borderBottom: "1px solid var(--line)",
-            background: "var(--color-bg)",
+            borderBottom: "1px solid var(--v-line)",
           }}
         >
           {code !== undefined ? (
@@ -159,8 +159,8 @@ export function ResponsePane({
               className="tag font-mono"
               style={{
                 fontWeight: 600,
-                background: "var(--panel-2)",
-                color: "var(--color-neutral-400)",
+                background: "var(--v-hover)",
+                color: "var(--v-text-2)",
               }}
             >
               pending
@@ -257,8 +257,9 @@ export function ResponsePane({
         className="flex items-center"
         style={{
           flex: "none",
-          padding: "0 6px",
-          borderBottom: "1px solid var(--line)",
+          height: 44,
+          padding: "0 8px",
+          borderBottom: "1px solid var(--v-line)",
         }}
       >
         <Subtab
@@ -339,9 +340,9 @@ function StreamMessagesView({
           key={i}
           style={{
             flex: "none", // shrinking + overflow:hidden would clip the card
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-            background: "var(--panel-2)",
+            borderRadius: "var(--v-r)",
+            background: "var(--v-raised)",
+            boxShadow: "var(--v-raise)",
             overflow: "hidden",
           }}
         >
@@ -349,7 +350,7 @@ function StreamMessagesView({
             className="flex items-center gap-[8px]"
             style={{
               padding: "6px 10px",
-              borderBottom: "1px solid var(--line)",
+              borderBottom: "1px solid var(--v-line)",
             }}
           >
             <Tag variant="accent">#{i + 1}</Tag>
@@ -428,9 +429,9 @@ function HistoryTimeline({
             className="flex items-center gap-[10px]"
             onClick={() => onSelect?.(entry)}
             style={{
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              background: "var(--panel-2)",
+              borderRadius: "var(--v-r)",
+              background: "var(--v-raised)",
+              boxShadow: "var(--v-raise)",
               padding: "8px 10px",
               cursor: onSelect ? "pointer" : "default",
             }}

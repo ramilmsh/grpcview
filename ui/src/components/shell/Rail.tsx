@@ -20,14 +20,15 @@ export function Rail() {
   const setView = useUIStore((s) => s.setView);
 
   return (
-    <div
-      className="bg-panel flex flex-col items-center"
+    <nav
+      aria-label="Sections"
+      className="flex flex-col items-center"
       style={{
-        width: 54,
+        width: 62,
         flex: "none",
-        borderRight: "1px solid var(--line)",
-        padding: "9px 0",
-        gap: 5,
+        background: "var(--v-shell)",
+        padding: "12px 0",
+        gap: 6,
       }}
     >
       {VIEWS.map(({ view, title, icon }) => (
@@ -41,6 +42,6 @@ export function Rail() {
           {icon}
         </button>
       ))}
-    </div>
+    </nav>
   );
 }

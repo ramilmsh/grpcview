@@ -171,7 +171,7 @@ export function ScriptDetail({ script }: { script: Script }) {
     >
       <div
         className="flex flex-col"
-        style={{ flex: "none", borderBottom: "1px solid var(--line)" }}
+        style={{ flex: "none", borderBottom: "1px solid var(--v-line)" }}
       >
         <div
           className="flex items-center gap-[11px]"
@@ -217,7 +217,7 @@ export function ScriptDetail({ script }: { script: Script }) {
           <div className="ml-auto flex items-center gap-[8px]">
             <Button
               variant="primary"
-              style={{ padding: "5px 13px", fontSize: 12, gap: 6 }}
+              style={{ height: 32, padding: "0 12px", fontSize: 13 }}
               onClick={draft.testRun}
               disabled={draft.running || !draft.source.trim()}
               title="export default runs as an entry (its default export is called); otherwise the buffer is a scratchpad and the last expression is the value"
@@ -228,7 +228,7 @@ export function ScriptDetail({ script }: { script: Script }) {
             </Button>
             <Button
               variant="secondary"
-              style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
+              style={{ height: 32, padding: "0 12px", fontSize: 13 }}
               onClick={draft.save}
               disabled={!draft.dirty || draft.saving}
               title={
@@ -241,7 +241,7 @@ export function ScriptDetail({ script }: { script: Script }) {
             </Button>
             <Button
               variant="danger"
-              style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
+              style={{ height: 32, padding: "0 12px", fontSize: 13 }}
               onClick={() => draft.setConfirmDelete(true)}
               title="Delete script"
             >
@@ -267,9 +267,9 @@ export function ScriptDetail({ script }: { script: Script }) {
         className="flex items-center"
         style={{
           flex: "none",
-          padding: "0 10px",
-          borderBottom: "1px solid var(--line)",
-          background: "var(--color-bg)",
+          height: 44,
+          padding: "0 8px",
+          borderBottom: "1px solid var(--v-line)",
         }}
       >
         <Subtab active={subtab === "code"} onClick={() => setSubtab("code")}>
@@ -380,10 +380,9 @@ function NoDependencies() {
           style={{
             width: 46,
             height: 46,
-            borderRadius: 12,
-            background: "var(--panel-2)",
-            border: "1px solid var(--line)",
-            color: "var(--color-neutral-500)",
+            borderRadius: "var(--v-r)",
+            background: "var(--v-hover)",
+            color: "var(--v-text-2)",
           }}
         >
           <Package size={22} />
@@ -421,10 +420,9 @@ function CapabilitiesPane() {
           style={{
             width: 48,
             height: 48,
-            borderRadius: 13,
-            background: "var(--panel-2)",
-            border: "1px solid var(--line)",
-            color: "var(--color-neutral-500)",
+            borderRadius: "var(--v-r)",
+            background: "var(--v-hover)",
+            color: "var(--v-text-2)",
           }}
         >
           <Shield size={24} />

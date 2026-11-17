@@ -3,6 +3,7 @@ import { CaretDown, Warning } from "@/components/ui/icons";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Menu } from "@/components/ui/Menu";
+import { MainPanel } from "@/components/ui/MainPanel";
 import {
   useActiveWorkspace,
   useCollections,
@@ -33,12 +34,12 @@ function Banner({
       style={{
         marginBottom: 14,
         padding: "10px 12px",
-        borderRadius: 8,
+        borderRadius: "var(--v-r)",
         fontSize: 13,
         lineHeight: 1.5,
-        background: tone === "error" ? "var(--err-bg)" : "var(--warn-bg)",
-        border: `1px solid ${tone === "error" ? "var(--err-border)" : "var(--warn)"}`,
-        color: tone === "error" ? "var(--err-fg)" : "var(--warn)",
+        background: tone === "error" ? "var(--v-err-bg)" : "var(--v-warn-bg)",
+        boxShadow: tone === "error" ? "0 0 0 1px var(--v-err-ring)" : "none",
+        color: tone === "error" ? "var(--v-text)" : "var(--v-warn)",
       }}
     >
       <Warning weight="fill" style={{ flex: "none" }} />
@@ -151,29 +152,39 @@ export function SourcesView() {
     ].find((m) => m.isError)?.error ?? null;
 
   return (
-    <div
-      className="flex flex-col"
-      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
-    >
+    <MainPanel>
       <div
-        className="flex items-center gap-[12px]"
+        className="flex items-start gap-[16px]"
         style={{
           flex: "none",
-          padding: "14px 20px",
-          borderBottom: "1px solid var(--line)",
+          padding: "22px 28px 20px",
+          borderBottom: "1px solid var(--v-line)",
         }}
       >
         <div>
-          <h4 style={{ margin: 0 }}>Definition sources</h4>
-          <span className="text-muted" style={{ fontSize: 12 }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Definition sources
+          </h1>
+          <p style={{ margin: "4px 0 0", color: "var(--v-text-2)" }}>
             Highest priority first — when sources share protos, the top one
             wins.
-          </span>
+          </p>
         </div>
         <Button
           variant="primary"
           className="ml-auto"
-          style={{ padding: "6px 11px 6px 13px", fontSize: 13, gap: 7 }}
+          style={{
+            width: 168,
+            justifyContent: "space-between",
+            padding: "0 12px 0 16px",
+          }}
           aria-haspopup="menu"
           aria-expanded={typeMenu !== null}
           onClick={(e) => {
@@ -186,7 +197,7 @@ export function SourcesView() {
         </Button>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "14px 20px" }}>
+      <div style={{ flex: 1, overflow: "auto", padding: "20px 28px 32px" }}>
         {activeError && (
           <Banner tone="error">
             {activeError instanceof Error
@@ -202,7 +213,7 @@ export function SourcesView() {
               executes this repo's own build code — so it is refused until you
               trust this workspace.
               {setWorkspaceTrust.isError && (
-                <span style={{ display: "block", color: "var(--err-fg)" }}>
+                <span style={{ display: "block", color: "var(--v-err)" }}>
                   {setWorkspaceTrust.error instanceof Error
                     ? setWorkspaceTrust.error.message
                     : "Could not trust this workspace"}
@@ -223,7 +234,7 @@ export function SourcesView() {
         )}
 
         {draft && (
-          <div style={{ maxWidth: 720, marginBottom: 12 }}>
+          <div style={{ maxWidth: 880, marginBottom: 10 }}>
             <AddSourceCard
               kind={draft}
               sourceLabels={sources.map(sourceLabel)}
@@ -246,7 +257,7 @@ export function SourcesView() {
             </div>
           )
         ) : (
-          <div className="flex flex-col" style={{ gap: 8, maxWidth: 720 }}>
+          <div className="flex flex-col" style={{ gap: 10, maxWidth: 880 }}>
             {sources.map((s, i) => (
               <SourceRow
                 key={s.id}
@@ -308,6 +319,6 @@ export function SourcesView() {
           </Button>
         </div>
       </Dialog>
-    </div>
+    </MainPanel>
   );
 }

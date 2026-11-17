@@ -93,21 +93,15 @@ export function FolderWorkspace() {
         className="flex items-center gap-[10px]"
         style={{
           flex: "none",
-          padding: "11px 16px 12px",
-          background: "var(--color-bg)",
-          borderBottom: "1px solid var(--line)",
+          padding: "14px 16px 0",
         }}
       >
         {/* Same icon a folder row draws in the tree (request-tree.tsx's renderRequestRow):
             filled, neutral-500. */}
-        <Folder
-          weight="fill"
-          size={15}
-          style={{ color: "var(--color-neutral-500)" }}
-        />
+        <Folder weight="fill" size={15} style={{ color: "var(--v-text-2)" }} />
         <span
           className="font-heading"
-          style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text)" }}
+          style={{ fontSize: 18, fontWeight: 600, color: "var(--v-text)" }}
         >
           {itemName}
         </span>
@@ -115,15 +109,25 @@ export function FolderWorkspace() {
 
       <div
         className="flex flex-col"
-        style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+        // The same sunken editor well as a request's (RequestWorkspace.tsx).
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          overflow: "hidden",
+          margin: "14px 16px 16px",
+          borderRadius: "var(--v-r-panel)",
+          background: "var(--v-well)",
+          boxShadow: "var(--v-sunken)",
+        }}
       >
         <div
           className="flex items-center"
           style={{
             flex: "none",
-            padding: "0 6px",
-            borderBottom: "1px solid var(--line)",
-            background: "var(--color-bg)",
+            height: 44,
+            padding: "0 8px",
+            borderBottom: "1px solid var(--v-line)",
           }}
         >
           <Subtab

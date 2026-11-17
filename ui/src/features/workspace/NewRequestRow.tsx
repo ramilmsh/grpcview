@@ -59,16 +59,15 @@ export function NewRequestRow() {
               zIndex: 30,
               width: "max-content",
               maxWidth: 220,
-              padding: "6px 9px",
-              borderRadius: 6,
+              padding: "6px 8px",
+              borderRadius: "var(--v-r)",
               fontSize: 12,
               lineHeight: 1.4,
               whiteSpace: "normal",
               cursor: "default",
-              color: "var(--err-fg)",
-              background: "color-mix(in srgb, var(--err) 22%, var(--panel-2))",
-              border: "1px solid var(--err-border)",
-              boxShadow: "var(--shadow-md)",
+              color: "var(--v-text)",
+              background: "var(--v-raised)",
+              boxShadow: "0 0 0 1px var(--v-err-ring), var(--v-popover)",
             }}
           >
             {collisionMessage(draft.name, folder)}

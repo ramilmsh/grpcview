@@ -3,11 +3,11 @@
   "inherit": true,
   "rules": [
     {
-      "background": "1b1d2b",
+      "background": "0e1018",
       "token": ""
     },
     {
-      "foreground": "6272a4",
+      "foreground": "6b7280",
       "token": "comment"
     },
     {
@@ -123,11 +123,11 @@
       "token": "meta.structure.dictionary.json string.quoted.double.json"
     },
     {
-      "foreground": "6272a4",
+      "foreground": "6b7280",
       "token": "meta.diff"
     },
     {
-      "foreground": "6272a4",
+      "foreground": "6b7280",
       "token": "meta.diff.header"
     },
     {
@@ -196,13 +196,31 @@
     }
   ],
   "colors": {
-    "editor.foreground": "#f8f8f2",
-    "editor.background": "#1b1d2b",
-    "editor.selectionBackground": "#44475a",
-    "editor.lineHighlightBackground": "#44475a",
-    "editorCursor.foreground": "#f8f8f0",
-    "editorWhitespace.foreground": "#3B3A32",
-    "editorIndentGuide.activeBackground": "#9D550FB0",
-    "editor.selectionHighlightBorder": "#222218"
+    "editor.foreground": "#f3f4f6",
+    "editor.background": "#0e1018",
+    "editor.selectionBackground": "#6366f14d",
+    "editor.inactiveSelectionBackground": "#6366f126",
+    "editor.lineHighlightBackground": "#161924",
+    "editor.lineHighlightBorder": "#00000000",
+    "editorCursor.foreground": "#6366f1",
+    "editorWhitespace.foreground": "#262b3d",
+    "editorIndentGuide.background1": "#1e2230",
+    "editorIndentGuide.activeBackground1": "#262b3d",
+    "editorLineNumber.foreground": "#6b7280",
+    "editorLineNumber.activeForeground": "#9ca3af",
+    "editor.selectionHighlightBorder": "#00000000",
+    "editor.selectionHighlightBackground": "#6366f126",
+    "editorWidget.background": "#1e2230",
+    "editorWidget.border": "#262b3d",
+    "editorSuggestWidget.background": "#1e2230",
+    "editorSuggestWidget.border": "#262b3d",
+    "editorSuggestWidget.selectedBackground": "#262b3d",
+    "editorHoverWidget.background": "#1e2230",
+    "editorHoverWidget.border": "#262b3d",
+    "editorGutter.background": "#0e1018",
+    "scrollbarSlider.background": "#262b3d80",
+    "scrollbarSlider.hoverBackground": "#343a50",
+    "scrollbarSlider.activeBackground": "#343a50",
+    "focusBorder": "#6366f1"
   }
 }

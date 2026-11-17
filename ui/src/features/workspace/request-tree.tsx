@@ -31,6 +31,16 @@ function buildParentIndex(roots: ItemWithPath[]): Map<string, ItemWithPath> {
   return parentOf;
 }
 
+// A folder's count: the saved requests drawn beneath it, at any depth. Not its direct
+// children (a subfolder is not a request) and never the draft row, which is not an item.
+export function countRequests(items: readonly ItemWithPath[] | undefined): number {
+  let n = 0;
+  for (const it of items ?? [])
+    if (it.item.content.case === "folder") n += countRequests(it.children);
+    else if (it.item.content.case === "request") n += 1;
+  return n;
+}
+
 // The PORTABLE description of an item row, shared with the panel tree's item tier
 // (panel-tree.tsx) so there is one answer per item, not two that can drift.
 export function requestTreeItem(node: ItemWithPath): TreeItemLike {
@@ -38,7 +48,7 @@ export function requestTreeItem(node: ItemWithPath): TreeItemLike {
   const kind: RequestTreeKind = folder ? "folder" : "request";
   return {
     label: node.item.name,
-    description: folder ? String(node.children?.length ?? 0) : undefined,
+    description: folder ? String(countRequests(node.children)) : undefined,
     icon: folder ? "folder" : "file",
     kind,
   };
@@ -77,14 +87,14 @@ export interface RequestRowCallbacks {
 // renderRequestRow is the row CONTENT only; the row shell is the tree component's.
 export function renderRequestRow(
   item: ItemWithPath,
-  _state: TreeRowState,
+  state: TreeRowState,
   cb: RequestRowCallbacks,
 ): ReactNode {
   if (item.item.content.case === "folder") {
-    const count = item.children?.length ?? 0;
+    const count = countRequests(item.children);
     return (
       <>
-        <Folder weight="fill" style={{ color: "var(--color-neutral-500)" }} />
+        <Folder weight="fill" style={{ color: "var(--v-text-2)" }} />
         <span
           style={{
             overflow: "hidden",
@@ -96,7 +106,7 @@ export function renderRequestRow(
         </span>
         <span
           className="rowmeta font-mono"
-          style={{ fontSize: 10, color: "var(--color-neutral-600)" }}
+          style={{ fontSize: 11, color: "var(--v-text-2)" }}
         >
           {count}
         </span>
@@ -141,7 +151,7 @@ export function renderRequestRow(
   );
   return (
     <>
-      <MethodKindTag kind={kind} />
+      <MethodKindTag kind={kind} dim={!state.active} />
       <span
         style={{
           overflow: "hidden",

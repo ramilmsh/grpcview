@@ -60,30 +60,37 @@ export function ScriptSidebar({
 
   return (
     <div
-      className="bg-panel flex flex-col"
+      className="flex flex-col"
       style={{
-        width: 280,
+        width: 324,
         flex: "none",
-        borderRight: "1px solid var(--line)",
+        background: "var(--v-shell)",
         minHeight: 0,
       }}
     >
       <div
         className="flex items-center gap-[8px]"
         style={{
-          height: 40,
+          height: 46,
           flex: "none",
-          padding: "0 12px",
-          borderBottom: "1px solid var(--line)",
+          gap: 4,
+          padding: "0 8px 0 14px",
+          borderBottom: "1px solid var(--v-line)",
         }}
       >
-        <MagnifyingGlass
-          size={14}
-          style={{ color: "var(--color-neutral-500)" }}
-        />
+        <MagnifyingGlass size={14} style={{ color: "var(--v-text-2)" }} />
         <input
           className="bare"
-          style={{ fontSize: 13 }}
+          aria-label="Filter scripts"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            height: 32,
+            padding: "0 10px",
+            borderRadius: "var(--v-r)",
+            background: "var(--v-well)",
+            boxShadow: "var(--v-sunken)",
+          }}
           placeholder="Filter scripts…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -168,9 +175,9 @@ export function ScriptSidebar({
         style={{
           flex: "none",
           padding: "9px 12px",
-          borderTop: "1px solid var(--line)",
+          borderTop: "1px solid var(--v-line)",
           fontSize: 11,
-          color: "var(--color-neutral-500)",
+          color: "var(--v-text-2)",
         }}
         title="QuickJS compiled to WASM, run in-process by wazero — hard memory + wall-clock bounds; filesystem and process denied, network open to every script"
       >

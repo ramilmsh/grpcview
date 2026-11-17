@@ -8,7 +8,7 @@ export default {
         surface: "var(--color-surface)",
         panel: "var(--panel)",
         "panel-2": "var(--panel-2)",
-        line: "var(--color-divider)",
+        line: "var(--v-line)",
         text: "var(--color-text)",
         accent: "var(--color-accent)",
         "accent-2": "var(--color-accent-2)",
@@ -44,9 +44,9 @@ export default {
         mono: ["var(--mono)"],
       },
       borderRadius: {
-        sm: "4px",
-        DEFAULT: "8px",
-        lg: "14px",
+        sm: "var(--radius-sm)",
+        DEFAULT: "var(--radius-md)",
+        lg: "var(--radius-lg)",
       },
       boxShadow: {
         sm: "var(--shadow-sm)",

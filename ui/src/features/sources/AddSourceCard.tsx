@@ -10,7 +10,7 @@ import { Copy, ShieldCheck, UploadSimple, X } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
-import { Tag } from "@/components/ui/Tag";
+import { DraftBadge } from "@/components/ui/Tag";
 import { useBazelTargets } from "@/lib/workspace-query";
 import {
   bazelHint,
@@ -38,32 +38,33 @@ export interface DraftCommon {
 
 const fieldLabel: CSSProperties = {
   display: "block",
-  fontSize: 12,
-  marginBottom: 5,
-  color: "color-mix(in srgb, var(--color-text) 70%, transparent)",
+  fontSize: 13,
+  fontWeight: 500,
+  marginBottom: 6,
+  color: "var(--v-text)",
 };
 
 const inset: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  padding: "8px 10px",
-  borderRadius: 8,
-  background: "var(--panel)",
-  border: "1px solid var(--line)",
-  fontSize: 12,
+  padding: "10px 12px",
+  borderRadius: "var(--v-r)",
+  background: "var(--v-panel)",
+  color: "var(--v-text-2)",
+  fontSize: 13,
 };
 
 const inlineCode: CSSProperties = {
   fontFamily: "var(--mono)",
-  fontSize: 11.5,
+  fontSize: 12,
   padding: "1px 5px",
-  borderRadius: 4,
-  background: "var(--color-surface)",
-  color: "var(--color-text)",
+  borderRadius: "var(--v-r-badge)",
+  background: "var(--v-hover)",
+  color: "var(--v-text)",
 };
 
-const divider = <div style={{ borderTop: "1px solid var(--line)" }} />;
+const divider = <div style={{ borderTop: "1px solid var(--v-line)" }} />;
 
 function Check({
   checked,
@@ -83,7 +84,7 @@ function Check({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        style={{ accentColor: "var(--color-accent)", marginTop: 2 }}
+        style={{ accentColor: "var(--v-accent)", marginTop: 2 }}
       />
       <span>{children}</span>
     </label>
@@ -200,27 +201,22 @@ export function AddSourceCard({
       role="group"
       aria-label={meta.title}
       onKeyDown={onKeyDown}
-      className="flex flex-col"
-      style={{
-        background: "var(--panel-2)",
-        border: "1px solid var(--color-accent)",
-        borderRadius: 9,
-        boxShadow:
-          "0 0 0 3px color-mix(in srgb, var(--color-accent) 14%, transparent), 0 8px 24px color-mix(in srgb, var(--color-accent) 10%, transparent)",
-      }}
+      // v4 draft card: raised, ringed in the accent with a soft halo (.card.focus).
+      className="card focus"
+      style={{ gap: 0, padding: 0, overflow: "hidden" }}
     >
       <div
-        className="flex items-center gap-[11px]"
-        style={{ padding: "11px 13px" }}
+        className="flex items-center gap-[12px]"
+        style={{ padding: "14px 16px" }}
       >
         <span
           className="flex items-center justify-center"
           style={{
-            width: 30,
-            height: 30,
+            width: 32,
+            height: 32,
             flex: "none",
-            borderRadius: 7,
-            background: `color-mix(in srgb, ${tint} 14%, transparent)`,
+            borderRadius: "var(--v-r)",
+            background: "var(--v-hover)",
           }}
         >
           <KindIcon size={17} style={{ color: tint }} />
@@ -228,10 +224,10 @@ export function AddSourceCard({
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             className="flex items-center gap-[8px]"
-            style={{ fontSize: 13.5, fontWeight: 600 }}
+            style={{ fontWeight: 500 }}
           >
             {meta.title}
-            <Tag variant="accent">Draft</Tag>
+            <DraftBadge />
           </div>
           <div className="text-muted truncate" style={{ fontSize: 12 }}>
             {meta.subtitle}
@@ -248,7 +244,7 @@ export function AddSourceCard({
 
       {divider}
 
-      <div className="flex flex-col" style={{ gap: 12, padding: "13px" }}>
+      <div className="flex flex-col" style={{ gap: 18, padding: "18px 16px" }}>
         {kind === "reflection" && (
           <>
             <div>
@@ -294,7 +290,7 @@ export function AddSourceCard({
               >
                 A plain proto_library is enough.
                 {targets.warning && (
-                  <span style={{ display: "block", color: "var(--warn)" }}>
+                  <span style={{ display: "block", color: "var(--v-warn)" }}>
                     Some packages could not be listed: {targets.warning}
                   </span>
                 )}
@@ -303,7 +299,7 @@ export function AddSourceCard({
             <div style={inset}>
               <ShieldCheck
                 size={15}
-                style={{ flex: "none", color: "var(--color-accent)" }}
+                style={{ flex: "none", color: "var(--v-text-2)" }}
               />
               <span>
                 Adding or refreshing runs{" "}
@@ -338,27 +334,28 @@ export function AddSourceCard({
                 onDragLeave={() => setDragging(false)}
                 onDrop={onDrop}
                 style={{
-                  padding: "12px 13px",
-                  borderRadius: 8,
-                  border: `1px dashed ${dragging ? "var(--color-accent)" : "var(--line)"}`,
+                  padding: 18,
+                  borderRadius: "var(--v-r)",
+                  border: `1px dashed ${dragging ? "var(--v-accent)" : "var(--v-hover)"}`,
                   background: dragging
-                    ? "color-mix(in srgb, var(--color-accent) 8%, transparent)"
-                    : "var(--panel)",
+                    ? "var(--v-accent-tint)"
+                    : "var(--v-well)",
+                  boxShadow: "var(--v-sunken)",
                 }}
               >
                 <span
                   className="flex items-center justify-center"
                   style={{
-                    width: 30,
-                    height: 30,
+                    width: 40,
+                    height: 40,
                     flex: "none",
-                    borderRadius: 7,
-                    background: "var(--color-surface)",
+                    borderRadius: "var(--v-r)",
+                    background: "var(--v-hover)",
                   }}
                 >
                   <UploadSimple
                     size={16}
-                    style={{ color: "var(--color-neutral-400)" }}
+                    style={{ color: "var(--v-text-2)" }}
                   />
                 </span>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -388,7 +385,7 @@ export function AddSourceCard({
                 </div>
                 <Button
                   autoFocus
-                  style={{ flex: "none", padding: "5px 11px", fontSize: 13 }}
+                  style={{ flex: "none" }}
                   onClick={() => fileRef.current?.click()}
                 >
                   Browse…
@@ -430,12 +427,12 @@ export function AddSourceCard({
 
       <div
         className="flex items-center gap-[8px]"
-        style={{ padding: "10px 13px" }}
+        style={{ padding: "12px 16px", background: "var(--v-raised)" }}
       >
         <label
           className="text-muted"
           htmlFor="add-source-priority"
-          style={{ fontSize: 12 }}
+          style={{ fontSize: 13 }}
         >
           Priority
         </label>
@@ -447,8 +444,8 @@ export function AddSourceCard({
           style={{
             width: "auto",
             maxWidth: 260,
-            minHeight: 30,
-            padding: "3px 8px",
+            height: 32,
+            padding: "0 8px",
             fontSize: 13,
             colorScheme: "dark",
           }}

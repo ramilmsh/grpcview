@@ -53,31 +53,32 @@ export function OutputRegion({
       className="flex flex-col"
       style={{
         flex: "none",
-        borderTop: "1px solid var(--line)",
+        borderTop: "1px solid var(--v-line)",
         minHeight: 0,
         ...(open ? { height: 260 } : {}),
       }}
     >
       <button
-        className="bg-panel flex items-center gap-[8px]"
+        className="flex items-center gap-[8px]"
         style={{
           flex: "none",
           height: 34,
           width: "100%",
           padding: "0 16px",
           border: "none",
+          background: "transparent",
           cursor: "pointer",
           textAlign: "left",
           fontFamily: "inherit",
-          color: "var(--color-neutral-300)",
+          color: "var(--v-text-2)",
         }}
         onClick={onToggle}
         title="Test-run output"
       >
         {open ? (
-          <CaretDown size={12} style={{ color: "var(--color-neutral-500)" }} />
+          <CaretDown size={12} style={{ color: "var(--v-text-2)" }} />
         ) : (
-          <CaretRight size={12} style={{ color: "var(--color-neutral-500)" }} />
+          <CaretRight size={12} style={{ color: "var(--v-text-2)" }} />
         )}
         <span
           style={{
@@ -98,12 +99,13 @@ export function OutputRegion({
       </button>
       {open && (
         <div
+          // The v4 log viewer: ground-dark and sunken (.logview).
+          className="logview"
           style={{
             flex: 1,
             overflow: "auto",
-            padding: "12px 16px",
-            borderTop: "1px solid var(--line)",
-            background: "var(--color-bg)",
+            margin: "0 16px 16px",
+            padding: "10px 14px",
           }}
         >
           <OutputPane
@@ -254,10 +256,10 @@ function ErrorBox({
     <div
       style={{
         padding: "10px 12px",
-        borderRadius: 8,
-        background: "var(--err-bg)",
-        border: "1px solid var(--err-border)",
-        color: "var(--err-fg)",
+        borderRadius: "var(--v-r)",
+        background: "var(--v-err-bg)",
+        boxShadow: "0 0 0 1px var(--v-err-ring)",
+        color: "var(--v-text)",
       }}
     >
       <div className="flex items-center gap-[8px]" style={{ fontSize: 13 }}>

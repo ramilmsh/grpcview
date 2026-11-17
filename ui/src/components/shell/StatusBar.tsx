@@ -12,20 +12,19 @@ export function StatusBar() {
 
   return (
     <div
-      className="bg-panel flex items-center font-mono"
+      className="flex items-center font-mono"
       style={{
-        height: 26,
+        height: 28,
         flex: "none",
         gap: 16,
-        padding: "0 14px",
-        borderTop: "1px solid var(--line)",
-        fontSize: 11,
-        color: "var(--color-neutral-500)",
+        padding: "0 16px",
+        background: "var(--v-shell)",
+        fontSize: 12,
+        color: "var(--v-text-2)",
       }}
     >
       <span
-        className="inline-flex items-center gap-[5px]"
-        style={{ color: reflection ? "var(--ok)" : undefined }}
+        className="inline-flex items-center gap-[6px]"
         title={
           reflection
             ? `Reflection source: ${reflection.address}`
@@ -37,7 +36,7 @@ export function StatusBar() {
         <span
           className="dot"
           style={{
-            background: reflection ? "var(--ok)" : "var(--color-neutral-600)",
+            background: reflection ? "var(--v-ok)" : "var(--v-text-muted)",
           }}
         />
         {reflection ? "Local" : sources.length > 0 ? "No server" : "No source"}

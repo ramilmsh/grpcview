@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import type { Request_Response, Server } from "@grpcview/v1/workspace_pb";
 import type { ItemWithPath } from "./format";
-import { itemKey } from "./format";
+import { childPathOf, itemKey } from "./format";
 
 export type ActiveView = "workspace" | "sources" | "scripts" | "daemons";
 
@@ -221,6 +221,8 @@ interface UIState {
   treeExpanded: ReadonlySet<string>;
   treeSelection: readonly string[];
   treeFocused: string | null;
+  // The tree's "Filter requests" query. Here, not panel state, so startNewRequest clears it.
+  treeFilter: string;
 
   // Keyed by bare script path, so NOT yet collection-scoped — a later slice fixes that.
   selectedScript: string | null;
@@ -241,8 +243,15 @@ interface UIState {
   closeTabs: (keys: readonly string[]) => void;
   // Closes the tab of `key` and of everything under it: what a delete of that item leaves.
   closeSubtree: (key: string) => void;
-  // Opens (or re-targets) the one "New request" draft tab, keeping what was typed.
-  openRequestDraft: (collection: string, folder: string[]) => void;
+  // The one "New request" action (tree "+" and the empty-state CTA): opens (or re-targets)
+  // the draft tab, keeping what was typed, with its placeholder row in `parent` (null = the
+  // root of `collection`; a folder lands in its own collection). Clears the tree filter and
+  // opens the path so the row is on screen. `tiered`: collections are tree rows (panelTiered).
+  startNewRequest: (
+    collection: string,
+    parent: ItemWithPath | null,
+    tiered: boolean,
+  ) => void;
   setRequestDraft: (patch: Partial<RequestDraft>) => void;
   // Swaps the draft tab, in place, for the request it created, activates and selects it.
   commitRequestDraft: (item: ItemWithPath) => void;
@@ -261,6 +270,7 @@ interface UIState {
   setTreeExpanded: (next: ReadonlySet<string>) => void;
   setTreeSelection: (next: readonly string[]) => void;
   setTreeFocused: (next: string | null) => void;
+  setTreeFilter: (next: string) => void;
 
   seedDraft: (key: string, draft: Draft) => void;
   setDraft: (key: string, patch: Partial<Draft>) => void;
@@ -305,6 +315,7 @@ export const useUIStore = create<UIState>()((set) => ({
   treeExpanded: new Set(),
   treeSelection: [],
   treeFocused: null,
+  treeFilter: "",
 
   setView: (activeView) => set({ activeView }),
 
@@ -380,7 +391,9 @@ export const useUIStore = create<UIState>()((set) => ({
       ),
     ),
 
-  openRequestDraft: (collection, folder) => {
+  startNewRequest: (fallback, parent, tiered) => {
+    const collection = parent?.collection ?? fallback;
+    const folder = childPathOf(parent);
     writeStoredCollection(collection);
     set((s) => {
       const requestDraft: RequestDraft = s.requestDraft
@@ -408,6 +421,9 @@ export const useUIStore = create<UIState>()((set) => ({
         kind: "newRequest",
       };
       const exists = s.openTabs.some((t) => t.key === NEW_REQUEST_KEY);
+      const treeExpanded = new Set(s.treeExpanded);
+      if (tiered) treeExpanded.add(collection);
+      if (parent) treeExpanded.add(itemKey(parent));
       return {
         requestDraft,
         openTabs: exists
@@ -419,6 +435,8 @@ export const useUIStore = create<UIState>()((set) => ({
         // The placeholder row is selected, like any row being worked on.
         treeSelection: [NEW_REQUEST_KEY],
         treeFocused: NEW_REQUEST_KEY,
+        treeFilter: "",
+        treeExpanded,
       };
     });
   },
@@ -497,6 +515,7 @@ export const useUIStore = create<UIState>()((set) => ({
   setTreeExpanded: (treeExpanded) => set({ treeExpanded }),
   setTreeSelection: (treeSelection) => set({ treeSelection }),
   setTreeFocused: (treeFocused) => set({ treeFocused }),
+  setTreeFilter: (treeFilter) => set({ treeFilter }),
 
   seedDraft: (key, draft) =>
     set((s) =>

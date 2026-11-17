@@ -7,6 +7,7 @@ import * as monaco from "monaco-editor";
 // Vendored from monaco-themes (MIT, https://github.com/brijeshb42/monaco-themes)
 // instead of imported from the package: its published "exports" map doesn't
 // expose the themes/*.json subpaths the README's usage example relies on.
+// Token rules are Dracula; the "colors" block is retuned to v4 (bg = --v-well).
 import theme from "./theme.json";
 
 self.MonacoEnvironment = {

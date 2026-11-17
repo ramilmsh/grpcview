@@ -91,8 +91,8 @@ export interface TreeProps<T> {
   // drag-selecting inside the input works — as a row mid-rename does.
   canDrag?(node: T): boolean;
 
-  indent?: number; // default 8
-  rowHeight?: number; // default 22
+  indent?: number; // default 18 (geometry.ts)
+  rowHeight?: number; // default 28
   compactFolders?: boolean;
   "aria-label"?: string;
 }

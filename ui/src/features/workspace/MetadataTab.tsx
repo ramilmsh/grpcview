@@ -29,9 +29,9 @@ export function MetadataTab({
         style={{
           flex: "none",
           padding: "6px 12px",
-          borderTop: "1px solid var(--line)",
+          borderTop: "1px solid var(--v-line)",
           fontSize: 11,
-          color: "var(--color-neutral-600)",
+          color: "var(--v-text-muted)",
         }}
       >
         {errors === 0 ? (

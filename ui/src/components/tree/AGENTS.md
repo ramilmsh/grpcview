@@ -10,6 +10,10 @@ A hand-rolled, domain-agnostic tree — `features/workspace/` supplies the gRPC 
   array arithmetic over it, never recursion. State is zustand (`treeExpanded`/
   `treeSelection`/`treeFocused`); decisions are pure functions (`keymap.ts`, `dispatch.ts`,
   `navigate.ts`, `dnd.ts`), `Tree.tsx` a thin interpreter.
+- **One indent rule** (`geometry.ts`, v4): `[8px pad][depth×18][14px twistie][8px gap]`;
+  leaves reserve the twistie, so a request's tag shares its level's folder-icon column.
+  Guides (under the ancestor's twistie) and drop lines get `left` from the same functions;
+  guides are per-row segments, so a folder's ends at its last descendant row.
 - Rename is the component's — validates against visible siblings, server stays collision
   authority. Context menu is the host's. DnD is native HTML5: a folder row splits into
   quarters (outer = between-rows, middle half = into), a leaf splits in half. A multi-row

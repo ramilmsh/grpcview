@@ -38,9 +38,9 @@ export function MessagesTab({
             key={i}
             style={{
               flex: "none",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              background: "var(--panel-2)",
+              borderRadius: "var(--v-r)",
+              background: "var(--v-raised)",
+              boxShadow: "var(--v-raise)",
               overflow: "hidden",
             }}
           >
@@ -91,7 +91,7 @@ export function MessagesTab({
         <div>
           <Button
             onClick={add}
-            style={{ padding: "5px 11px", fontSize: 12, gap: 6 }}
+            style={{ height: 32, padding: "0 12px", fontSize: 13 }}
           >
             <Plus size={13} /> Add message
           </Button>
