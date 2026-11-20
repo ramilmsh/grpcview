@@ -143,8 +143,8 @@ export function refreshTitle(s: DescriptorSource): string {
         : REDROP_TO_REFRESH;
     }
     case "bazel":
-      // Refusable: an untrusted workspace runs no build, and says so in Resolved.error.
-      return "Run bazel build for this label and re-read the descriptor sets it writes";
+      // Refusable: an untrusted workspace runs no bazel, and says so in Resolved.error.
+      return "Query bazel for this label's .proto files and recompile them";
     default:
       // A reference with no definition has no pointer to re-acquire from, so this reports
       // what is missing rather than fetching anything.
@@ -191,8 +191,8 @@ export const KIND_TINT: Record<SourceKind, string> = {
 };
 
 const BAZEL_TITLE =
-  "Refreshing this source runs `bazel build` for the label and reads the descriptor sets it " +
-  "writes. That runs this repo's build code, so it is refused until the workspace is trusted.";
+  "Refreshing this source runs `bazel query` for the label's .proto files and compiles them. " +
+  "That loads this repo's BUILD files, so it is refused until the workspace is trusted.";
 
 export interface SourceRowCallbacks {
   onMove: (from: number, to: number) => void;

@@ -191,9 +191,9 @@ describe("a bazel row", () => {
     expect(markup).not.toContain(">reflection<");
   });
 
-  it("says on the chip that resolving it builds, and that trust gates the build", () => {
+  it("says on the chip that resolving it queries bazel, and that trust gates it", () => {
     const markup = row(bazel("//proto/echo/v1:echov1_proto"));
-    expect(markup).toContain("bazel build");
+    expect(markup).toContain("bazel query");
     expect(markup).toContain("until the workspace is trusted");
   });
 
@@ -233,9 +233,9 @@ describe("the refresh affordance", () => {
     expect(markup).not.toContain('disabled=""');
   });
 
-  it("promises a build for a bazel label, and a re-reflect for an address", () => {
+  it("promises a bazel query for a label, and a re-reflect for an address", () => {
     expect(refreshTitle(bazel("//p:t"))).toContain(
-      "Run bazel build for this label",
+      "Query bazel for this label",
     );
     expect(refreshTitle(reflection("localhost:50051"))).toBe(
       "Re-reflect this target",

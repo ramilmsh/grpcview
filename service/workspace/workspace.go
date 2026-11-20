@@ -260,6 +260,19 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 		if fresh, err = w.resolveBazel(ctx, src.GetId(), label); err != nil {
 			return nil, err
 		}
+	case *grpcviewv1.AddDescriptorSourceRequest_Protos:
+		protos, err := normalizeProtos(w.store.Root(), source.Protos)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		src = &grpcviewv1.DescriptorSource{
+			Source:            &grpcviewv1.DescriptorSource_Protos{Protos: protos},
+			CommitDescriptors: request.Msg.GetCommitDescriptors(),
+		}
+		src.Id = sourceID(src)
+		if fresh, err = w.resolveProtos(ctx, src.GetId(), protos); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
 	}

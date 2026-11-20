@@ -286,19 +286,25 @@ func TestGetDefinitionsDiskCache(t *testing.T) {
 
 func TestDefinitionsDigestCoversWinners(t *testing.T) {
 	set := []byte("set")
-	a, err := definitionsDigest(set, map[string]string{"a.proto": "x", "b.proto": "y"})
+	a, err := definitionsDigest(set, map[string]string{"a.proto": "x", "b.proto": "y"}, nil)
 	if err != nil {
 		t.Fatalf("definitionsDigest: %v", err)
 	}
 	for range 8 { // map order must not matter
-		if b, _ := definitionsDigest(set, map[string]string{"b.proto": "y", "a.proto": "x"}); b != a {
+		if b, _ := definitionsDigest(set, map[string]string{"b.proto": "y", "a.proto": "x"}, nil); b != a {
 			t.Fatalf("digest depends on map order")
 		}
 	}
-	if b, _ := definitionsDigest(set, map[string]string{"a.proto": "y", "b.proto": "x"}); b == a {
+	if b, _ := definitionsDigest(set, map[string]string{"a.proto": "y", "b.proto": "x"}, nil); b == a {
 		t.Error("digest unchanged when the winning sources swap")
 	}
-	if b, _ := definitionsDigest([]byte("other"), map[string]string{"a.proto": "x", "b.proto": "y"}); b == a {
+	if b, _ := definitionsDigest([]byte("other"), map[string]string{"a.proto": "x", "b.proto": "y"}, nil); b == a {
 		t.Error("digest unchanged when the set changes")
+	}
+	winners := map[string]string{"a.proto": "x", "b.proto": "y"}
+	o1, _ := definitionsDigest(set, winners, map[string]string{"a.proto": "one"})
+	o2, _ := definitionsDigest(set, winners, map[string]string{"a.proto": "two"})
+	if o1 == a || o1 == o2 {
+		t.Error("digest does not cover the originals")
 	}
 }

@@ -124,7 +124,7 @@ func renderSourceTrust(ctx context.Context, w io.Writer, sess session, sources [
 		return nil
 	}
 	return writeLine(w, []byte(fmt.Sprintf(
-		"! %s is not trusted: %s above cannot build here — `grpcview trust` allows it",
+		"! %s is not trusted: %s above cannot resolve here — `grpcview trust` allows it",
 		listing.GetRoot(), bazelSourceCount(building))))
 }
 
@@ -138,10 +138,11 @@ func bazelSourceCount(n int) string {
 func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 	var tls, commit bool
 	var position uint32
+	var importPaths []string
 
 	cmd := &cobra.Command{
-		Use:   "add <host:port>|<file.binpb>|//pkg:target",
-		Short: "Add a reflection target, a descriptor-set file, or a bazel label as a definition source",
+		Use:   "add <host:port>|<file.binpb>|<dir>|<file.proto>|//pkg:target",
+		Short: "Add a reflection target, a descriptor-set file, .proto sources, or a bazel label as a definition source",
 		Long: "Add one definition source at LOWEST priority, so adding never moves an\n" +
 			"existing service to a different source — `sources reorder` is what does that.\n" +
 			"--position inserts it at that priority index instead (0 = top, wins conflicts).\n\n" +
@@ -152,7 +153,11 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 			"the file, which is the same rule every other tool's file argument follows, and a\n" +
 			"label must be written in FULL — `//pkg:target`, never bazel's `pkg:target`\n" +
 			"shorthand, because `localhost:8080` is indistinguishable from that shorthand and\n" +
-			"guessing wrong would dial a label or try to build an address.\n\n" +
+			"guessing wrong would dial a label or try to query an address.\n\n" +
+			"A DIRECTORY, or a file ending in .proto, is a PROTOS source: every *.proto under\n" +
+			"it (or that one file) compiled in-process, no build and no trust needed. Each\n" +
+			"file's import name is its path relative to the first -I containing it; with no\n" +
+			"-I, the directory itself, or the file's parent. Refreshing re-reads the disk.\n\n" +
 			"A file's BASENAME is the upload's identity, not its path: re-adding a rebuilt\n" +
 			"image of the same name REFRESHES that source in place at its existing priority\n" +
 			"instead of adding a second, indistinguishable row. The path is recorded next to\n" +
@@ -160,30 +165,31 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 			"file instead of asking to be handed it again. A reflection source is identified\n" +
 			"by its address (and whether it is dialed with --tls), and a bazel source by its\n" +
 			"canonical label, the same way.\n\n" +
-			"A BAZEL source is a label whose DEFAULT OUTPUTS are descriptor sets. Unlike an\n" +
-			"upload it knows how to produce its own bytes, so refreshing it runs a build —\n" +
-			"and a build runs arbitrary code out of this repository's BUILD files, so it is\n" +
+			"A BAZEL source is a proto_library (or proto_descriptor_set) label. Resolving it\n" +
+			"runs `bazel query` and `bazel cquery` for its .proto closure — no build — and\n" +
+			"compiles those files in-process. Loading BUILD and .bzl files runs this\n" +
+			"repository's own code, so it is\n" +
 			"refused unless the workspace is TRUSTED. `grpcview trust` grants that, once, per\n" +
 			"workspace root. --commit-descriptors applies to a bazel source exactly as to any\n" +
 			"other kind, and is the answer to a fresh clone with no bazel installed.\n\n" +
 			"Adding resolves the new source immediately — it is the one operation here that\n" +
 			"touches the network, or bazel — so a target that cannot be dialed, bytes that do\n" +
-			"not parse, and a label that cannot be built (an untrusted workspace included)\n" +
+			"not parse, and a label that cannot be resolved (an untrusted workspace included)\n" +
 			"FAIL the add and nothing is added. That is deliberate: a listed source that\n" +
 			"silently provides nothing is worse than an error. A source that resolved once\n" +
 			"and whose target later goes away is the different case — it stays listed with\n" +
 			"the reason, contributing nothing, and `sources ls` shows it.\n\n" +
 			"Because it resolves, this is one of the two verbs that WAITS. A LABEL therefore gets\n" +
-			"a " + buildTimeout.String() + " deadline instead of the usual one: a cold build of a large target is\n" +
-			"minutes, so waiting is the normal case and not the pathological one. A dial and a\n" +
-			"file read keep the ordinary deadline. `--timeout` overrides either way — for a build\n" +
-			"slower still, or to give up sooner.\n\n" +
+			"a " + bazelTimeout.String() + " deadline instead of the usual one: a warm query is seconds, but\n" +
+			"a cold one first fetches external repositories and runs module extensions, which\n" +
+			"can be minutes. A dial and a file read keep the ordinary deadline. `--timeout`\n" +
+			"overrides either way — for a bazel run slower still, or to give up sooner.\n\n" +
 			"Nothing is printed on success.",
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			msg, err := buildAddSource(args[0], tls, commit)
+			msg, err := buildAddSource(args[0], tls, commit, importPaths)
 			if err != nil {
 				return err
 			}
@@ -200,6 +206,8 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		"dial the reflection target over TLS; it is part of the source's identity, so the same address with and without it are two sources")
 	cmd.Flags().BoolVar(&commit, "commit-descriptors", false,
 		"commit what this source resolves to, as a protojson sidecar in the collection, instead of caching it in local state; `sources commit` toggles it afterwards")
+	cmd.Flags().StringArrayVarP(&importPaths, "import-path", "I", nil,
+		"import root for a .proto source (repeatable, first match wins); defaults to the directory itself, or the file's parent")
 	cmd.Flags().Uint32Var(&position, "position", 0,
 		"priority index to insert a NEW source at, 0 being the top; unset appends at the lowest priority, and a re-add keeps its existing priority")
 
@@ -216,16 +224,39 @@ func runSourcesAdd(ctx context.Context, g *globalFlags, open clientFactory, msg 
 	})
 }
 
-func buildAddSource(arg string, tls, commit bool) (*grpcviewv1.AddDescriptorSourceRequest, error) {
+func buildAddSource(arg string, tls, commit bool, importPaths []string) (*grpcviewv1.AddDescriptorSourceRequest, error) {
 	if arg == "" {
-		return nil, errors.New("no definition source given: `sources add` takes a reflection address, the path of a descriptor-set file, or a bazel label")
+		return nil, errors.New("no definition source given: `sources add` takes a reflection address, the path of a descriptor-set file, a .proto file or directory, or a bazel label")
 	}
 
 	info, statErr := os.Stat(arg)
-	switch {
-	case statErr == nil && info.IsDir():
+	isProtos := statErr == nil && (info.IsDir() || strings.HasSuffix(arg, ".proto"))
+	if len(importPaths) > 0 && !isProtos {
 		return nil, fmt.Errorf(
-			"cannot add %q as a definition source: it is a directory, and an upload is one FileDescriptorSet file (`buf build -o image.binpb`)", arg)
+			"-I does not apply to %q: import paths are for a .proto file or directory", arg)
+	}
+	switch {
+	case isProtos:
+		if tls {
+			return nil, fmt.Errorf(
+				"--tls does not apply to %q: it names .proto sources, and TLS selects how a reflection TARGET is dialed", arg)
+		}
+		abs, err := filepath.Abs(arg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve the path %q: %w", arg, err)
+		}
+		protos := &grpcviewv1.Protos{Path: abs}
+		for _, ip := range importPaths {
+			absIP, err := filepath.Abs(ip)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve the import path %q: %w", ip, err)
+			}
+			protos.ImportPaths = append(protos.ImportPaths, absIP)
+		}
+		return &grpcviewv1.AddDescriptorSourceRequest{
+			Source:            &grpcviewv1.AddDescriptorSourceRequest_Protos{Protos: protos},
+			CommitDescriptors: commit,
+		}, nil
 
 	case statErr == nil:
 		if tls {
@@ -284,7 +315,7 @@ func newSourcesCommitCmd(g *globalFlags, open clientFactory) *cobra.Command {
 			"the workspace's local state. `--off` moves it back to the local cache and\n" +
 			"deletes the sidecar. `sources ls` shows which sources are committed.\n\n" +
 			"This changes only WHERE the descriptors are stored. It never dials and never\n" +
-			"builds: committing writes the bytes the store already holds, so a source that\n" +
+			"runs bazel: committing writes the bytes the store already holds, so a source that\n" +
 			"has never resolved is refused — refresh it first — rather than resolved as a\n" +
 			"side effect of a config change.\n\n" +
 			"The point of committing is a fresh clone that resolves with no local state and\n" +
@@ -344,12 +375,12 @@ func newSourcesRefreshCmd(g *globalFlags, open clientFactory) *cobra.Command {
 			"skipped there, because 'refresh everything that has a way to re-acquire itself'\n" +
 			"is the useful reading of a bare refresh. The run stops at the first failure and\n" +
 			"reports it, so a later source is never quietly skipped.\n\n" +
-			"An unreachable target, or a build that fails, fails this command, unlike the\n" +
+			"An unreachable target, or a bazel query that fails, fails this command, unlike the\n" +
 			"passive listing: you named the source and asked for it to resolve.\n\n" +
-			"This verb WAITS, so it runs with a " + buildTimeout.String() + " deadline instead of the usual one: a cold\n" +
-			"bazel build of a large target is minutes, and a bare refresh pays for every source\n" +
-			"in the list inside that one budget. `--timeout` is the knob either way — for a build\n" +
-			"slower than this, or for giving up sooner.\n\n" +
+			"This verb WAITS, so it runs with a " + bazelTimeout.String() + " deadline instead of the usual one: a cold\n" +
+			"bazel query fetches external repositories first and can be minutes, and a bare\n" +
+			"refresh pays for every source in the list inside that one budget. `--timeout` is\n" +
+			"the knob either way — for a bazel run slower than this, or for giving up sooner.\n\n" +
 			"Nothing is printed on success.",
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
@@ -517,6 +548,8 @@ func sourceKind(src *grpcviewv1.DescriptorSource) string {
 		return "upload"
 	case src.GetBazel() != nil:
 		return "bazel"
+	case src.GetProtos() != nil:
+		return "protos"
 	default:
 		return "unknown"
 	}

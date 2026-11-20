@@ -66,7 +66,7 @@ gv.invoke("Users/GetUser")             // this collection, unchanged
 
 `//` opens a collection **slug**, `:` closes it and opens the request path. This is the
 grammar the user reads all day — the repo is a Bazel workspace, `list_bazel_targets` is an
-MCP tool, and bazel sources shell out to `bazel build`. `:` appears in neither a slug nor
+MCP tool, and bazel sources shell out to `bazel query`. `:` appears in neither a slug nor
 a request display name, so the parse is unambiguous.
 
 **A label never resolves by path.** This is a decision, not an oversight. Allowing either
@@ -219,7 +219,7 @@ client-side:
 ### The cost is a cold start per collection, and it is already memoized in-process
 
 `Get` → `loadCollection` → `definitionsFor` (`definitions.go:231`) resolves every source:
-dials reflection, shells out to `bazel build`, reads uploads. But that is the **cold** path
+dials reflection, shells out to `bazel query`, reads uploads. But that is the **cold** path
 only. `definitionsCache` (`definitions.go:49`) already holds derived `definitions` **in
 process**, keyed by collection id, epoch-guarded against a reader memoizing a view it
 derived from pre-write blobs. Sources are not re-read per operation; they are re-read per
@@ -242,7 +242,7 @@ union is the size of the monorepo's proto set, not N× a collection's.
 
 - **`definitionsCacheSize = 16`.** Workspace-wide typing makes the working set *every*
   collection, so a workspace with more than 16 thrashes the LRU — and a thrash here is not
-  a recompute, it is **re-dialing a reflection server or re-running `bazel build`**. The
+  a recompute, it is **re-dialing a reflection server or re-running `bazel query`**. The
   daemon pushes the same constant the *other* way: an unevicted entry per collection, now
   held for the daemon's idle hour rather than one command, is a slow leak. Both pressures
   are real and they point opposite ways; the bound needs choosing with both in view rather

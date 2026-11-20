@@ -90,7 +90,8 @@ message ItemMeta {
 // A POINTER plus authored config, never descriptor bytes. List order in
 // Collection is the priority order (earlier wins).
 message DescriptorSource {
-  // "upload:<file name>", "reflection:<address>[+tls]" or "bazel:<//pkg:target>".
+  // "upload:<file name>", "reflection:<address>[+tls]", "bazel:<//pkg:target>" or
+  // "protos:<path>".
   string id = 3;
   // Which kind of source this is.
   oneof source {
@@ -100,6 +101,8 @@ message DescriptorSource {
     Reflection reflection = 2;
     // A Bazel label that builds its own descriptor set.
     Bazel bazel = 5;
+    // .proto sources in the workspace, compiled in-process.
+    Protos protos = 6;
   }
   // Write what this resolves to as a committed sidecar under descriptors/
   // instead of the local blob store.
@@ -120,6 +123,28 @@ message Upload {
 message Bazel {
   // Canonical label, e.g. "//pkg:target".
   string label = 1;
+}
+
+// .proto sources compiled in-process. Paths are workspace-relative.
+message Protos {
+  // File or directory; a directory means every *.proto under it, recursively.
+  string path = 1;
+  // Import roots; empty means path itself if a directory, else its parent.
+  repeated string import_paths = 2;
+}
+
+// One .proto file's original text.
+message ProtoFile {
+  // Import name, e.g. "pkg/v1/x.proto".
+  string path = 1;
+  // Exact file text.
+  string content = 2;
+}
+
+// An originals blob: the .proto texts a source compiled from.
+message ProtoFiles {
+  // Sorted by path.
+  repeated ProtoFile files = 1;
 }
 
 // descriptors.json in a collection's state directory: LOCAL STATE, the
@@ -144,6 +169,8 @@ message DescriptorIndexEntry {
   // Stored, not derived: a reflection server's ListServices is authoritative and
   // narrower than "every service in the descriptor set".
   repeated string service_names = 3;
+  // sha256 hex of the ProtoFiles blob holding the originals; empty when none.
+  string originals_digest = 4;
 }
 
 // What one source last resolved to, and the shape the store hands the layer
@@ -158,6 +185,8 @@ message ResolvedSource {
   google.protobuf.FileDescriptorSet descriptor_set = 2;
   // Narrower than "every service in descriptor_set" — see DescriptorIndexEntry.
   repeated string service_names = 3;
+  // Original .proto texts, sorted by path; only a Protos source has them.
+  repeated ProtoFile originals = 4;
 }
 
 // A server to reflect schemas from; disk-local, not the wire grpcview.v1.Server.

@@ -209,9 +209,9 @@ export function SourcesView() {
         {untrustedBuild && (
           <Banner tone="warn">
             <span>
-              Resolving a bazel source runs <code>bazel build</code>, which
-              executes this repo's own build code — so it is refused until you
-              trust this workspace.
+              Resolving a bazel source runs <code>bazel query</code>, which
+              executes this repo's own BUILD and .bzl code — so it is refused
+              until you trust this workspace.
               {setWorkspaceTrust.isError && (
                 <span style={{ display: "block", color: "var(--v-err)" }}>
                   {setWorkspaceTrust.error instanceof Error

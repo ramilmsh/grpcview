@@ -21,6 +21,8 @@ func SourceID(src *grpcviewv1.DescriptorSource) string {
 		return uploadSourceID(s.Upload.GetFileName())
 	case *grpcviewv1.DescriptorSource_Bazel:
 		return bazelSourceID(s.Bazel.GetLabel())
+	case *grpcviewv1.DescriptorSource_Protos:
+		return protosSourceID(s.Protos.GetPath())
 	default:
 		return ""
 	}
@@ -34,6 +36,8 @@ func diskSourceID(ds *grpcviewstorev1.DescriptorSource) string {
 		return uploadSourceID(s.Upload.GetFileName())
 	case *grpcviewstorev1.DescriptorSource_Bazel:
 		return bazelSourceID(s.Bazel.GetLabel())
+	case *grpcviewstorev1.DescriptorSource_Protos:
+		return protosSourceID(s.Protos.GetPath())
 	default:
 		return ""
 	}
@@ -49,6 +53,8 @@ func reflectionSourceID(address string, tls bool) string {
 func uploadSourceID(fileName string) string { return "upload:" + fileName }
 
 func bazelSourceID(label string) string { return "bazel:" + label }
+
+func protosSourceID(path string) string { return "protos:" + path }
 
 // Rewrites a manifest-authored label IN PLACE so the next write persists it, and runs everywhere an id
 // is derived from disk — the OTHER door a label comes through. `sources add` canonicalizes before

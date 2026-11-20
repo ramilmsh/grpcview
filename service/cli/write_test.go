@@ -348,9 +348,20 @@ func TestSourcesAdd(t *testing.T) {
 			wantCode:   2,
 		},
 		{
-			name:       "a directory is not a descriptor set",
+			name: "a directory is a protos source, sent absolute",
+			arg:  "{dir}",
+			check: func(t *testing.T, fc *fakeClient) {
+				got := onlyAdd(t, fc).GetProtos()
+				if got.GetPath() != dir || len(got.GetImportPaths()) != 0 {
+					t.Errorf("protos = %v, want path %q and no import paths", got, dir)
+				}
+			},
+		},
+		{
+			name:       "--tls on a directory is refused",
 			arg:        "{dir}",
-			wantErrHas: "it is a directory",
+			tls:        true,
+			wantErrHas: "--tls does not apply",
 			wantCode:   2,
 		},
 		{
@@ -426,7 +437,8 @@ func TestSourcesAddFailuresReachNoRPC(t *testing.T) {
 	for _, args := range [][]string{
 		{"sources", "add", file, "--tls"},
 		{"sources", "add", "//grpcview/echo/v1:grpcviewechov1_proto", "--tls"},
-		{"sources", "add", dir},
+		{"sources", "add", dir, "--tls"},
+		{"sources", "add", file, "-I", dir},
 		{"sources", "add"},
 	} {
 		fc := newFake()

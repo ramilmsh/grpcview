@@ -50,17 +50,51 @@ func (s *Store) putBlob(fds *descriptorpb.FileDescriptorSet) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return digest, s.writeBlob(digest, canonical)
+}
+
+// Empty originals are "" — no blob. Callers must hold s.blobMu.
+func (s *Store) putOriginals(files []*grpcviewstorev1.ProtoFile) (string, error) {
+	if len(files) == 0 {
+		return "", nil
+	}
+	canonical, err := proto.MarshalOptions{Deterministic: true}.Marshal(&grpcviewstorev1.ProtoFiles{Files: files})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	digest := hex.EncodeToString(sum[:])
+	return digest, s.writeBlob(digest, canonical)
+}
+
+// Absent or unparseable is (nil, false), like readBlob. Callers must hold s.blobMu.
+func (s *Store) readOriginals(digest string) ([]*grpcviewstorev1.ProtoFile, bool, error) {
+	path := s.blobPath(digest)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	files := &grpcviewstorev1.ProtoFiles{}
+	if err := proto.Unmarshal(data, files); err != nil {
+		s.logger.Warn("dropping unreadable originals blob", "digest", digest, "error", err)
+		_ = os.Remove(path)
+		return nil, false, nil
+	}
+	return files.GetFiles(), true, nil
+}
+
+func (s *Store) writeBlob(digest string, canonical []byte) error {
 	path := s.blobPath(digest)
 	if fileExists(path) {
-		return digest, nil
+		return nil
 	}
 	if err := os.MkdirAll(s.blobsRoot(), 0o755); err != nil {
-		return "", err
+		return err
 	}
-	if err := writeFileAtomic(path, canonical, 0o644); err != nil {
-		return "", err
-	}
-	return digest, nil
+	return writeFileAtomic(path, canonical, 0o644)
 }
 
 // An absent or unparseable blob is (nil, nil): the source reads as unresolved and a refresh fixes it.
@@ -143,6 +177,9 @@ func (s *Store) referencedDigests() (map[string]bool, error) {
 		}
 		for _, e := range index.GetEntries() {
 			referenced[e.GetDigest()] = true
+			if d := e.GetOriginalsDigest(); d != "" {
+				referenced[d] = true
+			}
 		}
 	}
 	return referenced, nil
@@ -205,6 +242,7 @@ func (c *Collection) writeDescriptorSidecar(r *grpcviewstorev1.ResolvedSource) e
 		Id:            r.GetId(),
 		DescriptorSet: fds,
 		ServiceNames:  r.GetServiceNames(),
+		Originals:     r.GetOriginals(),
 	})
 	if err != nil {
 		return err
@@ -273,10 +311,22 @@ func (c *Collection) blobResolve(id string, entry *grpcviewstorev1.DescriptorInd
 		c.logger.Warn("descriptor blob missing for source", "source", id, "digest", entry.GetDigest())
 		return nil, nil
 	}
+	var originals []*grpcviewstorev1.ProtoFile
+	if d := entry.GetOriginalsDigest(); d != "" {
+		var ok bool
+		if originals, ok, err = c.store.readOriginals(d); err != nil {
+			return nil, err
+		}
+		if !ok {
+			c.logger.Warn("originals blob missing for source", "source", id, "digest", d)
+			return nil, nil
+		}
+	}
 	return &grpcviewstorev1.ResolvedSource{
 		Id:            id,
 		DescriptorSet: fds,
 		ServiceNames:  entry.GetServiceNames(),
+		Originals:     originals,
 	}, nil
 }
 

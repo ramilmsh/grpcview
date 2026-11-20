@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,16 +22,18 @@ import (
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/bazelbuild"
+	"codeberg.org/ramilmsh/grpcview/service/protofiles"
 	"codeberg.org/ramilmsh/grpcview/service/store"
 	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 type resolvedSource struct {
-	id       string
-	server   *grpcviewv1.Server
-	files    *descriptorpb.FileDescriptorSet
-	services []string
-	err      error
+	id        string
+	server    *grpcviewv1.Server
+	files     *descriptorpb.FileDescriptorSet
+	services  []string
+	originals []*grpcviewstorev1.ProtoFile // .proto texts, sorted by path; Protos and Bazel sources
+	err       error
 }
 
 func sourceID(src *grpcviewv1.DescriptorSource) string { return store.SourceID(src) }
@@ -93,7 +96,7 @@ func parseUpload(raw []byte) (*descriptorpb.FileDescriptorSet, error) {
 }
 
 // The ONLY place a bazelbuild.Builder is constructed, which is what makes the trust check unskippable:
-// a build can only be started through a Builder, so no future caller can add a second door that
+// bazel can only be run through a Builder, so no future caller can add a second door that
 // forgets to ask. Putting the gate in bazelbuild itself is worse — that package is the mechanism and
 // knows nothing about workspaces, manifests or roots.
 func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
@@ -106,7 +109,7 @@ func (w Workspace) bazelBuilder() (bazelbuild.Builder, error) {
 	}
 	if !trusted {
 		return bazelbuild.Builder{}, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"the workspace %s is not trusted, and resolving a bazel source runs `bazel build` — arbitrary code from this repo's BUILD files: trust the workspace first if it is yours", root))
+			"the workspace %s is not trusted, and resolving a bazel source runs bazel — which loads and analyzes this repo's BUILD files, arbitrary code: trust the workspace first if it is yours", root))
 	}
 
 	cfg, err := w.store.WorkspaceBazel()
@@ -153,30 +156,130 @@ func (w Workspace) resolveBazel(ctx context.Context, id, label string) (*resolve
 	if err != nil {
 		return nil, err
 	}
-	sets, err := builder.DescriptorSets(ctx, canon)
+	files, err := builder.Closure(ctx, canon)
 	if err != nil {
 		return nil, bazelResolveError(ctx, err)
 	}
-	return resolveUpload(id, dedupeFiles(sets))
+	res, err := protofiles.Compile(ctx, protofiles.Paths(files), slices.Sorted(maps.Keys(files))...)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, connect.NewError(connect.CodeCanceled, err)
+		}
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("compile %s: %w", canon, err))
+	}
+	rs, err := resolveUpload(id, res.Set)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(res.Originals)) {
+		rs.originals = append(rs.originals, &grpcviewstorev1.ProtoFile{Path: name, Content: res.Originals[name]})
+	}
+	return rs, nil
 }
 
-// First spelling of each proto file name wins. Not an optimization: a merging rule emits its inputs'
-// per-target sets, so one file name legitimately appears in more than one of them, and
-// desc.CreateFileDescriptorsFromSet REJECTS a duplicate. Deduping by name alone is safe because every
-// copy came out of one build of one target.
-func dedupeFiles(sets []*descriptorpb.FileDescriptorSet) *descriptorpb.FileDescriptorSet {
-	out := &descriptorpb.FileDescriptorSet{}
-	seen := make(map[string]bool)
-	for _, set := range sets {
-		for _, f := range set.GetFile() {
-			if seen[f.GetName()] {
-				continue
-			}
-			seen[f.GetName()] = true
-			out.File = append(out.File, f)
+// Normalizes a Protos source's paths (absolute or root-relative in) to root-relative, each confined to
+// the workspace. Empty import_paths stays empty: its default is derived at compile time.
+func normalizeProtos(root string, p *grpcviewv1.Protos) (*grpcviewv1.Protos, error) {
+	_, rel, _, err := resolveWorkspacePath(root, p.GetPath())
+	if err != nil {
+		return nil, err
+	}
+	out := &grpcviewv1.Protos{Path: rel}
+	for _, ip := range p.GetImportPaths() {
+		_, irel, isDir, err := resolveWorkspacePath(root, ip)
+		if err != nil {
+			return nil, err
+		}
+		if !isDir {
+			return nil, fmt.Errorf("import path %q is not a directory", ip)
+		}
+		out.ImportPaths = append(out.ImportPaths, irel)
+	}
+	return out, nil
+}
+
+// Compiles a Protos source from disk. No trust gate: compiling runs no repo code.
+func (w Workspace) resolveProtos(ctx context.Context, id string, p *grpcviewv1.Protos) (*resolvedSource, error) {
+	invalid := func(err error) error {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q: %w", id, err))
+	}
+	root := w.store.Root()
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	target, _, isDir, err := resolveWorkspacePath(root, p.GetPath())
+	if err != nil {
+		return nil, invalid(err)
+	}
+
+	var roots protofiles.Roots
+	for _, ip := range p.GetImportPaths() {
+		real, _, isDir, err := resolveWorkspacePath(root, ip)
+		if err != nil {
+			return nil, invalid(err)
+		}
+		if !isDir {
+			return nil, invalid(fmt.Errorf("import path %q is not a directory", ip))
+		}
+		roots = append(roots, real)
+	}
+	if len(roots) == 0 {
+		if isDir {
+			roots = protofiles.Roots{target}
+		} else {
+			roots = protofiles.Roots{filepath.Dir(target)}
 		}
 	}
-	return out
+
+	paths := []string{target}
+	if isDir {
+		if paths, err = protofiles.Find(target); err != nil {
+			return nil, invalid(err)
+		}
+		if len(paths) == 0 {
+			return nil, invalid(fmt.Errorf("no .proto files under %q", p.GetPath()))
+		}
+	}
+	names := make([]string, 0, len(paths))
+	for _, path := range paths {
+		name, ok := roots.ImportName(path)
+		if !ok {
+			return nil, invalid(fmt.Errorf("%s is under none of the import paths %q: add one that contains it", path, p.GetImportPaths()))
+		}
+		names = append(names, name)
+	}
+
+	// Every read, imports included, is confined: a symlink out of the workspace is refused.
+	confined := protofiles.ResolverFunc(func(name string) ([]byte, error) {
+		found, err := roots.Locate(name)
+		if err != nil {
+			return nil, err
+		}
+		real, err := filepath.EvalSymlinks(found)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := containedIn(realRoot, real); err != nil {
+			return nil, fmt.Errorf("%s resolves through a symlink to %s, outside the workspace %s", name, real, root)
+		}
+		return os.ReadFile(real)
+	})
+	res, err := protofiles.Compile(ctx, confined, names...)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, connect.NewError(connect.CodeCanceled, err)
+		}
+		return nil, invalid(fmt.Errorf("compile: %w", err))
+	}
+	rs, err := resolveUpload(id, res.Set)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(res.Originals)) {
+		rs.originals = append(rs.originals, &grpcviewstorev1.ProtoFile{Path: name, Content: res.Originals[name]})
+	}
+	return rs, nil
 }
 
 // The ONE seam where bazelbuild's plain errors become connect codes — that package returns plain errors
@@ -203,6 +306,8 @@ func (w Workspace) resolveOne(ctx context.Context, src *grpcviewv1.DescriptorSou
 		return resolveReflection(ctx, id, s.Reflection)
 	case *grpcviewv1.DescriptorSource_Bazel:
 		return w.resolveBazel(ctx, id, s.Bazel.GetLabel())
+	case *grpcviewv1.DescriptorSource_Protos:
+		return w.resolveProtos(ctx, id, s.Protos)
 	case *grpcviewv1.DescriptorSource_Upload:
 		path := s.Upload.GetPath()
 		if path == "" {
@@ -262,10 +367,11 @@ func (w Workspace) resolveConfigured(
 		}
 		if c, ok := cached[id]; ok {
 			out = append(out, &resolvedSource{
-				id:       id,
-				server:   src.GetReflection(),
-				files:    c.GetDescriptorSet(),
-				services: c.GetServiceNames(),
+				id:        id,
+				server:    src.GetReflection(),
+				files:     c.GetDescriptorSet(),
+				services:  c.GetServiceNames(),
+				originals: c.GetOriginals(),
 			})
 			continue
 		}
@@ -285,7 +391,9 @@ type mergedView struct {
 	descriptorSet []byte
 	summaries     map[string]*grpcviewv1.Resolved
 	serviceDescs  map[string]*desc.ServiceDescriptor
-	claimedBy     map[string]string // proto file name -> winning source id
+	claimedBy     map[string]string               // proto file name -> winning source id
+	files         map[string]*desc.FileDescriptor // proto file name -> winning, linked file
+	originals     map[string]string               // proto file name -> winner's original .proto text, if it kept one
 }
 
 func summarize(resolved []*resolvedSource) map[string]*grpcviewv1.Resolved {
@@ -307,14 +415,22 @@ func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
 	summaries := summarize(resolved)
 
 	claimedBy := make(map[string]string)
+	originals := make(map[string]string)
 	var claimed []*descriptorpb.FileDescriptorProto
 	for _, rs := range resolved {
+		texts := make(map[string]string, len(rs.originals))
+		for _, o := range rs.originals {
+			texts[o.GetPath()] = o.GetContent()
+		}
 		for _, f := range rs.files.GetFile() {
 			if _, taken := claimedBy[f.GetName()]; taken {
 				continue
 			}
 			claimedBy[f.GetName()] = rs.id
 			claimed = append(claimed, f)
+			if text, ok := texts[f.GetName()]; ok {
+				originals[f.GetName()] = text
+			}
 		}
 	}
 	if len(claimed) == 0 {
@@ -366,9 +482,11 @@ func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
 	}
 
 	all := make([]*desc.FileDescriptor, 0, len(claimed))
+	files := make(map[string]*desc.FileDescriptor, len(claimed))
 	for _, f := range claimed {
 		if fd := linked[f.GetName()]; fd != nil {
 			all = append(all, fd)
+			files[f.GetName()] = fd
 		}
 	}
 	descriptorSet, err := proto.Marshal(desc.ToFileDescriptorSet(all...))
@@ -381,6 +499,8 @@ func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
 		summaries:     summaries,
 		serviceDescs:  serviceDescs,
 		claimedBy:     claimedBy,
+		files:         files,
+		originals:     originals,
 	}, nil
 }
 
@@ -416,6 +536,7 @@ func (w Workspace) putDescriptorState(
 			Id:            rs.id,
 			DescriptorSet: rs.files,
 			ServiceNames:  rs.services,
+			Originals:     rs.originals,
 		}
 	}
 	stored := make([]*grpcviewv1.DescriptorSource, 0, len(sources))

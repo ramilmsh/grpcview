@@ -17,7 +17,7 @@ const defaultPort = 10000
 
 const (
 	defaultTimeout = 30 * time.Second
-	buildTimeout   = 10 * time.Minute
+	bazelTimeout   = 10 * time.Minute
 )
 
 type Streams struct {
@@ -79,7 +79,7 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	f.StringVar(&g.Server, "server", "", "base URL of a specific grpcview server; empty uses this workspace's, starting one if none is running")
 	f.BoolVar(&g.InProcess, "in-process", false, "do the work in this process and start no server; the escape hatch for CI, a read-only checkout and debugging")
 	f.DurationVar(&g.Timeout, "timeout", defaultTimeout,
-		"per-request timeout; a verb that may run a build — `sources refresh`, or `sources add` of a bazel label — defaults to "+buildTimeout.String()+" instead")
+		"per-request timeout; a verb that may run bazel — `sources refresh`, or `sources add` of a bazel label — defaults to "+bazelTimeout.String()+" instead")
 	return g
 }
 
@@ -87,7 +87,7 @@ func useBuildTimeout(cmd *cobra.Command, g *globalFlags) {
 	if flag := cmd.Flags().Lookup("timeout"); flag != nil && flag.Changed {
 		return
 	}
-	g.Timeout = buildTimeout
+	g.Timeout = bazelTimeout
 }
 
 func releaseVersion() string {

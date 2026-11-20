@@ -1,7 +1,10 @@
 # grpcview — descriptor explorer plan (follow-up to feature 2)
 
-**Status:** Planning only (this doc). **Not started.** Its rendered `.proto` files are slated to live under the Definitions tree of
-[`explorer-fs.md`](./explorer-fs.md), which would replace the `ExploreDescriptorSource` RPC below. This is the dedicated
+**Status:** Phase 1 partly shipped: `GetDefinitionsResponse.protos` serves the merged set as `.proto`
+(original text when the winning source kept it, else `protoprint`, source order, comments kept —
+`service/workspace/protos.go`). The `ExploreDescriptorSource` RPC below is dropped: files live
+under the Definitions tree's `proto/` ([`explorer-fs.md`](./explorer-fs.md)), one merged set, not one
+per source. Left: the symbol index, phases 2–4. This is the dedicated
 follow-up to the message-shape-visibility feature: the *TS-types* view ships first
 (see [`gv-features-plan.md`](../shipped/gv-features-plan.md) §"Feature 2"); this doc plans
 the richer **`.proto` descriptor explorer** that the TS view deliberately does not
@@ -114,8 +117,9 @@ Bazel: adding `desc/protoprint` needs a `gazelle` BUILD regen (new dep line in
 
 ## Phases
 
-1. **Backend rendering + symbol index.** `ExploreDescriptorSource` RPC + handler;
-   `protoprint` wiring; `gazelle` regen. *Verify:* `bazel test
+1. **Backend rendering + symbol index.** Rendering shipped as `GetDefinitions.protos` (no
+   `ExploreDescriptorSource`); symbol index left — derive it beside `protoFiles`
+   (`protos.go`) from the same linked files. *Verify:* `bazel test
    //service/workspace/...` — for a workspace with a known source, the response
    contains the expected files with field numbers + comments, and the symbol index
    maps a known message full-name to the right file/line.

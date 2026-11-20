@@ -262,9 +262,15 @@ func (w Workspace) GetDefinitions(ctx context.Context, request *connect.Request[
 	for _, f := range protobufStubs {
 		files = append(files, proto.Clone(f).(*grpcviewv1.DefinitionFile))
 	}
+	protos, err := defs.protoFiles()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf(
+			"failed to render collection %q's definitions as .proto: %w", id, err))
+	}
 	return connect.NewResponse(&grpcviewv1.GetDefinitionsResponse{
 		Digest: defs.digest,
 		Files:  files,
+		Protos: protos,
 	}), nil
 }
 
@@ -279,8 +285,9 @@ var stubsDigest = func() [sha256.Size]byte {
 }()
 
 // definitionsDigest identifies GetDefinitions' output: the generator, the merged set it runs
-// over, each file's winning source (DefinitionFile.source), and the builtin stubs.
-func definitionsDigest(set []byte, claimedBy map[string]string) (string, error) {
+// over, each file's winning source, the winners' original .proto texts, and the builtin stubs.
+// Rendered .proto is a function of the set (protoPrinter is fixed per binary).
+func definitionsDigest(set []byte, claimedBy, originals map[string]string) (string, error) {
 	bundle, err := codegen.BundleHash()
 	if err != nil {
 		return "", err
@@ -292,6 +299,11 @@ func definitionsDigest(set []byte, claimedBy map[string]string) (string, error) 
 	for _, name := range slices.Sorted(maps.Keys(claimedBy)) {
 		writeLenPrefixed(h, []byte(name))
 		writeLenPrefixed(h, []byte(claimedBy[name]))
+	}
+	h.Write([]byte{0}) // separates the two lists
+	for _, name := range slices.Sorted(maps.Keys(originals)) {
+		writeLenPrefixed(h, []byte(name))
+		writeLenPrefixed(h, []byte(originals[name]))
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

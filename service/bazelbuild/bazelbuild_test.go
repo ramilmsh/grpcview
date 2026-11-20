@@ -2,14 +2,15 @@ package bazelbuild
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
-
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 func TestCanonicalLabel(t *testing.T) {
@@ -160,234 +161,172 @@ func TestFindRoot(t *testing.T) {
 	})
 }
 
-func TestDescriptorSetsHappyPath(t *testing.T) {
-	root := t.TempDir()
-	first := setBytes(t, "a.proto", "b.proto")
-	second := setBytes(t, "c.proto")
-	write(t, filepath.Join(root, "out", "one.bin"), first)
-	write(t, filepath.Join(root, "out", "two.bin"), second)
-
-	log := filepath.Join(root, "argv.log")
-	binary := fakeBazel(t, `
-printf '%s\n' "$*" >> `+shquote(log)+`
-if [ "$1" = cquery ]; then
-  echo out/one.bin
-  echo ''
-  echo out/two.bin
-fi
-exit 0
-`)
-
-	b := Builder{Binary: binary, Root: root}
-	sets, err := b.DescriptorSets(context.Background(), "pkg")
-	if err != nil {
-		t.Fatalf("DescriptorSets: %v", err)
-	}
-	if len(sets) != 2 {
-		t.Fatalf("got %d sets, want 2", len(sets))
-	}
-	if names := fileNames(sets[0]); strings.Join(names, ",") != "a.proto,b.proto" {
-		t.Errorf("first set files = %v, want [a.proto b.proto]", names)
-	}
-	if names := fileNames(sets[1]); strings.Join(names, ",") != "c.proto" {
-		t.Errorf("second set files = %v, want [c.proto]", names)
+func TestLocate(t *testing.T) {
+	const root = "/ws"
+	main := protoFile{Name: "pkg/a.proto", Path: "pkg/a.proto", Source: true, Owner: "@@//pkg:a.proto"}
+	virtual := protoFile{Name: "google/protobuf/any.proto", Path: "bazel-out/k8/bin/external/protobuf+/src/google/protobuf/_virtual_imports/any_proto/google/protobuf/any.proto", Owner: "@@protobuf+//src/google/protobuf:any_proto"}
+	prefixed := protoFile{Name: "acme/x/v.proto", Path: "bazel-out/k8/bin/vend/_virtual_imports/v_proto/acme/x/v.proto", Owner: "@@//vend:v_proto"}
+	external := protoFile{Name: "e/e.proto", Path: "external/ext+/e/e.proto", Source: true, Owner: "@@ext+//e:e.proto"}
+	q := map[string]target{
+		"@@protobuf+//src/google/protobuf:any_proto": {Class: "proto_library", Srcs: []string{"@@protobuf+//src/google/protobuf:any.proto"}},
+		"@@protobuf+//src/google/protobuf:any.proto": {Location: "/ob/external/protobuf+/src/google/protobuf/any.proto"},
+		// Both srcs end in x/v.proto; only the shortest is imported as it.
+		"@@//vend:v_proto":       {Class: "proto_library", Prefix: "acme", Srcs: []string{"@@//vend:deep/x/v.proto", "@@//vend:x/v.proto"}},
+		"@@//vend:x/v.proto":      {Location: "/ws/vend/x/v.proto"},
+		"@@//vend:deep/x/v.proto": {Location: "/ws/vend/deep/x/v.proto"},
+		"@@ext+//e:e.proto":       {Location: "/ob/external/ext+/e/e.proto"},
 	}
 
-	argv, err := os.ReadFile(log)
+	got, err := locate(root, []protoFile{main, virtual, prefixed, external, {Name: "pkg/a.proto", Path: "elsewhere/a.proto", Source: true, Owner: "@@//elsewhere:a.proto"}}, q)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(argv)), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("bazel was invoked %d times, want 3: %q", len(lines), lines)
+	want := map[string]string{
+		"pkg/a.proto":               "/ws/pkg/a.proto", // first wins
+		"google/protobuf/any.proto": "/ob/external/protobuf+/src/google/protobuf/any.proto",
+		"acme/x/v.proto":            "/ws/vend/x/v.proto",
+		"e/e.proto":                 "/ob/external/ext+/e/e.proto",
 	}
-	wantQuery := `query --output=label --order_output=no --curses=no --color=no --noshow_progress -- kind("^(proto_library|proto_descriptor_set) rule$", deps(//pkg:pkg))`
-	wantBuild := "build --curses=no --color=no --noshow_progress -- //pkg:pkg"
-	wantCquery := "cquery --output=files --curses=no --color=no --noshow_progress -- //pkg:pkg"
-	if lines[0] != wantQuery {
-		t.Errorf("query argv = %q, want %q", lines[0], wantQuery)
+	if !maps.Equal(got, want) {
+		t.Errorf("locate = %v, want %v", got, want)
 	}
-	if lines[1] != wantBuild {
-		t.Errorf("build argv = %q, want %q", lines[1], wantBuild)
-	}
-	if lines[2] != wantCquery {
-		t.Errorf("cquery argv = %q, want %q", lines[2], wantCquery)
+
+	for name, tc := range map[string]struct {
+		f    protoFile
+		q    map[string]target
+		want string
+	}{
+		"generated, no virtual import": {
+			protoFile{Name: "pkg/gen.proto", Path: "bazel-out/k8/bin/pkg/gen.proto", Owner: "@@//pkg:make_gen"},
+			map[string]target{"@@//pkg:make_gen": {Class: "genrule"}},
+			"bazel-out/k8/bin/pkg/gen.proto (of @@//pkg:make_gen) is generated",
+		},
+		"generated src of a virtual import": {
+			protoFile{Name: "gen.proto", Path: "bazel-out/k8/bin/pkg/_virtual_imports/p/gen.proto", Owner: "@@//pkg:p"},
+			map[string]target{"@@//pkg:p": {Class: "proto_library", Srcs: []string{"@@//pkg:gen.proto"}}, "@@//pkg:gen.proto": {}},
+			"@@//pkg:gen.proto (of @@//pkg:p) is generated",
+		},
+		"no matching src": {
+			protoFile{Name: "x.proto", Path: "bazel-out/k8/bin/pkg/_virtual_imports/p/x.proto", Owner: "@@//pkg:p"},
+			map[string]target{"@@//pkg:p": {Class: "proto_library", Srcs: []string{"@@//pkg:y.proto"}}},
+			"none of its srcs ends in x.proto",
+		},
+		"external source not located": {external, nil, "did not locate @@ext+//e:e.proto"},
+	} {
+		if _, err := locate(root, []protoFile{tc.f}, tc.q); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to contain %q", name, err, tc.want)
+		}
 	}
 }
 
-// The transitive half: a proto_library's own descriptor set holds only its own files, so the deps
-// query's labels have to reach BOTH the build (as patterns) and the cquery (as one union expression),
-// or an import of google/protobuf/any.proto has nothing to link against.
-func TestDescriptorSetsReadsTheDepClosure(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "out", "own.bin"), setBytes(t, "a.proto"))
-	write(t, filepath.Join(root, "out", "any.bin"), setBytes(t, "google/protobuf/any.proto"))
+func TestOwnersSkipsMainSources(t *testing.T) {
+	got := owners([]protoFile{
+		{Source: true, Owner: "@@//pkg:a.proto"},
+		{Owner: "@@b+//p:b_proto"},
+		{Owner: "@@b+//p:b_proto"},
+		{Source: true, Owner: "@@a+//p:a.proto"},
+	})
+	if want := []string{"@@a+//p:a.proto", "@@b+//p:b_proto"}; !slices.Equal(got, want) {
+		t.Errorf("owners = %q, want %q", got, want)
+	}
+}
 
+func line(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+var starlarkFileRe = regexp.MustCompile(`--starlark:file=\S+`)
+
+func TestClosureArgv(t *testing.T) {
+	root := t.TempDir()
 	log := filepath.Join(root, "argv.log")
+	cq := line(t, protoFile{Name: "pkg/a.proto", Path: "pkg/a.proto", Source: true, Owner: "@@//pkg:a.proto"}) + "\n\n" +
+		line(t, protoFile{Name: "e/e.proto", Path: "external/ext+/e/e.proto", Source: true, Owner: "@@ext+//e:e.proto"})
+	q := `{"type":"SOURCE_FILE","sourceFile":{"name":"@@ext+//e:e.proto","location":"/ob/external/ext+/e/e.proto:1:1"}}`
+	// The fake checks the starlark file is the embedded one, while it still exists.
 	binary := fakeBazel(t, `
 printf '%s\n' "$*" >> `+shquote(log)+`
 case "$1" in
-query)
-  # The label under query, one dep, a duplicate of it, and a line no label parses out of.
-  echo //pkg:pkg
-  echo '@protobuf//src/google/protobuf:any_proto'
-  echo '@protobuf//src/google/protobuf:any_proto'
-  echo 'Loading: 3 packages loaded'
-  ;;
 cquery)
-  echo out/own.bin
-  echo out/any.bin
-  ;;
+	f=$(printf '%s\n' "$@" | sed -n 's/^--starlark:file=//p')
+	grep -q 'def format(target)' "$f" || { echo "no starlark file at $f" >&2; exit 9; }
+	printf '%s\n' `+shquote(cq)+` ;;
+query) printf '%s\n' `+shquote(q)+` ;;
+*) exit 1 ;;
 esac
-exit 0
 `)
-
-	sets, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg")
+	got, err := Builder{Binary: binary, Root: root}.Closure(context.Background(), "pkg")
 	if err != nil {
-		t.Fatalf("DescriptorSets: %v", err)
+		t.Fatalf("Closure: %v", err)
 	}
-	if len(sets) != 2 {
-		t.Fatalf("got %d sets, want 2", len(sets))
+	want := map[string]string{"pkg/a.proto": filepath.Join(root, "pkg", "a.proto"), "e/e.proto": "/ob/external/ext+/e/e.proto"}
+	if !maps.Equal(got, want) {
+		t.Errorf("Closure = %v, want %v", got, want)
 	}
 
-	argv, err := os.ReadFile(log)
+	raw, err := os.ReadFile(log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(argv)), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("bazel was invoked %d times, want 3: %q", len(lines), lines)
-	}
-	wantBuild := "build --curses=no --color=no --noshow_progress -- //pkg:pkg @protobuf//src/google/protobuf:any_proto"
-	wantCquery := "cquery --output=files --curses=no --color=no --noshow_progress -- //pkg:pkg + @protobuf//src/google/protobuf:any_proto"
-	if lines[1] != wantBuild {
-		t.Errorf("build argv = %q, want %q", lines[1], wantBuild)
-	}
-	if lines[2] != wantCquery {
-		t.Errorf("cquery argv = %q, want %q", lines[2], wantCquery)
+	wantArgv := "cquery --output=starlark --starlark:file=F --curses=no --color=no --noshow_progress -- config(deps(//pkg:pkg, 1), target)\n" +
+		"query --output=streamed_jsonproto --consistent_labels --order_output=no --curses=no --color=no --noshow_progress -- let o = @@ext+//e:e.proto in $o + labels(srcs, $o)\n"
+	if got := starlarkFileRe.ReplaceAllString(string(raw), "--starlark:file=F"); got != wantArgv {
+		t.Errorf("argv =\n%s\nwant\n%s", got, wantArgv)
 	}
 }
 
-// A failed deps query is fatal, not degraded to the label alone: silently resolving without the
-// closure is exactly the "no such file: google/protobuf/any.proto" the closure exists to prevent.
-func TestDescriptorSetsQueryFailure(t *testing.T) {
+func TestClosureMainOnlySkipsQuery(t *testing.T) {
 	root := t.TempDir()
-	binary := fakeBazel(t, `
-if [ "$1" = query ]; then echo 'ERROR: no such package' >&2; exit 7; fi
-exit 0
-`)
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
-	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want an error")
+	log := filepath.Join(root, "argv.log")
+	cq := line(t, protoFile{Name: "pkg/a.proto", Path: "pkg/a.proto", Source: true, Owner: "@@//pkg:a.proto"})
+	binary := fakeBazel(t, "printf '%s\\n' \"$*\" >> "+shquote(log)+"\nprintf '%s\\n' "+shquote(cq)+"\n")
+	if _, err := (Builder{Binary: binary, Root: root}).Closure(context.Background(), "//pkg"); err != nil {
+		t.Fatalf("Closure: %v", err)
 	}
-	if !strings.Contains(err.Error(), "query") || !strings.Contains(err.Error(), "//pkg:target") {
-		t.Errorf("error %q should name the invocation and the label", err)
+	raw, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(raw), "\n"); n != 1 {
+		t.Errorf("bazel was invoked %d times, want 1: %q", n, raw)
 	}
 }
 
-func TestDescriptorSetsMissingOutput(t *testing.T) {
-	root := t.TempDir()
-	binary := fakeBazel(t, `
-if [ "$1" = cquery ]; then echo bazel-out/k8-fastbuild/bin/pkg/gone.bin; fi
-exit 0
-`)
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
-	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want an error")
-	}
-	if !strings.Contains(err.Error(), "--remote_download_toplevel") {
-		t.Errorf("error %q does not name --remote_download_toplevel", err)
-	}
-	if !strings.Contains(err.Error(), "gone.bin") {
-		t.Errorf("error %q does not name the missing file", err)
-	}
-}
-
-func TestDescriptorSetsNoOutputs(t *testing.T) {
-	root := t.TempDir()
+func TestClosureNoProtoInfo(t *testing.T) {
 	binary := fakeBazel(t, "exit 0\n")
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
-	if err == nil || !strings.Contains(err.Error(), "no output files") {
-		t.Fatalf("err = %v, want it to report no output files", err)
+	_, err := Builder{Binary: binary, Root: t.TempDir()}.Closure(context.Background(), "//pkg:bin")
+	if err == nil || !strings.Contains(err.Error(), "ProtoInfo") || !strings.Contains(err.Error(), "//pkg:bin") {
+		t.Fatalf("err = %v, want it to name the label and the missing ProtoInfo", err)
 	}
 }
 
-func TestDescriptorSetsUnparseableOutput(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "junk.bin"), []byte{0xff, 0xff, 0xff, 0xff})
-	binary := fakeBazel(t, `
-if [ "$1" = cquery ]; then echo junk.bin; fi
-exit 0
-`)
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
-	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want an error")
-	}
-	if !strings.Contains(err.Error(), "junk.bin") || !strings.Contains(err.Error(), "FileDescriptorSet") {
-		t.Errorf("error %q should name the file and what it is not", err)
-	}
-}
-
-func TestDescriptorSetsEmptyOutput(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "out", "empty.bin"), setBytes(t))
-	binary := fakeBazel(t, `
-if [ "$1" = cquery ]; then echo out/empty.bin; fi
-exit 0
-`)
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
-	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want an error")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "out/empty.bin") || !strings.Contains(msg, "//pkg:target") {
-		t.Errorf("error %q should name both the offending file and the target", msg)
-	}
-	if !strings.Contains(msg, "no proto files") || !strings.Contains(msg, "FileDescriptorSets") {
-		t.Errorf("error %q should say the output holds no proto files and what the target must be", msg)
-	}
-}
-
-func TestDescriptorSetsEmptyAmongOutputs(t *testing.T) {
-	root := t.TempDir()
-	write(t, filepath.Join(root, "out", "one.bin"), setBytes(t, "a.proto"))
-	write(t, filepath.Join(root, "out", "two.bin"), setBytes(t))
-	binary := fakeBazel(t, `
-if [ "$1" = cquery ]; then echo out/one.bin; echo out/two.bin; fi
-exit 0
-`)
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
-	if err == nil || !strings.Contains(err.Error(), "out/two.bin") {
-		t.Fatalf("err = %v, want it to name out/two.bin", err)
-	}
-}
-
-func TestDescriptorSetsBuildFailure(t *testing.T) {
+func TestClosureCqueryFailure(t *testing.T) {
 	root := t.TempDir()
 	binary := fakeBazel(t, `
-if [ "$1" = query ]; then exit 0; fi
 i=1
 while [ $i -le 24 ]; do echo "noise line $i" >&2; i=$((i+1)); done
 echo 'ERROR: no such package' >&2
-exit 1
+exit 7
 `)
-	_, err := Builder{Binary: binary, Root: root}.DescriptorSets(context.Background(), "//pkg:target")
+	_, err := Builder{Binary: binary, Root: root}.Closure(context.Background(), "//pkg:target")
 	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want an error")
+		t.Fatal("Closure succeeded, want an error")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "ERROR: no such package") {
-		t.Errorf("error %q is missing the stderr tail", msg)
-	}
-	if !strings.Contains(msg, "build") || !strings.Contains(msg, "//pkg:target") {
-		t.Errorf("error %q should name the invocation and the label", msg)
+	if !strings.Contains(msg, "cquery") || !strings.Contains(msg, "//pkg:target") || !strings.Contains(msg, "ERROR: no such package") {
+		t.Errorf("error %q should name the invocation, the label and bazel's stderr tail", msg)
 	}
 	if strings.Contains(msg, "noise line 1\n") {
 		t.Errorf("error %q kept the head of stderr, want only the tail", msg)
 	}
 }
 
-func TestDescriptorSetsTimeout(t *testing.T) {
+func TestClosureTimeout(t *testing.T) {
 	root := t.TempDir()
 	// `sleep` in the background, not as the script's last command: a shell that
 	// execs the last command leaves nothing holding the output pipe once the
@@ -395,9 +334,9 @@ func TestDescriptorSetsTimeout(t *testing.T) {
 	binary := fakeBazel(t, "sleep 30 &\nwait\n")
 	start := time.Now()
 	_, err := Builder{Binary: binary, Root: root, Timeout: 100 * time.Millisecond}.
-		DescriptorSets(context.Background(), "//pkg:target")
+		Closure(context.Background(), "//pkg:target")
 	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want a timeout error")
+		t.Fatal("Closure succeeded, want a timeout error")
 	}
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Errorf("took %s, want the timeout to cut it off", elapsed)
@@ -407,22 +346,22 @@ func TestDescriptorSetsTimeout(t *testing.T) {
 	}
 }
 
-func TestDescriptorSetsRejectsBadLabelBeforeExec(t *testing.T) {
+func TestClosureRejectsBadLabelBeforeExec(t *testing.T) {
 	root := t.TempDir()
 	marker := filepath.Join(root, "ran")
 	binary := fakeBazel(t, "touch "+shquote(marker)+"\nexit 0\n")
 	_, err := Builder{Binary: binary, Root: root}.
-		DescriptorSets(context.Background(), "//x --output_base=/tmp")
+		Closure(context.Background(), "//x --output_base=/tmp")
 	if err == nil {
-		t.Fatal("DescriptorSets succeeded, want an invalid-label error")
+		t.Fatal("Closure succeeded, want an invalid-label error")
 	}
 	if _, statErr := os.Stat(marker); statErr == nil {
 		t.Fatal("bazel was exec'd for an invalid label")
 	}
 }
 
-func TestDescriptorSetsNeedsRoot(t *testing.T) {
-	_, err := Builder{Binary: "true"}.DescriptorSets(context.Background(), "//pkg:target")
+func TestClosureNeedsRoot(t *testing.T) {
+	_, err := Builder{Binary: "true"}.Closure(context.Background(), "//pkg:target")
 	if err == nil || !strings.Contains(err.Error(), "MODULE.bazel") {
 		t.Fatalf("err = %v, want it to explain the missing bazel root", err)
 	}
@@ -511,31 +450,6 @@ func fakeBazel(t *testing.T, body string) string {
 		t.Fatalf("write fake bazel: %v", err)
 	}
 	return path
-}
-
-func setBytes(t *testing.T, names ...string) []byte {
-	t.Helper()
-	set := &descriptorpb.FileDescriptorSet{}
-	for _, name := range names {
-		set.File = append(set.File, &descriptorpb.FileDescriptorProto{
-			Name:    proto.String(name),
-			Package: proto.String("test.v1"),
-			Syntax:  proto.String("proto3"),
-		})
-	}
-	raw, err := proto.Marshal(set)
-	if err != nil {
-		t.Fatalf("marshal FileDescriptorSet: %v", err)
-	}
-	return raw
-}
-
-func fileNames(set *descriptorpb.FileDescriptorSet) []string {
-	var out []string
-	for _, f := range set.GetFile() {
-		out = append(out, f.GetName())
-	}
-	return out
 }
 
 func write(t *testing.T, path string, data []byte) {

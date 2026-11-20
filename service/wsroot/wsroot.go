@@ -74,7 +74,7 @@ func Discover(override, cwd string) (root string, warn string, err error) {
 // ConfigDirEnv redirects every durable thing grpcview owns — the per-workspace state dirs and
 // the trust list — somewhere else. It exists for throwaway runs (CI, `//example:up --isolated`),
 // which must not write into the developer's real history. Overriding HOME instead would work
-// too, and would also relocate the output base of the `bazel build` a bazel source shells out
+// too, and would also relocate the output base of the `bazel query` a bazel source shells out
 // to, which is not the same request at all.
 const ConfigDirEnv = "GRPCVIEW_CONFIG_DIR"
 

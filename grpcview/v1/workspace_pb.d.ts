@@ -216,8 +216,8 @@ export declare const ServiceSchema: GenMessage<Service>;
  */
 export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource"> & {
   /**
-   * "reflection:<address>" (+"+tls"), "upload:<file name>" or "bazel:<//pkg:target>";
-   * adding an existing id refreshes that source in place.
+   * "reflection:<address>" (+"+tls"), "upload:<file name>", "bazel:<//pkg:target>"
+   * or "protos:<path>"; adding an existing id refreshes that source in place.
    *
    * @generated from field: string id = 3;
    */
@@ -252,6 +252,14 @@ export declare type DescriptorSource = Message$1<"grpcview.v1.DescriptorSource">
      */
     value: Bazel;
     case: "bazel";
+  } | {
+    /**
+     * .proto sources in the workspace, compiled in-process.
+     *
+     * @generated from field: grpcview.v1.Protos protos = 8;
+     */
+    value: Protos;
+    case: "protos";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -333,6 +341,35 @@ export declare type Bazel = Message$1<"grpcview.v1.Bazel"> & {
  * Use `create(BazelSchema)` to create a new message.
  */
 export declare const BazelSchema: GenMessage<Bazel>;
+
+/**
+ * .proto files compiled in-process; refreshing re-reads them from disk.
+ *
+ * @generated from message grpcview.v1.Protos
+ */
+export declare type Protos = Message$1<"grpcview.v1.Protos"> & {
+  /**
+   * Workspace-relative file or directory; a directory means every *.proto under
+   * it, recursively.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * Workspace-relative import roots (protoc -I). Empty: path itself if a
+   * directory, else its parent.
+   *
+   * @generated from field: repeated string import_paths = 2;
+   */
+  importPaths: string[];
+};
+
+/**
+ * Describes the message grpcview.v1.Protos.
+ * Use `create(ProtosSchema)` to create a new message.
+ */
+export declare const ProtosSchema: GenMessage<Protos>;
 
 /**
  * What one source last resolved to.

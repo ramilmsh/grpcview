@@ -59,6 +59,10 @@ func diskToWireSource(
 		out.Source = &grpcviewv1.DescriptorSource_Bazel{
 			Bazel: &grpcviewv1.Bazel{Label: src.Bazel.GetLabel()},
 		}
+	case *grpcviewstorev1.DescriptorSource_Protos:
+		out.Source = &grpcviewv1.DescriptorSource_Protos{
+			Protos: &grpcviewv1.Protos{Path: src.Protos.GetPath(), ImportPaths: src.Protos.GetImportPaths()},
+		}
 	}
 	return out
 }
@@ -101,6 +105,10 @@ func wireToDiskSource(
 	case *grpcviewv1.DescriptorSource_Bazel:
 		out.Source = &grpcviewstorev1.DescriptorSource_Bazel{
 			Bazel: &grpcviewstorev1.Bazel{Label: src.Bazel.GetLabel()},
+		}
+	case *grpcviewv1.DescriptorSource_Protos:
+		out.Source = &grpcviewstorev1.DescriptorSource_Protos{
+			Protos: &grpcviewstorev1.Protos{Path: src.Protos.GetPath(), ImportPaths: src.Protos.GetImportPaths()},
 		}
 	}
 	return out

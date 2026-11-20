@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
-import type { Bazel, Collection, Request_Response, Server } from "./workspace_pb";
+import type { Bazel, Collection, Protos, Request_Response, Server } from "./workspace_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -54,6 +54,15 @@ export declare type AddDescriptorSourceRequest = Message<"grpcview.v1.AddDescrip
      */
     value: Bazel;
     case: "bazel";
+  } | {
+    /**
+     * .proto sources in the workspace. Paths may be absolute or workspace-relative;
+     * stored root-relative.
+     *
+     * @generated from field: grpcview.v1.Protos protos = 9;
+     */
+    value: Protos;
+    case: "protos";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -1078,14 +1087,57 @@ export declare type DefinitionFile = Message<"grpcview.v1.DefinitionFile"> & {
 export declare const DefinitionFileSchema: GenMessage<DefinitionFile>;
 
 /**
+ * One merged proto file as .proto text.
+ *
+ * @generated from message grpcview.v1.ProtoDefinitionFile
+ */
+export declare type ProtoDefinitionFile = Message<"grpcview.v1.ProtoDefinitionFile"> & {
+  /**
+   * Import name: "grpcview/v1/service.proto".
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * .proto text.
+   *
+   * @generated from field: string content = 2;
+   */
+  content: string;
+
+  /**
+   * Id of the source that won this file.
+   *
+   * @generated from field: string source = 3;
+   */
+  source: string;
+
+  /**
+   * True: reconstructed from descriptors. False: the winning source's original text,
+   * verbatim.
+   *
+   * @generated from field: bool rendered = 4;
+   */
+  rendered: boolean;
+};
+
+/**
+ * Describes the message grpcview.v1.ProtoDefinitionFile.
+ * Use `create(ProtoDefinitionFileSchema)` to create a new message.
+ */
+export declare const ProtoDefinitionFileSchema: GenMessage<ProtoDefinitionFile>;
+
+/**
  * A collection's merged definitions, generated.
  *
  * @generated from message grpcview.v1.GetDefinitionsResponse
  */
 export declare type GetDefinitionsResponse = Message<"grpcview.v1.GetDefinitionsResponse"> & {
   /**
-   * Hex sha256 over the generator, merged descriptor set, per-file winning sources
-   * and builtin stubs; changes iff the files do. Equals Collection.definitions_digest.
+   * Hex sha256 over the generator, merged descriptor set, per-file winning sources,
+   * original .proto texts and builtin stubs; changes iff `files` or `protos` do.
+   * Equals Collection.definitions_digest.
    *
    * @generated from field: string digest = 1;
    */
@@ -1098,6 +1150,14 @@ export declare type GetDefinitionsResponse = Message<"grpcview.v1.GetDefinitions
    * @generated from field: repeated grpcview.v1.DefinitionFile files = 2;
    */
   files: DefinitionFile[];
+
+  /**
+   * One per merged proto file, google/protobuf/* excepted, sorted by path. Kept apart
+   * from `files`, which feeds Monaco's TypeScript.
+   *
+   * @generated from field: repeated grpcview.v1.ProtoDefinitionFile protos = 3;
+   */
+  protos: ProtoDefinitionFile[];
 };
 
 /**

@@ -20,12 +20,24 @@ import (
 // SYMLINK escape, which the two textual checks miss. root itself is resolved first, so a workspace
 // reached through a symlink is legal.
 func resolveWorkspaceFile(root, p string) (real string, rel string, err error) {
+	real, rel, isDir, err := resolveWorkspacePath(root, p)
+	if err != nil {
+		return "", "", err
+	}
+	if isDir {
+		return "", "", fmt.Errorf("%q is a directory, not a descriptor set", p)
+	}
+	return real, rel, nil
+}
+
+// resolveWorkspaceFile, for a file or a directory.
+func resolveWorkspacePath(root, p string) (real string, rel string, isDir bool, err error) {
 	if strings.TrimSpace(p) == "" {
-		return "", "", fmt.Errorf("empty path")
+		return "", "", false, fmt.Errorf("empty path")
 	}
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to resolve workspace root %q: %w", root, err)
+		return "", "", false, fmt.Errorf("failed to resolve workspace root %q: %w", root, err)
 	}
 	absRoot = filepath.Clean(absRoot)
 
@@ -37,30 +49,26 @@ func resolveWorkspaceFile(root, p string) (real string, rel string, err error) {
 
 	rel, err = containedIn(absRoot, abs)
 	if err != nil {
-		return "", "", fmt.Errorf("%q is outside the workspace %s: a descriptor set has to live in the workspace", p, absRoot)
+		return "", "", false, fmt.Errorf("%q is outside the workspace %s: sources have to live in the workspace", p, absRoot)
 	}
 
 	realRoot, err := filepath.EvalSymlinks(absRoot)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to resolve workspace root %q: %w", absRoot, err)
+		return "", "", false, fmt.Errorf("failed to resolve workspace root %q: %w", absRoot, err)
 	}
 	realPath, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		return "", "", fmt.Errorf("cannot read %q: %w", p, err)
+		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
 	}
 	if _, err := containedIn(realRoot, realPath); err != nil {
-		return "", "", fmt.Errorf("%q resolves through a symlink to %s, outside the workspace %s", p, realPath, absRoot)
+		return "", "", false, fmt.Errorf("%q resolves through a symlink to %s, outside the workspace %s", p, realPath, absRoot)
 	}
 
 	info, err := os.Stat(realPath)
 	if err != nil {
-		return "", "", fmt.Errorf("cannot read %q: %w", p, err)
+		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
 	}
-	if info.IsDir() {
-		return "", "", fmt.Errorf("%q is a directory, not a descriptor set", p)
-	}
-
-	return realPath, filepath.ToSlash(rel), nil
+	return realPath, filepath.ToSlash(rel), info.IsDir(), nil
 }
 
 // The weaker cousin of resolveWorkspaceFile, for the one input that legitimately sits ABOVE root

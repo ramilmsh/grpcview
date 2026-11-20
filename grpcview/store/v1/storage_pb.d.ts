@@ -274,7 +274,8 @@ export declare const ItemMetaSchema: GenMessage<ItemMeta>;
  */
 export declare type DescriptorSource = Message<"grpcview.store.v1.DescriptorSource"> & {
   /**
-   * "upload:<file name>", "reflection:<address>[+tls]" or "bazel:<//pkg:target>".
+   * "upload:<file name>", "reflection:<address>[+tls]", "bazel:<//pkg:target>" or
+   * "protos:<path>".
    *
    * @generated from field: string id = 3;
    */
@@ -309,6 +310,14 @@ export declare type DescriptorSource = Message<"grpcview.store.v1.DescriptorSour
      */
     value: Bazel;
     case: "bazel";
+  } | {
+    /**
+     * .proto sources in the workspace, compiled in-process.
+     *
+     * @generated from field: grpcview.store.v1.Protos protos = 6;
+     */
+    value: Protos;
+    case: "protos";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -376,6 +385,80 @@ export declare type Bazel = Message<"grpcview.store.v1.Bazel"> & {
 export declare const BazelSchema: GenMessage<Bazel>;
 
 /**
+ * .proto sources compiled in-process. Paths are workspace-relative.
+ *
+ * @generated from message grpcview.store.v1.Protos
+ */
+export declare type Protos = Message<"grpcview.store.v1.Protos"> & {
+  /**
+   * File or directory; a directory means every *.proto under it, recursively.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * Import roots; empty means path itself if a directory, else its parent.
+   *
+   * @generated from field: repeated string import_paths = 2;
+   */
+  importPaths: string[];
+};
+
+/**
+ * Describes the message grpcview.store.v1.Protos.
+ * Use `create(ProtosSchema)` to create a new message.
+ */
+export declare const ProtosSchema: GenMessage<Protos>;
+
+/**
+ * One .proto file's original text.
+ *
+ * @generated from message grpcview.store.v1.ProtoFile
+ */
+export declare type ProtoFile = Message<"grpcview.store.v1.ProtoFile"> & {
+  /**
+   * Import name, e.g. "pkg/v1/x.proto".
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * Exact file text.
+   *
+   * @generated from field: string content = 2;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message grpcview.store.v1.ProtoFile.
+ * Use `create(ProtoFileSchema)` to create a new message.
+ */
+export declare const ProtoFileSchema: GenMessage<ProtoFile>;
+
+/**
+ * An originals blob: the .proto texts a source compiled from.
+ *
+ * @generated from message grpcview.store.v1.ProtoFiles
+ */
+export declare type ProtoFiles = Message<"grpcview.store.v1.ProtoFiles"> & {
+  /**
+   * Sorted by path.
+   *
+   * @generated from field: repeated grpcview.store.v1.ProtoFile files = 1;
+   */
+  files: ProtoFile[];
+};
+
+/**
+ * Describes the message grpcview.store.v1.ProtoFiles.
+ * Use `create(ProtoFilesSchema)` to create a new message.
+ */
+export declare const ProtoFilesSchema: GenMessage<ProtoFiles>;
+
+/**
  * descriptors.json in a collection's state directory: LOCAL STATE, the
  * `id -> digest` half of the descriptor store. Covers exactly the sources whose
  * descriptors are NOT committed. The other half is the content-addressed blob
@@ -434,6 +517,13 @@ export declare type DescriptorIndexEntry = Message<"grpcview.store.v1.Descriptor
    * @generated from field: repeated string service_names = 3;
    */
   serviceNames: string[];
+
+  /**
+   * sha256 hex of the ProtoFiles blob holding the originals; empty when none.
+   *
+   * @generated from field: string originals_digest = 4;
+   */
+  originalsDigest: string;
 };
 
 /**
@@ -472,6 +562,13 @@ export declare type ResolvedSource = Message<"grpcview.store.v1.ResolvedSource">
    * @generated from field: repeated string service_names = 3;
    */
   serviceNames: string[];
+
+  /**
+   * Original .proto texts, sorted by path; only a Protos source has them.
+   *
+   * @generated from field: repeated grpcview.store.v1.ProtoFile originals = 4;
+   */
+  originals: ProtoFile[];
 };
 
 /**

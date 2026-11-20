@@ -79,8 +79,8 @@ enum SourceOrigin {
 
 // Priority-ordered: the first source to define a file, or serve a service, wins.
 message DescriptorSource {
-  // "reflection:<address>" (+"+tls"), "upload:<file name>" or "bazel:<//pkg:target>";
-  // adding an existing id refreshes that source in place.
+  // "reflection:<address>" (+"+tls"), "upload:<file name>", "bazel:<//pkg:target>"
+  // or "protos:<path>"; adding an existing id refreshes that source in place.
   string id = 3;
 
   // Which kind of source this is.
@@ -91,6 +91,8 @@ message DescriptorSource {
     Server reflection = 2;
     // A Bazel label that builds its own descriptor set.
     Bazel  bazel      = 7;
+    // .proto sources in the workspace, compiled in-process.
+    Protos protos     = 8;
   }
 
   // What this source last resolved to; unset before the first resolve.
@@ -120,6 +122,16 @@ message Upload {
 message Bazel {
   // Canonical label, e.g. "//pkg:target".
   string label = 1;
+}
+
+// .proto files compiled in-process; refreshing re-reads them from disk.
+message Protos {
+  // Workspace-relative file or directory; a directory means every *.proto under
+  // it, recursively.
+  string          path         = 1;
+  // Workspace-relative import roots (protoc -I). Empty: path itself if a
+  // directory, else its parent.
+  repeated string import_paths = 2;
 }
 
 // What one source last resolved to.
