@@ -1,7 +1,8 @@
-load("@aspect_bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
-load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_files")
-load("@aspect_rules_js//js:defs.bzl", "js_test")
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_run_binary")
 load("@protobuf//bazel:proto_descriptor_set.bzl", "proto_descriptor_set")
+
+package(default_visibility = ["//service/scripting/codegen:__pkg__"])
 
 # example/'s merged set: its bazel source wins every file its reflection source also serves.
 proto_descriptor_set(
@@ -19,42 +20,37 @@ proto_descriptor_set(
     ],
 )
 
-# bazel run //service/scripting/codegen/testdata:update
-write_source_files(
-    name = "update",
-    files = {
-        "all.binpb": ":all_fds",
-        "example.binpb": ":example_fds",
-    },
-)
+[copy_file(
+    name = set + "_binpb",
+    src = ":%s_fds" % set,
+    out = set + ".binpb",
+) for set in ("example", "all")]
 
-# *.golden.json: UPDATE_GOLDEN=1 bazel run :golden_test
-FILES = [
-    "all.binpb",
-    "all.golden.json",
-    "example.binpb",
-    "example.golden.json",
-]
-
-exports_files(
-    FILES,
-    visibility = ["//visibility:public"],
-)
-
-# js_test data must live in bin.
-copy_to_bin(
-    name = "testdata",
-    srcs = FILES,
-    visibility = ["//visibility:public"],
-)
-
-# Node protoc-gen-es, independent of QuickJS: the golden codegen.Pool must match.
-js_test(
-    name = "golden_test",
+js_binary(
+    name = "golden",
     data = [
-        ":testdata",
         "//:node_modules/@bufbuild/protobuf",
         "//:node_modules/@bufbuild/protoc-gen-es",
     ],
-    entry_point = "golden.test.cjs",
+    entry_point = "golden.cjs",
+)
+
+# Node protoc-gen-es, independent of QuickJS: the golden codegen.Pool must match.
+js_run_binary(
+    name = "golden_json",
+    srcs = [
+        "all.binpb",
+        "example.binpb",
+    ],
+    outs = [
+        "all.golden.json",
+        "example.golden.json",
+    ],
+    args = [
+        "$(rootpath example.binpb)",
+        "$(rootpath example.golden.json)",
+        "$(rootpath all.binpb)",
+        "$(rootpath all.golden.json)",
+    ],
+    tool = ":golden",
 )

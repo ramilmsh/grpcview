@@ -1,9 +1,7 @@
 // Golden for service/scripting/codegen: real protoc-gen-es under node, which codegen.Pool (the
-// same plugin under QuickJS) must reproduce byte-for-byte. Regenerate:
-//   UPDATE_GOLDEN=1 bazel run //service/scripting/codegen/testdata:golden_test
-const assert = require("node:assert/strict");
+// same plugin under QuickJS) must reproduce byte-for-byte. Built by :golden_json.
+// Usage: golden.cjs <in.binpb> <out.json> [<in.binpb> <out.json>...]
 const { readFileSync, writeFileSync } = require("node:fs");
-const { join } = require("node:path");
 // Deep CJS path: the package ships no `exports`/`main`.
 const {
   protocGenEs,
@@ -30,18 +28,12 @@ function generate(set) {
   return files;
 }
 
-const ws = process.env.BUILD_WORKSPACE_DIRECTORY;
-for (const set of ["example", "all"]) {
-  const files = generate(new Uint8Array(readFileSync(join(__dirname, `${set}.binpb`))));
+const argv = process.argv.slice(2);
+if (argv.length === 0 || argv.length % 2) throw new Error("usage: golden.cjs (<in> <out>)...");
+for (let i = 0; i < argv.length; i += 2) {
+  const files = generate(new Uint8Array(readFileSync(argv[i])));
   const sorted = Object.fromEntries(
     Object.entries(files).sort(([a], [b]) => (a < b ? -1 : 1)),
   );
-  const got = JSON.stringify(sorted, null, 2) + "\n";
-  const golden = `${set}.golden.json`;
-  if (process.env.UPDATE_GOLDEN && ws) {
-    writeFileSync(join(ws, "service/scripting/codegen/testdata", golden), got);
-    console.log(`wrote ${golden}`);
-    continue;
-  }
-  assert.equal(got, readFileSync(join(__dirname, golden), "utf8"), `${golden} is stale`);
+  writeFileSync(argv[i + 1], JSON.stringify(sorted, null, 2) + "\n");
 }

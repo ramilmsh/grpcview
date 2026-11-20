@@ -1,4 +1,4 @@
-// protoc-gen-es under QuickJS; codegen/testdata/golden.test.cjs is its node twin. Bundled once
+// protoc-gen-es under QuickJS; codegen/testdata/golden.cjs is its node twin. Bundled once
 // per worker (see codegen_bundle.go) into a standalone
 // IIFE that defines a global the Go side calls once per generate job.
 import { protocGenEs } from "@bufbuild/protoc-gen-es/dist/cjs/src/protoc-gen-es-plugin.js";

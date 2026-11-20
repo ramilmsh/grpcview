@@ -149,7 +149,7 @@ func readTestdata(t testing.TB, name string) []byte {
 	return b
 }
 
-// Pool output must be byte-identical to node protoc-gen-es (testdata/golden.test.cjs).
+// Pool output must be byte-identical to node protoc-gen-es (testdata/golden.cjs).
 func TestGenerateMatchesBrowserGolden(t *testing.T) {
 	p := newTestPool(t, 1)
 	for _, set := range []string{"example", "all"} {

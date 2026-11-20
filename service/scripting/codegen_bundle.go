@@ -140,7 +140,7 @@ func codegenInputsHash(registry fs.FS, root, polyfill string, patches map[string
 // Eval'ing CodegenCallScript.
 const CodegenInputGlobal = "__grpcview_codegen_input"
 
-// CodegenParameter is the protoc-gen-es plugin parameter, matching codegen/testdata/golden.test.cjs.
+// CodegenParameter is the protoc-gen-es plugin parameter, matching codegen/testdata/golden.cjs.
 const CodegenParameter = "target=ts,json_types=true"
 
 // CodegenCallScript invokes the bundle's entry point on CodegenInputGlobal, generating

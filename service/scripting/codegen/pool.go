@@ -1,6 +1,6 @@
 // Package codegen runs @bufbuild/protoc-gen-es (vendored under service/scripting/npm, bundled
 // with esbuild, executed in QuickJS-WASM) against a FileDescriptorSet, producing exactly what
-// node protoc-gen-es does (testdata/golden.test.cjs).
+// node protoc-gen-es does (testdata/golden.cjs).
 //
 // A Pool holds N warm workers, each a long-lived QuickJS Instance with the bundle already
 // Eval'd once, amortizing bundle-eval (the dominant cost of a cold run) across every job.
