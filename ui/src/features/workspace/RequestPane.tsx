@@ -98,7 +98,10 @@ export function RequestPane({
           <MessagesTab
             messages={messages}
             onChange={onMessagesChange}
+            currentKey={currentKey}
             inputTypeName={inputTypeName}
+            inputPackage={inputPackage}
+            inputFile={inputFile}
           />
         ) : (
           <MessageTab
