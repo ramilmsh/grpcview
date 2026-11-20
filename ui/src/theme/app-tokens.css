@@ -351,3 +351,11 @@ input.bare::placeholder { color: var(--v-text-muted); }
   font-size: 12px; cursor: pointer;
 }
 .msgchip-add:hover { background: var(--v-hover); color: var(--v-text); }
+
+/* top bar: the collection's reflection source; opens Definition sources */
+.reflbtn {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px;
+  border: none; border-radius: var(--v-r); background: transparent; color: var(--v-text-2);
+  font: inherit; font-size: 13px; cursor: pointer; transition: background-color 120ms ease;
+}
+.reflbtn:hover { background: var(--v-hover); }

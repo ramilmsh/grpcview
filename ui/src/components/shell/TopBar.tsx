@@ -4,6 +4,7 @@ import {
   CaretDown,
   MagnifyingGlass,
   Gear,
+  Stack,
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
@@ -22,6 +23,7 @@ export function TopBar() {
   const { collection, workspace, reflection, sources } = useActiveWorkspace();
   const { collections } = useCollections();
   const setActiveCollection = useUIStore((s) => s.setActiveCollection);
+  const setView = useUIStore((s) => s.setView);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -131,29 +133,40 @@ export function TopBar() {
           Search
           <Kbd>⌘K</Kbd>
         </button>
-        <span
-          className="flex items-center gap-[8px] font-mono"
-          style={{ fontSize: 13, color: "var(--v-text-2)" }}
+        {/* Where this collection's services are reflected from, and the default invoke
+            target. Not a live health check — so no status dot; the Sources icon instead. */}
+        <button
+          type="button"
+          className="reflbtn"
+          onClick={() => setView("sources")}
           title={
-            connected
-              ? `Reflection source: ${hostLabel(reflection)}`
-              : sources.length > 0
-                ? `${sourceCount}, none reflective — requests need a target of their own`
-                : "No definition source added yet"
+            sources.length === 0
+              ? "No definition source yet. Click to add one."
+              : `${sourceCount} — where this collection's services and methods are loaded from.\n` +
+                (connected
+                  ? `Reflection: ${hostLabel(reflection)} — also where requests are sent unless they set their own target.`
+                  : "None is a reflection server — requests need a target of their own.") +
+                "\nClick to manage definition sources."
           }
         >
-          <span
-            className="dot"
-            style={{
-              background: connected ? "var(--v-ok)" : "var(--v-text-muted)",
-            }}
-          />
-          {connected
-            ? hostLabel(reflection)
-            : sources.length > 0
-              ? sourceCount
-              : "no source"}
-        </span>
+          <Stack size={15} />
+          {sources.length === 0 ? (
+            <span>No sources</span>
+          ) : (
+            <>
+              <span style={{ color: "var(--v-text)" }}>{sourceCount}</span>
+              <span style={{ color: "var(--v-text-muted)" }}>·</span>
+              <span style={{ color: "var(--v-text-muted)" }}>
+                {connected ? "reflection" : "no reflection"}
+              </span>
+              {connected && (
+                <span className="font-mono" style={{ color: "var(--v-text)" }}>
+                  {hostLabel(reflection)}
+                </span>
+              )}
+            </>
+          )}
+        </button>
         <IconButton title="Settings — not available in Phase 1" disabled>
           <Gear />
         </IconButton>
