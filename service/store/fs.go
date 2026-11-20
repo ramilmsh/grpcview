@@ -858,7 +858,7 @@ func (c *Collection) readCollection() (*grpcviewstorev1.Collection, error) {
 	if err := readMessage(c.collectionFilePath(), col); err != nil {
 		return nil, err
 	}
-	col.Sources = normalizeSources(col.GetSources(), c.logger)
+	col.Sources = normalizeSources(col.GetSources(), c.store.root, c.logger)
 	return col, nil
 }
 

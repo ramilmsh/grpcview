@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
@@ -56,27 +57,56 @@ func bazelSourceID(label string) string { return "bazel:" + label }
 
 func protosSourceID(path string) string { return "protos:" + path }
 
-// Rewrites a manifest-authored label IN PLACE so the next write persists it, and runs everywhere an id
-// is derived from disk — the OTHER door a label comes through. `sources add` canonicalizes before
-// deriving an id; a hand-written grpcview.json does not, and "bazel://pkg" vs "bazel://pkg:pkg" would
-// be one target as two sources. A label that will not canonicalize keeps its raw spelling, so the row
-// stays visible with its resolve error on it.
-func canonicalizeBazelLabel(ds *grpcviewstorev1.DescriptorSource, logger *slog.Logger) {
-	bazel, ok := ds.GetSource().(*grpcviewstorev1.DescriptorSource_Bazel)
-	if !ok || bazel.Bazel.GetLabel() == "" {
-		return
+// Rewrites manifest-authored config IN PLACE so the next write persists it, and runs everywhere an id
+// is derived from disk — the OTHER door config comes through. `sources add` canonicalizes before
+// deriving an id; a hand-written grpcview.json does not, so "bazel://pkg" vs "bazel://pkg:pkg", or
+// "./api" vs "api", would be one thing as two sources. What will not canonicalize keeps its raw
+// spelling, so the row stays visible with its resolve error on it.
+func canonicalizeSource(ds *grpcviewstorev1.DescriptorSource, root string, logger *slog.Logger) {
+	switch s := ds.GetSource().(type) {
+	case *grpcviewstorev1.DescriptorSource_Bazel:
+		if s.Bazel.GetLabel() == "" {
+			return
+		}
+		canon, err := bazelbuild.CanonicalLabel(s.Bazel.GetLabel())
+		if err != nil {
+			logger.Warn("keeping a bazel label that will not canonicalize as it stands",
+				"label", s.Bazel.GetLabel(), "error", err)
+			return
+		}
+		s.Bazel.Label = canon
+	case *grpcviewstorev1.DescriptorSource_Protos:
+		s.Protos.Path = canonicalProtosPath(root, s.Protos.GetPath())
+		for i, ip := range s.Protos.GetImportPaths() {
+			s.Protos.ImportPaths[i] = canonicalProtosPath(root, ip)
+		}
 	}
-	canon, err := bazelbuild.CanonicalLabel(bazel.Bazel.GetLabel())
+}
+
+// The root-relative, cleaned, slash-separated spelling `sources add` records. Lexical only: symlinks
+// are resolve-time confinement's business. A path outside root stays as authored.
+func canonicalProtosPath(root, p string) string {
+	if p == "" {
+		return p
+	}
+	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		logger.Warn("keeping a bazel label that will not canonicalize as it stands",
-			"label", bazel.Bazel.GetLabel(), "error", err)
-		return
+		return p
 	}
-	bazel.Bazel.Label = canon
+	abs := filepath.FromSlash(p)
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(absRoot, abs)
+	}
+	rel, err := filepath.Rel(absRoot, filepath.Clean(abs))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return p
+	}
+	return filepath.ToSlash(rel)
 }
 
 func normalizeSources(
 	in []*grpcviewstorev1.DescriptorSource,
+	root string,
 	logger *slog.Logger,
 ) []*grpcviewstorev1.DescriptorSource {
 	if len(in) == 0 {
@@ -85,7 +115,7 @@ func normalizeSources(
 	out := make([]*grpcviewstorev1.DescriptorSource, 0, len(in))
 	seen := make(map[string]bool, len(in))
 	for _, ds := range in {
-		canonicalizeBazelLabel(ds, logger)
+		canonicalizeSource(ds, root, logger)
 		if ds.GetId() == "" {
 			ds.Id = diskSourceID(ds)
 		}
@@ -134,7 +164,7 @@ func (s *Store) workspaceDefinitions() (map[string]*grpcviewstorev1.DescriptorSo
 func (s *Store) definitionSet(in []*grpcviewstorev1.DescriptorSource) map[string]*grpcviewstorev1.DescriptorSource {
 	defs := make(map[string]*grpcviewstorev1.DescriptorSource, len(in))
 	for _, ds := range in {
-		canonicalizeBazelLabel(ds, s.logger)
+		canonicalizeSource(ds, s.root, s.logger)
 		if ds.GetId() == "" {
 			ds.Id = diskSourceID(ds)
 		}

@@ -74,6 +74,19 @@ const bazel = (
     ...over,
   }) as unknown as DescriptorSource;
 
+const protos = (
+  path: string,
+  over: Partial<DescriptorSource> = {},
+): DescriptorSource =>
+  ({
+    id: `protos:${path}`,
+    source: { case: "protos", value: { path, importPaths: [] } },
+    resolved: resolved(5, ["fixture.Greeter"]),
+    origin: SourceOrigin.COLLECTION,
+    commitDescriptors: false,
+    ...over,
+  }) as unknown as DescriptorSource;
+
 // A WORKSPACE-origin entry with no oneof arm: the manifest no longer defines the id.
 const danglingReference = (id: string): DescriptorSource =>
   ({
@@ -203,6 +216,26 @@ describe("a bazel row", () => {
     );
     expect(markup).toContain("shared");
     expect(markup).toContain(">bazel<");
+  });
+});
+
+// Same regression as bazel: with no protos arm, a protos source fell through to "reference".
+describe("a protos row", () => {
+  it("claims the protos kind and names the source by its path", () => {
+    expect(sourceKind(protos("api"))).toBe("protos");
+    expect(sourceLabel(protos("api"))).toBe("api");
+    const markup = row(protos("api"));
+    expect(markup).toContain(">protos<");
+    expect(markup).toContain("5 files, 1 service");
+    expect(markup).not.toContain(NO_DEFINITION_LABEL);
+    expect(markup).not.toContain("var(--v-warn)");
+  });
+
+  it("offers to recompile from its path, with no trust gate", () => {
+    expect(refreshTitle(protos("api"))).toBe(
+      "Re-read and recompile the .proto files at api",
+    );
+    expect(row(protos("api"))).not.toContain("until the workspace is trusted");
   });
 });
 

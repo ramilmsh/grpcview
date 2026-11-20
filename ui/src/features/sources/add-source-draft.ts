@@ -4,7 +4,8 @@ import type { SourceKind } from "./source-row";
 // what the priority select offers. Kept apart from the component so it is testable without a
 // transport (the card calls a connect-query hook).
 
-export type DraftKind = Exclude<SourceKind, "reference">;
+// No protos draft: a .proto path is added from the CLI or MCP for now.
+export type DraftKind = Exclude<SourceKind, "reference" | "protos">;
 
 export const DRAFT_KINDS: readonly DraftKind[] = [
   "reflection",
