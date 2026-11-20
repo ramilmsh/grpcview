@@ -90,8 +90,6 @@
 }
 .treerow:hover { background: var(--v-hover); color: var(--v-text); }
 .treerow.on { background: var(--v-accent-tint); color: var(--v-text); font-weight: 500; box-shadow: var(--v-selected); }
-/* inactive rows mute their method badge */
-.treerow:not(.on) .mtag { opacity: .55; }
 .rowmeta { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--v-text-2); }
 .rowbtns { display: none; align-items: center; gap: 1px; margin-left: auto; }
 .treerow:hover > .rowbtns { display: flex; }
@@ -107,8 +105,9 @@
 /* selection (.sel), open tab (.on) and focus (.foc) combine; .foc adds an accent ring */
 .treerow.sel { background: var(--v-hover); color: var(--v-text); }
 .treerow.on.sel { background: var(--v-accent-tint); }
-.treerow.foc { box-shadow: inset 0 0 0 1px var(--v-accent); }
-.treerow.on.foc { box-shadow: var(--v-selected), inset 0 0 0 1px var(--v-accent); }
+/* the keyboard cursor only shows while the tree holds focus */
+.tree:focus .treerow.foc { box-shadow: inset 0 0 0 1px var(--v-accent); }
+.tree:focus .treerow.on.foc { box-shadow: var(--v-selected), inset 0 0 0 1px var(--v-accent); }
 
 /* indent guides: one 1px rule per ancestor level, `left` inline (tree/geometry.ts); continuous only while rows stack with no vertical gap */
 .guide {
@@ -153,17 +152,30 @@
 .tagbtn:disabled { cursor: default; }
 
 /* method-kind tag */
+/* Text on a 10% tint of the kind color, never opacity-dimmed. Text color is picked per
+   surface so each tag holds >= 4.5:1 on its tint-over-surface background:
+   panel (#161924) by default, sidebar (#10121A) for resting tree rows, raised for
+   popovers and hover/selected rows (worst case: picked row in the method picker). */
+:root {
+  --mt-u: #5892D9; --mt-ss: #9680DA; --mt-cs: #D469A3; --mt-bd: #2FB686;
+}
+.treerow, .tab.on, .tab:hover {
+  --mt-u: #79A7E0; --mt-ss: #AB99E1; --mt-cs: #DC88B5; --mt-bd: #3ABA8D;
+}
+.tree .treerow:not(:hover, .on, .sel, .dropinto) {
+  --mt-u: #548FD8; --mt-ss: #9079D8; --mt-cs: #D2649F; --mt-bd: #2FB686;
+}
 .mtag {
-  font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .02em;
-  min-width: 20px; height: 16px; padding: 0 3px; border-radius: var(--v-r-badge); flex: none;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  min-width: 22px; height: 18px; padding: 0 4px; border-radius: 6px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.mt-u { background: var(--v-method-unary-bg); color: var(--v-method-unary); }
-.mt-ss { background: var(--v-method-server-streaming-bg); color: var(--v-method-server-streaming); }
-.mt-cs { background: var(--v-method-client-streaming-bg); color: var(--v-method-client-streaming); }
-.mt-bd { background: var(--v-method-bidi-streaming-bg); color: var(--v-method-bidi-streaming); }
+.mt-u { color: var(--mt-u); background: rgba(96, 165, 250, 0.10); }
+.mt-ss { color: var(--mt-ss); background: rgba(167, 139, 250, 0.10); }
+.mt-cs { color: var(--mt-cs); background: rgba(244, 114, 182, 0.10); }
+.mt-bd { color: var(--mt-bd); background: rgba(52, 211, 153, 0.10); }
 /* no method chosen yet (a draft); the dashed border takes the padding's place, same box */
-.mt-none { background: transparent; color: var(--v-text-2); border: 1px dashed var(--v-text-muted); padding: 0 2px; }
+.mt-none { background: transparent; color: var(--v-text-2); border: 1px dashed var(--v-text-muted); padding: 0 3px; }
 
 /* small square icon buttons */
 .iconbtn {
@@ -316,3 +328,86 @@ input.bare::placeholder { color: var(--v-text-muted); }
   overflow: hidden; text-overflow: ellipsis;
 }
 .combo-note { padding: 6px 9px; font-size: 12px; color: var(--v-text-2); }
+
+/* client-stream / bidi message switcher (MessagesTab): hover only on the controls */
+.msgchip {
+  display: inline-flex; align-items: center; height: 26px; flex: none;
+  border-radius: var(--v-r-badge); color: var(--v-text-2);
+}
+.msgchip.on { background: var(--v-accent-tint); color: var(--v-text); box-shadow: var(--v-selected); }
+.msgchip-label {
+  height: 26px; padding: 0 10px; border: none; background: transparent; color: inherit;
+  font-family: var(--mono); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: var(--v-r-badge);
+}
+.msgchip:not(.on) .msgchip-label:hover { background: var(--v-hover); color: var(--v-text); }
+.msgchip-x {
+  width: 18px; height: 18px; margin: 0 4px 0 -4px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px; background: transparent; color: var(--v-text-2); cursor: pointer;
+}
+.msgchip-x:hover { background: var(--v-err-bg); color: var(--v-err); }
+.msgchip-add {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; flex: none;
+  border: none; border-radius: var(--v-r-badge); background: transparent; color: var(--v-text-2);
+  font-size: 12px; cursor: pointer;
+}
+.msgchip-add:hover { background: var(--v-hover); color: var(--v-text); }
+
+/* top bar: the collection's reflection source; opens Definition sources */
+.reflbtn {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px;
+  border: none; border-radius: var(--v-r); background: transparent; color: var(--v-text-2);
+  font: inherit; font-size: 13px; cursor: pointer; transition: background-color 120ms ease;
+}
+.reflbtn:hover { background: var(--v-hover); }
+
+/* top bar: definition-sources dropdown (features/sources/SourcesPopover.tsx). Rows stay
+   static; only its buttons react. */
+.srcpop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; outline: none;
+  width: 420px; max-width: calc(100vw - 32px); max-height: calc(100vh - 80px); overflow-y: auto;
+  display: flex; flex-direction: column; padding: 8px;
+  border-radius: var(--v-r-panel); background: var(--v-raised); box-shadow: var(--v-popover);
+}
+.srcpop-caps {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--v-text-2);
+}
+.srcpop-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px;
+  border: none; border-radius: var(--v-r); background: transparent; color: var(--v-text-2);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.srcpop-btn:hover:not(:disabled) { background: var(--v-hover); color: var(--v-text); }
+.srcpop-btn:active:not(:disabled) { box-shadow: var(--v-btn-press); }
+.srcpop-btn:disabled { color: var(--v-text-muted); cursor: default; }
+.srcpop-err {
+  display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--v-warn);
+}
+.srcpop-err .srcpop-btn { height: 24px; font-size: 12px; }
+.srcpop-log {
+  margin: 4px 0 2px; padding: 8px 10px; max-height: 180px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* TargetBar TLS switch: lock + "TLS" + toggle; off = grey, on = green lock, white label, indigo track */
+.tlsswitch {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 4px 0 8px;
+  border: none; border-radius: var(--v-r-badge); background: transparent; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--v-text-2);
+}
+.tlsswitch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--v-accent); }
+.tlsswitch-lock { color: var(--v-text-2); }
+.tlsswitch.on .tlsswitch-lock { color: var(--v-ok); }
+.tlsswitch.on .tlsswitch-label { color: var(--v-text); }
+.tlsswitch-track {
+  position: relative; width: 28px; height: 16px; border-radius: 8px; flex: none;
+  background: var(--v-hover); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  transition: background-color 140ms ease;
+}
+.tlsswitch.on .tlsswitch-track { background: var(--v-accent-strong); }
+.tlsswitch-knob {
+  position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--v-text-2); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+.tlsswitch.on .tlsswitch-knob { transform: translateX(12px); background: #fff; }

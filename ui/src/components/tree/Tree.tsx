@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useId,
   useImperativeHandle,
   useRef,
@@ -143,6 +144,16 @@ export function Tree<T>(props: TreeProps<T>): ReactNode {
   } = useTreeState(props);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
+
+  // The open tab is the selection: switching tabs elsewhere moves selection and focus
+  // here too, so the tree never shows a stale row beside the active one.
+  useEffect(() => {
+    if (activeId === null) return;
+    setSelection(replaceSelection(activeId));
+    setFocused(activeId);
+    setAnchor(activeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on a tab switch
+  }, [activeId]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const rowEls = useRef<Map<string, HTMLDivElement>>(new Map());

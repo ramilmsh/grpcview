@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Broadcast,
   CaretDown,
   MagnifyingGlass,
   Gear,
+  Stack,
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
@@ -17,11 +18,24 @@ import { useUIStore } from "@/lib/ui-store";
 import { collectionSwitcherItems } from "@/features/workspace/collection-switcher";
 import { NewCollectionDialog } from "@/features/workspace/NewCollectionDialog";
 import { RenameCollectionDialog } from "@/features/workspace/RenameCollectionDialog";
+import { SourcesPopover } from "@/features/sources/SourcesPopover";
 
 export function TopBar() {
   const { collection, workspace, reflection, sources } = useActiveWorkspace();
   const { collections } = useCollections();
   const setActiveCollection = useUIStore((s) => s.setActiveCollection);
+  // The definition-sources dropdown, hung right-aligned under its trigger.
+  const [srcOpen, setSrcOpen] = useState(false);
+  const srcWrapRef = useRef<HTMLDivElement>(null);
+  const srcTriggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!srcOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!srcWrapRef.current?.contains(e.target as Node)) setSrcOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [srcOpen]);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -131,29 +145,60 @@ export function TopBar() {
           Search
           <Kbd>⌘K</Kbd>
         </button>
-        <span
-          className="flex items-center gap-[8px] font-mono"
-          style={{ fontSize: 13, color: "var(--v-text-2)" }}
-          title={
-            connected
-              ? `Reflection source: ${hostLabel(reflection)}`
-              : sources.length > 0
-                ? `${sourceCount}, none reflective — requests need a target of their own`
-                : "No definition source added yet"
-          }
+        {/* Where this collection's services are reflected from, and the default invoke
+            target. Not a live health check — so no status dot; the Sources icon instead. */}
+        <div
+          ref={srcWrapRef}
+          style={{ position: "relative" }}
+          onKeyDown={(e) => {
+            if (e.key !== "Escape" || !srcOpen) return;
+            e.stopPropagation();
+            setSrcOpen(false);
+            srcTriggerRef.current?.focus();
+          }}
         >
-          <span
-            className="dot"
-            style={{
-              background: connected ? "var(--v-ok)" : "var(--v-text-muted)",
-            }}
-          />
-          {connected
-            ? hostLabel(reflection)
-            : sources.length > 0
-              ? sourceCount
-              : "no source"}
-        </span>
+          <button
+            ref={srcTriggerRef}
+            type="button"
+            className="reflbtn"
+            aria-haspopup="dialog"
+            aria-expanded={srcOpen}
+            onClick={() => setSrcOpen((o) => !o)}
+            title={
+              srcOpen
+                ? undefined
+                : sources.length === 0
+                  ? "No definition source yet. Click to add one."
+                  : `${sourceCount} — where this collection's services and methods are loaded from.\n` +
+                    (connected
+                      ? `Reflection: ${hostLabel(reflection)} — also where requests are sent unless they set their own target.`
+                      : "None is a reflection server — requests need a target of their own.") +
+                    "\nClick to see and refresh definition sources."
+            }
+          >
+            <Stack size={15} />
+            {sources.length === 0 ? (
+              <span>No sources</span>
+            ) : (
+              <>
+                <span style={{ color: "var(--v-text)" }}>{sourceCount}</span>
+                <span style={{ color: "var(--v-text-muted)" }}>·</span>
+                <span style={{ color: "var(--v-text-muted)" }}>
+                  {connected ? "reflection" : "no reflection"}
+                </span>
+                {connected && (
+                  <span
+                    className="font-mono"
+                    style={{ color: "var(--v-text)" }}
+                  >
+                    {hostLabel(reflection)}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+          {srcOpen && <SourcesPopover onClose={() => setSrcOpen(false)} />}
+        </div>
         <IconButton title="Settings — not available in Phase 1" disabled>
           <Gear />
         </IconButton>

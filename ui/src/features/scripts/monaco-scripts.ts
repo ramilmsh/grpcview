@@ -6,7 +6,7 @@ import type * as Monaco from "monaco-editor";
 // is a plain exported string constant instead — see the file itself.
 import dayjsTypes from "./vendor/dayjs-types";
 
-const ts = monaco.languages.typescript;
+const ts = monaco.typescript;
 
 // Must be `file://`, not the app's `grpcview://` convention: NodeJs resolution only
 // walks node_modules within the importing file's own URI scheme.
@@ -17,7 +17,7 @@ export const SCRATCH_PATH = "file:///scripts/scratch.ts";
 // Exported so gv-types.ts's useWorkspaceModuleTypes can re-set `compilerOptions.paths` without
 // dropping everything set here: setCompilerOptions REPLACES the whole object, so a caller that
 // only wants to add `paths` still has to restate every option below.
-export const baseCompilerOptions: Monaco.languages.typescript.CompilerOptions =
+export const baseCompilerOptions: Monaco.typescript.CompilerOptions =
   {
     target: ts.ScriptTarget.ESNext,
     module: ts.ModuleKind.ESNext,

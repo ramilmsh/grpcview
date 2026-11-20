@@ -5,9 +5,11 @@ ts_project(
     name = "sources",
     srcs = [
         "AddSourceCard.tsx",
+        "SourcesPopover.tsx",
         "SourcesView.tsx",
         "add-source-draft.ts",
         "source-row.tsx",
+        "sources-popover.ts",
     ],
     declaration = True,
     no_emit = False,
@@ -31,6 +33,7 @@ ts_project(
     srcs = [
         "add-source-draft.test.ts",
         "source-row.test.tsx",
+        "sources-popover.test.ts",
     ],
     declaration = True,
     no_emit = False,

@@ -215,7 +215,9 @@ interface UIState {
   invokes: Record<string, InvokeState | undefined>;
   // Non-null exactly while the NEW_REQUEST_KEY tab is open.
   requestDraft: RequestDraft | null;
-  requestSubtab: RequestSubtab;
+  // Per request key; a request never opened before starts on "message". Kept after
+  // its tab closes, so reopening restores it (session only).
+  requestSubtabs: Record<string, RequestSubtab | undefined>;
   responseSubtab: ResponseSubtab;
 
   treeExpanded: ReadonlySet<string>;
@@ -286,7 +288,7 @@ interface UIState {
   stopStream: (key: string) => void;
   failStream: (key: string, error: string) => void;
 
-  setRequestSubtab: (tab: RequestSubtab) => void;
+  setRequestSubtab: (key: string, tab: RequestSubtab) => void;
   setResponseSubtab: (tab: ResponseSubtab) => void;
 
   selectScript: (name: string | null) => void;
@@ -306,7 +308,7 @@ export const useUIStore = create<UIState>()((set) => ({
   folderDrafts: {},
   invokes: {},
   requestDraft: null,
-  requestSubtab: "message",
+  requestSubtabs: {},
   responseSubtab: "messages",
   selectedScript: null,
   scriptDrafts: {},
@@ -583,7 +585,8 @@ export const useUIStore = create<UIState>()((set) => ({
       },
     })),
 
-  setRequestSubtab: (requestSubtab) => set({ requestSubtab }),
+  setRequestSubtab: (key, tab) =>
+    set((s) => ({ requestSubtabs: { ...s.requestSubtabs, [key]: tab } })),
   setResponseSubtab: (responseSubtab) => set({ responseSubtab }),
 
   selectScript: (selectedScript) => set({ selectedScript }),

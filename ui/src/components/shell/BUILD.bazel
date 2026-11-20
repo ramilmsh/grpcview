@@ -19,6 +19,7 @@ ts_project(
         "//ui:node_modules/clsx",
         "//ui:node_modules/react",
         "//ui/src/components/ui",
+        "//ui/src/features/sources",
         "//ui/src/features/workspace",
         "//ui/src/lib",
     ],

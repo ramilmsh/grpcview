@@ -137,7 +137,7 @@ export function Editor({
     if (!model) return;
     const before = model.getValue();
     if (!findRegion(before)) return;
-    const getWorker = await m.languages.typescript.getTypeScriptWorker();
+    const getWorker = await m.typescript.getTypeScriptWorker();
     const client = await getWorker(model.uri);
     const diags = await client.getSuggestionDiagnostics(model.uri.toString());
     if (editor.getModel() !== model || model.getValue() !== before) return;
@@ -170,7 +170,7 @@ export function Editor({
     const before = model.getValue();
     const region = findRegion(before);
     if (!region) return false;
-    const getWorker = await m.languages.typescript.getTypeScriptWorker();
+    const getWorker = await m.typescript.getTypeScriptWorker();
     const client = await getWorker(model.uri);
     const diags = await client.getSemanticDiagnostics(model.uri.toString());
     if (editor.getModel() !== model || model.getValue() !== before)
@@ -307,7 +307,7 @@ export function Editor({
       inputName ?? "",
       inputFile,
     );
-    typeLib.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+    typeLib.current = monaco.typescript.typescriptDefaults.addExtraLib(
       alias.dts,
       "file:///grpcview/request/request-message.d.ts",
     );

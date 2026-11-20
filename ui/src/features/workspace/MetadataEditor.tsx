@@ -131,7 +131,7 @@ export function MetadataEditor({
     if (!model) return;
     const before = model.getValue();
     if (!findRegion(before)) return;
-    const getWorker = await m.languages.typescript.getTypeScriptWorker();
+    const getWorker = await m.typescript.getTypeScriptWorker();
     const client = await getWorker(model.uri);
     const diags = await client.getSuggestionDiagnostics(model.uri.toString());
     if (editor.getModel() !== model || model.getValue() !== before) return;
@@ -164,7 +164,7 @@ export function MetadataEditor({
     const before = model.getValue();
     const region = findRegion(before);
     if (!region) return false;
-    const getWorker = await m.languages.typescript.getTypeScriptWorker();
+    const getWorker = await m.typescript.getTypeScriptWorker();
     const client = await getWorker(model.uri);
     const diags = await client.getSemanticDiagnostics(model.uri.toString());
     if (editor.getModel() !== model || model.getValue() !== before)
@@ -291,7 +291,7 @@ export function MetadataEditor({
   const typeLib = useRef<Monaco.IDisposable | null>(null);
   useEffect(() => {
     if (!monaco) return;
-    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+    const tsDefaults = monaco.typescript.typescriptDefaults;
     typeLib.current?.dispose();
     typeLib.current = tsDefaults.addExtraLib(
       METADATA_TYPE_DTS,

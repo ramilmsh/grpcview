@@ -29,7 +29,8 @@ function generate(set) {
 }
 
 const argv = process.argv.slice(2);
-if (argv.length === 0 || argv.length % 2) throw new Error("usage: golden.cjs (<in> <out>)...");
+if (argv.length === 0 || argv.length % 2)
+  throw new Error("usage: golden.cjs (<in> <out>)...");
 for (let i = 0; i < argv.length; i += 2) {
   const files = generate(new Uint8Array(readFileSync(argv[i])));
   const sorted = Object.fromEntries(

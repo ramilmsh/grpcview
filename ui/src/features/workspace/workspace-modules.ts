@@ -39,7 +39,7 @@ export function stripModuleExtension(path: string): string {
 // re-derived whenever it changes.
 export function workspaceModulePaths(
   collectionId: string | null | undefined,
-): NonNullable<Monaco.languages.typescript.CompilerOptions["paths"]> {
+): NonNullable<Monaco.typescript.CompilerOptions["paths"]> {
   return {
     "@/*": [`${WS_PREFIX}/*`],
     "#/*": [`${collectionModulePrefix(collectionId)}/*`],
