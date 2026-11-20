@@ -1023,6 +1023,90 @@ export declare type ListWorkspaceModulesResponse = Message<"grpcview.v1.ListWork
 export declare const ListWorkspaceModulesResponseSchema: GenMessage<ListWorkspaceModulesResponse>;
 
 /**
+ * Asks for a collection's merged definitions as generated TypeScript.
+ *
+ * @generated from message grpcview.v1.GetDefinitionsRequest
+ */
+export declare type GetDefinitionsRequest = Message<"grpcview.v1.GetDefinitionsRequest"> & {
+  /**
+   * Collection id.
+   *
+   * @generated from field: string collection = 1;
+   */
+  collection: string;
+};
+
+/**
+ * Describes the message grpcview.v1.GetDefinitionsRequest.
+ * Use `create(GetDefinitionsRequestSchema)` to create a new message.
+ */
+export declare const GetDefinitionsRequestSchema: GenMessage<GetDefinitionsRequest>;
+
+/**
+ * One protoc-gen-es output file of the merged descriptor set.
+ *
+ * @generated from message grpcview.v1.DefinitionFile
+ */
+export declare type DefinitionFile = Message<"grpcview.v1.DefinitionFile"> & {
+  /**
+   * protoc-gen-es output name: "grpcview/v1/service_pb.ts".
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * Generated TypeScript.
+   *
+   * @generated from field: string content = 2;
+   */
+  content: string;
+
+  /**
+   * Id of the source that won this file's proto (first to define it); "builtin"
+   * for a stub served from the binary.
+   *
+   * @generated from field: string source = 3;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message grpcview.v1.DefinitionFile.
+ * Use `create(DefinitionFileSchema)` to create a new message.
+ */
+export declare const DefinitionFileSchema: GenMessage<DefinitionFile>;
+
+/**
+ * A collection's merged definitions, generated.
+ *
+ * @generated from message grpcview.v1.GetDefinitionsResponse
+ */
+export declare type GetDefinitionsResponse = Message<"grpcview.v1.GetDefinitionsResponse"> & {
+  /**
+   * Hex sha256 over the generator, merged descriptor set, per-file winning sources
+   * and builtin stubs; changes iff the files do. Equals Collection.definitions_digest.
+   *
+   * @generated from field: string digest = 1;
+   */
+  digest: string;
+
+  /**
+   * One per merged proto file, google/protobuf/* excepted, sorted by path; then the
+   * builtin `@bufbuild/protobuf` type stubs they import, under "node_modules/".
+   *
+   * @generated from field: repeated grpcview.v1.DefinitionFile files = 2;
+   */
+  files: DefinitionFile[];
+};
+
+/**
+ * Describes the message grpcview.v1.GetDefinitionsResponse.
+ * Use `create(GetDefinitionsResponseSchema)` to create a new message.
+ */
+export declare const GetDefinitionsResponseSchema: GenMessage<GetDefinitionsResponse>;
+
+/**
  * A collection is only ever created by an explicit act — this RPC, or
  * `grpcview init` — or a stale query would scatter grpcview.json around a repo.
  *
@@ -2318,6 +2402,17 @@ export declare const WorkspaceService: GenService<{
     methodKind: "unary";
     input: typeof ListWorkspaceModulesRequestSchema;
     output: typeof ListWorkspaceModulesResponseSchema;
+  },
+  /**
+   * The merged descriptor set as protoc-gen-es TypeScript, memoized by digest.
+   * Temporary: the FS surface replaces it.
+   *
+   * @generated from rpc grpcview.v1.WorkspaceService.GetDefinitions
+   */
+  getDefinitions: {
+    methodKind: "unary";
+    input: typeof GetDefinitionsRequestSchema;
+    output: typeof GetDefinitionsResponseSchema;
   },
   /**
    * Creates the collection's directory in the workspace. An existing collection at

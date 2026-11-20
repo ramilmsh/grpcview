@@ -164,8 +164,8 @@ func TestGetCarriesTheDerivedMergedView(t *testing.T) {
 	if !hasService(ws.GetServices(), "EchoService") {
 		t.Errorf("Get carried no EchoService: %v", ws.GetServices())
 	}
-	if len(ws.GetDescriptorSet()) == 0 {
-		t.Error("Get carried no descriptor_set")
+	if ws.GetDefinitionsDigest() == "" {
+		t.Error("Get carried no definitions_digest")
 	}
 	if len(ws.GetSources()) != 1 {
 		t.Fatalf("sources = %d, want 1", len(ws.GetSources()))
@@ -359,7 +359,7 @@ func TestGetNoticesAHandEditedSourceList(t *testing.T) {
 	if len(ws.GetServices()) != 0 {
 		t.Errorf("services = %v, want none: they came from a source the manifest no longer lists", ws.GetServices())
 	}
-	if len(ws.GetDescriptorSet()) != 0 {
-		t.Error("descriptor_set survived the removal of every source that produced it")
+	if ws.GetDefinitionsDigest() != "" {
+		t.Error("definitions_digest survived the removal of every source that produced it")
 	}
 }

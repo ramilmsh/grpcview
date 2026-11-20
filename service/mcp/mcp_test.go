@@ -107,8 +107,7 @@ func TestDescriptorLoading(t *testing.T) {
 }
 
 func TestTrimHeavyFieldsStripsEveryShape(t *testing.T) {
-	// Collection.descriptor_set nests under a message field; DescribeMethodResponse's is
-	// top-level. Both must go, and nothing else may.
+	// DescribeMethodResponse.descriptor_set must go, and nothing else may.
 	sd := mustLoadService(t)
 	handler := func(res proto.Message) gen.Handler {
 		return func(context.Context, protoreflect.MethodDescriptor, proto.Message) (proto.Message, error) {
@@ -116,28 +115,12 @@ func TestTrimHeavyFieldsStripsEveryShape(t *testing.T) {
 		}
 	}
 
-	nested := &grpcviewv1.GetResponse{Collection: &grpcviewv1.Collection{
-		Name:          "scratch",
-		DescriptorSet: []byte("binary"),
-	}}
-	got, err := trimHeavyFields(handler(nested))(context.Background(), sd.Methods().ByName("Get"), nil)
-	if err != nil {
-		t.Fatalf("trimHeavyFields (nested): %v", err)
-	}
-	coll := got.(*grpcviewv1.GetResponse).GetCollection()
-	if coll.GetDescriptorSet() != nil {
-		t.Errorf("Collection.descriptor_set survived: %q", coll.GetDescriptorSet())
-	}
-	if coll.GetName() != "scratch" {
-		t.Errorf("Collection.name was altered: %q", coll.GetName())
-	}
-
 	top := &grpcviewv1.DescribeMethodResponse{
 		ProtoText:     "message Foo {}",
 		SourceId:      "reflection:localhost:9000",
 		DescriptorSet: []byte("binary"),
 	}
-	got, err = trimHeavyFields(handler(top))(context.Background(), sd.Methods().ByName("DescribeMethod"), nil)
+	got, err := trimHeavyFields(handler(top))(context.Background(), sd.Methods().ByName("DescribeMethod"), nil)
 	if err != nil {
 		t.Fatalf("trimHeavyFields (top level): %v", err)
 	}

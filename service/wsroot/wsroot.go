@@ -93,9 +93,10 @@ func ConfigRoot() (string, error) {
 	return filepath.Join(configDir, "grpcview"), nil
 }
 
-// CacheRoot is where grpcview's disposable, machine-local state lives: today, just the daemon
-// registration files (server/registration.go) recording which server serves which workspace —
-// safe to lose, since a client that finds none just spawns a fresh one. Collapsed onto
+// CacheRoot is where grpcview's disposable, machine-local state lives: the daemon registration
+// files (server/registration.go) recording which server serves which workspace, and generated
+// TypeScript (codegen/, see codegen.Cache) — safe to lose: a client that finds no registration
+// spawns a fresh daemon, a missing generated file is regenerated. Collapsed onto
 // ConfigRoot under ConfigDirEnv, same as the rest of the durable state, so an isolated run has
 // exactly one directory to clean up rather than two.
 func CacheRoot() (string, error) {

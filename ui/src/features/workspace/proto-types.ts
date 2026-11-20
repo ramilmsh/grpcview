@@ -1,42 +1,4 @@
-// Runs the real @bufbuild/protoc-gen-es in-browser over the workspace's merged
-// FileDescriptorSet to give Monaco the generated protojson `<Message>Json` types.
-
-// Deep CJS import is MANDATORY: @bufbuild/protoc-gen-es ships CJS-only with no `exports`/`main`
-// field, so the package specifier alone does not resolve.
-import { protocGenEs } from "@bufbuild/protoc-gen-es/dist/cjs/src/protoc-gen-es-plugin.js";
-import { fromBinary, create } from "@bufbuild/protobuf";
-import {
-  FileDescriptorSetSchema,
-  CodeGeneratorRequestSchema,
-} from "@bufbuild/protobuf/wkt";
-
-const cache = new WeakMap<Uint8Array, Map<string, string>>();
-
-// generateWorkspaceTypes maps generated-file name (e.g. "proto/foo/v1/foo_pb.ts") → TS source.
-// WKTs are left out; their Json types come from the vendor/bufbuild-stubs.ts Monaco stub.
-export function generateWorkspaceTypes(
-  descriptorSet: Uint8Array,
-): Map<string, string> {
-  const memo = cache.get(descriptorSet);
-  if (memo) return memo;
-
-  const fds = fromBinary(FileDescriptorSetSchema, descriptorSet);
-  const fileToGenerate = fds.file
-    .map((f) => f.name)
-    .filter((n) => !n.startsWith("google/protobuf/"));
-  const req = create(CodeGeneratorRequestSchema, {
-    fileToGenerate,
-    protoFile: fds.file,
-    // Required: protocGenEs.run() calls request.sourceFileDescriptors.find(...).
-    sourceFileDescriptors: [],
-    parameter: "target=ts,json_types=true",
-  });
-  const resp = protocGenEs.run(req);
-  const files = new Map<string, string>();
-  for (const f of resp.file) files.set(f.name, f.content ?? "");
-  cache.set(descriptorSet, files);
-  return files;
-}
+// Pure helpers over GetDefinitions' generated protoc-gen-es files (path → content).
 
 // resolveLocalSymbol reads the full-name literal in `export type <Sym> = Message…<"<fullName>">`,
 // which is what lets a nested message resolve from its short name.
@@ -68,7 +30,7 @@ export function resolveLocalSymbol(
 // requestMessageAlias builds the per-method ambient d.ts aliasing `RequestMessage` to the input
 // message's `<Local>Json` type. Import paths stay extensionless — node10 substitutes .ts.
 export function requestMessageAlias(
-  files: Map<string, string>,
+  files: ReadonlyMap<string, string>,
   pkg: string,
   name: string,
   file: string,
@@ -102,7 +64,7 @@ export interface InvokeTarget {
 // Every import is aliased positionally: two proto files may each export a `FooJson`, and the map
 // is one flat file.
 export function gvRequestMapDts(
-  files: Map<string, string>,
+  files: ReadonlyMap<string, string>,
   targets: InvokeTarget[],
 ): string | null {
   const imports: string[] = [];
@@ -111,7 +73,7 @@ export function gvRequestMapDts(
 
   for (const target of targets) {
     if (seen.has(target.path)) continue;
-    // WKT responses are not generated (generateWorkspaceTypes skips google/protobuf/*), so
+    // WKT responses are not generated (GetDefinitions skips google/protobuf/*), so
     // there is no module to import them from.
     if (target.file.startsWith("google/protobuf/")) continue;
 
@@ -143,7 +105,7 @@ export {};
 // messageTypeText returns the generated `<Message>Json` type text for the TypesModal, or null
 // when there is nothing to show. Unlike requestMessageAlias it never guesses a symbol.
 export function messageTypeText(
-  files: Map<string, string>,
+  files: ReadonlyMap<string, string>,
   pkg: string,
   name: string,
   file: string,

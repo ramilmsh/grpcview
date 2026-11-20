@@ -7,6 +7,13 @@ copy_file(
     out = "quickjs.wasm",
 )
 
+# CodegenBundleHash keys on the esbuild version it pins.
+copy_file(
+    name = "go_mod",
+    src = "//:go.mod",
+    out = "go.mod.txt",
+)
+
 go_library(
     name = "scripting",
     srcs = [
@@ -26,6 +33,7 @@ go_library(
     embedsrcs = [
         "codegen_entry.js",
         "codegen_polyfill.js",
+        "go.mod.txt",
         "quickjs.wasm",
     ] + glob(["npm/**"]),
     importpath = "codeberg.org/ramilmsh/grpcview/service/scripting",
@@ -43,6 +51,7 @@ go_test(
     srcs = [
         "bundler_test.go",
         "capabilities_test.go",
+        "codegen_bundle_test.go",
         "engine_core_test.go",
         "entry_test.go",
         "gv_test.go",

@@ -8,7 +8,6 @@ export function MessageTab({
   onChange,
   currentKey,
   inputTypeName,
-  descriptorSet,
   inputPackage,
   inputFile,
 }: {
@@ -16,7 +15,6 @@ export function MessageTab({
   onChange: (value: string) => void;
   currentKey: string;
   inputTypeName?: string;
-  descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
 }) {
@@ -29,7 +27,6 @@ export function MessageTab({
           data={body}
           onChange={onChange}
           currentKey={currentKey}
-          descriptorSet={descriptorSet}
           inputPackage={inputPackage}
           inputName={inputTypeName}
           inputFile={inputFile}

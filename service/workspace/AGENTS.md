@@ -43,7 +43,7 @@ computed specifier → `any`, never a false error.
 
 # Definition sources (where schemas come from)
 
-Services and `descriptor_set` are derived, never authored — from a priority-ordered list of
+Services and `definitions_digest` are derived, never authored — from a priority-ordered list of
 sources (reflection targets, uploaded `FileDescriptorSet`s, bazel labels), merged by
 `sources.go`. Each resolves independently, storing per `commit_descriptors`: **off
 (default)** — content-addressed blob under the workspace state root, shared across
@@ -69,7 +69,11 @@ Descriptor bytes are normalized once at the write boundary (`DiscardUnknown` + d
 marshal) — digest is a function of schema, not encoder.
 
 Descriptor sets are cached: `definitions.go`'s LRU holds the 16 most recently used, keyed
-per collection, kept warm across daemon requests.
+per collection, kept warm across daemon requests. `GetDefinitions`' TypeScript is cached per
+file (`generated.go`), by Merkle key — bundle hash, plugin parameter, the file's descriptor,
+its imports' keys — in memory over a disk CAS under `wsroot.CacheRoot()/codegen` shared by
+every daemon; only misses (a changed file and its importers) reach QuickJS, in one job.
+Its `files[]` ends with the `@bufbuild/protobuf` Monaco stubs (`stubs.go`, source `builtin`).
 
 ## The bazel kind, and workspace trust
 

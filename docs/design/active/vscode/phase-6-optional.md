@@ -6,29 +6,12 @@ See [`README.md`](./README.md) for the producer/sink model.
 Nothing here is required for the extension to ship. Each item is recorded with its
 actual justification, because two of them are weaker than they first appear.
 
-## `protoc-gen-es` under QuickJS
+## `protoc-gen-es` under QuickJS — moved
 
-**What:** move type generation into the Go binary, running `protoc-gen-es` inside the
-existing QuickJS-WASM engine (bundled by the existing esbuild integration). One
-producer serving every sink, in-process, single static binary preserved.
-
-**Why it is *not* foundational.** This was originally scoped as phase 0 on the premise
-that VS Code needs types on disk. It does not: the primary editing path is Monaco in a
-webview, where in-memory `addExtraLib` already works, and the extension host is Node
-and can run `protoc-gen-es` directly. That leaves two genuine but modest
-justifications:
-
-- **Deletes browser hackery** — `ui/src/features/workspace/vendor/bufbuild-stubs.ts`
-  plus the `typescript` / `@typescript/vfs` no-op aliases in `ui/vite.config.ts`, which
-  exist solely to make a codegen plugin run in a page.
-- **Shrinks the single-file HTML.** Note the lazy chunk at `proto-types.ts:12` saves no
-  *shipped* bytes — `vite-plugin-singlefile` inlines dynamic imports, so it only defers
-  parse.
-
-**Feasibility signal:** generation is a pure function with no I/O, and the `typescript`
-imports `protoc-gen-es` pulls in are already stubbed out on the `target=ts` path
-(`proto-types.ts:8`), so the dependency surface is smaller than it looks. Worth a
-throwaway spike before committing.
+No longer optional. It is P0–P1 of
+[`explorer-fs.md`](../../planned/explorer-fs.md): the daemon generates types and serves them as
+the read-only Definitions tree. The worker pool has shipped (`service/scripting/codegen`) but has
+no callers yet.
 
 ## tsserver-plugin sink
 

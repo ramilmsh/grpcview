@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 
 	"connectrpc.com/connect"
@@ -24,6 +25,7 @@ type Workspace struct {
 	store  *store.Store
 	engine *scripting.Engine
 	defs   *definitionsCache
+	gen    *generator
 	root   string
 }
 
@@ -38,19 +40,26 @@ func New(ctx context.Context, root string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, fmt.Errorf("failed to initialize scripting engine: %w", err)
 	}
+	// Generated TypeScript is machine-wide cache: content-addressed, shared by every daemon.
+	codegenDir := ""
+	if cacheRoot, err := wsroot.CacheRoot(); err == nil {
+		codegenDir = filepath.Join(cacheRoot, "codegen")
+	}
 	return Workspace{
 		store:  store.New(root, stateRoot, slog.Default()),
 		engine: engine,
 		defs:   newDefinitionsCache(),
+		gen:    newGenerator(codegenDir),
 		root:   root,
 	}, nil
 }
 
 func (w Workspace) Close(ctx context.Context) error {
+	err := w.gen.Close(ctx)
 	if w.engine != nil {
-		return w.engine.Close(ctx)
+		err = errors.Join(err, w.engine.Close(ctx))
 	}
-	return nil
+	return err
 }
 
 func toConnectError(err error) error {

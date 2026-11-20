@@ -1,6 +1,7 @@
 # grpcview — descriptor explorer plan (follow-up to feature 2)
 
-**Status:** Planning only (this doc). **Not started.** This is the dedicated
+**Status:** Planning only (this doc). **Not started.** Its rendered `.proto` files are slated to live under the Definitions tree of
+[`explorer-fs.md`](./explorer-fs.md), which would replace the `ExploreDescriptorSource` RPC below. This is the dedicated
 follow-up to the message-shape-visibility feature: the *TS-types* view ships first
 (see [`gv-features-plan.md`](../shipped/gv-features-plan.md) §"Feature 2"); this doc plans
 the richer **`.proto` descriptor explorer** that the TS view deliberately does not

@@ -249,6 +249,6 @@ message Collection {
   repeated Service          services = 4;
   // Scripts saved under this collection's scripts/ directory.
   repeated Script           scripts  = 5;
-  // Merged, deduped FileDescriptorSet; derived and cached, never persisted.
-  bytes                     descriptor_set = 6;
+  // GetDefinitionsResponse.digest of these definitions; empty when none resolve.
+  string                    definitions_digest = 6;
 }

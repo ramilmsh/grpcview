@@ -1,0 +1,60 @@
+load("@aspect_bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_files")
+load("@aspect_rules_js//js:defs.bzl", "js_test")
+load("@protobuf//bazel:proto_descriptor_set.bzl", "proto_descriptor_set")
+
+# example/'s merged set: its bazel source wins every file its reflection source also serves.
+proto_descriptor_set(
+    name = "example_fds",
+    deps = ["//grpcview/v1:grpcviewv1_proto"],
+)
+
+# Every proto in the repo, for timing.
+proto_descriptor_set(
+    name = "all_fds",
+    deps = [
+        "//grpcview/echo/v1:grpcviewechov1_proto",
+        "//grpcview/store/v1:grpcviewstorev1_proto",
+        "//grpcview/v1:grpcviewv1_proto",
+    ],
+)
+
+# bazel run //service/scripting/codegen/testdata:update
+write_source_files(
+    name = "update",
+    files = {
+        "all.binpb": ":all_fds",
+        "example.binpb": ":example_fds",
+    },
+)
+
+# *.golden.json: UPDATE_GOLDEN=1 bazel run :golden_test
+FILES = [
+    "all.binpb",
+    "all.golden.json",
+    "example.binpb",
+    "example.golden.json",
+]
+
+exports_files(
+    FILES,
+    visibility = ["//visibility:public"],
+)
+
+# js_test data must live in bin.
+copy_to_bin(
+    name = "testdata",
+    srcs = FILES,
+    visibility = ["//visibility:public"],
+)
+
+# Node protoc-gen-es, independent of QuickJS: the golden codegen.Pool must match.
+js_test(
+    name = "golden_test",
+    data = [
+        ":testdata",
+        "//:node_modules/@bufbuild/protobuf",
+        "//:node_modules/@bufbuild/protoc-gen-es",
+    ],
+    entry_point = "golden.test.cjs",
+)

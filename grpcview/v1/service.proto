@@ -309,6 +309,33 @@ message ListWorkspaceModulesResponse {
   repeated WorkspaceModule modules = 1;
 }
 
+// Asks for a collection's merged definitions as generated TypeScript.
+message GetDefinitionsRequest {
+  // Collection id.
+  string collection = 1;
+}
+
+// One protoc-gen-es output file of the merged descriptor set.
+message DefinitionFile {
+  // protoc-gen-es output name: "grpcview/v1/service_pb.ts".
+  string path = 1;
+  // Generated TypeScript.
+  string content = 2;
+  // Id of the source that won this file's proto (first to define it); "builtin"
+  // for a stub served from the binary.
+  string source = 3;
+}
+
+// A collection's merged definitions, generated.
+message GetDefinitionsResponse {
+  // Hex sha256 over the generator, merged descriptor set, per-file winning sources
+  // and builtin stubs; changes iff the files do. Equals Collection.definitions_digest.
+  string digest = 1;
+  // One per merged proto file, google/protobuf/* excepted, sorted by path; then the
+  // builtin `@bufbuild/protobuf` type stubs they import, under "node_modules/".
+  repeated DefinitionFile files = 2;
+}
+
 // A collection is only ever created by an explicit act — this RPC, or
 // `grpcview init` — or a stale query would scatter grpcview.json around a repo.
 message CreateCollectionRequest {
@@ -617,6 +644,9 @@ service WorkspaceService {
   // (Monaco `compilerOptions.paths`) can mirror what the bundler's `@/` / `#/` plugin
   // actually resolves at compile time.
   rpc ListWorkspaceModules(ListWorkspaceModulesRequest) returns (ListWorkspaceModulesResponse);
+  // The merged descriptor set as protoc-gen-es TypeScript, memoized by digest.
+  // Temporary: the FS surface replaces it.
+  rpc GetDefinitions(GetDefinitionsRequest) returns (GetDefinitionsResponse);
   // Creates the collection's directory in the workspace. An existing collection at
   // that path is AlreadyExists, never adopted.
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionResponse);

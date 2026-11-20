@@ -22,7 +22,11 @@ type definitions struct {
 	sources       []*grpcviewv1.DescriptorSource
 	serviceList   []*grpcviewv1.Service
 	descriptorSet []byte
-	mergeErr      error
+	claimedBy     map[string]string // proto file name -> winning source id
+	// digest identifies GetDefinitions' output; "" with digestErr set if it could not be computed.
+	digest    string
+	digestErr error
+	mergeErr  error
 	listDigest    [sha256.Size]byte
 }
 
@@ -165,7 +169,9 @@ func (w Workspace) derive(ctx context.Context, coll *store.Collection) (*definit
 	if err != nil {
 		return nil, err
 	}
-	w.defs.store(coll.Key(), epoch, defs)
+	if defs.digestErr == nil { // a failed digest is retried, not memoized
+		w.defs.store(coll.Key(), epoch, defs)
+	}
 	return defs, nil
 }
 
@@ -207,13 +213,18 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 			listDigest: sourceListDigest(sources),
 		}, nil
 	}
-	return &definitions{
+	defs := &definitions{
 		services:      view.serviceDescs,
 		sources:       withSummaries(sources, view.summaries),
 		serviceList:   view.services,
 		descriptorSet: view.descriptorSet,
+		claimedBy:     view.claimedBy,
 		listDigest:    sourceListDigest(sources),
-	}, nil
+	}
+	if len(defs.descriptorSet) > 0 {
+		defs.digest, defs.digestErr = definitionsDigest(defs.descriptorSet, defs.claimedBy)
+	}
+	return defs, nil
 }
 
 func withSummaries(sources []*grpcviewv1.DescriptorSource, summaries map[string]*grpcviewv1.Resolved) []*grpcviewv1.DescriptorSource {
@@ -233,7 +244,7 @@ func (w Workspace) loadCollection(ctx context.Context, coll *store.Collection) (
 		return nil, err
 	}
 	ws.Services = defs.serviceList
-	ws.DescriptorSet = defs.descriptorSet
+	ws.DefinitionsDigest = defs.digest
 	byID := make(map[string]*grpcviewv1.Resolved, len(defs.sources))
 	for _, src := range defs.sources {
 		byID[src.GetId()] = src.GetResolved()

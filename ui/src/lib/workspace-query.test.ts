@@ -6,7 +6,13 @@ import {
   get,
   listWorkspaceModules,
 } from "@grpcview/v1/service-WorkspaceService_connectquery";
-import { keyForCollection, workspaceModulesKey } from "./workspace-query";
+import { create } from "@bufbuild/protobuf";
+import { GetDefinitionsResponseSchema } from "@grpcview/v1/service_pb";
+import {
+  keyForCollection,
+  nextDefinitions,
+  workspaceModulesKey,
+} from "./workspace-query";
 
 // The one claim the collection tier rests on: useCollectionItems' per-collection Get shares a
 // cache entry with useWorkspace's, so the active collection is fetched once and a write RPC's
@@ -43,5 +49,54 @@ describe("workspaceModulesKey", () => {
     expect(workspaceModulesKey(transport)).toEqual(
       createQueryOptions(listWorkspaceModules, {}, { transport }).queryKey,
     );
+  });
+});
+
+// Editor/gv-types effects re-register Monaco libs on `files` identity, so it must change only
+// with the digest — and never carry a failed or emptied set.
+describe("nextDefinitions", () => {
+  const data = (digest: string) =>
+    create(GetDefinitionsResponseSchema, {
+      digest,
+      files: [{ path: "a_pb.ts", content: digest }],
+    });
+  const empty = { collection: "c", defs: { digest: "", files: new Map() } };
+  const held = {
+    collection: "c",
+    defs: nextDefinitions(empty, "c", "d1", {
+      isError: false,
+      data: data("d1"),
+    }),
+  };
+
+  it("builds files from the response", () => {
+    expect(held.defs.digest).toBe("d1");
+    expect(held.defs.files.get("a_pb.ts")).toBe("d1");
+  });
+
+  it("keeps identity for an unchanged digest", () => {
+    expect(
+      nextDefinitions(held, "c", "d1", { isError: false, data: data("d1") }),
+    ).toBe(held.defs);
+  });
+
+  it("holds the last set while a new digest loads, but not across collections", () => {
+    expect(nextDefinitions(held, "c", "d2", { isError: false })).toBe(
+      held.defs,
+    );
+    expect(
+      nextDefinitions(held, "other", "d2", { isError: false }).files.size,
+    ).toBe(0);
+  });
+
+  it("drops everything on an empty digest or a failed fetch", () => {
+    expect(
+      nextDefinitions(held, "c", "", { isError: false, data: data("d1") }).files
+        .size,
+    ).toBe(0);
+    expect(
+      nextDefinitions(held, "c", "d1", { isError: true, data: data("d1") })
+        .files.size,
+    ).toBe(0);
   });
 });

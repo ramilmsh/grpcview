@@ -254,7 +254,7 @@ describe("gvRequestMapDts", () => {
     ).toBeNull();
   });
 
-  it("skips a well-known-type response: generateWorkspaceTypes never emits those", () => {
+  it("skips a well-known-type response: GetDefinitions never emits those", () => {
     expect(
       gvRequestMapDts(GEN, [
         {
