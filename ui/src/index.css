@@ -1,6 +1,57 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@source "./**/*.{html,js}";
+
+/* Nocturne tokens (theme.css, loaded after this file) back every app utility. `inline
+   reference`: utilities embed the var() directly and no :root copy is emitted — several
+   names (--color-bg, --font-heading, --radius-sm…) coincide with Nocturne's own. */
+@theme inline reference {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--v-line);
+  --color-text: var(--color-text);
+  --color-accent: var(--color-accent);
+  --color-accent-2: var(--color-accent-2);
+  --color-ok: var(--ok);
+  --color-err: var(--err);
+  --color-warn: var(--warn);
+  --color-neutral-100: var(--color-neutral-100);
+  --color-neutral-200: var(--color-neutral-200);
+  --color-neutral-300: var(--color-neutral-300);
+  --color-neutral-400: var(--color-neutral-400);
+  --color-neutral-500: var(--color-neutral-500);
+  --color-neutral-600: var(--color-neutral-600);
+  --color-neutral-700: var(--color-neutral-700);
+  --color-neutral-800: var(--color-neutral-800);
+  --color-neutral-900: var(--color-neutral-900);
+  --color-accent-r-100: var(--color-accent-100);
+  --color-accent-r-200: var(--color-accent-200);
+  --color-accent-r-300: var(--color-accent-300);
+  --color-accent-r-400: var(--color-accent-400);
+  --color-accent-r-500: var(--color-accent-500);
+  --color-accent-r-600: var(--color-accent-600);
+  --color-accent-r-700: var(--color-accent-700);
+  --color-accent-r-800: var(--color-accent-800);
+  --color-accent-r-900: var(--color-accent-900);
+
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-lg: var(--radius-lg);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-lg: var(--shadow-lg);
+}
+
+/* v3 preflight defaults that v4 dropped. */
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: #e5e7eb; }
+  input::placeholder, textarea::placeholder { color: #9ca3af; }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
 
 html,
 body,
