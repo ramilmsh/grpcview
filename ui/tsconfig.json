@@ -23,11 +23,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    // TS 5.x deprecates baseUrl ahead of removing it in 7.0; paths below are
-    // already written relative to this file's own directory (ui/), which is
-    // baseUrl:"."'s exact behavior, so silencing rather than restructuring.
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@grpcview/*": ["../grpcview/*"]

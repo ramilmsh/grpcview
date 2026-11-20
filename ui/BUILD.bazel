@@ -32,6 +32,9 @@ tsconfig_to_swcconfig.t2s(
     args = [
         "--filename",
         "$(location tsconfig.json)",
+        # TS 7 removed baseUrl; swc still needs it to resolve jsc.paths.
+        "--set",
+        "jsc.baseUrl=.",
     ],
     stdout = ".swcrc",
     visibility = [":__subpackages__"],
