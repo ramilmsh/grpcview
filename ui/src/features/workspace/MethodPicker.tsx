@@ -20,9 +20,8 @@ import {
 const muted = { color: "var(--v-text-2)" };
 
 // The two-pane service → method body: a search box over a services pane and the selected
-// service's methods. Shared by MethodPickerModal (repointing a request) and
-// NewRequestPage (creating one). Keyboard: Up/Down move within the active pane, Right/Left
-// (outside the search box) or Tab/Shift+Tab switch panes, Enter picks.
+// service's methods, on NewRequestPage. Keyboard: Up/Down move within the active pane,
+// Right/Left (outside the search box) or Tab/Shift+Tab switch panes, Enter picks.
 export function MethodPicker({
   services,
   onPick,

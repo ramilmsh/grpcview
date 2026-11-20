@@ -328,3 +328,63 @@ input.bare::placeholder { color: var(--v-text-muted); }
   overflow: hidden; text-overflow: ellipsis;
 }
 .combo-note { padding: 6px 9px; font-size: 12px; color: var(--v-text-2); }
+
+/* client-stream / bidi message switcher (MessagesTab): hover only on the controls */
+.msgchip {
+  display: inline-flex; align-items: center; height: 26px; flex: none;
+  border-radius: var(--v-r-badge); color: var(--v-text-2);
+}
+.msgchip.on { background: var(--v-accent-tint); color: var(--v-text); box-shadow: var(--v-selected); }
+.msgchip-label {
+  height: 26px; padding: 0 10px; border: none; background: transparent; color: inherit;
+  font-family: var(--mono); font-size: 12px; font-weight: 500; cursor: pointer; border-radius: var(--v-r-badge);
+}
+.msgchip:not(.on) .msgchip-label:hover { background: var(--v-hover); color: var(--v-text); }
+.msgchip-x {
+  width: 18px; height: 18px; margin: 0 4px 0 -4px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px; background: transparent; color: var(--v-text-2); cursor: pointer;
+}
+.msgchip-x:hover { background: var(--v-err-bg); color: var(--v-err); }
+.msgchip-add {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; flex: none;
+  border: none; border-radius: var(--v-r-badge); background: transparent; color: var(--v-text-2);
+  font-size: 12px; cursor: pointer;
+}
+.msgchip-add:hover { background: var(--v-hover); color: var(--v-text); }
+
+/* top bar: the collection's reflection source; opens Definition sources */
+.reflbtn {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px;
+  border: none; border-radius: var(--v-r); background: transparent; color: var(--v-text-2);
+  font: inherit; font-size: 13px; cursor: pointer; transition: background-color 120ms ease;
+}
+.reflbtn:hover { background: var(--v-hover); }
+
+/* top bar: definition-sources dropdown (features/sources/SourcesPopover.tsx). Rows stay
+   static; only its buttons react. */
+.srcpop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; outline: none;
+  width: 420px; max-width: calc(100vw - 32px); max-height: calc(100vh - 80px); overflow-y: auto;
+  display: flex; flex-direction: column; padding: 8px;
+  border-radius: var(--v-r-panel); background: var(--v-raised); box-shadow: var(--v-popover);
+}
+.srcpop-caps {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--v-text-2);
+}
+.srcpop-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px;
+  border: none; border-radius: var(--v-r); background: transparent; color: var(--v-text-2);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.srcpop-btn:hover:not(:disabled) { background: var(--v-hover); color: var(--v-text); }
+.srcpop-btn:active:not(:disabled) { box-shadow: var(--v-btn-press); }
+.srcpop-btn:disabled { color: var(--v-text-muted); cursor: default; }
+.srcpop-err {
+  display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--v-warn);
+}
+.srcpop-err .srcpop-btn { height: 24px; font-size: 12px; }
+.srcpop-log {
+  margin: 4px 0 2px; padding: 8px 10px; max-height: 180px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}

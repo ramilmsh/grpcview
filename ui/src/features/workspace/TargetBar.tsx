@@ -59,10 +59,13 @@ export function TargetBar({
           background: "transparent",
           border: "none",
           outline: "none",
-          padding: 0,
+          // Room past the text and the full bar height, so a click just after the
+          // last character (or above/below it) still lands in the field.
+          padding: "0 16px 0 0",
+          alignSelf: "stretch",
           color: "var(--v-text)",
           fontSize: 13,
-          width: `${Math.max(address.length, 12)}ch`,
+          width: `calc(${Math.max(address.length, 12) + 2}ch + 16px)`,
         }}
       />
       {unset ? (

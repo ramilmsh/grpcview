@@ -21,6 +21,7 @@ export const CaretUp = Ph.CaretUp as unknown as Icon;
 export const ClockCounterClockwise =
   Ph.ClockCounterClockwise as unknown as Icon;
 export const CaretRight = Ph.CaretRight as unknown as Icon;
+export const Check = Ph.Check as unknown as Icon;
 export const CheckCircle = Ph.CheckCircle as unknown as Icon;
 export const Code = Ph.Code as unknown as Icon;
 export const Copy = Ph.Copy as unknown as Icon;

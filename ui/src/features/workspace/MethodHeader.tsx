@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  CaretDown,
   Code,
   FileArchive,
   Play,
@@ -16,7 +15,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
 import { middleEllipsis, serviceName } from "@/lib/format";
-import { MethodPickerModal } from "./MethodPickerModal";
+import { MethodDropdown } from "./MethodDropdown";
 import { TargetBar } from "./TargetBar";
 
 export function MethodHeader({
@@ -48,7 +47,6 @@ export function MethodHeader({
   onTargetChange: (t: Server) => void;
   onShowTypes: () => void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   // The ADDRESS, not the presence of a Server: an override starts life as an empty
   // one the moment the target field is touched, and dialing "" is not an invoke.
@@ -85,7 +83,7 @@ export function MethodHeader({
             color: "var(--v-text)",
             maxWidth: 240,
             // Shrink priority across this row is set by flex-shrink, not by who comes
-            // first: the service/method pair (1000, and inside it the service before the
+            // first: the method picker (1000, and inside it the service before the
             // method) gives up width long before the request name does — so Invoke, which
             // never shrinks, stays on screen at any pane width.
             minWidth: 0,
@@ -103,74 +101,15 @@ export function MethodHeader({
         />
         <MethodKindTag kind={kind} />
 
-        <div
-          className="flex items-center gap-[4px] font-mono"
-          style={{
-            fontSize: 13,
-            minWidth: 0,
-            flexShrink: 1000,
-          }}
-        >
-          <Button
-            className="font-mono"
-            style={{
-              height: 32,
-              padding: "0 10px",
-              gap: 6,
-              fontSize: 13,
-              fontWeight: 400,
-              background: "transparent",
-              boxShadow: "var(--v-raise)",
-              color: "var(--v-text-2)",
-              minWidth: 0,
-              flexShrink: 1000,
-            }}
-            title={request.service || "Select service"}
-            onClick={() => setPickerOpen(true)}
-          >
-            <span
-              style={{
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {request.service || "select service"}
-            </span>
-            <CaretDown size={10} style={{ opacity: 0.6, flex: "none" }} />
-          </Button>
-          <span style={{ color: "var(--v-text-muted)" }}>/</span>
-          <Button
-            className="font-mono"
-            style={{
-              height: 32,
-              padding: "0 10px",
-              gap: 6,
-              fontSize: 13,
-              fontWeight: 500,
-              background: "transparent",
-              boxShadow: "var(--v-raise)",
-              color: "var(--v-text)",
-              minWidth: 0,
-              flexShrink: 1,
-            }}
-            title={request.method || "Select method"}
-            onClick={() => setPickerOpen(true)}
-          >
-            <span
-              style={{
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {request.method || "select method"}
-            </span>
-            <CaretDown size={10} style={{ opacity: 0.6, flex: "none" }} />
-          </Button>
-        </div>
+        <MethodDropdown
+          services={services}
+          current={
+            hasMethod
+              ? { service: request.service, method: request.method }
+              : null
+          }
+          onPick={onPick}
+        />
 
         {/* No minWidth:0 here on purpose: min-content keeps the group from shrinking past
             Invoke, and the source chip inside it is the only part that gives up width. */}
@@ -250,13 +189,6 @@ export function MethodHeader({
         reflection={reflection}
         override={targetOverride}
         onChange={onTargetChange}
-      />
-
-      <MethodPickerModal
-        open={pickerOpen}
-        services={services}
-        onClose={() => setPickerOpen(false)}
-        onSelect={onPick}
       />
     </div>
   );
