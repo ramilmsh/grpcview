@@ -45,27 +45,34 @@ export function DraftBadge() {
 // Unary, server-stream, client-stream, bidi.
 export type MethodKind = "u" | "ss" | "cs" | "bd";
 
+const KIND_NAME: Record<MethodKind, string> = {
+  u: "Unary",
+  ss: "Server stream",
+  cs: "Client stream",
+  bd: "Bidi stream",
+};
+
 const KIND_LABEL: Record<MethodKind, string> = {
   u: "U",
-  ss: "S←",
-  cs: "C→",
+  ss: "S→",
+  cs: "C←",
   bd: "B⇄",
 };
 
+// Never dimmed: colors are per-surface (app-tokens.css) so every tag holds 4.5:1.
 export function MethodKindTag({
   kind = "u",
   className,
-  dim,
 }: {
   kind?: MethodKind;
   className?: string;
-  // v4: a tree row that is not the open tab mutes its badge.
-  dim?: boolean;
 }) {
   return (
     <span
       className={clsx("mtag", `mt-${kind}`, className)}
-      style={dim ? { opacity: 0.55 } : undefined}
+      role="img"
+      aria-label={KIND_NAME[kind]}
+      title={KIND_NAME[kind]}
     >
       {KIND_LABEL[kind]}
     </span>

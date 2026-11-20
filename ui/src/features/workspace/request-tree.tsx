@@ -87,7 +87,7 @@ export interface RequestRowCallbacks {
 // renderRequestRow is the row CONTENT only; the row shell is the tree component's.
 export function renderRequestRow(
   item: ItemWithPath,
-  state: TreeRowState,
+  _state: TreeRowState,
   cb: RequestRowCallbacks,
 ): ReactNode {
   if (item.item.content.case === "folder") {
@@ -151,7 +151,7 @@ export function renderRequestRow(
   );
   return (
     <>
-      <MethodKindTag kind={kind} dim={!state.active} />
+      <MethodKindTag kind={kind} />
       <span
         style={{
           overflow: "hidden",
