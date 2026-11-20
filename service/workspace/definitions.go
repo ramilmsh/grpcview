@@ -24,10 +24,10 @@ type definitions struct {
 	descriptorSet []byte
 	claimedBy     map[string]string // proto file name -> winning source id
 	// digest identifies GetDefinitions' output; "" with digestErr set if it could not be computed.
-	digest    string
-	digestErr error
-	mergeErr  error
-	listDigest    [sha256.Size]byte
+	digest     string
+	digestErr  error
+	mergeErr   error
+	listDigest [sha256.Size]byte
 }
 
 // Identifies a source list by its whole authored content, with the derived Resolved summaries excluded

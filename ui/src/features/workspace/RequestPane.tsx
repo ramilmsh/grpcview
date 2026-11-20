@@ -1,7 +1,7 @@
 import { ArrowsSplit, BracketsCurly } from "@/components/ui/icons";
 import { Subtab } from "@/components/ui/Subtab";
 import { Tag, type MethodKind } from "@/components/ui/Tag";
-import { useUIStore } from "@/lib/ui-store";
+import { useUIStore, type RequestSubtab } from "@/lib/ui-store";
 import { MessageTab } from "./MessageTab";
 import { MessagesTab } from "./MessagesTab";
 import { MetadataTab } from "./MetadataTab";
@@ -36,8 +36,9 @@ export function RequestPane({
   inputPackage?: string;
   inputFile?: string;
 }) {
-  const subtab = useUIStore((s) => s.requestSubtab);
-  const setSubtab = useUIStore((s) => s.setRequestSubtab);
+  const subtab = useUIStore((s) => s.requestSubtabs[currentKey] ?? "message");
+  const setRequestSubtab = useUIStore((s) => s.setRequestSubtab);
+  const setSubtab = (tab: RequestSubtab) => setRequestSubtab(currentKey, tab);
   const multi = kind === "cs" || kind === "bd";
 
   return (

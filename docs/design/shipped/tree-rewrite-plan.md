@@ -275,7 +275,7 @@ maps — codicons for free on the VS Code side, a lookup table on ours. Ad-hoc i
 are how a "portable" provider quietly stops being portable.
 
 **The honest cost:** shared trees are capped at VS Code's expressiveness. Custom badges
-like the request tree's method-kind tags (`U`, `S←`, `B⇄`) are not expressible in a
+like the request tree's method-kind tags (`U`, `S→`, `B⇄`) are not expressible in a
 `TreeItem` — they become `description` text or an icon. Any tree we want portable must be
 designed within that ceiling from the start; retrofitting is a redesign.
 
@@ -363,7 +363,7 @@ the viewport edges; reject drops into a dragged node's own descendant.
 5. **The rename box replaces the whole row content** (T4b). VS Code keeps the file icon
    visible beside its edit box; we yield the entire content area to the input, keeping only
    the row *shell* (indent guides, twistie column). Our rich request rows show a
-   `MethodKindTag` (`U`, `S←`, `B⇄`) where VS Code shows a file icon, and swapping that tag
+   `MethodKindTag` (`U`, `S→`, `B⇄`) where VS Code shows a file icon, and swapping that tag
    for the portable tier's generic `"file"` icon mid-edit would be a stranger visual
    substitution than simply yielding the row. The shell stays because it is the tree's own
    chrome, not the content's — dropping it would make the edited row jump out of the indent
