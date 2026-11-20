@@ -44,7 +44,8 @@ resolves in one place, `wsroot.Discover`:** explicit `--workspace`, else
 - `InvokeSaved`/`InvokeSavedStreaming` resolve saved body/metadata/middleware/target
   server-side, support `dry_run`; `describe` never dials, answering from the cached merged
   descriptor set.
-- `sources add` reads kind from the argument: a path that stats as a file → upload;
-  `//`/`@` prefix → bazel label; else → reflection address.
+- `sources add` reads kind from the argument: a directory or `*.proto` that stats → protos
+  (`-I` import roots); another file → upload; `//`/`@` prefix → bazel label; else →
+  reflection address.
 - One writer — every verb goes through this workspace's daemon by default; `--in-process`
   is the escape hatch to two writers on one directory.

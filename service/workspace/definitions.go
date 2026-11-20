@@ -23,11 +23,23 @@ type definitions struct {
 	serviceList   []*grpcviewv1.Service
 	descriptorSet []byte
 	claimedBy     map[string]string // proto file name -> winning source id
+	files         map[string]*desc.FileDescriptor
+	originals     map[string]string // proto file name -> winner's original .proto text
 	// digest identifies GetDefinitions' output; "" with digestErr set if it could not be computed.
 	digest     string
 	digestErr  error
 	mergeErr   error
 	listDigest [sha256.Size]byte
+
+	// GetDefinitionsResponse.protos, rendered on first ask.
+	protosOnce sync.Once
+	protos     []*grpcviewv1.ProtoDefinitionFile
+	protosErr  error
+}
+
+func (d *definitions) protoFiles() ([]*grpcviewv1.ProtoDefinitionFile, error) {
+	d.protosOnce.Do(func() { d.protos, d.protosErr = protoFiles(d.files, d.claimedBy, d.originals) })
+	return d.protos, d.protosErr
 }
 
 // Identifies a source list by its whole authored content, with the derived Resolved summaries excluded
@@ -192,7 +204,7 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 	for _, src := range sources {
 		rs := &resolvedSource{id: src.GetId(), server: src.GetReflection()}
 		if blob, ok := stored[rs.id]; ok {
-			rs.files, rs.services = blob.GetDescriptorSet(), blob.GetServiceNames()
+			rs.files, rs.services, rs.originals = blob.GetDescriptorSet(), blob.GetServiceNames(), store.Originals(blob.GetOriginals())
 		} else {
 			rs.err = unresolvedReason(src)
 		}
@@ -219,10 +231,12 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 		serviceList:   view.services,
 		descriptorSet: view.descriptorSet,
 		claimedBy:     view.claimedBy,
+		files:         view.files,
+		originals:     view.originals,
 		listDigest:    sourceListDigest(sources),
 	}
 	if len(defs.descriptorSet) > 0 {
-		defs.digest, defs.digestErr = definitionsDigest(defs.descriptorSet, defs.claimedBy)
+		defs.digest, defs.digestErr = definitionsDigest(defs.descriptorSet, defs.claimedBy, defs.originals)
 	}
 	return defs, nil
 }

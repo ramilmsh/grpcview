@@ -110,7 +110,7 @@ everything else as unanalyzable coverage.
 ## Network and bazel are gated, and this is the sharpest design call
 
 `unresolvable-source` and `method-not-in-sources` need resolved descriptors, and resolving a
-source **dials a reflection server, shells out to `bazel build`, or reads an upload**
+source **dials a reflection server, shells out to `bazel query`, or reads an upload**
 (`definitionsFor`, `definitions.go:231`). A `check` that does that by default is a bad
 surprise twice over: it touches the network from CI, and it can take minutes on a cold bazel
 cache.
@@ -128,7 +128,7 @@ Two bounds this makes load-bearing, both already flagged elsewhere:
   ([`shipped/daemon.md`](../shipped/daemon.md), deviation 4). One pass calls it once, so
   this is fine here — but the UI surface must not poll it.
 - **`definitionsCacheSize = 16`.** A source-enabled pass touches *every* collection, so a
-  workspace with more than 16 thrashes an LRU whose miss is a network dial or a bazel build.
+  workspace with more than 16 thrashes an LRU whose miss is a network dial or a bazel query.
   [`cross-collection-invoke.md`](./cross-collection-invoke.md) flags the same constant from
   the typing side, and the shipped daemon from the leak side (entries now live for its idle
   hour rather than one command); three pressures, one number, chosen once.

@@ -302,8 +302,8 @@ export function AddSourceCard({
                 style={{ flex: "none", color: "var(--v-text-2)" }}
               />
               <span>
-                Adding or refreshing runs{" "}
-                <code style={inlineCode}>bazel build</code>, so this workspace
+                Adding or refreshing loads this repo's BUILD files with{" "}
+                <code style={inlineCode}>bazel query</code>, so this workspace
                 has to be trusted.
               </span>
             </div>

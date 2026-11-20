@@ -495,7 +495,7 @@ export function useWorkspaceMutations() {
 }
 
 // Workspace Trust (VS Code's, copied): grants or revokes permission for this workspace ROOT
-// to execute — today, for a bazel source to run `bazel build`. Its own hook rather than a
+// to execute — today, for a bazel source to run `bazel query`/`cquery`. Its own hook rather than a
 // member of useWorkspaceMutations because it is the one write that does not return a
 // Collection, so there is no Get cache to seed; what it changes is `trusted` on the
 // collections listing, which is therefore what gets invalidated.

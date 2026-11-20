@@ -3,6 +3,7 @@ import {
   ArrowClockwise,
   CaretDown,
   CaretUp,
+  Code,
   FileArchive,
   GitBranch,
   Hammer,
@@ -29,12 +30,18 @@ import { SourceOrigin, type DescriptorSource } from "@grpcview/v1/workspace_pb";
 // unset — a reference grpcview.work.json no longer defines. It has no kind to claim, since
 // the manifest held the address and the address is what said reflection or upload, so the
 // row must not label it a descriptor set; Resolved.error already names the file to fix.
-export type SourceKind = "reflection" | "descriptorSet" | "bazel" | "reference";
+export type SourceKind =
+  | "reflection"
+  | "descriptorSet"
+  | "bazel"
+  | "protos"
+  | "reference";
 
 export function sourceKind(s: DescriptorSource): SourceKind {
   if (s.source.case === "reflection") return "reflection";
   if (s.source.case === "upload") return "descriptorSet";
   if (s.source.case === "bazel") return "bazel";
+  if (s.source.case === "protos") return "protos";
   return "reference";
 }
 
@@ -44,12 +51,14 @@ export function sourceLabel(s: DescriptorSource): string {
   // The bazel label IS what the row points at, the way an address is for reflection: it is
   // config, it is what a refresh builds, and it is the only readable half of the id.
   if (s.source.case === "bazel") return s.source.value.label;
+  // Root-relative, so the path is both the label and the recipe.
+  if (s.source.case === "protos") return s.source.value.path;
   return s.id;
 }
 
 // The workspace-root-relative path a source's bytes were last read from, empty when there
-// isn't one. Only an upload has one to show: reflection has an address instead, and a bazel
-// label's outputs are the build's business, not a recipe a user retypes.
+// isn't one. Only an upload has one to show: reflection has an address instead, a bazel
+// label's outputs are the build's business, and a protos path is already the row's label.
 export function refreshRecipe(s: DescriptorSource): string {
   return s.source.case === "upload" ? s.source.value.path : "";
 }
@@ -143,8 +152,10 @@ export function refreshTitle(s: DescriptorSource): string {
         : REDROP_TO_REFRESH;
     }
     case "bazel":
-      // Refusable: an untrusted workspace runs no build, and says so in Resolved.error.
-      return "Run bazel build for this label and re-read the descriptor sets it writes";
+      // Refusable: an untrusted workspace runs no bazel, and says so in Resolved.error.
+      return "Query bazel for this label's .proto files and recompile them";
+    case "protos":
+      return `Re-read and recompile the .proto files at ${sourceLabel(s)}`;
     default:
       // A reference with no definition has no pointer to re-acquire from, so this reports
       // what is missing rather than fetching anything.
@@ -179,6 +190,7 @@ export const KIND_ICON: Record<SourceKind, typeof PlugsConnected> = {
   reflection: PlugsConnected,
   descriptorSet: FileArchive,
   bazel: Hammer,
+  protos: Code,
   reference: LinkBreak,
 };
 
@@ -187,12 +199,13 @@ export const KIND_TINT: Record<SourceKind, string> = {
   reflection: "var(--v-text)",
   descriptorSet: "var(--v-text)",
   bazel: "var(--v-text)",
+  protos: "var(--v-text)",
   reference: "var(--v-warn)",
 };
 
 const BAZEL_TITLE =
-  "Refreshing this source runs `bazel build` for the label and reads the descriptor sets it " +
-  "writes. That runs this repo's build code, so it is refused until the workspace is trusted.";
+  "Refreshing this source runs `bazel query` for the label's .proto files and compiles them. " +
+  "That loads this repo's BUILD files, so it is refused until the workspace is trusted.";
 
 export interface SourceRowCallbacks {
   onMove: (from: number, to: number) => void;
@@ -311,6 +324,7 @@ export function SourceRow({
           bazel
         </Tag>
       )}
+      {kind === "protos" && <Tag variant="neutral">protos</Tag>}
       {kind === "reference" && (
         <span className="tag tag-warn" title={noDefinitionTitle(s.id)}>
           {NO_DEFINITION_LABEL}

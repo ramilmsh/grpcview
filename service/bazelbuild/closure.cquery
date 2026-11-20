@@ -1,0 +1,18 @@
+# One JSON line per file in each ProtoInfo closure; nothing for a target without one.
+# A file's import name is its path relative to the longest protoc -I root holding it ("." = as is).
+
+def format(target):
+    ps = providers(target) or {}
+    infos = [ps[k] for k in ps if k == "ProtoInfo" or k.endswith("%ProtoInfo")]
+    if not infos:
+        return ""
+    roots = sorted([r + "/" for r in infos[0].transitive_proto_path.to_list() if r != "."], key = len, reverse = True)
+    lines = []
+    for f in infos[0].transitive_sources.to_list():
+        name = f.path
+        for r in roots:
+            if name.startswith(r):
+                name = name[len(r):]
+                break
+        lines.append(json.encode({"name": name, "path": f.path, "source": f.is_source, "owner": str(f.owner)}))
+    return "\n".join(lines)

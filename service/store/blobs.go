@@ -35,7 +35,12 @@ func normalizeDescriptorSet(fds *descriptorpb.FileDescriptorSet) ([]byte, string
 	if err := (proto.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(raw, clean); err != nil {
 		return nil, "", err
 	}
-	canonical, err := proto.MarshalOptions{Deterministic: true}.Marshal(clean)
+	return canonicalize(clean)
+}
+
+// Deterministic bytes of m and their digest, which is the blob's file name.
+func canonicalize(m proto.Message) ([]byte, string, error) {
+	canonical, err := proto.MarshalOptions{Deterministic: true}.Marshal(m)
 	if err != nil {
 		return nil, "", err
 	}
@@ -50,38 +55,50 @@ func (s *Store) putBlob(fds *descriptorpb.FileDescriptorSet) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path := s.blobPath(digest)
-	if fileExists(path) {
-		return digest, nil
-	}
-	if err := os.MkdirAll(s.blobsRoot(), 0o755); err != nil {
-		return "", err
-	}
-	if err := writeFileAtomic(path, canonical, 0o644); err != nil {
-		return "", err
-	}
-	return digest, nil
+	return digest, s.writeBlob(digest, canonical)
 }
 
-// An absent or unparseable blob is (nil, nil): the source reads as unresolved and a refresh fixes it.
-// An unparseable one is also DELETED, because write-if-absent would otherwise make the corruption
-// permanent. Callers must hold s.blobMu.
-func (s *Store) readBlob(digest string) (*descriptorpb.FileDescriptorSet, error) {
+// Empty originals are "" — no blob. Callers must hold s.blobMu.
+func (s *Store) putOriginals(files []*grpcviewstorev1.ProtoFile) (string, error) {
+	if len(files) == 0 {
+		return "", nil
+	}
+	canonical, digest, err := canonicalize(&grpcviewstorev1.ProtoFiles{Files: files})
+	if err != nil {
+		return "", err
+	}
+	return digest, s.writeBlob(digest, canonical)
+}
+
+func (s *Store) writeBlob(digest string, canonical []byte) error {
+	path := s.blobPath(digest)
+	if fileExists(path) {
+		return nil
+	}
+	if err := os.MkdirAll(s.blobsRoot(), 0o755); err != nil {
+		return err
+	}
+	return writeFileAtomic(path, canonical, 0o644)
+}
+
+// Reads blob digest into m; false if it is absent or unparseable, and the source reads as unresolved
+// so a refresh fixes it. An unparseable one is also DELETED, because write-if-absent would otherwise
+// make the corruption permanent. Callers must hold s.blobMu.
+func (s *Store) readBlob(digest string, m proto.Message) (bool, error) {
 	path := s.blobPath(digest)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return false, nil
 	}
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	fds := &descriptorpb.FileDescriptorSet{}
-	if err := proto.Unmarshal(data, fds); err != nil {
-		s.logger.Warn("dropping unreadable descriptor blob", "digest", digest, "error", err)
+	if err := proto.Unmarshal(data, m); err != nil {
+		s.logger.Warn("dropping unreadable blob", "digest", digest, "error", err)
 		_ = os.Remove(path)
-		return nil, nil
+		return false, nil
 	}
-	return fds, nil
+	return true, nil
 }
 
 // Deletes every blob no collection in this workspace references. Workspace-scoped because the blobs
@@ -143,6 +160,9 @@ func (s *Store) referencedDigests() (map[string]bool, error) {
 		}
 		for _, e := range index.GetEntries() {
 			referenced[e.GetDigest()] = true
+			if d := e.GetOriginalsDigest(); d != "" {
+				referenced[d] = true
+			}
 		}
 	}
 	return referenced, nil
@@ -205,6 +225,7 @@ func (c *Collection) writeDescriptorSidecar(r *grpcviewstorev1.ResolvedSource) e
 		Id:            r.GetId(),
 		DescriptorSet: fds,
 		ServiceNames:  r.GetServiceNames(),
+		Originals:     r.GetOriginals(),
 	})
 	if err != nil {
 		return err
@@ -265,18 +286,27 @@ func (c *Collection) pruneDescriptorSidecars(keep map[string]bool) error {
 }
 
 func (c *Collection) blobResolve(id string, entry *grpcviewstorev1.DescriptorIndexEntry) (*grpcviewstorev1.ResolvedSource, error) {
-	fds, err := c.store.readBlob(entry.GetDigest())
-	if err != nil {
+	fds := &descriptorpb.FileDescriptorSet{}
+	if ok, err := c.store.readBlob(entry.GetDigest(), fds); err != nil || !ok {
+		if err == nil {
+			c.logger.Warn("descriptor blob missing for source", "source", id, "digest", entry.GetDigest())
+		}
 		return nil, err
 	}
-	if fds == nil {
-		c.logger.Warn("descriptor blob missing for source", "source", id, "digest", entry.GetDigest())
-		return nil, nil
+	originals := &grpcviewstorev1.ProtoFiles{}
+	if d := entry.GetOriginalsDigest(); d != "" {
+		if ok, err := c.store.readBlob(d, originals); err != nil || !ok {
+			if err == nil {
+				c.logger.Warn("originals blob missing for source", "source", id, "digest", d)
+			}
+			return nil, err
+		}
 	}
 	return &grpcviewstorev1.ResolvedSource{
 		Id:            id,
 		DescriptorSet: fds,
 		ServiceNames:  entry.GetServiceNames(),
+		Originals:     originals.GetFiles(),
 	}, nil
 }
 

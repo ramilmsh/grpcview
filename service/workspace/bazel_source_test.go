@@ -36,10 +36,30 @@ func bazelWorkspace(t *testing.T, w Workspace) {
 	writeFile(t, filepath.Join(w.store.Root(), "MODULE.bazel"), []byte("module(name = \"test\")\n"))
 }
 
-func cqueryPrinting(paths ...string) string {
-	return "if [ \"$1\" = cquery ]; then\n" +
-		"  printf '%s\\n' " + strings.Join(quoteAll(paths), " ") + "\n" +
-		"fi\nexit 0\n"
+const healthProto = `syntax = "proto3";
+package grpc.health.v1;
+import "google/protobuf/empty.proto";
+service Health { rpc Check(google.protobuf.Empty) returns (google.protobuf.Empty); }
+`
+
+// Writes grpc/health/v1/health.proto under a bazel root.
+func writeHealth(t *testing.T, bazelRoot string) {
+	t.Helper()
+	writeFile(t, filepath.Join(bazelRoot, "grpc", "health", "v1", "health.proto"), []byte(healthProto))
+}
+
+// A fake bazel whose starlark cquery reports main-repo sources, and which leaves a marker if anything
+// but that cquery runs.
+func cqueryPrinting(t *testing.T, marker string, paths ...string) string {
+	t.Helper()
+	var files []string
+	for _, p := range paths {
+		files = append(files, fmt.Sprintf(`{"name":%q,"path":%q,"source":true,"owner":"@@//%s"}`, p, p, p))
+	}
+	return "case \"$1 $2\" in\n" +
+		"\"cquery --output=starlark\") printf '%s\\n' " + strings.Join(quoteAll(files), " ") + " ;;\n" +
+		"*) touch " + quoteAll([]string{marker})[0] + " ;;\n" +
+		"esac\nexit 0\n"
 }
 
 func quoteAll(in []string) []string {
@@ -57,7 +77,9 @@ func bazelAddReq(label string) *grpcviewv1.AddDescriptorSourceRequest {
 	}
 }
 
-func TestAddBazelSourceResolvesAndDedupes(t *testing.T) {
+// Analysis only: the closure is compiled in-process, so nothing but the cquery runs, and the
+// source keeps the original .proto text.
+func TestAddBazelSourceCompilesWithoutBuilding(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -67,14 +89,16 @@ func TestAddBazelSourceResolvesAndDedupes(t *testing.T) {
 		t.Fatalf("Trust: %v", err)
 	}
 
-	health := fileDescriptorSet(t, "grpc/health/v1/health.proto")
-	writeFile(t, filepath.Join(w.store.Root(), "out", "one.bin"), health)
-	writeFile(t, filepath.Join(w.store.Root(), "out", "two.bin"), health)
-	fakeBazelOnPath(t, cqueryPrinting("out/one.bin", "out/two.bin"))
+	writeHealth(t, w.store.Root())
+	marker := filepath.Join(w.store.Root(), "bazel-built")
+	fakeBazelOnPath(t, cqueryPrinting(t, marker, "grpc/health/v1/health.proto"))
 
 	resp, err := w.AddDescriptorSource(ctx, connect.NewRequest(bazelAddReq("//proto/health:health_descriptor_set")))
 	if err != nil {
 		t.Fatalf("AddDescriptorSource(bazel): %v", err)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("bazel ran something other than the starlark cquery")
 	}
 	coll := resp.Msg.GetCollection()
 	if len(coll.GetSources()) != 1 {
@@ -93,6 +117,23 @@ func TestAddBazelSourceResolvesAndDedupes(t *testing.T) {
 	if addr := hasServiceNamed(coll.GetServices(), "grpc.health.v1.Health").GetSource().GetAddress(); addr != "" {
 		t.Errorf("a bazel source must contribute no dial target, got %q", addr)
 	}
+
+	c, err := w.store.Open(ctx, testWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources, err := c.Sources(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := w.resolveConfigured(ctx, c, sources, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originals := resolved[0].originals
+	if len(originals) != 1 || originals["grpc/health/v1/health.proto"] != healthProto {
+		t.Errorf("originals = %v, want health.proto's text alone (empty.proto is builtin)", originals)
+	}
 }
 
 func TestAddBazelSourceCanonicalizesTheID(t *testing.T) {
@@ -104,8 +145,8 @@ func TestAddBazelSourceCanonicalizesTheID(t *testing.T) {
 	if err := wsroot.Trust(w.store.Root()); err != nil {
 		t.Fatalf("Trust: %v", err)
 	}
-	writeFile(t, filepath.Join(w.store.Root(), "out.bin"), fileDescriptorSet(t, "grpc/health/v1/health.proto"))
-	fakeBazelOnPath(t, cqueryPrinting("out.bin"))
+	writeHealth(t, w.store.Root())
+	fakeBazelOnPath(t, cqueryPrinting(t, filepath.Join(w.store.Root(), "bazel-built"), "grpc/health/v1/health.proto"))
 
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(bazelAddReq("//proto/health"))); err != nil {
 		t.Fatalf("AddDescriptorSource(//proto/health): %v", err)
@@ -147,8 +188,8 @@ func TestAddBazelSourceRefusedWhenUntrusted(t *testing.T) {
 		t.Fatal("bazel was exec'd for an untrusted workspace")
 	}
 
-	writeFile(t, filepath.Join(w.store.Root(), "out.bin"), fileDescriptorSet(t, "grpc/health/v1/health.proto"))
-	fakeBazelOnPath(t, cqueryPrinting("out.bin"))
+	writeHealth(t, w.store.Root())
+	fakeBazelOnPath(t, cqueryPrinting(t, filepath.Join(w.store.Root(), "bazel-built"), "grpc/health/v1/health.proto"))
 	if err := wsroot.Trust(w.store.Root()); err != nil {
 		t.Fatalf("Trust: %v", err)
 	}
@@ -185,7 +226,7 @@ func TestAddBazelSourceRejectsABadLabel(t *testing.T) {
 	}
 }
 
-func TestAddBazelSourceBuildFailureFailsTheAdd(t *testing.T) {
+func TestAddBazelSourceBazelFailureFailsTheAdd(t *testing.T) {
 	isolateTrust(t)
 	w := newTestWorkspace(t)
 	ctx := context.Background()
@@ -198,7 +239,7 @@ func TestAddBazelSourceBuildFailureFailsTheAdd(t *testing.T) {
 
 	_, err := w.AddDescriptorSource(ctx, connect.NewRequest(bazelAddReq("//proto/health:health")))
 	if err == nil {
-		t.Fatal("AddDescriptorSource with a failing build succeeded, want an error")
+		t.Fatal("AddDescriptorSource with a failing bazel succeeded, want an error")
 	}
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("code = %s, want FailedPrecondition", got)
@@ -217,8 +258,8 @@ func TestBazelSourceLoadsUnresolvedWhenUntrusted(t *testing.T) {
 	if err := wsroot.Trust(w.store.Root()); err != nil {
 		t.Fatalf("Trust: %v", err)
 	}
-	writeFile(t, filepath.Join(w.store.Root(), "out.bin"), fileDescriptorSet(t, "grpc/health/v1/health.proto"))
-	fakeBazelOnPath(t, cqueryPrinting("out.bin"))
+	writeHealth(t, w.store.Root())
+	fakeBazelOnPath(t, cqueryPrinting(t, filepath.Join(w.store.Root(), "bazel-built"), "grpc/health/v1/health.proto"))
 	if _, err := w.AddDescriptorSource(ctx, connect.NewRequest(bazelAddReq("//proto/health:health"))); err != nil {
 		t.Fatalf("AddDescriptorSource: %v", err)
 	}
@@ -447,8 +488,8 @@ func TestBazelRootMayBeAnAncestorOfTheWorkspace(t *testing.T) {
 	monorepo := filepath.Dir(w.store.Root())
 	writeFile(t, filepath.Join(monorepo, "MODULE.bazel"), []byte("module(name = \"acme\")\n"))
 	writeBazelRoot(t, w.store.Root(), monorepo)
-	writeFile(t, filepath.Join(monorepo, "out.bin"), fileDescriptorSet(t, "grpc/health/v1/health.proto"))
-	fakeBazelOnPath(t, cqueryPrinting("out.bin"))
+	writeHealth(t, monorepo)
+	fakeBazelOnPath(t, cqueryPrinting(t, filepath.Join(monorepo, "bazel-built"), "grpc/health/v1/health.proto"))
 
 	resp, err := w.AddDescriptorSource(ctx, connect.NewRequest(bazelAddReq("//proto/health:health")))
 	if err != nil {

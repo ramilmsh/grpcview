@@ -45,17 +45,18 @@ node_modules/@bufbuild/protobuf/   ← today's hand-fed Monaco stubs, served as 
 the *merged* `FileDescriptorSet`, and the first source to define a file wins
 (`sources.go:308-318`). A per-source tree would show files that were overridden and never
 type-check. The explorer shows the merged set and **labels each file with the source that won
-it**. `claimedBy` (`sources.go:308`) already records this but `mergedView` drops it, so keep it.
+it**: `mergedView.claimedBy` (`sources.go`).
 Overridden files are not listed.
 
 **Paths equal Monaco's extra-lib URIs.** Today generated files live under `GEN_PREFIX`
 (`file:///grpcview/request/gen/`, `gv-types.ts:37`). The Definitions tree uses the same paths,
 so opening a file from the explorer and go-to-definition from a body land on the same model.
 
-The descriptor explorer's rendered `.proto` files
-([`descriptor-explorer-plan.md`](./descriptor-explorer-plan.md)) slot in later as a `proto/`
-sibling of `gen/`. That plan's own RPC (`ExploreDescriptorSource`) becomes unnecessary. Its
-symbol index stays.
+The descriptor explorer's `.proto` files
+([`descriptor-explorer-plan.md`](./descriptor-explorer-plan.md)) are a `proto/` sibling of `gen/`,
+named by import path, labeled by winning source. `GetDefinitionsResponse.protos` already serves
+them (original text, or rendered when the winner kept none); `ExploreDescriptorSource` is dropped.
+Its symbol index stays.
 
 ### Requests — the real collection directory
 

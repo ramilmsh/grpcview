@@ -132,13 +132,13 @@ func TestSourcesLsTrust(t *testing.T) {
 		{
 			name:     "an untrusted workspace with a bazel source says so, once, after the rows",
 			snapshot: bazelWorkspace("//grpcview/echo/v1:grpcviewechov1_proto"),
-			wantNote: "! %s is not trusted: 1 bazel source above cannot build here — `grpcview trust` allows it",
+			wantNote: "! %s is not trusted: 1 bazel source above cannot resolve here — `grpcview trust` allows it",
 			wantList: 2,
 		},
 		{
 			name:     "the count is the number of rows that would build",
 			snapshot: bazelWorkspace("//grpcview/echo/v1:grpcviewechov1_proto", "//proto/auth/v1:authv1_proto"),
-			wantNote: "! %s is not trusted: 2 bazel sources above cannot build here — `grpcview trust` allows it",
+			wantNote: "! %s is not trusted: 2 bazel sources above cannot resolve here — `grpcview trust` allows it",
 			wantList: 2,
 		},
 		{
@@ -312,17 +312,17 @@ func TestTheBuildingVerbsGetALongerDefaultTimeout(t *testing.T) {
 		{
 			name: "sources add of a bazel label waits for the build",
 			args: []string{"sources", "add", label},
-			want: buildTimeout,
+			want: bazelTimeout,
 		},
 		{
 			name: "sources refresh does too: any row in the list may be a bazel source",
 			args: []string{"sources", "refresh"},
-			want: buildTimeout,
+			want: bazelTimeout,
 		},
 		{
 			name: "refreshing one named source is the same budget: the id says nothing about its kind",
 			args: []string{"sources", "refresh", "bazel:" + label},
-			want: buildTimeout,
+			want: bazelTimeout,
 		},
 		{
 			name: "sources add of a reflection target keeps the short one: it dials, it does not build",

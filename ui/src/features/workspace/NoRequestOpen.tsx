@@ -43,7 +43,14 @@ export function NoRequestOpen() {
       >
         No request open
       </h2>
-      <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.45, color: "var(--v-text-2)" }}>
+      <p
+        style={{
+          margin: "6px 0 0",
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: "var(--v-text-2)",
+        }}
+      >
         Pick a request from the tree, or start a new one.
       </p>
       <Button

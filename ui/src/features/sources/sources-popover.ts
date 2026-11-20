@@ -9,6 +9,7 @@ export const KIND_LABEL: Record<SourceKind, string> = {
   reflection: "reflection",
   descriptorSet: "descriptor set",
   bazel: "bazel",
+  protos: "protos",
   reference: NO_DEFINITION_LABEL,
 };
 

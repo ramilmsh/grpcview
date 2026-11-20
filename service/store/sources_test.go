@@ -318,6 +318,68 @@ func TestWorkspaceDefinitionRejectsAnUpload(t *testing.T) {
 	}
 }
 
+func TestManifestProtosPathIsCanonicalized(t *testing.T) {
+	for _, tc := range []struct{ name, path, importPath string }{
+		{"dot-prefixed", "./api", "./proto/"},
+		{"trailing slash", "api/", "proto/"},
+		{"absolute inside root", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			coll, ctx := newTestCollection(t)
+			path, ip := tc.path, tc.importPath
+			if path == "" {
+				path = filepath.ToSlash(filepath.Join(coll.store.root, "api"))
+				ip = filepath.ToSlash(filepath.Join(coll.store.root, "proto"))
+			}
+			manifest := `{"schemaVersion": 1, "name": "test", "sources": [
+  {"protos": {"path": "` + path + `", "importPaths": ["` + ip + `"]}}
+]}`
+			if err := os.WriteFile(coll.collectionFilePath(), []byte(manifest), 0o644); err != nil {
+				t.Fatalf("write manifest: %v", err)
+			}
+			got, err := coll.Sources(ctx)
+			if err != nil {
+				t.Fatalf("Sources: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("sources = %v, want 1", got)
+			}
+			if id := got[0].GetId(); id != "protos:api" {
+				t.Errorf("id = %q, want protos:api — the id `sources add api` derives", id)
+			}
+			if p := got[0].GetProtos().GetPath(); p != "api" {
+				t.Errorf("path = %q, want it canonicalized in place", p)
+			}
+			if ips := got[0].GetProtos().GetImportPaths(); len(ips) != 1 || ips[0] != "proto" {
+				t.Errorf("import paths = %q, want [proto]", ips)
+			}
+		})
+	}
+}
+
+func TestManifestProtosPathOutsideRootStaysAsAuthored(t *testing.T) {
+	s := newTestStore(t)
+	outside := filepath.ToSlash(filepath.Join(filepath.Dir(s.root), "elsewhere"))
+	defs := s.definitionSet([]*grpcviewstorev1.DescriptorSource{
+		{Source: &grpcviewstorev1.DescriptorSource_Protos{
+			Protos: &grpcviewstorev1.Protos{Path: "../out", ImportPaths: []string{outside}},
+		}},
+		{Source: &grpcviewstorev1.DescriptorSource_Protos{
+			Protos: &grpcviewstorev1.Protos{Path: "./api/"},
+		}},
+	})
+	def := defs["protos:../out"]
+	if def == nil {
+		t.Fatalf("a path outside the root must stay visible as authored: %v", defs)
+	}
+	if ips := def.GetProtos().GetImportPaths(); len(ips) != 1 || ips[0] != outside {
+		t.Errorf("import paths = %q, want [%s] as authored", ips, outside)
+	}
+	if defs["protos:api"] == nil {
+		t.Errorf("workspace definitions canonicalize too: %v", defs)
+	}
+}
+
 func TestWorkspaceDefinitionAcceptsBazelNotUpload(t *testing.T) {
 	s := newTestStore(t)
 	const label = "//grpcview/echo/v1:grpcviewechov1_proto"

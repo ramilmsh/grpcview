@@ -20,6 +20,9 @@ message AddDescriptorSourceRequest {
     Server reflection = 3;
     // A Bazel label that builds its own descriptor set.
     Bazel bazel = 6;
+    // .proto sources in the workspace. Paths may be absolute or workspace-relative;
+    // stored root-relative.
+    Protos protos = 9;
   }
   // Identity of a descriptor_set upload; re-uploading the same name refreshes it.
   string file_name = 4;
@@ -326,14 +329,31 @@ message DefinitionFile {
   string source = 3;
 }
 
+// One merged proto file as .proto text.
+message ProtoDefinitionFile {
+  // Import name: "grpcview/v1/service.proto".
+  string path = 1;
+  // .proto text.
+  string content = 2;
+  // Id of the source that won this file.
+  string source = 3;
+  // True: reconstructed from descriptors. False: the winning source's original text,
+  // verbatim.
+  bool rendered = 4;
+}
+
 // A collection's merged definitions, generated.
 message GetDefinitionsResponse {
-  // Hex sha256 over the generator, merged descriptor set, per-file winning sources
-  // and builtin stubs; changes iff the files do. Equals Collection.definitions_digest.
+  // Hex sha256 over the generator, merged descriptor set, per-file winning sources,
+  // original .proto texts and builtin stubs; changes iff `files` or `protos` do.
+  // Equals Collection.definitions_digest.
   string digest = 1;
   // One per merged proto file, google/protobuf/* excepted, sorted by path; then the
   // builtin `@bufbuild/protobuf` type stubs they import, under "node_modules/".
   repeated DefinitionFile files = 2;
+  // One per merged proto file, google/protobuf/* excepted, sorted by path. Kept apart
+  // from `files`, which feeds Monaco's TypeScript.
+  repeated ProtoDefinitionFile protos = 3;
 }
 
 // A collection is only ever created by an explicit act — this RPC, or

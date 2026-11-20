@@ -44,7 +44,7 @@ computed specifier → `any`, never a false error.
 # Definition sources (where schemas come from)
 
 Services and `definitions_digest` are derived, never authored — from a priority-ordered list of
-sources (reflection targets, uploaded `FileDescriptorSet`s, bazel labels), merged by
+sources (reflection targets, uploaded `FileDescriptorSet`s, bazel labels, `.proto` files), merged by
 `sources.go`. Each resolves independently, storing per `commit_descriptors`: **off
 (default)** — content-addressed blob under the workspace state root, shared across
 collections; **on** — protojson in the collection, so a fresh clone resolves offline
@@ -53,7 +53,7 @@ derived in memory per collection on first touch (`mergeSources`, front to back �
 source to define a file/serve a service wins); nothing persisted.
 
 Order is precedence only, never recency. Identity is config-derived (`store.SourceID`:
-`reflection:<address>[+tls]`, `upload:<file name>`, `bazel:<canonical label>`, computed in
+`reflection:<address>[+tls]`, `upload:<file name>`, `bazel:<canonical label>`, `protos:<path>`, computed in
 `service/store/sources.go`); re-adding refreshes in place, new ones append at lowest
 priority unless `AddDescriptorSourceRequest.position` names an index. No resolved definitions → `FailedPrecondition`. A service's dial target is
 independent of who won its descriptors — `Service.source` is the first *reflection* source
@@ -74,14 +74,32 @@ file (`generated.go`), by Merkle key — bundle hash, plugin parameter, the file
 its imports' keys — in memory over a disk CAS under `wsroot.CacheRoot()/codegen` shared by
 every daemon; only misses (a changed file and its importers) reach QuickJS, in one job.
 Its `files[]` ends with the `@bufbuild/protobuf` Monaco stubs (`stubs.go`, source `builtin`).
+Its `protos[]` is the merged set as `.proto` (`protos.go`, memoized on the `definitions` entry):
+the winner's original text verbatim if it kept one (`rendered=false`), else `protoprint` in
+source order, comments kept. `mergeSources` keeps per file its winner and that winner's original;
+the digest covers originals.
+
+## The protos kind
+
+`Protos{path, import_paths}` compiles in-process (`service/protofiles`, protocompile, WKTs
+builtin, comments kept). Import name = path relative to the first import path containing it
+(default: path if a dir, else its parent); every read is confined to the root. No trust gate —
+nothing runs. Original `.proto` texts persist beside the descriptors (`ResolvedSource.originals`;
+a `ProtoFiles` blob named by `DescriptorIndexEntry.originals_digest`, or inline in the sidecar).
 
 ## The bazel kind, and workspace trust
 
-A `Bazel{label}` refresh **builds**: `bazel query` for the descriptor-set closure, `bazel
-build`, `bazel cquery --output=files` — argv slices, never a shell string; downstream it
-behaves like an upload (no dial target). Adding one is a combobox pick, not free-typed.
+A `Bazel{label}` refresh **never builds** (a build runs `.bazelrc` aspects/validations on
+third-party protos; outputs may be remote-only). `service/bazelbuild` runs one starlark `cquery`
+(`closure.cquery`) over `config(deps(label, 1), target)` — depth 1 covers a `proto_descriptor_set`,
+`config` drops aspect-analyzed copies — emitting each ProtoInfo file with its import name (path minus
+the longest `transitive_proto_path` root, protoc's own `-I` rule). Main-repo sources are root + path;
+everything else is located by at most one `query --output=streamed_jsonproto` of the owners and their
+srcs (a virtual import's original = shortest src ending in its name minus `import_prefix`). A
+generated original is an error. The whole closure compiles in-process like the protos kind,
+originals kept. Argv slices, never a shell string; no dial target. Adding one is a combobox pick, not free-typed.
 
-Gated on **workspace trust** (VS Code's model, since a build runs arbitrary repo code):
-granted once per root, stored in user state (`service/wsroot`), not the repo. Untrusted is a
-working state, not broken — only a build is refused (`ListCollectionsResponse.trusted` +
-`SetWorkspaceTrust`).
+Gated on **workspace trust** (VS Code's model — loading BUILD files runs arbitrary repo
+code): granted once per root, stored in user state (`service/wsroot`), not the repo.
+Untrusted is a working state, not broken — only running bazel is refused
+(`ListCollectionsResponse.trusted` + `SetWorkspaceTrust`).

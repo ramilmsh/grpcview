@@ -180,7 +180,11 @@ export function TreeRow<T>({
         />
       )}
       {guideLevels(row.depth).map((i) => (
-        <span key={i} className="guide" style={{ left: guideLeft(i, indent) }} />
+        <span
+          key={i}
+          className="guide"
+          style={{ left: guideLeft(i, indent) }}
+        />
       ))}
       <span
         className="twistie"

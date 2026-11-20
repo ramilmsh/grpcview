@@ -648,10 +648,15 @@ func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState
 		if err != nil {
 			return err
 		}
+		originals, err := c.store.putOriginals(fresh.GetOriginals())
+		if err != nil {
+			return err
+		}
 		entries = append(entries, &grpcviewstorev1.DescriptorIndexEntry{
-			SourceId:     id,
-			Digest:       digest,
-			ServiceNames: fresh.GetServiceNames(),
+			SourceId:        id,
+			Digest:          digest,
+			ServiceNames:    fresh.GetServiceNames(),
+			OriginalsDigest: originals,
 		})
 	}
 	if err := c.writeDescriptorIndex(entries); err != nil {
@@ -853,7 +858,7 @@ func (c *Collection) readCollection() (*grpcviewstorev1.Collection, error) {
 	if err := readMessage(c.collectionFilePath(), col); err != nil {
 		return nil, err
 	}
-	col.Sources = normalizeSources(col.GetSources(), c.logger)
+	col.Sources = normalizeSources(col.GetSources(), c.store.root, c.logger)
 	return col, nil
 }
 

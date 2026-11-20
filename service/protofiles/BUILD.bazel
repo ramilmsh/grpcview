@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "protofiles",
+    srcs = ["protofiles.go"],
+    importpath = "codeberg.org/ramilmsh/grpcview/service/protofiles",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_bufbuild_protocompile//:protocompile",
+        "@com_github_bufbuild_protocompile//reporter",
+        "@com_github_jhump_protoreflect//desc",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
+)
+
+go_test(
+    name = "protofiles_test",
+    srcs = ["protofiles_test.go"],
+    embed = [":protofiles"],
+    deps = ["@com_github_jhump_protoreflect//desc"],
+)

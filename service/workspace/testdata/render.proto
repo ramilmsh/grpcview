@@ -1,0 +1,37 @@
+// Fixture for protoprint rendering (protos_test.go).
+syntax = "proto3";
+
+package grpcview.testdata;
+
+import "google/protobuf/timestamp.proto";
+
+// A shelf of books.
+message Shelf {
+  // Stable id.
+  string id = 1;
+  // Books in shelf order.
+  repeated Book books = 7;
+  google.protobuf.Timestamp updated = 3; // last write
+
+  // One book.
+  message Book {
+    string title = 1;
+    Genre genre = 2;
+    oneof where {
+      int32 slot = 4;
+      string loaned_to = 5;
+    }
+  }
+}
+
+// What a book is about.
+enum Genre {
+  GENRE_UNSPECIFIED = 0;
+  GENRE_FICTION = 2;
+}
+
+// Manages shelves.
+service Library {
+  // Fetches a shelf.
+  rpc GetShelf(Shelf) returns (Shelf);
+}

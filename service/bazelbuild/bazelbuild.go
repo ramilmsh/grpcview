@@ -1,24 +1,24 @@
-// Package bazelbuild turns a bazel label into the descriptor sets its default outputs name. It is the
-// mechanism, and knows nothing about grpcview's protos, store or RPCs.
+// Package bazelbuild locates a bazel label's .proto closure on disk. It is the mechanism, and knows
+// nothing about grpcview's protos, store or RPCs.
 
 package bazelbuild
 
 import (
 	"bytes"
 	"context"
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
+	"maps"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
-
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 const DefaultTimeout = 10 * time.Minute
@@ -29,9 +29,7 @@ type Builder struct {
 	Timeout time.Duration
 }
 
-// Passed to EVERY invocation, identically and on purpose: cquery reports the output path of the
-// configuration it is asked about, so a flag differing from the build's would report a path the build
-// never wrote.
+// Passed to every invocation: output is parsed, never shown.
 var commonArgs = []string{"--curses=no", "--color=no", "--noshow_progress"}
 
 var rootMarkers = []string{"MODULE.bazel", "WORKSPACE", "WORKSPACE.bazel"}
@@ -113,118 +111,221 @@ func CanonicalLabel(label string) (string, error) {
 	return repo + "//" + pkg + ":" + target, nil
 }
 
-func (b Builder) DescriptorSets(ctx context.Context, label string) ([]*descriptorpb.FileDescriptorSet, error) {
+//go:embed closure.cquery
+var closureCquery []byte
+
+// One file of a ProtoInfo closure, as closure.cquery reports it.
+type protoFile struct {
+	Name   string `json:"name"` // import name
+	Path   string `json:"path"` // exec path
+	Source bool   `json:"source"`
+	Owner  string `json:"owner"`
+}
+
+// What loading says about one label: a rule's class, import_prefix and srcs, or a source file's
+// absolute path. A generated file has none.
+type target struct {
+	Class, Prefix string
+	Srcs          []string
+	Location      string
+}
+
+// Closure maps every import name in label's ProtoInfo closure to its absolute path, from analysis and
+// loading alone: a build would run the user's --aspects and validations on someone else's protos.
+func (b Builder) Closure(ctx context.Context, label string) (map[string]string, error) {
 	canon, err := CanonicalLabel(label)
 	if err != nil {
 		return nil, err
 	}
-	if b.Root == "" {
-		return nil, errors.New("no bazel workspace root: no MODULE.bazel, WORKSPACE or WORKSPACE.bazel above this workspace")
+	r, cancel, err := b.session(ctx, canon)
+	if err != nil {
+		return nil, err
 	}
-
-	timeout := b.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	targets, err := b.protoClosure(ctx, runCtx, timeout, canon)
+	files, err := r.cquery(canon)
 	if err != nil {
 		return nil, err
 	}
-
-	if _, err := b.run(ctx, runCtx, timeout, canon, "build", nil, targets...); err != nil {
-		return nil, err
+	if len(files) == 0 {
+		return nil, fmt.Errorf("bazel target %s carries no ProtoInfo, nor do its direct deps; it must be a proto_library or a proto_descriptor_set", canon)
 	}
-	// cquery takes ONE expression, so the closure is unioned into it; `bazel build` takes patterns and
-	// gets them as separate arguments. Same configuration in both, see commonArgs.
-	stdout, err := b.run(ctx, runCtx, timeout, canon, "cquery", []string{"--output=files"}, strings.Join(targets, " + "))
+	q, err := r.query(owners(files))
 	if err != nil {
 		return nil, err
 	}
-
-	paths := splitLines(stdout)
-	if len(paths) == 0 {
-		return nil, fmt.Errorf("bazel target %s has no output files; it must be a target whose default outputs are FileDescriptorSets (a proto_library or a proto_descriptor_set)", canon)
+	out, err := locate(b.Root, files, q)
+	if err != nil {
+		return nil, fmt.Errorf("bazel target %s: %w", canon, err)
 	}
-
-	sets := make([]*descriptorpb.FileDescriptorSet, 0, len(paths))
-	for _, rel := range paths {
-		full := rel
-		if !filepath.IsAbs(full) {
-			full = filepath.Join(b.Root, rel)
-		}
-		raw, err := os.ReadFile(full)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil, fmt.Errorf("bazel target %s built, but its output %s does not exist locally; if you build with remote execution, add --remote_download_toplevel so the descriptor set is downloaded", canon, rel)
-			}
-			return nil, fmt.Errorf("failed to read bazel output %s of %s: %w", rel, canon, err)
-		}
-		set := &descriptorpb.FileDescriptorSet{}
-		if err := proto.Unmarshal(raw, set); err != nil {
-			return nil, fmt.Errorf("bazel output %s of %s is not a FileDescriptorSet: %w", rel, canon, err)
-		}
-		// proto.Unmarshal succeeds on almost any bytes (unknown fields are kept, not rejected), so an empty
-		// set is the only signal that the label's outputs are not descriptor sets at all — a go_binary, say.
-		if len(set.GetFile()) == 0 {
-			return nil, fmt.Errorf("bazel output %s of %s contains no proto files; it must be a target whose default outputs are FileDescriptorSets (a proto_library or a proto_descriptor_set)", rel, canon)
-		}
-		sets = append(sets, set)
-	}
-	return sets, nil
+	return out, nil
 }
 
-// Deliberately exact rather than something like `.*proto.*`: go_proto_library and cc_proto_library
-// carry "proto" in their kind and output no descriptor set, so a loose pattern would fill the picker
-// with targets that fail the moment they are added.
-const descriptorSetKinds = `proto_library|proto_descriptor_set`
-
-// The label, then every descriptor-set-producing target below it. Load-bearing, not an optimization: a
-// proto_library's descriptor set holds ONLY the files that target declares, so a label whose protos
-// import another target's — google/protobuf/any.proto, most often — links to nothing on its own
-// ("no such file: google/protobuf/any.proto"). Reading the closure's sets and deduping by file name
-// (the caller's job) is what reconstitutes the transitive set protoc --include_imports would emit.
-//
-// A dep whose kind produces no descriptor set is filtered out here rather than tolerated later,
-// because an output that is not a FileDescriptorSet is a hard error further down.
-func (b Builder) protoClosure(parent, ctx context.Context, timeout time.Duration, canon string) ([]string, error) {
-	expr := fmt.Sprintf(`kind("^(%s) rule$", deps(%s))`, descriptorSetKinds, canon)
-	stdout, err := b.run(parent, ctx, timeout, canon, "query", []string{"--output=label", "--order_output=no"}, expr)
+// depth 1 covers a proto_descriptor_set, whose deps carry its ProtoInfo; config(…, target) drops the
+// copies --aspects analyze in other configurations.
+func (r runner) cquery(canon string) ([]protoFile, error) {
+	dir, err := os.MkdirTemp("", "grpcview-")
 	if err != nil {
 		return nil, err
 	}
-	// canon leads, and stays even if the query listed nothing: its own outputs are what the user asked
-	// for, and a rule kind this query does not recognize can still emit a descriptor set.
-	targets, seen := []string{canon}, map[string]bool{canon: true}
-	for _, line := range splitLines(stdout) {
-		dep, cerr := CanonicalLabel(line)
-		if cerr != nil || seen[dep] {
+	defer func() { _ = os.RemoveAll(dir) }()
+	file := filepath.Join(dir, "closure.cquery")
+	if err := os.WriteFile(file, closureCquery, 0o600); err != nil {
+		return nil, err
+	}
+	stdout, err := r.run("cquery", []string{"--output=starlark", "--starlark:file=" + file},
+		fmt.Sprintf("config(deps(%s, 1), target)", canon))
+	if err != nil {
+		return nil, err
+	}
+	return decodeLines[protoFile](r, stdout)
+}
+
+func isMainSource(f protoFile) bool {
+	return f.Source && strings.HasPrefix(strings.TrimPrefix(f.Owner, "@@"), "//")
+}
+
+// owners are the labels locate needs loading facts about, sorted.
+func owners(files []protoFile) []string {
+	set := map[string]bool{}
+	for _, f := range files {
+		if !isMainSource(f) {
+			set[f.Owner] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(set))
+}
+
+// query loads labels and their srcs.
+func (r runner) query(labels []string) (map[string]target, error) {
+	if len(labels) == 0 {
+		return nil, nil
+	}
+	expr := "let o = " + strings.Join(labels, " + ") + " in $o + labels(srcs, $o)"
+	stdout, err := r.run("query", []string{"--output=streamed_jsonproto", "--consistent_labels", "--order_output=no"}, expr)
+	if err != nil {
+		return nil, err
+	}
+	type attr struct {
+		Name            string   `json:"name"`
+		StringValue     string   `json:"stringValue"`
+		StringListValue []string `json:"stringListValue"`
+	}
+	lines, err := decodeLines[struct {
+		Rule *struct {
+			Name      string `json:"name"`
+			RuleClass string `json:"ruleClass"`
+			Attribute []attr `json:"attribute"`
+		} `json:"rule"`
+		SourceFile *struct{ Name, Location string } `json:"sourceFile"`
+	}](r, stdout)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]target{}
+	for _, l := range lines {
+		switch {
+		case l.Rule != nil:
+			t := target{Class: l.Rule.RuleClass}
+			for _, a := range l.Rule.Attribute {
+				switch a.Name {
+				case "import_prefix":
+					t.Prefix = a.StringValue
+				case "srcs":
+					t.Srcs = a.StringListValue
+				}
+			}
+			out[l.Rule.Name] = t
+		case l.SourceFile != nil:
+			// A source file's location is always line 1, column 1.
+			out[l.SourceFile.Name] = target{Location: strings.TrimSuffix(l.SourceFile.Location, ":1:1")}
+		}
+	}
+	return out, nil
+}
+
+// locate maps each import name in files, first wins, to its absolute path: a main-repo source is under
+// root, anything else is found through q's facts about its owner.
+func locate(root string, files []protoFile, q map[string]target) (map[string]string, error) {
+	out := map[string]string{}
+	for _, f := range files {
+		if _, ok := out[f.Name]; ok {
 			continue
 		}
-		seen[dep] = true
-		targets = append(targets, dep)
+		p, err := locateFile(root, f, q)
+		if err != nil {
+			return nil, err
+		}
+		out[f.Name] = p
 	}
-	return targets, nil
+	return out, nil
 }
+
+func locateFile(root string, f protoFile, q map[string]target) (string, error) {
+	owner := q[f.Owner]
+	switch {
+	case isMainSource(f):
+		return filepath.Join(root, filepath.FromSlash(f.Path)), nil
+	case f.Source:
+		if owner.Location == "" {
+			return "", fmt.Errorf("bazel query did not locate %s", f.Owner)
+		}
+		return owner.Location, nil
+	case owner.Class != "proto_library":
+		return "", generated(f.Path, f.Owner)
+	}
+	// A virtual import: a symlink, made only by a build, to one of its rule's srcs. Each src is
+	// strip_import_prefix/rest, where rest is its import name minus import_prefix, so the shortest src
+	// ending in rest is the one.
+	rest := strings.TrimPrefix(f.Name, owner.Prefix+"/")
+	var src, srcPath string
+	for _, s := range owner.Srcs {
+		_, p, _ := strings.Cut(s, "//")
+		p = strings.TrimPrefix(strings.Replace(p, ":", "/", 1), "/")
+		if (p == rest || strings.HasSuffix(p, "/"+rest)) && (src == "" || len(p) < len(srcPath)) {
+			src, srcPath = s, p
+		}
+	}
+	switch {
+	case src == "":
+		return "", fmt.Errorf("%s exposes %s, but none of its srcs ends in %s", f.Owner, f.Name, rest)
+	case q[src].Location == "":
+		return "", generated(src, f.Owner)
+	}
+	return q[src].Location, nil
+}
+
+func generated(file, owner string) error {
+	return fmt.Errorf("%s (of %s) is generated, and resolving it would need a build, which grpcview never runs: depend on a checked-in .proto instead", file, owner)
+}
+
+func decodeLines[T any](r runner, stdout string) ([]T, error) {
+	var out []T
+	for _, line := range splitLines(stdout) {
+		var v T
+		if err := json.Unmarshal([]byte(line), &v); err != nil {
+			return nil, fmt.Errorf("bazel output for %s: unparseable line %q: %w", r.subject, line, err)
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// QueryTargets' kinds. Deliberately exact rather than something like `.*proto.*`: go_proto_library
+// and cc_proto_library carry "proto" in their kind but are not what a source names.
+const descriptorSetKinds = `proto_library|proto_descriptor_set`
 
 // Runs no actions, but `bazel query` still loads BUILD files and can fetch external repos — code from
 // this repo — so THE CALLER MUST HAVE CHECKED TRUST here too. A partial result is a listing plus a
 // warning, never an error: one unloadable package must not blank a picker.
 func (b Builder) QueryTargets(ctx context.Context) ([]string, string, error) {
-	if b.Root == "" {
-		return nil, "", errors.New("no bazel workspace root: no MODULE.bazel, WORKSPACE or WORKSPACE.bazel above this workspace")
-	}
-	timeout := b.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
 	expr := fmt.Sprintf(`kind("^(%s) rule$", //...)`, descriptorSetKinds)
-	stdout, err := b.run(ctx, runCtx, timeout, expr, "query", []string{"--output=label", "--order_output=no", "--keep_going"}, expr)
+	r, cancel, err := b.session(ctx, expr)
+	if err != nil {
+		return nil, "", err
+	}
+	defer cancel()
+	stdout, err := r.run("query", []string{"--output=label", "--order_output=no", "--keep_going"}, expr)
 
 	labels, seen := []string(nil), map[string]bool{}
 	for _, line := range splitLines(stdout) {
@@ -246,13 +347,32 @@ func (b Builder) QueryTargets(ctx context.Context) ([]string, string, error) {
 	return labels, "", nil
 }
 
-// `subject` names the target in error messages only — with a closure of labels after "--", no single
-// argument is the thing the user asked about.
-//
+// One bazel session's invocations. `subject` names the target in error messages only — with a set of
+// labels after "--", no single argument is the thing the user asked about.
+type runner struct {
+	b           Builder
+	parent, ctx context.Context
+	timeout     time.Duration
+	subject     string
+}
+
+// session bounds a run of invocations about subject by b's timeout; the caller must cancel it.
+func (b Builder) session(ctx context.Context, subject string) (runner, context.CancelFunc, error) {
+	if b.Root == "" {
+		return runner{}, nil, errors.New("no bazel workspace root: no MODULE.bazel, WORKSPACE or WORKSPACE.bazel above this workspace")
+	}
+	timeout := b.Timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	return runner{b: b, parent: ctx, ctx: runCtx, timeout: timeout, subject: subject}, cancel, nil
+}
+
 // stdout comes back on the error paths too, for the one caller that can use a partial answer
 // (QueryTargets). stdout and stderr are captured, never inherited: this runs inside a server.
-func (b Builder) run(parent, ctx context.Context, timeout time.Duration, subject, verb string, extra []string, targets ...string) (string, error) {
-	binary := b.Binary
+func (r runner) run(verb string, extra []string, targets ...string) (string, error) {
+	binary := r.b.Binary
 	if binary == "" {
 		binary = "bazel"
 	}
@@ -262,8 +382,8 @@ func (b Builder) run(parent, ctx context.Context, timeout time.Duration, subject
 	args = append(args, targets...)
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = b.Root
+	cmd := exec.CommandContext(r.ctx, binary, args...)
+	cmd.Dir = r.b.Root
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	// Killing bazel on the timeout kills only bazel itself; anything it spawned
@@ -276,15 +396,15 @@ func (b Builder) run(parent, ctx context.Context, timeout time.Duration, subject
 	switch {
 	case err == nil:
 		return out, nil
-	case parent.Err() != nil:
-		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, subject, parent.Err())
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if the build really takes this long", verb, subject, timeout)
+	case r.parent.Err() != nil:
+		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, r.subject, r.parent.Err())
+	case errors.Is(r.ctx.Err(), context.DeadlineExceeded):
+		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if it really takes this long", verb, r.subject, r.timeout)
 	}
 	if tail := tailOf(stderr.String()); tail != "" {
-		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, subject, err, tail)
+		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, r.subject, err, tail)
 	}
-	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, subject, err)
+	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, r.subject, err)
 }
 
 func splitLines(s string) []string {

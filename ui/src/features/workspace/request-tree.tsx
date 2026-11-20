@@ -33,7 +33,9 @@ function buildParentIndex(roots: ItemWithPath[]): Map<string, ItemWithPath> {
 
 // A folder's count: the saved requests drawn beneath it, at any depth. Not its direct
 // children (a subfolder is not a request) and never the draft row, which is not an item.
-export function countRequests(items: readonly ItemWithPath[] | undefined): number {
+export function countRequests(
+  items: readonly ItemWithPath[] | undefined,
+): number {
   let n = 0;
   for (const it of items ?? [])
     if (it.item.content.case === "folder") n += countRequests(it.children);

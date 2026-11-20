@@ -1,6 +1,9 @@
 package store
 
 import (
+	"maps"
+	"slices"
+
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
@@ -59,6 +62,10 @@ func diskToWireSource(
 		out.Source = &grpcviewv1.DescriptorSource_Bazel{
 			Bazel: &grpcviewv1.Bazel{Label: src.Bazel.GetLabel()},
 		}
+	case *grpcviewstorev1.DescriptorSource_Protos:
+		out.Source = &grpcviewv1.DescriptorSource_Protos{
+			Protos: &grpcviewv1.Protos{Path: src.Protos.GetPath(), ImportPaths: src.Protos.GetImportPaths()},
+		}
 	}
 	return out
 }
@@ -101,6 +108,10 @@ func wireToDiskSource(
 	case *grpcviewv1.DescriptorSource_Bazel:
 		out.Source = &grpcviewstorev1.DescriptorSource_Bazel{
 			Bazel: &grpcviewstorev1.Bazel{Label: src.Bazel.GetLabel()},
+		}
+	case *grpcviewv1.DescriptorSource_Protos:
+		out.Source = &grpcviewstorev1.DescriptorSource_Protos{
+			Protos: &grpcviewstorev1.Protos{Path: src.Protos.GetPath(), ImportPaths: src.Protos.GetImportPaths()},
 		}
 	}
 	return out
@@ -146,4 +157,25 @@ func serverToTarget(s *grpcviewv1.Server) *grpcviewstorev1.Target {
 	}
 	address, tls := addressTLSFromServer(s)
 	return &grpcviewstorev1.Target{Address: address, Tls: tls}
+}
+
+// ProtoFiles is originals (import name -> .proto text) as stored: sorted by path.
+func ProtoFiles(originals map[string]string) []*grpcviewstorev1.ProtoFile {
+	var out []*grpcviewstorev1.ProtoFile
+	for _, name := range slices.Sorted(maps.Keys(originals)) {
+		out = append(out, &grpcviewstorev1.ProtoFile{Path: name, Content: originals[name]})
+	}
+	return out
+}
+
+// Originals inverts ProtoFiles.
+func Originals(files []*grpcviewstorev1.ProtoFile) map[string]string {
+	if len(files) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(files))
+	for _, f := range files {
+		out[f.GetPath()] = f.GetContent()
+	}
+	return out
 }

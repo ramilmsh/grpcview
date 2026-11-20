@@ -87,6 +87,7 @@ use_repo(
     "com_connectrpc_connect",
     "com_connectrpc_cors",
     "com_connectrpc_grpcreflect",
+    "com_github_bufbuild_protocompile",
     "com_github_evanw_esbuild",
     "com_github_go_git_go_git_v5",
     "com_github_jhump_protoreflect",

@@ -1,0 +1,30 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@protobuf//bazel:proto_descriptor_set.bzl", "proto_descriptor_set")
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+
+# Hand-written fixture: gazelle would add ts/buf rules for render.proto.
+# gazelle:ignore
+
+package(default_visibility = ["//service/workspace:__pkg__"])
+
+exports_files(["render.proto"])
+
+proto_library(
+    name = "render_proto",
+    srcs = ["render.proto"],
+    # Exercises the printer (undocumented fields, a oneof), not an API: buf lint does not apply.
+    tags = ["no-lint"],
+    deps = ["@protobuf//:timestamp_proto"],
+)
+
+# With SourceCodeInfo (.bazelrc --include_source_info), like an upload from protoc.
+proto_descriptor_set(
+    name = "render_fds",
+    deps = [":render_proto"],
+)
+
+copy_file(
+    name = "render_binpb",
+    src = ":render_fds",
+    out = "render.binpb",
+)

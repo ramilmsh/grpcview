@@ -1,7 +1,10 @@
 {
   "schemaVersion": 1,
   "name": "example",
-  "items": ["workspace"],
+  "items": [
+    "workspace",
+    "listcollections"
+  ],
   "sources": [
     {
       "id": "bazel://grpcview/v1:grpcviewv1_proto",
@@ -16,7 +19,7 @@
         "address": "localhost:10000",
         "tls": false
       },
-      "commitDescriptors": true
+      "commitDescriptors": false
     }
   ]
 }
