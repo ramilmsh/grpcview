@@ -2,18 +2,36 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "codegen",
-    srcs = ["pool.go"],
+    srcs = [
+        "cache.go",
+        "keys.go",
+        "pool.go",
+    ],
     importpath = "codeberg.org/ramilmsh/grpcview/service/scripting/codegen",
     visibility = ["//visibility:public"],
-    deps = ["//service/scripting"],
+    deps = [
+        "//service/scripting",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/descriptorpb",
+    ],
 )
 
 go_test(
     name = "codegen_test",
-    srcs = ["pool_test.go"],
+    srcs = [
+        "cache_test.go",
+        "pool_test.go",
+    ],
+    data = [
+        "//service/scripting/codegen/testdata:all.binpb",
+        "//service/scripting/codegen/testdata:all.golden.json",
+        "//service/scripting/codegen/testdata:example.binpb",
+        "//service/scripting/codegen/testdata:example.golden.json",
+    ],
     embed = [":codegen"],
     deps = [
         "//grpcview/echo/v1:grpcviewechov1_go_proto",
+        "//service/scripting",
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//reflect/protodesc",
         "@org_golang_google_protobuf//types/descriptorpb",

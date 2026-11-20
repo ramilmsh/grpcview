@@ -459,3 +459,23 @@ func BenchmarkMiddleware(b *testing.B) {
 	b.Run("warm-pool-fresh-context", func(b *testing.B) { run(b) })
 	b.Run("warm-pool-long-lived-context", func(b *testing.B) { run(b, WithLongLivedMiddleware()) })
 }
+
+// nativeSpin is a native C loop (naive indexOf, ~2^32 byte compares, ~14s unkilled) that
+// QuickJS's interrupt handler never polls; only the wasm-level hard kill stops it promptly.
+const nativeSpin = `"a".repeat(1 << 17).indexOf("a".repeat(1 << 16) + "b")`
+
+func TestHardKillStopsNativeLoop(t *testing.T) {
+	e := newEngine(t)
+	if !e.rt.HardKill() {
+		t.Fatal("Engine runtime: hard kill off, want on")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := e.RunScenario(ctx, nativeSpin, Grant{}, Input{}); !errors.Is(err, ErrInterrupted) {
+		t.Fatalf("native spin: got %v, want ErrInterrupted", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("hard kill took %v, want prompt", elapsed)
+	}
+}

@@ -285,6 +285,7 @@ type mergedView struct {
 	descriptorSet []byte
 	summaries     map[string]*grpcviewv1.Resolved
 	serviceDescs  map[string]*desc.ServiceDescriptor
+	claimedBy     map[string]string // proto file name -> winning source id
 }
 
 func summarize(resolved []*resolvedSource) map[string]*grpcviewv1.Resolved {
@@ -379,6 +380,7 @@ func mergeSources(resolved []*resolvedSource) (*mergedView, error) {
 		descriptorSet: descriptorSet,
 		summaries:     summaries,
 		serviceDescs:  serviceDescs,
+		claimedBy:     claimedBy,
 	}, nil
 }
 

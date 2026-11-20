@@ -78,6 +78,13 @@ export const listBazelTargets: typeof WorkspaceService["method"]["listBazelTarge
  */
 export const listWorkspaceModules: typeof WorkspaceService["method"]["listWorkspaceModules"];
 /**
+ * The merged descriptor set as protoc-gen-es TypeScript, memoized by digest.
+ * Temporary: the FS surface replaces it.
+ *
+ * @generated from rpc grpcview.v1.WorkspaceService.GetDefinitions
+ */
+export const getDefinitions: typeof WorkspaceService["method"]["getDefinitions"];
+/**
  * Creates the collection's directory in the workspace. An existing collection at
  * that path is AlreadyExists, never adopted.
  *

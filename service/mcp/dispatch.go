@@ -29,6 +29,7 @@ type rpcEntry struct {
 // be a decision rather than an omission.
 var notTools = map[string]string{
 	"ListWorkspaceModules": "feeds Monaco's TypeScript resolution the workspace's .ts sources; an agent reads files directly",
+	"GetDefinitions":       "feeds Monaco generated TypeScript; an agent uses describe_method",
 }
 
 // One entry per RPC; a missing one fails TestTotality. Tool names are curated, not derived,

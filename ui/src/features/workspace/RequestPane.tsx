@@ -19,7 +19,6 @@ export function RequestPane({
   onMiddlewareChange,
   currentKey,
   inputTypeName,
-  descriptorSet,
   inputPackage,
   inputFile,
 }: {
@@ -34,7 +33,6 @@ export function RequestPane({
   onMiddlewareChange: (next: string[]) => void;
   currentKey: string;
   inputTypeName?: string;
-  descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputFile?: string;
 }) {
@@ -107,7 +105,6 @@ export function RequestPane({
             onChange={onBodyChange}
             currentKey={currentKey}
             inputTypeName={inputTypeName}
-            descriptorSet={descriptorSet}
             inputPackage={inputPackage}
             inputFile={inputFile}
           />

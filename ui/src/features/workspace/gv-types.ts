@@ -8,18 +8,17 @@ import { useEffect, useMemo, useRef } from "react";
 // theme/monaco-theme.ts does loader.config({ monaco }), so this is the loader's own instance.
 import * as monaco from "monaco-editor";
 import type * as Monaco from "monaco-editor";
-// Side-effect import: the virtual `@bufbuild/protobuf` d.ts the generated `_pb.ts` files
-// registered below import from.
-import "./vendor/bufbuild-stubs";
 // Also a side-effect import (sets the global TS defaults) — baseCompilerOptions is the exported
 // base useWorkspaceModuleTypes below extends with `paths` rather than duplicating.
 import { baseCompilerOptions } from "@/features/scripts/monaco-scripts";
 import {
   useActiveWorkspace,
+  useDefinitions,
   useRootItems,
   useWorkspaceModules,
 } from "@/lib/workspace-query";
 import { collectInvokeTargets } from "./gv-requests";
+import { gvRequestMapDts } from "./proto-types";
 // Side-effect import (registers the auto-import completion provider) — colocated with the
 // other Monaco global setup above. setAutoImportContext is what useWorkspaceModuleTypes below
 // feeds live workspace-module data into, since the provider is a monaco-global singleton and
@@ -33,50 +32,52 @@ import { workspaceModulePaths, workspaceModuleUri } from "./workspace-modules";
 
 // Editor.tsx registers the per-method `file:///grpcview/request/request-message.d.ts` alias; it
 // must keep this same `file:///grpcview/request/` prefix, because that shared prefix is what
-// resolves its relative "./gen/…" import against the modules registered here.
+// resolves its relative "./gen/…" import against the modules registered here. Every
+// GetDefinitions file lands here, the `node_modules/@bufbuild/protobuf/*` stubs included:
+// node10 finds them walking up from any `_pb.ts`.
 const GEN_PREFIX = "file:///grpcview/request/gen/";
 const MAP_PATH = "file:///grpcview/request/gv-requests.d.ts";
 const MODULES_PATH = "file:///grpcview/request/gv-modules.d.ts";
 
 export function useGvInvokeTypes(): void {
-  const { workspace, services } = useActiveWorkspace();
+  const { services, workspace } = useActiveWorkspace();
   const rootItems = useRootItems(workspace);
-  const descriptorSet = workspace?.descriptorSet;
+  const { files } = useDefinitions();
 
-  // Recomputed on any tree or descriptor change: a rename moves a path.
+  // Recomputed on any tree or service change: a rename moves a path.
   const targets = useMemo(
     () => collectInvokeTargets(rootItems, services),
     [rootItems, services],
   );
 
   // typescriptDefaults is global and a same-path re-add throws "Duplicate definition".
+  // `files` changes identity only with the digest, so this re-registers only then.
   const libs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
-    // descriptorSet is best-effort on the backend (empty when a source is unreachable).
-    if (!descriptorSet?.length) return;
-    let cancelled = false;
-    void (async () => {
-      const { generateWorkspaceTypes, gvRequestMapDts } =
-        await import("./proto-types");
-      const files = generateWorkspaceTypes(descriptorSet);
-      if (cancelled) return;
-      const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-      libs.current.forEach((d) => d.dispose());
-      libs.current = [];
-      for (const [path, content] of files) {
-        libs.current.push(
-          tsDefaults.addExtraLib(content, `${GEN_PREFIX}${path}`),
-        );
-      }
-      const map = gvRequestMapDts(files, targets);
-      if (map) libs.current.push(tsDefaults.addExtraLib(map, MAP_PATH));
-    })();
+    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+    libs.current = [...files].map(([path, content]) =>
+      tsDefaults.addExtraLib(content, `${GEN_PREFIX}${path}`),
+    );
     return () => {
-      cancelled = true;
       libs.current.forEach((d) => d.dispose());
       libs.current = [];
     };
-  }, [descriptorSet, targets]);
+  }, [files]);
+
+  // Its own effect: a tree edit moves a target without touching the definitions.
+  const mapLib = useRef<Monaco.IDisposable | undefined>(undefined);
+  useEffect(() => {
+    const map = gvRequestMapDts(files, targets);
+    if (!map) return;
+    mapLib.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+      map,
+      MAP_PATH,
+    );
+    return () => {
+      mapLib.current?.dispose();
+      mapLib.current = undefined;
+    };
+  }, [files, targets]);
 }
 
 // Registers every importable `.ts` in the workspace as a Monaco extra lib, and points

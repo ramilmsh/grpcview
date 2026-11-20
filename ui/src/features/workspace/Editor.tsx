@@ -8,8 +8,6 @@ import type * as Monaco from "monaco-editor";
 import { MONACO_THEME } from "@/theme/monaco-theme";
 // Side-effect import: global TS defaults. Our own TS_MODEL_URI keeps this model distinct.
 import "@/features/scripts/monaco-scripts";
-// Side-effect import: virtual `@bufbuild/protobuf` d.ts the generated `_pb.ts` files need.
-import "./vendor/bufbuild-stubs";
 import {
   BODY_SKELETON,
   bodyBounds as boundsOf,
@@ -27,6 +25,8 @@ import {
 import { getAutoImportContext } from "./module-auto-import";
 import { workspacePathForUri } from "./module-specifier";
 import { registerEditorForDebug } from "@/lib/editor-debug";
+import { useDefinitions } from "@/lib/workspace-query";
+import { requestMessageAlias } from "./proto-types";
 
 const TS_MODEL_URI = "file:///grpcview/request/body.ts";
 
@@ -86,7 +86,6 @@ interface EditorProps {
   data: string;
   onChange: (value: string) => void;
   currentKey: string; // request identity — reload the buffer when it changes
-  descriptorSet?: Uint8Array;
   inputPackage?: string;
   inputName?: string;
   inputFile?: string;
@@ -97,7 +96,6 @@ export function Editor({
   data,
   onChange,
   currentKey,
-  descriptorSet,
   inputPackage,
   inputName,
   inputFile,
@@ -119,6 +117,7 @@ export function Editor({
   const resolveArmedRef = useRef(false);
 
   const monaco = useMonaco();
+  const { files } = useDefinitions();
 
   const clearPruneTimer = () => {
     if (pruneTimerRef.current !== null) {
@@ -297,39 +296,26 @@ export function Editor({
   // Method-scoped, so it stays here; the `./gen/**` modules its import resolves against are
   // registered app-level by gv-types.ts, hence the shared `file:///grpcview/request/` prefix.
   // typescriptDefaults is global and a same-path re-add throws "Duplicate definition".
-  const typeLibs = useRef<Monaco.IDisposable[]>([]);
+  // `files` changes identity only with the definitions digest.
+  const typeLib = useRef<Monaco.IDisposable | undefined>(undefined);
   useEffect(() => {
-    // descriptorSet is best-effort on the backend (empty when a source is unreachable).
-    if (!monaco || !descriptorSet?.length || !inputFile) return;
-    let cancelled = false;
-    void (async () => {
-      const { generateWorkspaceTypes, requestMessageAlias } =
-        await import("./proto-types");
-      // Free after gv-types.ts's call: generateWorkspaceTypes memoizes on the descriptor bytes.
-      const files = generateWorkspaceTypes(descriptorSet);
-      if (cancelled) return;
-      const tsDefaults = monaco.languages.typescript.typescriptDefaults;
-      typeLibs.current.forEach((d) => d.dispose());
-      typeLibs.current = [];
-      const alias = requestMessageAlias(
-        files,
-        inputPackage ?? "",
-        inputName ?? "",
-        inputFile,
-      );
-      typeLibs.current.push(
-        tsDefaults.addExtraLib(
-          alias.dts,
-          "file:///grpcview/request/request-message.d.ts",
-        ),
-      );
-    })();
+    // No definitions yet (or none resolvable): RequestMessage stays undeclared.
+    if (!monaco || !files.size || !inputFile) return;
+    const alias = requestMessageAlias(
+      files,
+      inputPackage ?? "",
+      inputName ?? "",
+      inputFile,
+    );
+    typeLib.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+      alias.dts,
+      "file:///grpcview/request/request-message.d.ts",
+    );
     return () => {
-      cancelled = true;
-      typeLibs.current.forEach((d) => d.dispose());
-      typeLibs.current = [];
+      typeLib.current?.dispose();
+      typeLib.current = undefined;
     };
-  }, [monaco, descriptorSet, inputPackage, inputName, inputFile]);
+  }, [monaco, files, inputPackage, inputName, inputFile]);
 
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;

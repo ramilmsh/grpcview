@@ -1,0 +1,56 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_run_binary")
+load("@protobuf//bazel:proto_descriptor_set.bzl", "proto_descriptor_set")
+
+package(default_visibility = ["//service/scripting/codegen:__pkg__"])
+
+# example/'s merged set: its bazel source wins every file its reflection source also serves.
+proto_descriptor_set(
+    name = "example_fds",
+    deps = ["//grpcview/v1:grpcviewv1_proto"],
+)
+
+# Every proto in the repo, for timing.
+proto_descriptor_set(
+    name = "all_fds",
+    deps = [
+        "//grpcview/echo/v1:grpcviewechov1_proto",
+        "//grpcview/store/v1:grpcviewstorev1_proto",
+        "//grpcview/v1:grpcviewv1_proto",
+    ],
+)
+
+[copy_file(
+    name = set + "_binpb",
+    src = ":%s_fds" % set,
+    out = set + ".binpb",
+) for set in ("example", "all")]
+
+js_binary(
+    name = "golden",
+    data = [
+        "//:node_modules/@bufbuild/protobuf",
+        "//:node_modules/@bufbuild/protoc-gen-es",
+    ],
+    entry_point = "golden.cjs",
+)
+
+# Node protoc-gen-es, independent of QuickJS: the golden codegen.Pool must match.
+js_run_binary(
+    name = "golden_json",
+    srcs = [
+        "all.binpb",
+        "example.binpb",
+    ],
+    outs = [
+        "all.golden.json",
+        "example.golden.json",
+    ],
+    args = [
+        "$(rootpath example.binpb)",
+        "$(rootpath example.golden.json)",
+        "$(rootpath all.binpb)",
+        "$(rootpath all.golden.json)",
+    ],
+    tool = ":golden",
+)

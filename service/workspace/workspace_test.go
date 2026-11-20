@@ -60,6 +60,7 @@ func newTestWorkspace(t *testing.T) Workspace {
 	return Workspace{
 		store: store.New(t.TempDir(), t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
 		defs:  newDefinitionsCache(),
+		gen:   newGenerator(t.TempDir()),
 	}
 }
 
@@ -77,6 +78,7 @@ func newTestWorkspaceWithEngine(t *testing.T) Workspace {
 		store:  store.New(root, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
 		engine: eng,
 		defs:   newDefinitionsCache(),
+		gen:    newGenerator(t.TempDir()),
 		root:   root,
 	}
 }

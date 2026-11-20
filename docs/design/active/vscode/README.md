@@ -26,7 +26,7 @@ two architecture decisions every phase depends on.
 | 3 | [`phase-3-type-sinks.md`](./phase-3-type-sinks.md) | Extract the type producer/sink seam |
 | 4 | [`phase-4-request-management.md`](./phase-4-request-management.md) | Document identity, dirty state, preview tabs, commands |
 | 5 | [`phase-5-extension.md`](./phase-5-extension.md) | The extension itself |
-| 6 | [`phase-6-optional.md`](./phase-6-optional.md) | QuickJS producer, tsserver plugin, tsgo IPC, CI checking |
+| 6 | [`phase-6-optional.md`](./phase-6-optional.md) | tsserver plugin, tsgo IPC, CI checking (QuickJS producer moved to [`explorer-fs.md`](../../planned/explorer-fs.md)) |
 | — | [`body-contract.md`](./body-contract.md) | Enforcing the body/metadata export signature (spans 2 and 5) |
 | — | [`daemon.md`](../../shipped/daemon.md) | One daemon per workspace — was phase 1's Decision 10; SHIPPED 2026-08-08 |
 

@@ -23,6 +23,7 @@
  *   int      qjs_eval(const char* src, int len, int async) -> status
  *   int      qjs_pump(void)                                 -> status
  *   uint8_t* qjs_result(int as_json)                        -> [tag u8][len u32 LE][payload]
+ *   int      qjs_set_bytes(name, name_len, p, len)          - global name = Uint8Array(p). 0 / -1.
  *
  *   status : 0 QJS_DONE    - a settled value is held (fetch it with qjs_result)
  *            1 QJS_PENDING - the top-level promise is unsettled; pump again (or, later,
@@ -39,6 +40,7 @@
  *   uint8_t* host_invoke(const uint8_t* req, int req_len)    -> result ptr
  *   uint8_t* host_random(int n)                              -> result ptr (JSON int array)
  *   void     host_console(int level, const uint8_t* msg, int len) - fire-and-forget sink
+ *   int      host_interrupted(void)                    - 1 once the host's deadline fired
  *
  * Enforcement (grant + scope + syscall) lives entirely in the Go host functions,
  * OUTSIDE the sandbox; this file only validates/marshals and never does I/O.
@@ -46,6 +48,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include "cutils.h"
 #include "quickjs.h"
 
 /* Result-buffer ABI, shared with the Go side (engine.go mirrors these). */
@@ -86,6 +89,16 @@ extern uint8_t *host_random(int n);
  * fail in a way a script should catch, so it returns void and the Go host buffers it. */
 __attribute__((import_module("env"), import_name("host_console")))
 extern void host_console(int level, const uint8_t *msg, int len);
+
+/* Interrupt poll: nonzero once the host's ctx is done. QuickJS polls it every ~10k ops
+ * (and in regexp backtracking) — far cheaper than wazero's per-loop CloseOnContextDone. */
+__attribute__((import_module("env"), import_name("host_interrupted")))
+extern int host_interrupted(void);
+
+static int interrupt_handler(JSRuntime *rt, void *opaque) {
+    (void)rt; (void)opaque;
+    return host_interrupted();
+}
 
 __attribute__((export_name("qjs_malloc")))
 void *qjs_malloc(size_t n) { return malloc(n); }
@@ -206,6 +219,48 @@ static JSValue js_console(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     return JS_UNDEFINED;
 }
 
+/* Uint8Array over ab (consumed). JS_NewTypedArray reads argv[0..2] regardless of argc. */
+static JSValue new_u8(JSContext *ctx, JSValue ab) {
+    JSValue args[3] = {ab, JS_UNDEFINED, JS_UNDEFINED};
+    JSValue u8 = JS_NewTypedArray(ctx, 3, args, JS_TYPED_ARRAY_UINT8);
+    JS_FreeValue(ctx, ab);
+    return u8;
+}
+
+/* __grpcview_utf8_decode(bytes: Uint8Array, fatal: bool) -> string. Native backing for the
+ * codegen TextDecoder polyfill; non-fatal maps invalid sequences to U+FFFD. */
+static JSValue js_utf8_decode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    if (argc < 1) return JS_ThrowTypeError(ctx, "utf8_decode: bytes required");
+    size_t off, len, bpe;
+    JSValue ab = JS_GetTypedArrayBuffer(ctx, argv[0], &off, &len, &bpe);
+    if (JS_IsException(ab)) return ab;
+    size_t abLen;
+    uint8_t *buf = JS_GetArrayBuffer(ctx, &abLen, ab);
+    JS_FreeValue(ctx, ab);
+    if (!buf) return len ? JS_EXCEPTION : JS_NewStringLen(ctx, "", 0);
+    const uint8_t *p = buf + off, *end = p + len;
+    if (argc >= 2 && JS_ToBool(ctx, argv[1])) {
+        for (const uint8_t *q = p; q < end;) {
+            if (*q < 0x80) { q++; continue; }
+            if (unicode_from_utf8(q, end - q, &q) < 0) return JS_ThrowTypeError(ctx, "invalid UTF-8");
+        }
+    }
+    return JS_NewStringLen(ctx, (const char *)p, len);
+}
+
+/* __grpcview_utf8_encode(str) -> Uint8Array. */
+static JSValue js_utf8_encode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    size_t len;
+    const char *s = JS_ToCStringLen(ctx, &len, argc >= 1 ? argv[0] : JS_UNDEFINED);
+    if (!s) return JS_EXCEPTION;
+    JSValue ab = JS_NewArrayBufferCopy(ctx, (const uint8_t *)s, len);
+    JS_FreeCString(ctx, s);
+    if (JS_IsException(ab)) return ab;
+    return new_u8(ctx, ab);
+}
+
 /* Register the Layer-B marshallers + the console shim as globals. Surfaced to scripts
  * only via the injected prelude / node:* shims; registering unconditionally is safe —
  * the privilege lives in the import (Layer A), not here. */
@@ -221,6 +276,10 @@ static void register_globals(JSContext *ctx) {
                       JS_NewCFunction(ctx, js_host_random, "__grpcview_random", 1));
     JS_SetPropertyStr(ctx, g, "__grpcview_console",
                       JS_NewCFunction(ctx, js_console, "__grpcview_console", 2));
+    JS_SetPropertyStr(ctx, g, "__grpcview_utf8_decode",
+                      JS_NewCFunction(ctx, js_utf8_decode, "__grpcview_utf8_decode", 2));
+    JS_SetPropertyStr(ctx, g, "__grpcview_utf8_encode",
+                      JS_NewCFunction(ctx, js_utf8_encode, "__grpcview_utf8_encode", 1));
     JS_FreeValue(ctx, g);
 }
 
@@ -269,6 +328,8 @@ int qjs_new(uint64_t mem_limit) {
         JS_SetMemoryLimit(g_rt, lim);
     }
 
+    JS_SetInterruptHandler(g_rt, interrupt_handler, NULL);
+
     g_ctx = JS_NewContext(g_rt);
     if (!g_ctx) { JS_FreeRuntime(g_rt); g_rt = NULL; return -1; }
 
@@ -278,6 +339,24 @@ int qjs_new(uint64_t mem_limit) {
     g_is_error = 0;
     g_pending = 0;
     g_async = 0;
+    return 0;
+}
+
+/* Set global `name` to a Uint8Array copy of p[0:len] — binary input without a source-text
+ * round trip. 0 / -1. */
+__attribute__((export_name("qjs_set_bytes")))
+int qjs_set_bytes(const char *name, int name_len, const uint8_t *p, int len) {
+    if (!g_ctx || name_len < 0 || len < 0) return -1;
+    JSValue ab = JS_NewArrayBufferCopy(g_ctx, p, (size_t)len);
+    if (JS_IsException(ab)) { JS_FreeValue(g_ctx, JS_GetException(g_ctx)); return -1; }
+    JSValue u8 = new_u8(g_ctx, ab);
+    if (JS_IsException(u8)) { JS_FreeValue(g_ctx, JS_GetException(g_ctx)); return -1; }
+    JSAtom a = JS_NewAtomLen(g_ctx, name, (size_t)name_len);
+    JSValue g = JS_GetGlobalObject(g_ctx);
+    int r = JS_SetProperty(g_ctx, g, a, u8); /* takes u8 */
+    JS_FreeValue(g_ctx, g);
+    JS_FreeAtom(g_ctx, a);
+    if (r < 0) { JS_FreeValue(g_ctx, JS_GetException(g_ctx)); return -1; }
     return 0;
 }
 

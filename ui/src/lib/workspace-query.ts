@@ -41,6 +41,7 @@ import {
   setWorkspaceTrust,
   listBazelTargets,
   listWorkspaceModules,
+  getDefinitions,
   invoke,
   runScript,
   createScript,
@@ -50,6 +51,7 @@ import {
 import { GetResponseSchema } from "@grpcview/v1/service_pb";
 import type {
   CollectionSummary,
+  GetDefinitionsResponse,
   GetResponse,
   WorkspaceModule,
 } from "@grpcview/v1/service_pb";
@@ -164,6 +166,77 @@ export function useWorkspaceModules(): {
   return {
     modules: query.data?.modules ?? [],
     isPending: query.isPending,
+  };
+}
+
+// The active collection's generated TypeScript: path → content, `gen/`-relative, plus the
+// builtin `node_modules/@bufbuild/protobuf/*` stubs. Identity follows `digest`, so a refetch
+// that changed nothing re-registers no Monaco lib.
+export interface Definitions {
+  digest: string;
+  files: ReadonlyMap<string, string>;
+}
+
+const NO_DEFINITIONS: Definitions = { digest: "", files: new Map() };
+
+interface Held {
+  collection: string | null;
+  defs: Definitions;
+}
+
+// useDefinitions' result, pure for testing. `prev` is what the last render returned.
+export function nextDefinitions(
+  prev: Held,
+  collection: string | null,
+  digest: string,
+  query: { isError: boolean; data?: GetDefinitionsResponse },
+): Definitions {
+  // A failed fetch's types must not stay registered.
+  if (digest === "" || query.isError) return NO_DEFINITIONS;
+  const { data } = query;
+  // A new digest in flight: hold this collection's last set rather than flap Monaco's libs.
+  if (!data) return prev.collection === collection ? prev.defs : NO_DEFINITIONS;
+  if (data.digest === prev.defs.digest) return prev.defs;
+  return {
+    digest: data.digest,
+    files: new Map(data.files.map((f) => [f.path, f.content])),
+  };
+}
+
+// Driven off Get's `definitionsDigest`, the one freshness signal: it is in the key, so a Get
+// refetch or write seed that moved it (UI write, CLI/MCP refresh, hand edit) fetches, and
+// nothing else does — hundreds of KB, never refetched on focus/mount (staleTime Infinity).
+// An empty digest means nothing resolves: no RPC, no definitions.
+export function useDefinitions(): Definitions & {
+  isLoading: boolean;
+  error: ConnectError | null;
+} {
+  const transport = useTransport();
+  const { collection, workspace } = useActiveWorkspace();
+  const digest = workspace?.definitionsDigest ?? "";
+  const options = createQueryOptions(
+    getDefinitions,
+    collection === null || digest === "" ? skipToken : { collection },
+    { transport },
+  );
+  const query = useTanStackQuery({
+    ...options,
+    // Cast: connect-query types its key as a fixed-shape tuple (see useBazelTargets).
+    queryKey: [
+      ...options.queryKey,
+      digest,
+    ] as unknown as typeof options.queryKey,
+    staleTime: Infinity,
+  });
+
+  const cache = useRef<Held>({ collection, defs: NO_DEFINITIONS });
+  const defs = nextDefinitions(cache.current, collection, digest, query);
+  cache.current = { collection, defs };
+
+  return {
+    ...defs,
+    isLoading: query.isLoading,
+    error: query.error ? ConnectError.from(query.error) : null,
   };
 }
 

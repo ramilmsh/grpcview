@@ -6,11 +6,12 @@ npm_link_all_packages(name = "node_modules")
 
 # buf.yaml: every proto_library implicitly depends on it (lint_buf_aspect's default
 # config location). .shellcheckrc: referenced by //tools/lint:linters.bzl's shellcheck
-# aspect.
+# aspect. go.mod: //service/scripting reads its esbuild version.
 exports_files([
     "buf.yaml",
     ".shellcheckrc",
     "MODULE.bazel",
+    "go.mod",
 ])
 
 alias(

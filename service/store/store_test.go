@@ -558,9 +558,9 @@ func TestDescriptorStatePersistence(t *testing.T) {
 	if len(ws.GetSources()) != 1 || ws.GetSources()[0].GetReflection().GetAddress() != "localhost:50051" {
 		t.Errorf("sources not round-tripped: %v", ws.GetSources())
 	}
-	if len(ws.GetServices()) != 0 || len(ws.GetDescriptorSet()) != 0 {
-		t.Errorf("Load returned a merged view the store must not hold: %v / %d bytes",
-			ws.GetServices(), len(ws.GetDescriptorSet()))
+	if len(ws.GetServices()) != 0 || ws.GetDefinitionsDigest() != "" {
+		t.Errorf("Load returned a merged view the store must not hold: %v / %q",
+			ws.GetServices(), ws.GetDefinitionsDigest())
 	}
 
 	blobs, err := coll.DescriptorResolves(ctx)

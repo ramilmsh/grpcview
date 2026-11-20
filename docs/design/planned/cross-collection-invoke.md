@@ -207,8 +207,8 @@ An earlier draft of this doc conceded that cross-collection paths would fall to
 and is **withdrawn**. Every file needed is on disk and most of the machinery is already
 client-side:
 
-- `Collection` on the wire already carries `services` and `descriptor_set` — the latter
-  documented as a "Merged, deduped FileDescriptorSet" (`workspace.proto:186`).
+- `Collection` on the wire already carries `services` and `definitions_digest`, keying
+  that collection's `GetDefinitions` (generated types, server-side).
 - `useCollectionItems(ids)` (`workspace-query.ts:238`) already issues one `Get` per
   collection on keys **identical** to `useWorkspace`'s, with a test asserting exactly
   that. Today `queryIds` is the active collection plus every expanded row; holding N

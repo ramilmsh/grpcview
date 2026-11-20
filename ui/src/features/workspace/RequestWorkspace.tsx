@@ -328,7 +328,6 @@ export function RequestWorkspace() {
       <TypesModal
         open={typesOpen}
         onClose={() => setTypesOpen(false)}
-        descriptorSet={workspace?.descriptorSet}
         input={activeMethod?.input}
         output={activeMethod?.output}
       />
@@ -358,7 +357,6 @@ export function RequestWorkspace() {
           onMiddlewareChange={onMiddlewareChange}
           currentKey={key}
           inputTypeName={activeMethod?.input?.name}
-          descriptorSet={workspace?.descriptorSet}
           inputPackage={activeMethod?.input?.package}
           inputFile={activeMethod?.input?.file}
         />

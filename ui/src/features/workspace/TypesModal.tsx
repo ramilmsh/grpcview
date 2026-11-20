@@ -1,55 +1,33 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Message } from "@grpcview/v1/workspace_pb";
 import { Dialog } from "@/components/ui/Dialog";
-
-// Type-only: proto-types.ts pulls in the heavy protoc-gen-es, so it must stay a lazy import.
-type ProtoTypes = typeof import("./proto-types");
+import { useDefinitions } from "@/lib/workspace-query";
+import { messageTypeText } from "./proto-types";
 
 export function TypesModal({
   open,
   onClose,
-  descriptorSet,
   input,
   output,
 }: {
   open: boolean;
   onClose: () => void;
-  descriptorSet?: Uint8Array;
   input?: Message;
   output?: Message;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [gen, setGen] = useState<{
-    files: Map<string, string>;
-    messageTypeText: ProtoTypes["messageTypeText"];
-  } | null>(null);
-
-  useEffect(() => {
-    if (!open || !descriptorSet?.length) return;
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      const { generateWorkspaceTypes, messageTypeText } =
-        await import("./proto-types");
-      if (cancelled) return;
-      setGen({ files: generateWorkspaceTypes(descriptorSet), messageTypeText });
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, descriptorSet]);
-
+  const { files, isLoading, error } = useDefinitions();
   return (
     <Dialog open={open} onClose={onClose} title="Message types" width={640}>
-      {!descriptorSet?.length ? (
-        <Note>Schema unavailable — no reflected descriptor set yet.</Note>
-      ) : loading || !gen ? (
+      {isLoading ? (
         <Note>Generating types…</Note>
+      ) : error ? (
+        <Note>Could not generate types: {error.message}</Note>
+      ) : !files.size ? (
+        <Note>Schema unavailable — no generated definitions yet.</Note>
       ) : (
         <div className="flex flex-col" style={{ gap: 16 }}>
-          <TypeSection label="Request" message={input} gen={gen} />
-          <TypeSection label="Response" message={output} gen={gen} />
+          <TypeSection label="Request" message={input} files={files} />
+          <TypeSection label="Response" message={output} files={files} />
         </div>
       )}
     </Dialog>
@@ -63,10 +41,7 @@ type SectionState =
 
 function resolveSection(
   message: Message | undefined,
-  gen: {
-    files: Map<string, string>;
-    messageTypeText: ProtoTypes["messageTypeText"];
-  },
+  files: ReadonlyMap<string, string>,
 ): SectionState {
   if (!message || !message.name) return { kind: "unavailable" };
   if (message.file.startsWith("google/protobuf/")) {
@@ -77,8 +52,8 @@ function resolveSection(
         : message.name,
     };
   }
-  const result = gen.messageTypeText(
-    gen.files,
+  const result = messageTypeText(
+    files,
     message.package,
     message.name,
     message.file,
@@ -91,16 +66,13 @@ function resolveSection(
 function TypeSection({
   label,
   message,
-  gen,
+  files,
 }: {
   label: string;
   message?: Message;
-  gen: {
-    files: Map<string, string>;
-    messageTypeText: ProtoTypes["messageTypeText"];
-  };
+  files: ReadonlyMap<string, string>;
 }) {
-  const state = resolveSection(message, gen);
+  const state = resolveSection(message, files);
   return (
     <div>
       <div

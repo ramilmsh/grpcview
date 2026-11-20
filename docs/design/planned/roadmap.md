@@ -93,7 +93,7 @@ Carried from the MCP track, which shipped on 2026-08-06; the decisions behind it
   MCP returns `"eyJtZXNzYWdlIjoi…"` where the value is `{"message":"echo: hi from mcp"}`.
   Blast radius is the store schema, `convert.go`, `invoke.go`'s two assignment sites, and
   the UI's decoders. `AddDescriptorSourceRequest.descriptor_set` and
-  `Collection.descriptor_set` stay `bytes` — those really are binary.
+  `DescribeMethodResponse.descriptor_set` stay `bytes` — those really are binary.
 - **History growth is still uncapped *on disk*.** The payload half shipped in two rounds:
   2026-08-07, every MCP response *except* `get_collection`'s has `history` stripped;
   2026-08-08, a recorded response body over 8 KB is elided on the way out
@@ -145,6 +145,8 @@ reintroduces that bug is worse than no cache. The same watcher is what picking u
 ---
 
 ## Watch instead of Get: live editing across surfaces
+
+**Planned in [`explorer-fs.md`](./explorer-fs.md)** (P2–P3), along with the listing watcher above.
 
 Now that every surface — UI, CLI, MCP session, VS Code extension — is a client of one daemon
 holding one `Collection.mu`, "who wrote this last" has a single answer, and the missing half is

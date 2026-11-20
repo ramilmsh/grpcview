@@ -771,11 +771,11 @@ export declare type Collection = Message$1<"grpcview.v1.Collection"> & {
   scripts: Script[];
 
   /**
-   * Merged, deduped FileDescriptorSet; derived and cached, never persisted.
+   * GetDefinitionsResponse.digest of these definitions; empty when none resolve.
    *
-   * @generated from field: bytes descriptor_set = 6;
+   * @generated from field: string definitions_digest = 6;
    */
-  descriptorSet: Uint8Array;
+  definitionsDigest: string;
 };
 
 /**
