@@ -1,6 +1,6 @@
 load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
 load("@aspect_rules_esbuild//esbuild:defs.bzl", "esbuild")
-load("@npm//ui:tailwindcss/package_json.bzl", tailwindcss_bin = "bin")
+load("@npm//ui:@tailwindcss/cli/package_json.bzl", tailwindcss_bin = "bin")
 load("//ui:defs.bzl", "ts_project")
 
 ts_project(
@@ -68,10 +68,7 @@ tailwindcss_bin.tailwindcss(
     srcs = [
         "index.css",
         "index.html",
-        "postcss.config.js",
-        "tailwind.config.js",
         ":src",
-        "//ui:node_modules/autoprefixer",
         "//ui:node_modules/tailwindcss",
         "//ui/src/components/shell",
         "//ui/src/components/tree",
@@ -89,10 +86,6 @@ tailwindcss_bin.tailwindcss(
         "index.css",
         "-o",
         "dist/tailwind.css",
-        "--config",
-        "tailwind.config.js",
-        "--postcss",
-        "postcss.config.js",
         "--minify",
     ],
     chdir = "ui/src",

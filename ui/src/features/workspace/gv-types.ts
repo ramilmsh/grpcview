@@ -54,7 +54,7 @@ export function useGvInvokeTypes(): void {
   // `files` changes identity only with the digest, so this re-registers only then.
   const libs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
-    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+    const tsDefaults = monaco.typescript.typescriptDefaults;
     libs.current = [...files].map(([path, content]) =>
       tsDefaults.addExtraLib(content, `${GEN_PREFIX}${path}`),
     );
@@ -69,7 +69,7 @@ export function useGvInvokeTypes(): void {
   useEffect(() => {
     const map = gvRequestMapDts(files, targets);
     if (!map) return;
-    mapLib.current = monaco.languages.typescript.typescriptDefaults.addExtraLib(
+    mapLib.current = monaco.typescript.typescriptDefaults.addExtraLib(
       map,
       MAP_PATH,
     );
@@ -93,7 +93,7 @@ export function useWorkspaceModuleTypes(): void {
   // typescriptDefaults is global and a same-path re-add throws "Duplicate definition".
   const libs = useRef<Monaco.IDisposable[]>([]);
   useEffect(() => {
-    const tsDefaults = monaco.languages.typescript.typescriptDefaults;
+    const tsDefaults = monaco.typescript.typescriptDefaults;
     libs.current.forEach((d) => d.dispose());
     libs.current = modules.map((m) =>
       tsDefaults.addExtraLib(m.content, workspaceModuleUri(m.path)),
@@ -111,7 +111,7 @@ export function useWorkspaceModuleTypes(): void {
     const dts = requireTypesDts(modules, collection);
     if (!dts) return;
     requireLib.current =
-      monaco.languages.typescript.typescriptDefaults.addExtraLib(
+      monaco.typescript.typescriptDefaults.addExtraLib(
         dts,
         MODULES_PATH,
       );
@@ -128,7 +128,7 @@ export function useWorkspaceModuleTypes(): void {
   // setCompilerOptions REPLACES the whole object — baseCompilerOptions restates everything
   // monaco-scripts.ts already sets, so this never regresses it back to the defaults.
   useEffect(() => {
-    monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+    monaco.typescript.typescriptDefaults.setCompilerOptions({
       ...baseCompilerOptions,
       // paths requires a baseUrl; the substitutions below are already fully-rooted
       // `file:///…` URIs, so its value only has to be non-empty to satisfy that requirement.

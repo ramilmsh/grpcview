@@ -1,7 +1,7 @@
 {
   "name": "grpcview",
   "dependencies": {
-    "@bufbuild/protobuf": "^2.10.2",
+    "@bufbuild/protobuf": "^2.17.0",
     "@bufbuild/protoc-gen-es": "^2.10.2",
     "@connectrpc/protoc-gen-connect-es": "^1.7.0",
     "@connectrpc/protoc-gen-connect-query": "^2.2.0"

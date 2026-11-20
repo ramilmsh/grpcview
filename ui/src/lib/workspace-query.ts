@@ -375,7 +375,7 @@ export function useCollectionItems(
   const cache = useRef<{
     signature: readonly unknown[];
     map: ReadonlyMap<string, ItemWithPath[]>;
-  }>();
+  }>(undefined);
   const signature: unknown[] = [];
   for (const [i, id] of ids.entries())
     signature.push(id, results[i]?.data?.collection);
