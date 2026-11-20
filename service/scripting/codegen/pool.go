@@ -67,7 +67,7 @@ func New(ctx context.Context, size int) (*Pool, error) {
 	}
 
 	p := &Pool{
-		rt:     rt,
+		rt:   rt,
 		jobs: make(chan job),
 		done: make(chan struct{}),
 	}

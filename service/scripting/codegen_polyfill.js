@@ -18,7 +18,11 @@ if (typeof globalThis.TextDecoder === "undefined") {
   globalThis.TextDecoder.prototype.decode = function (bytes) {
     if (bytes == null) return "";
     if (!(bytes instanceof Uint8Array))
-      bytes = new Uint8Array(bytes.buffer || bytes, bytes.byteOffset || 0, bytes.byteLength);
+      bytes = new Uint8Array(
+        bytes.buffer || bytes,
+        bytes.byteOffset || 0,
+        bytes.byteLength,
+      );
     return __grpcview_utf8_decode(bytes, this.fatal);
   };
 }
