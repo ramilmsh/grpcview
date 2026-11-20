@@ -73,37 +73,30 @@ export function TargetBar({
           no reflection source — type where this request is sent
         </span>
       ) : null}
+      {/* A real switch: a <button role="switch"> gets Space/Enter and is announced
+          as "TLS, switch, on/off". */}
       <button
         type="button"
+        role="switch"
+        aria-checked={tls}
+        aria-label="TLS"
         onClick={() => emit({ tls: !tls })}
-        className="ml-auto flex items-center gap-[5px]"
+        className={tls ? "tlsswitch on" : "tlsswitch"}
         title={
-          tls ? "TLS on — click to disable" : "insecure — click to enable TLS"
+          tls
+            ? "TLS on: connection is encrypted"
+            : "TLS off: plaintext connection"
         }
-        style={{
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          padding: 0,
-          fontSize: 13,
-          color: "var(--v-text-2)",
-        }}
       >
         {tls ? (
-          <>
-            <LockSimple
-              weight="fill"
-              size={13}
-              style={{ color: "var(--v-ok)" }}
-            />
-            TLS
-          </>
+          <LockSimple weight="fill" size={13} className="tlsswitch-lock" />
         ) : (
-          <>
-            <LockSimpleOpen size={13} style={{ color: "var(--v-text-2)" }} />
-            insecure
-          </>
+          <LockSimpleOpen size={13} className="tlsswitch-lock" />
         )}
+        <span className="tlsswitch-label">TLS</span>
+        <span className="tlsswitch-track" aria-hidden="true">
+          <span className="tlsswitch-knob" />
+        </span>
       </button>
     </div>
   );
