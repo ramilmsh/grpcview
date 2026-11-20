@@ -16,29 +16,14 @@ import (
 	"sync"
 
 	"github.com/bufbuild/protocompile"
-	"github.com/bufbuild/protocompile/linker"
 	"github.com/bufbuild/protocompile/reporter"
-	"google.golang.org/protobuf/reflect/protodesc"
+	"github.com/jhump/protoreflect/desc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-// Resolver returns a file's text by import name ("pkg/v1/x.proto"). An error wrapping fs.ErrNotExist
-// means "not mine": the standard imports (google/protobuf/*) are tried next.
-type Resolver interface {
-	Read(importName string) ([]byte, error)
-}
-
 // Roots resolves an import name against each directory in order, like protoc's -I: first hit wins.
 type Roots []string
-
-func (r Roots) Read(importName string) ([]byte, error) {
-	p, err := r.Locate(importName)
-	if err != nil {
-		return nil, err
-	}
-	return os.ReadFile(p)
-}
 
 // Locate returns the on-disk path importName resolves to.
 func (r Roots) Locate(importName string) (string, error) {
@@ -66,22 +51,6 @@ func (r Roots) ImportName(p string) (string, bool) {
 	return "", false
 }
 
-// Paths resolves import names through an explicit map to files on disk.
-type Paths map[string]string
-
-func (m Paths) Read(importName string) ([]byte, error) {
-	p, ok := m[importName]
-	if !ok {
-		return nil, fmt.Errorf("%s: %w", importName, fs.ErrNotExist)
-	}
-	return os.ReadFile(p)
-}
-
-// ResolverFunc adapts a function to Resolver.
-type ResolverFunc func(importName string) ([]byte, error)
-
-func (f ResolverFunc) Read(importName string) ([]byte, error) { return f(importName) }
-
 func checkImportName(name string) error {
 	if name == "" || path.IsAbs(name) || path.Clean(name) != name || name == ".." || strings.HasPrefix(name, "../") {
 		return fmt.Errorf("%q is not a clean relative import name: %w", name, fs.ErrNotExist)
@@ -94,22 +63,26 @@ type Result struct {
 	// Compiled files and their transitive deps (standard imports included), deps first, deduped.
 	// SourceCodeInfo is retained.
 	Set *descriptorpb.FileDescriptorSet
-	// Import name -> exact text, for every file the Resolver supplied (never builtin standard imports).
+	// Import name -> exact text, for every file read supplied, google/protobuf/* excluded (never rendered).
 	Originals map[string]string
 }
 
-// Compile compiles files (import names) and everything they import.
-func Compile(ctx context.Context, r Resolver, files ...string) (*Result, error) {
+// Compile compiles files (import names) and everything they import. read returns a file's text by
+// import name ("pkg/v1/x.proto"); an error wrapping fs.ErrNotExist means "not mine": the standard
+// imports (google/protobuf/*) are tried next.
+func Compile(ctx context.Context, read func(importName string) ([]byte, error), files ...string) (*Result, error) {
 	var mu sync.Mutex
 	originals := make(map[string]string)
 	resolver := protocompile.WithStandardImports(protocompile.ResolverFunc(func(name string) (protocompile.SearchResult, error) {
-		raw, err := r.Read(name)
+		raw, err := read(name)
 		if err != nil {
 			return protocompile.SearchResult{}, err
 		}
-		mu.Lock()
-		originals[name] = string(raw)
-		mu.Unlock()
+		if !strings.HasPrefix(name, "google/protobuf/") {
+			mu.Lock()
+			originals[name] = string(raw)
+			mu.Unlock()
+		}
 		return protocompile.SearchResult{Source: bytes.NewReader(raw)}, nil
 	}))
 
@@ -133,31 +106,15 @@ func Compile(ctx context.Context, r Resolver, files ...string) (*Result, error) 
 		return nil, err
 	}
 
-	set := &descriptorpb.FileDescriptorSet{}
-	seen := make(map[string]bool)
-	var visit func(fd protoreflect.FileDescriptor)
-	visit = func(fd protoreflect.FileDescriptor) {
-		if seen[fd.Path()] {
-			return
-		}
-		seen[fd.Path()] = true
-		imports := fd.Imports()
-		for i := range imports.Len() {
-			visit(imports.Get(i).FileDescriptor)
-		}
-		set.File = append(set.File, fileProto(fd))
+	fds := make([]protoreflect.FileDescriptor, len(linked))
+	for i, f := range linked {
+		fds[i] = f
 	}
-	for _, fd := range linked {
-		visit(fd)
+	wrapped, err := desc.WrapFiles(fds)
+	if err != nil {
+		return nil, err
 	}
-	return &Result{Set: set, Originals: originals}, nil
-}
-
-func fileProto(fd protoreflect.FileDescriptor) *descriptorpb.FileDescriptorProto {
-	if res, ok := fd.(linker.Result); ok {
-		return res.FileDescriptorProto()
-	}
-	return protodesc.ToFileDescriptorProto(fd)
+	return &Result{Set: desc.ToFileDescriptorSet(wrapped...), Originals: originals}, nil
 }
 
 // Find returns every *.proto under dir, recursively, sorted.

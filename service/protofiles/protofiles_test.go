@@ -2,6 +2,7 @@ package protofiles
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,17 @@ func write(t *testing.T, root string, files map[string]string) {
 		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// fromRoots reads import names through r, like the production confined reader minus confinement.
+func fromRoots(r Roots) func(string) ([]byte, error) {
+	return func(name string) ([]byte, error) {
+		p, err := r.Locate(name)
+		if err != nil {
+			return nil, err
+		}
+		return os.ReadFile(p)
 	}
 }
 
@@ -64,7 +76,7 @@ func TestCompile(t *testing.T) {
 		t.Fatalf("names = %s", got)
 	}
 
-	res, err := Compile(context.Background(), roots, names...)
+	res, err := Compile(context.Background(), fromRoots(roots), names...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,9 +112,16 @@ func TestCompile(t *testing.T) {
 func TestCompilePaths(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, map[string]string{"x/common.proto": common, "y/svc.proto": svc})
-	res, err := Compile(context.Background(), Paths{
+	paths := map[string]string{
 		"a/v1/common.proto": filepath.Join(dir, "x/common.proto"),
 		"a/v1/svc.proto":    filepath.Join(dir, "y/svc.proto"),
+	}
+	res, err := Compile(context.Background(), func(name string) ([]byte, error) {
+		p, ok := paths[name]
+		if !ok {
+			return nil, fs.ErrNotExist
+		}
+		return os.ReadFile(p)
 	}, "a/v1/svc.proto")
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +136,7 @@ func TestCompileErrors(t *testing.T) {
 	write(t, root, map[string]string{
 		"bad.proto": "syntax = \"proto3\";\nmessage A { Missing m = 1; }\nmessage B { Gone g = 1; }\n",
 	})
-	_, err := Compile(context.Background(), Roots{root}, "bad.proto")
+	_, err := Compile(context.Background(), fromRoots(Roots{root}), "bad.proto")
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -132,7 +151,7 @@ func TestCompileErrors(t *testing.T) {
 func TestCompileMissingImport(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, map[string]string{"a.proto": "syntax = \"proto3\";\nimport \"nope.proto\";\n"})
-	_, err := Compile(context.Background(), Roots{root}, "a.proto")
+	_, err := Compile(context.Background(), fromRoots(Roots{root}), "a.proto")
 	if err == nil || !strings.Contains(err.Error(), "nope.proto") {
 		t.Fatalf("err = %v", err)
 	}

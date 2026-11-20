@@ -131,7 +131,7 @@ func TestAddBazelSourceCompilesWithoutBuilding(t *testing.T) {
 		t.Fatal(err)
 	}
 	originals := resolved[0].originals
-	if len(originals) != 1 || originals[0].GetPath() != "grpc/health/v1/health.proto" || originals[0].GetContent() != healthProto {
+	if len(originals) != 1 || originals["grpc/health/v1/health.proto"] != healthProto {
 		t.Errorf("originals = %v, want health.proto's text alone (empty.proto is builtin)", originals)
 	}
 }

@@ -372,8 +372,7 @@ func (b Builder) session(ctx context.Context, subject string) (runner, context.C
 // stdout comes back on the error paths too, for the one caller that can use a partial answer
 // (QueryTargets). stdout and stderr are captured, never inherited: this runs inside a server.
 func (r runner) run(verb string, extra []string, targets ...string) (string, error) {
-	b, parent, ctx, timeout, subject := r.b, r.parent, r.ctx, r.timeout, r.subject
-	binary := b.Binary
+	binary := r.b.Binary
 	if binary == "" {
 		binary = "bazel"
 	}
@@ -383,8 +382,8 @@ func (r runner) run(verb string, extra []string, targets ...string) (string, err
 	args = append(args, targets...)
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Dir = b.Root
+	cmd := exec.CommandContext(r.ctx, binary, args...)
+	cmd.Dir = r.b.Root
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	// Killing bazel on the timeout kills only bazel itself; anything it spawned
@@ -397,15 +396,15 @@ func (r runner) run(verb string, extra []string, targets ...string) (string, err
 	switch {
 	case err == nil:
 		return out, nil
-	case parent.Err() != nil:
-		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, subject, parent.Err())
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if it really takes this long", verb, subject, timeout)
+	case r.parent.Err() != nil:
+		return out, fmt.Errorf("bazel %s of %s was cancelled: %w", verb, r.subject, r.parent.Err())
+	case errors.Is(r.ctx.Err(), context.DeadlineExceeded):
+		return out, fmt.Errorf("bazel %s of %s exceeded the %s timeout; raise bazel.timeout_seconds in grpcview.work.json if it really takes this long", verb, r.subject, r.timeout)
 	}
 	if tail := tailOf(stderr.String()); tail != "" {
-		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, subject, err, tail)
+		return out, fmt.Errorf("bazel %s of %s failed: %w\n%s", verb, r.subject, err, tail)
 	}
-	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, subject, err)
+	return out, fmt.Errorf("bazel %s of %s failed: %w", verb, r.subject, err)
 }
 
 func splitLines(s string) []string {

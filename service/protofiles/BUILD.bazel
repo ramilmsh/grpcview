@@ -7,9 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_bufbuild_protocompile//:protocompile",
-        "@com_github_bufbuild_protocompile//linker",
         "@com_github_bufbuild_protocompile//reporter",
-        "@org_golang_google_protobuf//reflect/protodesc",
+        "@com_github_jhump_protoreflect//desc",
         "@org_golang_google_protobuf//reflect/protoreflect",
         "@org_golang_google_protobuf//types/descriptorpb",
     ],

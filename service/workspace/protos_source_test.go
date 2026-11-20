@@ -2,7 +2,9 @@ package workspace
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -89,14 +91,11 @@ func TestAddProtosSource(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var got []string
-			for _, f := range resolved[0].originals {
-				got = append(got, f.GetPath())
-				if f.GetPath() == "acme/v1/svc.proto" && f.GetContent() != protosSvc {
-					t.Errorf("svc.proto original = %q", f.GetContent())
-				}
+			originals := resolved[0].originals
+			if text := originals["acme/v1/svc.proto"]; text != protosSvc {
+				t.Errorf("svc.proto original = %q", text)
 			}
-			if strings.Join(got, ",") != "acme/v1/common.proto,acme/v1/svc.proto" {
+			if got := strings.Join(slices.Sorted(maps.Keys(originals)), ","); got != "acme/v1/common.proto,acme/v1/svc.proto" {
 				t.Errorf("originals = %v", got)
 			}
 

@@ -197,7 +197,7 @@ func newSourcesAddCmd(g *globalFlags, open clientFactory) *cobra.Command {
 				msg.Position = &position
 			}
 			if msg.GetBazel() != nil {
-				useBuildTimeout(cmd, g)
+				useBazelTimeout(cmd, g)
 			}
 			return runSourcesAdd(cmd.Context(), g, open, msg, args[0])
 		},
@@ -386,7 +386,7 @@ func newSourcesRefreshCmd(g *globalFlags, open clientFactory) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			useBuildTimeout(cmd, g)
+			useBazelTimeout(cmd, g)
 			var id string
 			if len(args) == 1 {
 				id = args[0]

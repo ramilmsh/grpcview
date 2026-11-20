@@ -83,7 +83,7 @@ func registerGlobalFlags(cmd *cobra.Command) *globalFlags {
 	return g
 }
 
-func useBuildTimeout(cmd *cobra.Command, g *globalFlags) {
+func useBazelTimeout(cmd *cobra.Command, g *globalFlags) {
 	if flag := cmd.Flags().Lookup("timeout"); flag != nil && flag.Changed {
 		return
 	}

@@ -54,12 +54,12 @@ func renderedProtos(t *testing.T, fds *descriptorpb.FileDescriptorSet) []*grpcvi
 // compiled compiles one in-memory file and returns its descriptor without SourceCodeInfo.
 func compiled(t *testing.T, name, text string) *descriptorpb.FileDescriptorProto {
 	t.Helper()
-	res, err := protofiles.Compile(context.Background(), protofiles.ResolverFunc(func(n string) ([]byte, error) {
+	res, err := protofiles.Compile(context.Background(), func(n string) ([]byte, error) {
 		if n != name {
 			return nil, os.ErrNotExist
 		}
 		return []byte(text), nil
-	}), name)
+	}, name)
 	if err != nil {
 		t.Fatalf("compile %s: %v\n%s", name, err, text)
 	}

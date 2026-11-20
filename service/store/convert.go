@@ -1,6 +1,9 @@
 package store
 
 import (
+	"maps"
+	"slices"
+
 	grpcviewstorev1 "codeberg.org/ramilmsh/grpcview/grpcview/store/v1"
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 )
@@ -154,4 +157,25 @@ func serverToTarget(s *grpcviewv1.Server) *grpcviewstorev1.Target {
 	}
 	address, tls := addressTLSFromServer(s)
 	return &grpcviewstorev1.Target{Address: address, Tls: tls}
+}
+
+// ProtoFiles is originals (import name -> .proto text) as stored: sorted by path.
+func ProtoFiles(originals map[string]string) []*grpcviewstorev1.ProtoFile {
+	var out []*grpcviewstorev1.ProtoFile
+	for _, name := range slices.Sorted(maps.Keys(originals)) {
+		out = append(out, &grpcviewstorev1.ProtoFile{Path: name, Content: originals[name]})
+	}
+	return out
+}
+
+// Originals inverts ProtoFiles.
+func Originals(files []*grpcviewstorev1.ProtoFile) map[string]string {
+	if len(files) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(files))
+	for _, f := range files {
+		out[f.GetPath()] = f.GetContent()
+	}
+	return out
 }

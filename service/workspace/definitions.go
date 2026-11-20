@@ -204,7 +204,7 @@ func (w Workspace) deriveDefinitions(ctx context.Context, coll *store.Collection
 	for _, src := range sources {
 		rs := &resolvedSource{id: src.GetId(), server: src.GetReflection()}
 		if blob, ok := stored[rs.id]; ok {
-			rs.files, rs.services, rs.originals = blob.GetDescriptorSet(), blob.GetServiceNames(), blob.GetOriginals()
+			rs.files, rs.services, rs.originals = blob.GetDescriptorSet(), blob.GetServiceNames(), store.Originals(blob.GetOriginals())
 		} else {
 			rs.err = unresolvedReason(src)
 		}

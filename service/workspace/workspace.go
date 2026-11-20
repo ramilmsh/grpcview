@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/bazelbuild"
@@ -204,8 +205,9 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	}
 
 	var (
-		src   *grpcviewv1.DescriptorSource
-		fresh *resolvedSource
+		src    *grpcviewv1.DescriptorSource
+		upload *descriptorpb.FileDescriptorSet // the uploaded bytes, which resolveOne cannot re-read
+		layout *protosLayout                  // already resolved: resolveOne would resolve it again
 	)
 	switch source := request.Msg.GetSource().(type) {
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:
@@ -214,8 +216,7 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 			return nil, connect.NewError(connect.CodeInvalidArgument,
 				errors.New("a descriptor-set upload needs a file_name — it is the source's identity"))
 		}
-		fds, err := parseUpload(source.DescriptorSet)
-		if err != nil {
+		if upload, err = parseUpload(source.DescriptorSet); err != nil {
 			return nil, err
 		}
 		var recipe string
@@ -228,53 +229,39 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 				recipe = rel
 			}
 		}
-		src = &grpcviewv1.DescriptorSource{
-			Source: &grpcviewv1.DescriptorSource_Upload{
-				Upload: &grpcviewv1.Upload{FileName: fileName, Path: recipe},
-			},
-			CommitDescriptors: request.Msg.GetCommitDescriptors(),
-		}
-		src.Id = sourceID(src)
-		if fresh, err = resolveUpload(src.GetId(), fds); err != nil {
-			return nil, err
-		}
+		src = &grpcviewv1.DescriptorSource{Source: &grpcviewv1.DescriptorSource_Upload{
+			Upload: &grpcviewv1.Upload{FileName: fileName, Path: recipe},
+		}}
 	case *grpcviewv1.AddDescriptorSourceRequest_Reflection:
-		src = &grpcviewv1.DescriptorSource{
-			Source:            &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection},
-			CommitDescriptors: request.Msg.GetCommitDescriptors(),
-		}
-		src.Id = sourceID(src)
-		if fresh, err = resolveReflection(ctx, src.GetId(), src.GetReflection()); err != nil {
-			return nil, err
-		}
+		src = &grpcviewv1.DescriptorSource{Source: &grpcviewv1.DescriptorSource_Reflection{Reflection: source.Reflection}}
 	case *grpcviewv1.AddDescriptorSourceRequest_Bazel:
 		label, err := bazelbuild.CanonicalLabel(source.Bazel.GetLabel())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		src = &grpcviewv1.DescriptorSource{
-			Source:            &grpcviewv1.DescriptorSource_Bazel{Bazel: &grpcviewv1.Bazel{Label: label}},
-			CommitDescriptors: request.Msg.GetCommitDescriptors(),
-		}
-		src.Id = sourceID(src)
-		if fresh, err = w.resolveBazel(ctx, src.GetId(), label); err != nil {
-			return nil, err
-		}
+		src = &grpcviewv1.DescriptorSource{Source: &grpcviewv1.DescriptorSource_Bazel{Bazel: &grpcviewv1.Bazel{Label: label}}}
 	case *grpcviewv1.AddDescriptorSourceRequest_Protos:
-		protos, err := normalizeProtos(w.store.Root(), source.Protos)
-		if err != nil {
+		if layout, err = resolveProtosLayout(w.store.Root(), source.Protos); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		src = &grpcviewv1.DescriptorSource{
-			Source:            &grpcviewv1.DescriptorSource_Protos{Protos: protos},
-			CommitDescriptors: request.Msg.GetCommitDescriptors(),
-		}
-		src.Id = sourceID(src)
-		if fresh, err = w.resolveProtos(ctx, src.GetId(), protos); err != nil {
-			return nil, err
-		}
+		src = &grpcviewv1.DescriptorSource{Source: &grpcviewv1.DescriptorSource_Protos{Protos: layout.recorded}}
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown source type: <%T> %+v", source, source))
+	}
+	src.Id = sourceID(src)
+	src.CommitDescriptors = request.Msg.GetCommitDescriptors()
+
+	var fresh *resolvedSource
+	switch {
+	case upload != nil:
+		fresh, err = resolveUpload(src.GetId(), upload)
+	case layout != nil:
+		fresh, err = w.resolveProtos(ctx, src.GetId(), layout)
+	default:
+		fresh, err = w.resolveOne(ctx, src)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	if i := slices.IndexFunc(ws.GetSources(), func(s *grpcviewv1.DescriptorSource) bool {
