@@ -41,3 +41,16 @@ export function tabMenuItems(
     },
   ];
 }
+
+// The tab `delta` steps from the active one, wrapping; null with no tabs. No active tab
+// starts from the first (forward) or last (back).
+export function adjacentTab(
+  tabs: readonly OpenTab[],
+  activeKey: string | null,
+  delta: 1 | -1,
+): OpenTab | null {
+  if (tabs.length === 0) return null;
+  const at = tabs.findIndex((t) => t.key === activeKey);
+  if (at === -1) return tabs[delta === 1 ? 0 : tabs.length - 1];
+  return tabs[(at + delta + tabs.length) % tabs.length];
+}

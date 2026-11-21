@@ -48,6 +48,7 @@ ts_project(
         "geometry.test.ts",
         "keymap.test.ts",
         "navigate.test.ts",
+        "platform.test.ts",
         "selection.test.ts",
     ],
     declaration = True,

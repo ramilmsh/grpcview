@@ -1,10 +1,5 @@
 import { useState } from "react";
-import {
-  Code,
-  FileArchive,
-  Play,
-  PlugsConnected,
-} from "@/components/ui/icons";
+import { Code, FileArchive, Play, PlugsConnected } from "@/components/ui/icons";
 import type {
   Service,
   Method,
@@ -15,6 +10,8 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { EditableName } from "@/components/ui/EditableName";
 import { MethodKindTag, type MethodKind } from "@/components/ui/Tag";
 import { middleEllipsis, serviceName } from "@/lib/format";
+import { withShortcut } from "@/lib/shortcuts";
+import { useShortcut } from "@/lib/use-shortcuts";
 import { MethodDropdown } from "./MethodDropdown";
 import { TargetBar } from "./TargetBar";
 
@@ -52,6 +49,8 @@ export function MethodHeader({
   // one the moment the target field is touched, and dialing "" is not an invoke.
   const canInvoke = !!(targetOverride ?? reflection)?.address;
   const hasMethod = !!(request.service && request.method);
+  // Exactly when the Invoke button is enabled.
+  useShortcut("invoke", onInvoke, !invoking && canInvoke);
 
   const onPick = (service: Service, method: Method) => {
     onChangeMethod(serviceName(service), method.name);
@@ -176,7 +175,7 @@ export function MethodHeader({
             title={
               !canInvoke
                 ? "Set a target or add a reflection source to invoke"
-                : "Invoke"
+                : withShortcut("Invoke", "invoke")
             }
           >
             <Play weight="fill" size={13} />

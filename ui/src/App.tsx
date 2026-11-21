@@ -19,6 +19,9 @@ import { NoCollection } from "@/features/workspace/NoCollection";
 import { SourcesView } from "@/features/sources/SourcesView";
 import { ScriptsView } from "@/features/scripts/ScriptsView";
 import { DaemonsView } from "@/features/daemons/DaemonsView";
+import { QuickOpen } from "@/features/workspace/QuickOpen";
+import { ShortcutSheet } from "@/components/shell/ShortcutSheet";
+import { useGlobalShortcuts } from "@/lib/use-shortcuts";
 
 // TransportProvider must sit OUTSIDE QueryClientProvider.
 //
@@ -84,11 +87,15 @@ function CurrentView() {
 }
 
 export default function App() {
+  useGlobalShortcuts();
   return (
     <TransportProvider transport={transport}>
       <QueryClientProvider client={queryClient}>
         <AppShell>
           <CurrentView />
+          {/* Overlays: fixed-position, so where they mount in the shell is moot. */}
+          <QuickOpen />
+          <ShortcutSheet />
         </AppShell>
       </QueryClientProvider>
     </TransportProvider>

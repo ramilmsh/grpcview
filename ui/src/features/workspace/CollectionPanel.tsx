@@ -45,6 +45,8 @@ import {
   type CollectionMenuActions,
 } from "./collection-menu";
 import { NewCollectionDialog } from "./NewCollectionDialog";
+import { withShortcut } from "@/lib/shortcuts";
+import { useShortcut } from "@/lib/use-shortcuts";
 
 export function CollectionPanel() {
   const { collection: activeCollection, services } = useActiveWorkspace();
@@ -132,6 +134,8 @@ export function CollectionPanel() {
   // it only moves the row (see startNewRequest).
   const newRequestIn = (parent: ItemWithPath | null) =>
     startNewRequest(collection, parent, tiered);
+  // The "+" button's action, enabled exactly when it is.
+  useShortcut("newRequest", () => newRequestIn(null), services.length > 0);
 
   // Addressed at the ITEM's own collection, not the active one: with the tier on screen, the
   // rows of a collection that is not active are renameable and deletable too.
@@ -298,7 +302,7 @@ export function CollectionPanel() {
         />
         <IconButton
           aria-label="Add Request"
-          data-tooltip="Add Request"
+          data-tooltip={withShortcut("New request", "newRequest")}
           onClick={() => newRequestIn(null)}
           disabled={services.length === 0}
         >

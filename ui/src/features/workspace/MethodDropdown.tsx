@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { MethodKindTag } from "@/components/ui/Tag";
 import { methodKind, serviceName } from "@/lib/format";
+import { shortcutLabel, shortcutLabels } from "@/lib/shortcuts";
 import { KIND_NAME, moveIndex } from "./method-picker";
 import {
   groupMethods,
@@ -209,6 +210,8 @@ function MethodPopover({
   return (
     <div
       className="flex flex-col"
+      // Owns the keyboard while open: the global shortcut listener stands down.
+      data-popover
       style={{
         position: "absolute",
         left: 0,
@@ -404,9 +407,9 @@ function MethodPopover({
           ...muted,
         }}
       >
-        <span>↑ ↓ to move</span>
-        <span>Enter to pick</span>
-        <span>Esc to close</span>
+        <span>{shortcutLabels("pickerMove").join(" ")} to move</span>
+        <span>{shortcutLabel("pickerPick")} to pick</span>
+        <span>{shortcutLabel("pickerClose")} to close</span>
       </div>
     </div>
   );

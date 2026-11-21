@@ -9,8 +9,10 @@ ts_project(
         "editor-debug.ts",
         "format.ts",
         "keepalive.ts",
+        "shortcuts.ts",
         "stale-tabs.ts",
         "ui-store.ts",
+        "use-shortcuts.ts",
         "workspace-query.ts",
     ],
     declaration = True,
@@ -30,6 +32,7 @@ ts_project(
         "//ui:node_modules/monaco-editor",
         "//ui:node_modules/react",
         "//ui:node_modules/zustand",
+        "//ui/src/components/tree",
         "//ui/src/components/ui",
     ],
 )
@@ -40,6 +43,7 @@ ts_project(
     srcs = [
         "active-collection.test.ts",
         "format.test.ts",
+        "shortcuts.test.ts",
         "stale-tabs.test.ts",
         "ui-store.test.ts",
         "workspace-query.test.ts",
@@ -57,6 +61,7 @@ ts_project(
         "//ui:node_modules/@connectrpc/connect-query",
         "//ui:node_modules/@types/node",
         "//ui:node_modules/expect",
+        "//ui/src/components/tree",
     ],
 )
 

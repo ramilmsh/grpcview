@@ -5,6 +5,7 @@ ts_project(
     srcs = [
         "AppShell.tsx",
         "Rail.tsx",
+        "ShortcutSheet.tsx",
         "StatusBar.tsx",
         "TopBar.tsx",
     ],

@@ -7,7 +7,9 @@ import { useUIStore, type OpenTab } from "@/lib/ui-store";
 import { DraftKindTag, MethodKindTag } from "@/components/ui/Tag";
 import { useActiveWorkspace, useRootItems } from "@/lib/workspace-query";
 import { findByKey, methodKind, resolveMethod } from "@/lib/format";
-import { tabMenuItems, type TabMenuActions } from "./tab-menu";
+import { withShortcut } from "@/lib/shortcuts";
+import { useShortcut } from "@/lib/use-shortcuts";
+import { adjacentTab, tabMenuItems, type TabMenuActions } from "./tab-menu";
 import { draftTitle } from "./new-request-draft";
 import { useRequestDraft } from "./useRequestDraft";
 
@@ -38,7 +40,21 @@ export function RequestTabs() {
     closeAll: closeAllTabs,
   };
 
-  if (openTabs.length === 0) return null;
+  // The same paths as a tab's × and a click on a tab.
+  const hasTabs = openTabs.length > 0;
+  useShortcut(
+    "closeTab",
+    () => (activeKey ? closeTab(activeKey) : false),
+    hasTabs,
+  );
+  const step = (delta: 1 | -1) => {
+    const tab = adjacentTab(openTabs, activeKey, delta);
+    if (tab) setActiveKey(tab.key, tab.collection);
+  };
+  useShortcut("prevTab", () => step(-1), hasTabs);
+  useShortcut("nextTab", () => step(1), hasTabs);
+
+  if (!hasTabs) return null;
 
   return (
     <div
@@ -110,14 +126,16 @@ export function RequestTabs() {
                 ? draftTitle(draft?.name ?? "")
                 : (item?.item.name ?? tab.name)}
             </span>
-            <X
-              size={12}
-              style={{ opacity: 0.5, flex: "none" }}
+            <span
+              title={withShortcut("Close", "closeTab")}
+              style={{ display: "flex", flex: "none" }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.key);
               }}
-            />
+            >
+              <X size={12} style={{ opacity: 0.5 }} />
+            </span>
           </div>
         );
       })}

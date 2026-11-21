@@ -42,7 +42,6 @@ import {
   listBazelTargets,
   listWorkspaceModules,
   getDefinitions,
-  invoke,
   runScript,
   createScript,
   updateScript,
@@ -565,10 +564,6 @@ export function useDeleteScript() {
   return useMutation(deleteScript, useSeedGetCache());
 }
 
-export function useInvoke() {
-  return useMutation(invoke);
-}
-
 // Invalidates one collection's Get query: Invoke persists run history server-side but
 // does not return the fresh Collection the History timeline rides on. A no-op with no
 // collection, since there is then no key to invalidate.
@@ -586,8 +581,8 @@ export function useRefreshWorkspace(collection: string | null) {
   );
 }
 
-// The raw connect client: connect-query has no streaming hook, so InvokeStreaming
-// is called directly on this.
+// The raw connect client: connect-query has no streaming hook and its mutations take no
+// AbortSignal, so Invoke and InvokeStreaming are both called directly on this.
 export function useStreamingClient() {
   const transport = useTransport();
   return useMemo(() => createClient(WorkspaceService, transport), [transport]);

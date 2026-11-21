@@ -5,7 +5,6 @@ import {
   useActiveWorkspace,
   useRootItems,
   useWorkspaceMutations,
-  useInvoke,
   useStreamingClient,
   useRefreshWorkspace,
   sourceForService,
@@ -24,6 +23,7 @@ import {
   hostMetadataScript,
   migrateMetadataToTs,
 } from "./metadata-wrapper";
+import { SavedHint } from "./SavedHint";
 
 const DEBOUNCE_MS = 400;
 
@@ -37,7 +37,6 @@ export function RequestWorkspace() {
   const collection = activeCollection ?? "";
   const rootItems = useRootItems(workspace);
   const { updateRequest } = useWorkspaceMutations();
-  const invokeMut = useInvoke();
   const streamClient = useStreamingClient();
   const refreshWorkspace = useRefreshWorkspace(activeCollection);
 
@@ -199,32 +198,46 @@ export function RequestWorkspace() {
   // values (setDraft is async, so a current-draft closure would be stale).
   const runInvoke = (b: string, md: string, msgs: string[]) => {
     if (kind === "u") {
+      // Abortable like a stream (Esc), so it goes through the raw client, not a mutation.
+      aborters.current[key]?.abort();
+      const ac = new AbortController();
+      aborters.current[key] = ac;
       setInvoke(key, { loading: true });
-      invokeMut.mutate(
-        {
-          spec: {
-            collection,
-            path,
-            itemName,
-            service: request.service,
-            method: request.method,
-            metadataScript: md,
-            target: targetOverride,
-          },
-          body: b,
-        },
-        {
-          // The server persists history before returning, so refresh on success.
-          onSuccess: (res) => {
-            setInvoke(key, { response: res.response });
-            refreshWorkspace();
-          },
-          onError: (e) =>
-            setInvoke(key, {
-              error: e instanceof Error ? e.message : String(e),
-            }),
-        },
-      );
+      void (async () => {
+        try {
+          const res = await streamClient.invoke(
+            {
+              spec: {
+                collection,
+                path,
+                itemName,
+                service: request.service,
+                method: request.method,
+                metadataScript: md,
+                target: targetOverride,
+              },
+              body: b,
+            },
+            { signal: ac.signal },
+          );
+          setInvoke(key, { response: res.response });
+        } catch (e) {
+          const canceled =
+            ac.signal.aborted ||
+            (e instanceof ConnectError && e.code === Code.Canceled);
+          setInvoke(key, {
+            error: canceled
+              ? "Cancelled"
+              : e instanceof Error
+                ? e.message
+                : String(e),
+          });
+        } finally {
+          if (aborters.current[key] === ac) delete aborters.current[key];
+          // The server persists history before returning.
+          refreshWorkspace();
+        }
+      })();
       return;
     }
 
@@ -309,8 +322,9 @@ export function RequestWorkspace() {
   return (
     <div
       className="flex flex-col"
-      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{ flex: 1, minWidth: 0, minHeight: 0, position: "relative" }}
     >
+      <SavedHint />
       <MethodHeader
         request={request}
         services={services}

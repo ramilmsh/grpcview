@@ -25,6 +25,7 @@ import {
 import { getAutoImportContext } from "./module-auto-import";
 import { workspacePathForUri } from "./module-specifier";
 import { registerEditorForDebug } from "@/lib/editor-debug";
+import { bindEditorShortcuts } from "@/lib/use-shortcuts";
 import { useDefinitions } from "@/lib/workspace-query";
 import { requestMessageAlias } from "./proto-types";
 
@@ -321,32 +322,37 @@ export function Editor({
     editorRef.current = editor;
     monacoNsRef.current = m;
     registerEditorForDebug(TS_MODEL_URI, editor);
-    // A full-document format would reflow the wrapper across the hidden boundary.
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
+    // Selects the editable region only, never the hidden wrapper around it.
+    const selectRegion = () => {
       const model = editor.getModel();
       if (!model) return;
-      const selectBody = () => {
-        const { first, last } = bodyBounds(model);
-        editor.setSelection({
-          startLineNumber: first,
-          startColumn: 1,
-          endLineNumber: last,
-          endColumn: model.getLineMaxColumn(last),
-        });
-      };
-      selectBody();
+      const { first, last } = bodyBounds(model);
+      editor.setSelection({
+        startLineNumber: first,
+        startColumn: 1,
+        endLineNumber: last,
+        endColumn: model.getLineMaxColumn(last),
+      });
+    };
+    // Formats the visible region only: a full-document format (Monaco's own ⇧⌥F, which
+    // this binding overrides) would reflow the wrapper across the hidden boundary.
+    const format = () => {
+      selectRegion();
       void Promise.resolve(
         editor.getAction("editor.action.formatSelection")?.run(),
       )
         .then(() => {
           // formatSelection indents one level inside the hidden `=> (`; outdent clamps at 0.
-          selectBody();
+          selectRegion();
           return Promise.resolve(
             editor.getAction("editor.action.outdentLines")?.run(),
           );
         })
         .then(() => applyHidden(editor));
-    });
+    };
+    // Registry shortcuts: format, select-region (shadows select-all), and the request
+    // view's global ones (invoke, save, quick open, tabs…).
+    bindEditorShortcuts(editor, m, { format, selectBody: selectRegion });
 
     setRegion(editor, findRegion(editor.getValue()));
     applyHidden(editor);
@@ -381,24 +387,6 @@ export function Editor({
         e.preventDefault();
         e.stopPropagation();
       }
-    });
-
-    // Shadow select-all for this editor so it covers the body region only.
-    editor.addAction({
-      id: "grpcview.selectBody",
-      label: "Select Body",
-      keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyA],
-      run: (ed) => {
-        const model = ed.getModel();
-        if (!model) return;
-        const { first, last } = bodyBounds(model);
-        ed.setSelection({
-          startLineNumber: first,
-          startColumn: 1,
-          endLineNumber: last,
-          endColumn: model.getLineMaxColumn(last),
-        });
-      },
     });
 
     // D3 + D4 (docs/design/planned/script-region.md): the region's first token decides the mode,

@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import { fn } from "jest-mock";
 import { expect } from "expect";
 import type { OpenTab } from "@/lib/ui-store";
-import { tabMenuItems, type TabMenuActions } from "./tab-menu";
+import { adjacentTab, tabMenuItems, type TabMenuActions } from "./tab-menu";
 
 const tab = (key: string): OpenTab => ({
   key,
@@ -101,5 +101,25 @@ describe("tabMenuItems", () => {
       false,
       true,
     ]);
+  });
+});
+
+describe("adjacentTab", () => {
+  const t = (key: string): OpenTab => ({
+    key,
+    name: key,
+    collection: "c",
+    kind: "request",
+  });
+  const tabs = [t("a"), t("b"), t("c")];
+  it("steps and wraps both ways", () => {
+    expect(adjacentTab(tabs, "b", 1)?.key).toBe("c");
+    expect(adjacentTab(tabs, "c", 1)?.key).toBe("a");
+    expect(adjacentTab(tabs, "a", -1)?.key).toBe("c");
+  });
+  it("starts from an end with no active tab; null with no tabs", () => {
+    expect(adjacentTab(tabs, null, 1)?.key).toBe("a");
+    expect(adjacentTab(tabs, null, -1)?.key).toBe("c");
+    expect(adjacentTab([], "a", 1)).toBeNull();
   });
 });

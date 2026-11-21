@@ -11,6 +11,7 @@ import { useUIStore } from "@/lib/ui-store";
 import { findByKey } from "@/lib/format";
 import { MetadataTab } from "./MetadataTab";
 import { defaultMetadataModule, hostMetadataScript } from "./metadata-wrapper";
+import { SavedHint } from "./SavedHint";
 
 const DEBOUNCE_MS = 400;
 
@@ -87,8 +88,9 @@ export function FolderWorkspace() {
   return (
     <div
       className="flex flex-col"
-      style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{ flex: 1, minWidth: 0, minHeight: 0, position: "relative" }}
     >
+      <SavedHint />
       <div
         className="flex items-center gap-[10px]"
         style={{

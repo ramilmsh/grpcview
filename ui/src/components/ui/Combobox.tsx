@@ -188,7 +188,7 @@ export function Combobox({
       </div>
 
       {showList && (
-        <div className="combo-list" id={listId} role="listbox">
+        <div className="combo-list" id={listId} role="listbox" data-popover>
           {visible.map((option, index) => (
             <button
               type="button"

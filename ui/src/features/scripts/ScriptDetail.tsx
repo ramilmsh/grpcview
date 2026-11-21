@@ -11,6 +11,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Kbd } from "@/components/ui/Kbd";
+import { shortcutLabel } from "@/lib/shortcuts";
+import { bindEditorShortcuts } from "@/lib/use-shortcuts";
 import { Subtab } from "@/components/ui/Subtab";
 import { EditableName } from "@/components/ui/EditableName";
 import {
@@ -126,11 +128,15 @@ function useScriptDraft(script: Script): ScriptDraft {
   saveRef.current = save;
 
   const onMount: OnMount = (editor, m) => {
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () =>
-      testRunRef.current(),
-    );
-    editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () =>
-      saveRef.current(),
+    // ⌘K too, so Monaco's chord prefix does not swallow quick open.
+    bindEditorShortcuts(
+      editor,
+      m,
+      {
+        scriptRun: () => testRunRef.current(),
+        scriptSave: () => saveRef.current(),
+      },
+      ["quickOpen"],
     );
   };
 
@@ -224,7 +230,7 @@ export function ScriptDetail({ script }: { script: Script }) {
             >
               <Play weight="fill" size={12} />
               {draft.running ? "Running…" : "Test run"}
-              <Kbd>⌘↵</Kbd>
+              <Kbd>{shortcutLabel("scriptRun")}</Kbd>
             </Button>
             <Button
               variant="secondary"
@@ -237,7 +243,7 @@ export function ScriptDetail({ script }: { script: Script }) {
             >
               <FloppyDisk size={14} />
               {draft.saving ? "Saving…" : "Save"}
-              <Kbd>⌘S</Kbd>
+              <Kbd>{shortcutLabel("scriptSave")}</Kbd>
             </Button>
             <Button
               variant="danger"
