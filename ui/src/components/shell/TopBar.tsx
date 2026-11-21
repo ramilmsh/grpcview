@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   Broadcast,
   CaretDown,
-  MagnifyingGlass,
   Gear,
   Stack,
 } from "@/components/ui/icons";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Kbd } from "@/components/ui/Kbd";
 import { Menu } from "@/components/ui/Menu";
 import {
   useActiveWorkspace,
@@ -123,28 +121,6 @@ export function TopBar() {
       ) : null}
 
       <div className="ml-auto flex items-center gap-[10px]">
-        {/* Sunken, not a button-looking button: a search field that opens a palette. */}
-        <button
-          type="button"
-          className="flex items-center gap-[8px]"
-          style={{
-            height: 32,
-            padding: "0 10px",
-            border: "none",
-            borderRadius: "var(--v-r)",
-            background: "var(--v-well)",
-            boxShadow: "var(--v-sunken)",
-            color: "var(--v-text-2)",
-            font: "inherit",
-            cursor: "not-allowed",
-          }}
-          title="Search — not available in Phase 1"
-          disabled
-        >
-          <MagnifyingGlass size={15} />
-          Search
-          <Kbd>⌘K</Kbd>
-        </button>
         {/* Where this collection's services are reflected from, and the default invoke
             target. Not a live health check — so no status dot; the Sources icon instead. */}
         <div
