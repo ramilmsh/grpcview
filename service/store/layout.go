@@ -19,8 +19,7 @@ const (
 
 	// RequestFileName, BodyFileName and MetadataFileName are exported for service/workspace's
 	// ListWorkspaceModules walk, which excludes a request's body.ts/metadata.ts from the
-	// module list by checking for the sibling request.json (the same reason
-	// NodeModulesDirName/BazelSymlinkPrefix below are exported).
+	// module list by checking for the sibling request.json.
 	RequestFileName  = "request.json"
 	BodyFileName     = "body.ts"
 	MetadataFileName = "metadata.ts"
@@ -49,10 +48,11 @@ const (
 	gitignoreFileName = ".gitignore"
 	gitExcludeRelPath = ".git/info/exclude"
 
-	// NodeModulesDirName and BazelSymlinkPrefix are exported for service/workspace's
-	// ListWorkspaceModules walk, which skips the same directories this scan does.
-	NodeModulesDirName = "node_modules"
-	BazelSymlinkPrefix = "bazel-"
+	nodeModulesDirName = "node_modules"
+	bazelSymlinkPrefix = "bazel-"
+
+	// MountDirName holds the virtual mounts: <coll>/.grpcview/ and the workspace's /.grpcview/.
+	MountDirName = ".grpcview"
 )
 
 type itemKind int

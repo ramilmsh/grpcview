@@ -82,6 +82,18 @@ func TestListWorkspaceModulesSkipsDotDirs(t *testing.T) {
 	}
 }
 
+func TestListWorkspaceModulesSkipsDotFiles(t *testing.T) {
+	root := t.TempDir()
+	writeModuleFile(t, root, "keep.ts", "export const k = 1")
+	writeModuleFile(t, root, ".tmp-123.ts", "export const nope = 1")
+	writeModuleFile(t, root, ".grpcview/gen.ts", "export const g = 1")
+
+	got := modulePaths(listWorkspaceModules(t, root))
+	if len(got) != 2 || got[0] != ".grpcview/gen.ts" || got[1] != "keep.ts" {
+		t.Fatalf("paths = %v, want .grpcview/gen.ts and keep.ts (dot-files hidden, .grpcview not)", got)
+	}
+}
+
 func TestListWorkspaceModulesSkipsBazelSymlinkDirs(t *testing.T) {
 	root := t.TempDir()
 	writeModuleFile(t, root, "keep.ts", "export const k = 1")

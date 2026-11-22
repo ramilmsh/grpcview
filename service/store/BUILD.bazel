@@ -9,6 +9,7 @@ go_library(
         "discover.go",
         "fs.go",
         "layout.go",
+        "paths.go",
         "scripts.go",
         "sources.go",
         "store.go",
@@ -30,6 +31,7 @@ go_test(
     name = "store_test",
     srcs = [
         "discover_test.go",
+        "paths_test.go",
         "scripts_test.go",
         "sources_test.go",
         "store_test.go",
