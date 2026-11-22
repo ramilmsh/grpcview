@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "definitions.go",
         "describe.go",
+        "files.go",
         "generated.go",
         "gvinvoke.go",
         "invoke.go",
@@ -57,6 +58,7 @@ go_test(
         "collections_test.go",
         "definitions_test.go",
         "describe_test.go",
+        "files_test.go",
         "folder_metadata_test.go",
         "generated_test.go",
         "gvinvoke_test.go",

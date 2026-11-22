@@ -83,6 +83,9 @@ func New(root, stateRoot string, logger *slog.Logger) *Store {
 
 func (s *Store) Root() string { return s.root }
 
+// StateRoot holds history, the descriptor index and blobs; never part of the served FS.
+func (s *Store) StateRoot() string { return s.stateRoot }
+
 func (s *Store) Open(_ context.Context, id string) (*Collection, error) {
 	cleaned, err := cleanCollectionID(id)
 	if err != nil {

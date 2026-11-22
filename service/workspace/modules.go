@@ -25,6 +25,9 @@ const (
 
 func (w Workspace) ListWorkspaceModules(_ context.Context, _ *connect.Request[grpcviewv1.ListWorkspaceModulesRequest]) (*connect.Response[grpcviewv1.ListWorkspaceModulesResponse], error) {
 	modules, err := scanWorkspaceModules(w.root)
+	if errors.Is(err, errWorkspaceModuleCapHit) {
+		return nil, connect.NewError(connect.CodeResourceExhausted, err)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to scan the workspace for TypeScript modules: %w", err))
 	}
@@ -48,7 +51,6 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 		modules    []*grpcviewv1.WorkspaceModule
 		totalBytes int
 		oversized  []string
-		cutoff     string
 	)
 
 	walkErr := filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, err error) error {
@@ -98,9 +100,11 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 			return nil
 		}
 
-		if len(modules) >= maxWorkspaceModuleFiles || totalBytes+int(info.Size()) > maxWorkspaceModuleBytes {
-			cutoff = path
-			return errWorkspaceModuleCapHit
+		if len(modules) >= maxWorkspaceModuleFiles {
+			return fmt.Errorf("%w: more than %d files", errWorkspaceModuleCapHit, maxWorkspaceModuleFiles)
+		}
+		if totalBytes+int(info.Size()) > maxWorkspaceModuleBytes {
+			return fmt.Errorf("%w: more than %d bytes", errWorkspaceModuleCapHit, maxWorkspaceModuleBytes)
 		}
 
 		content, err := os.ReadFile(path)
@@ -119,14 +123,8 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 		totalBytes += len(content)
 		return nil
 	})
-	if walkErr != nil && !errors.Is(walkErr, errWorkspaceModuleCapHit) {
+	if walkErr != nil {
 		return nil, walkErr
-	}
-
-	if cutoff != "" {
-		slog.Default().Warn("workspace module scan hit its cap and stopped early; some TypeScript files were dropped",
-			"root", absRoot, "listed", len(modules), "max_files", maxWorkspaceModuleFiles,
-			"max_bytes", maxWorkspaceModuleBytes, "stopped_at", cutoff)
 	}
 	for _, path := range oversized {
 		slog.Default().Warn("workspace module skipped: over the per-file size cap",
