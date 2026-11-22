@@ -134,6 +134,22 @@ func (c *reconnecting) DeleteScript(ctx context.Context, req *connect.Request[gr
 	return call(c, ctx, remote.DeleteScript, req)
 }
 
+func (c *reconnecting) Stat(ctx context.Context, req *connect.Request[grpcviewv1.StatRequest]) (*connect.Response[grpcviewv1.StatResponse], error) {
+	return read(c, ctx, remote.Stat, req)
+}
+
+func (c *reconnecting) ReadDirectory(ctx context.Context, req *connect.Request[grpcviewv1.ReadDirectoryRequest]) (*connect.Response[grpcviewv1.ReadDirectoryResponse], error) {
+	return read(c, ctx, remote.ReadDirectory, req)
+}
+
+func (c *reconnecting) ReadFile(ctx context.Context, req *connect.Request[grpcviewv1.ReadFileRequest]) (*connect.Response[grpcviewv1.ReadFileResponse], error) {
+	return read(c, ctx, remote.ReadFile, req)
+}
+
+func (c *reconnecting) ReadFiles(ctx context.Context, req *connect.Request[grpcviewv1.ReadFilesRequest]) (*connect.Response[grpcviewv1.ReadFilesResponse], error) {
+	return read(c, ctx, remote.ReadFiles, req)
+}
+
 func (c *reconnecting) ServerInfo(ctx context.Context, req *connect.Request[grpcviewv1.ServerInfoRequest]) (*connect.Response[grpcviewv1.ServerInfoResponse], error) {
 	return read(c, ctx, remote.ServerInfo, req)
 }

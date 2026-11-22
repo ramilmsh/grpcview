@@ -63,10 +63,16 @@ type Workspace interface {
 	DeleteScript(context.Context, *connect.Request[grpcviewv1.DeleteScriptRequest]) (*connect.Response[grpcviewv1.DeleteScriptResponse], error)
 }
 
-// Client adds the server's own lifecycle. In-process there is no process to describe and
-// nothing to shut down, so the local binding answers the first and rejects the second.
+// Client adds the workspace's files and the server's own lifecycle. In-process there is no
+// process to describe and nothing to shut down, so the local binding answers the first and
+// rejects the second.
 type Client interface {
 	Workspace
+
+	Stat(context.Context, *connect.Request[grpcviewv1.StatRequest]) (*connect.Response[grpcviewv1.StatResponse], error)
+	ReadDirectory(context.Context, *connect.Request[grpcviewv1.ReadDirectoryRequest]) (*connect.Response[grpcviewv1.ReadDirectoryResponse], error)
+	ReadFile(context.Context, *connect.Request[grpcviewv1.ReadFileRequest]) (*connect.Response[grpcviewv1.ReadFileResponse], error)
+	ReadFiles(context.Context, *connect.Request[grpcviewv1.ReadFilesRequest]) (*connect.Response[grpcviewv1.ReadFilesResponse], error)
 
 	ServerInfo(context.Context, *connect.Request[grpcviewv1.ServerInfoRequest]) (*connect.Response[grpcviewv1.ServerInfoResponse], error)
 	Shutdown(context.Context, *connect.Request[grpcviewv1.ShutdownRequest]) (*connect.Response[grpcviewv1.ShutdownResponse], error)
@@ -76,6 +82,7 @@ var _ Workspace = workspace.Workspace{}
 
 type remote struct {
 	grpcviewv1.WorkspaceServiceClient
+	grpcviewv1.FileServiceClient
 	lifecycle grpcviewv1.ServerServiceClient
 }
 
@@ -86,6 +93,7 @@ func Remote(baseURL string) Client { return newRemote(baseURL) }
 func newRemote(baseURL string) remote {
 	return remote{
 		WorkspaceServiceClient: grpcviewv1.NewWorkspaceServiceClient(http.DefaultClient, baseURL),
+		FileServiceClient:      grpcviewv1.NewFileServiceClient(http.DefaultClient, baseURL),
 		lifecycle:              grpcviewv1.NewServerServiceClient(http.DefaultClient, baseURL),
 	}
 }

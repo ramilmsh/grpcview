@@ -20,6 +20,8 @@ import (
 )
 
 type fakeClient struct {
+	grpcviewv1.UnimplementedFileServiceHandler
+
 	snapshot *grpcviewv1.Collection
 	getErr   error
 
