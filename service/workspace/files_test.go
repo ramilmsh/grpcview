@@ -24,8 +24,8 @@ import (
 
 func newFilesWorkspace(t *testing.T, root string) Workspace {
 	t.Helper()
-	st := store.New(root, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
-	w := Workspace{store: st, defs: newDefinitionsCache(), files: newFileMounts(st)}
+	w := newWorkspaceAt(t, root)
+	w.files = newFileMounts(w.store)
 	t.Cleanup(w.files.close)
 	return w
 }

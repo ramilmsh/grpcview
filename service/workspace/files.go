@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -84,11 +83,7 @@ func newFileMounts(s *store.Store) *fileMounts {
 	return m
 }
 
-func (m *fileMounts) close() {
-	if m != nil {
-		m.cancel()
-	}
-}
+func (m *fileMounts) close() { m.cancel() }
 
 func (m *fileMounts) bump(ev store.Event) {
 	m.mu.Lock()
@@ -100,9 +95,6 @@ func (m *fileMounts) bump(ev store.Event) {
 		}) {
 			m.epochs[id]++
 		}
-	}
-	if m.modules != nil && m.modules.epoch != m.epochs[""] {
-		m.modules = nil
 	}
 }
 
@@ -121,15 +113,11 @@ func (m *fileMounts) epoch(id string) uint64 {
 // modulesJSON is /.grpcview/modules.json: the module scan as {paths, digest}, memoized per workspace epoch.
 func (w Workspace) modulesJSON() ([]byte, error) {
 	m := w.files
-	var epoch uint64
-	if m != nil {
-		epoch = m.epoch("")
-		m.mu.Lock()
-		snap := m.modules
-		m.mu.Unlock()
-		if snap != nil && snap.epoch == epoch {
-			return snap.content, nil
-		}
+	m.mu.Lock()
+	epoch, snap := m.epochs[""], m.modules
+	m.mu.Unlock()
+	if snap != nil && snap.epoch == epoch {
+		return snap.content, nil
 	}
 	modules, err := scanWorkspaceModules(w.store.Root())
 	if err != nil {
@@ -146,20 +134,19 @@ func (w Workspace) modulesJSON() ([]byte, error) {
 	for _, mod := range modules {
 		p := "/" + mod.GetPath()
 		doc.Paths = append(doc.Paths, p)
-		fmt.Fprintf(h, "%d:%s%d:%s", len(p), p, len(mod.GetContent()), mod.GetContent())
+		writeLenPrefixed(h, []byte(p))
+		writeLenPrefixed(h, []byte(mod.GetContent()))
 	}
 	doc.Digest = hex.EncodeToString(h.Sum(nil))
 	content, err := json.Marshal(doc)
 	if err != nil {
 		return nil, eio(err)
 	}
-	if m != nil {
-		m.mu.Lock()
-		if m.epochs[""] == epoch {
-			m.modules = &modulesSnapshot{epoch: epoch, content: content}
-		}
-		m.mu.Unlock()
+	m.mu.Lock()
+	if m.epochs[""] == epoch {
+		m.modules = &modulesSnapshot{epoch: epoch, content: content}
 	}
+	m.mu.Unlock()
 	return content, nil
 }
 
@@ -181,9 +168,10 @@ type fsNode struct {
 
 // fsView reads each mount at most once, so one call never mixes mount versions.
 type fsView struct {
-	w    Workspace
-	ctx  context.Context
-	defs map[string]defsResult
+	w     Workspace
+	ctx   context.Context
+	state string // canonical state root, "" if none
+	defs  map[string]defsResult
 
 	modulesOnce sync.Once
 	modules     []byte
@@ -196,7 +184,7 @@ type defsResult struct {
 }
 
 func (w Workspace) fsView(ctx context.Context) *fsView {
-	return &fsView{w: w, ctx: ctx, defs: map[string]defsResult{}}
+	return &fsView{w: w, ctx: ctx, state: wsroot.Canonical(w.store.StateRoot()), defs: map[string]defsResult{}}
 }
 
 // hiddenSegment: invisible, or a .grpcview that is not a mount; disk beneath one is never read.
@@ -211,14 +199,11 @@ func (v *fsView) lookup(p string) (*fsNode, error) {
 	if r.Kind == store.PathMount {
 		return v.mount(r)
 	}
-	segs := strings.Split(strings.TrimPrefix(path.Clean(p), "/"), "/")
-	if path.Clean(p) == "/" {
-		segs = nil
-	}
-	if slices.ContainsFunc(segs, hiddenSegment) {
+	rel := strings.TrimPrefix(path.Clean(p), "/")
+	if slices.ContainsFunc(strings.Split(rel, "/"), hiddenSegment) {
 		return nil, errNoEntry
 	}
-	abs, err := wsroot.Confine(v.w.store.Root(), filepath.Join(segs...))
+	abs, err := wsroot.Confine(v.w.store.Root(), filepath.FromSlash(rel))
 	if errors.Is(err, wsroot.ErrEscapes) {
 		return nil, err
 	}
@@ -248,11 +233,10 @@ func (v *fsView) real(abs string) (*fsNode, error) {
 
 // visible: abs (symlink-free, inside the root) crosses no hidden segment and is not the state root.
 func (v *fsView) visible(abs string) bool {
-	root := v.w.store.Root()
-	if state := v.w.store.StateRoot(); state != "" && wsroot.Within(wsroot.Canonical(state), abs) {
+	if v.state != "" && wsroot.Within(v.state, abs) {
 		return false
 	}
-	rel, err := filepath.Rel(root, abs)
+	rel, err := filepath.Rel(v.w.store.Root(), abs)
 	if err != nil {
 		return false
 	}
@@ -425,42 +409,51 @@ func (v *fsView) children(p string, n *fsNode) ([]fsEntry, error) {
 		}
 		e := fsEntry{name: de.Name(), link: de.Type()&fs.ModeSymlink != 0}
 		child := filepath.Join(n.abs, e.name)
-		if e.link {
+		switch {
+		case e.link:
 			target, err := wsroot.Confine(v.w.store.Root(), child)
 			if err != nil {
 				continue
 			}
-			child = target
-		}
-		c, err := v.real(child)
-		if err != nil {
+			c, err := v.real(target)
+			if err != nil {
+				continue
+			}
+			e.typ = c.typ
+		case !v.visible(child):
+			continue
+		case de.IsDir():
+			e.typ = dirFile
+		case de.Type().IsRegular():
+			e.typ = regularFile
+		default:
 			continue
 		}
-		e.typ = c.typ
 		out = append(out, e)
 	}
-	if v.hostsMount(p, n.abs) {
+	if v.hostsMount(p, des) {
 		out = append(out, fsEntry{name: store.MountDirName, typ: dirFile})
 	}
 	slices.SortFunc(out, func(a, b fsEntry) int { return cmp.Compare(a.name, b.name) })
 	return out, nil
 }
 
-// hostsMount: p is the workspace root or a collection root, so it holds a virtual .grpcview.
-func (v *fsView) hostsMount(p, abs string) bool {
+// hostsMount: p (listing des) is the workspace root or a collection root, so it holds a virtual .grpcview.
+func (v *fsView) hostsMount(p string, des []fs.DirEntry) bool {
 	if p == "/" {
 		return true
 	}
-	if _, err := os.Stat(filepath.Join(abs, store.CollectionFileName)); err != nil {
+	if !slices.ContainsFunc(des, func(de fs.DirEntry) bool { return de.Name() == store.CollectionFileName }) {
 		return false
 	}
 	r, err := v.w.store.ResolvePath(p)
 	return err == nil && r.Collection != "" && r.File == ""
 }
 
-// walk appends n's descendants, named relative to the listed directory. A mount that fails (a merge
-// error) is listed but not descended into: the real tree stays browsable.
-func (v *fsView) walk(p string, n *fsNode, prefix string, out *[]*grpcviewv1.ReadDirectoryResponse_Entry) error {
+// walk appends n's children, and with recursive all descendants, named relative to the listed
+// directory. A mount that fails (a merge error) is listed but not descended into: the real tree stays
+// browsable.
+func (v *fsView) walk(p string, n *fsNode, prefix string, recursive bool, out *[]*grpcviewv1.ReadDirectoryResponse_Entry) error {
 	entries, err := v.children(p, n)
 	if err != nil {
 		return err
@@ -468,7 +461,7 @@ func (v *fsView) walk(p string, n *fsNode, prefix string, out *[]*grpcviewv1.Rea
 	for _, e := range entries {
 		name := prefix + e.name
 		*out = append(*out, &grpcviewv1.ReadDirectoryResponse_Entry{Name: name, Type: e.typ})
-		if e.typ != dirFile || e.link {
+		if !recursive || e.typ != dirFile || e.link {
 			continue
 		}
 		childPath := path.Join(p, e.name)
@@ -480,7 +473,7 @@ func (v *fsView) walk(p string, n *fsNode, prefix string, out *[]*grpcviewv1.Rea
 		} else {
 			child = &fsNode{typ: dirFile, abs: filepath.Join(n.abs, e.name)}
 		}
-		if err := v.walk(childPath, child, name+"/", out); err != nil {
+		if err := v.walk(childPath, child, name+"/", true, out); err != nil {
 			return err
 		}
 	}
@@ -520,16 +513,7 @@ func (w Workspace) ReadDirectory(ctx context.Context, request *connect.Request[g
 		return nil, w.fail(p, err)
 	}
 	var out []*grpcviewv1.ReadDirectoryResponse_Entry
-	if request.Msg.GetRecursive() {
-		err = v.walk(path.Clean(p), n, "", &out)
-	} else {
-		var entries []fsEntry
-		entries, err = v.children(path.Clean(p), n)
-		for _, e := range entries {
-			out = append(out, &grpcviewv1.ReadDirectoryResponse_Entry{Name: e.name, Type: e.typ})
-		}
-	}
-	if err != nil {
+	if err := v.walk(path.Clean(p), n, "", request.Msg.GetRecursive(), &out); err != nil {
 		return nil, w.fail(p, err)
 	}
 	return connect.NewResponse(&grpcviewv1.ReadDirectoryResponse{Entries: out}), nil
