@@ -238,7 +238,7 @@ export const uptimeLabel = (
 };
 
 // Idle-timeout column: a zero duration is the sentinel for "never idles out" — every hand-run
-// server, per the daemon design (AGENTS.md "The workspace daemon"). The "idle" prefix is what
+// server, per the daemon design (`service/daemon`). The "idle" prefix is what
 // makes the value self-describing next to the uptime column it sits beside (Daemons view).
 export const idleTimeoutLabel = (d?: Duration): string => {
   const ms = durationMs(d);

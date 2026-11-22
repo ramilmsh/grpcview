@@ -1,6 +1,6 @@
 # Phase 2 — body and metadata as files
 
-**Status: shipped 2026-08-09.** Behavior now lives in `AGENTS.md`; what follows is the
+**Status: shipped 2026-08-09.** Behavior now lives in the code; what follows is the
 plan as written, in the present tense about the code as it stood. Three things landed
 differently, and each is a decision rather than an omission:
 

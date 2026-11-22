@@ -152,7 +152,7 @@ now wraps any body lacking a default export before evaluating it
 JSON `draft_body` is therefore evaluable server-side, which is exactly what U0 was for. The
 diagnosis below stands as the reason that wrap has to live in the backend and not only in
 the editor. (A pre-2026-07-24 `{{ }}` token body remains unevaluable, and stays that way on
-purpose — `AGENTS.md` §Project Stage takes no migrations.)
+purpose — pre-release takes no migrations.)
 
 Verified `RequestWorkspace.tsx:84-100`: the seed runs
 `migrateBodyToTs(request.draftBody || "{}")` in the editor, and the comment is

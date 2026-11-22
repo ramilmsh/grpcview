@@ -1,8 +1,8 @@
 # MCP: streaming methods
 
 **Status:** **Shipped** (on `trunk` 2026-08-08). All five phases landed as planned, verified
-live against the example collection through a real stdio MCP server. Behavior is documented
-in `AGENTS.md` §"The MCP server". Two claims below were wrong — see "What was wrong".
+live against the example collection through a real stdio MCP server. Behavior is
+`service/mcp/`. Two claims below were wrong — see "What was wrong".
 
 Promotes the `invoke_stream` want from [`../planned/roadmap.md`](../planned/roadmap.md)
 §"The MCP server" into a plan. Today MCP is the only surface that cannot run a client-streaming,
@@ -51,7 +51,7 @@ two methods the CLI's `inProcess` binding does.
 - **Registration routes through the existing shim.** The hand-built tool is handed to
   `shim.AddTool` under the plugin's generated name (`toolNamePrefix + "InvokeStreaming"`), so
   the rename map, `annotateSchema` and `defaultCollection` all apply unchanged and there is
-  exactly one seam for payload rules, as `AGENTS.md` claims. `trimHeavyFields` does not apply:
+  exactly one seam for payload rules. `trimHeavyFields` does not apply:
   the handler returns a `CallToolResult` directly, and neither frame carries a
   `descriptor_set` or `history`.
 - **No `record_history` opt-out for the ad-hoc form**, matching `InvokeStreaming`'s existing
@@ -80,7 +80,7 @@ keeps registering only the unary binds; a new loop registers the streaming ones.
 
 `service/mcp/BUILD.bazel`: add the new file to `srcs` (and the new test to `srcs` of the test
 target). A new `.go` file that is not in `srcs` compiles and passes locally under `go test`
-while being invisible to Bazel — see `AGENTS.md` §"Delegating to background agents".
+while being invisible to Bazel.
 
 ## Phase 2 — the collector
 
@@ -139,8 +139,6 @@ The claim is now false in three places and misleading in a fourth:
   string in `service/cli/ls_test.go` and `service/workspace/describe_test.go`.
 - `service/workspace/invoke.go:80` — the `Unimplemented` from `invokeUnary` should name the
   streaming tool/verb, since that error is what an agent hits first.
-- `AGENTS.md` §"The MCP server" — the "Streaming RPCs get no tool" bullet, and the
-  "MCP exposes no tool for them" clause in §"Verify through MCP or the CLI, not the browser".
 - `docs/design/shipped/mcp.md` — "Streaming RPCs get no tool" is under "What held". It held
   until now; add the amendment rather than editing the history.
 - `docs/design/planned/roadmap.md` — drop the `invoke_stream` bullet, since it is this doc.

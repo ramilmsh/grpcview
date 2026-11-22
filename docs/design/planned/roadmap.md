@@ -84,7 +84,7 @@ Carried from `ui-redesign-plan.md` §4, minus everything that has since shipped.
 ## The MCP server — three leftovers
 
 Carried from the MCP track, which shipped on 2026-08-06; the decisions behind it are in
-[`shipped/mcp.md`](../shipped/mcp.md), and the behaviour is `AGENTS.md` §"The MCP server".
+[`shipped/mcp.md`](../shipped/mcp.md); the behaviour is `service/mcp/`.
 
 - **`bytes` → `string` for the four fields holding JSON text.**
   `Request.Response.response`, `History.Request.body`, `History.Response.response` and

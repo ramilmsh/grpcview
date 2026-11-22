@@ -1,1 +1,8 @@
-@AGENTS.md
+- **Be terse.** Always find the shortest way to say something.
+- **Pre-release.** No live users or deployments: no backwards compatibility, migrations or upgrade paths. No deprecated or reserved keywords in protobuf.
+- **Bazel workspace. Never run bare `go`**; everything is available via bazel. `bazel test //...` is the one verification.
+- **`bazel clean --expunge` is not a fix.** Bazel is hermetic; treat "stale cache" like "compiler bug". Retry, or `bazel fetch @broken_repo`; a repo hook pauses to confirm.
+- **Ship straight to trunk.** No feature branches.
+- **Never push without explicit per-push approval.**
+- **Delegate to background agents.** Split a task into parts; don't execute it in the main thread.
+- **Verify through MCP first, CLI second, browser last.** All three share the backend; MCP and CLI are faster.

@@ -278,7 +278,7 @@ Cost to accept: copying or `git mv`-ing a collection directory orphans its histo
 resolve cache, because both are keyed by path. Both were gitignored, so neither ever
 travelled between machines anyway — a move loses local history and forces a re-resolve.
 
-Per AGENTS.md:23-28 there is no migration: the existing `~/.config/.grpcview/default`
+Pre-release, there is no migration: the existing `~/.config/.grpcview/default`
 collection is abandoned, not moved.
 
 ## Decision 7 — acquisition and storage are two systems; the descriptor store is the seam
@@ -378,8 +378,7 @@ Consequences:
 ### Definitions can be shared; order stays per collection
 
 Five collections pointing at the same target must not mean five copies of the config. But
-precedence is per-collection by design ("order is precedence, and only order" —
-`AGENTS.md`), so the tiering splits along that line:
+precedence is per-collection by design ("order is precedence, and only order"), so the tiering splits along that line:
 
 - **The workspace manifest holds source *definitions*,** named by the same config-derived
   id `store.SourceID` already produces (`sources.go:11`), so a source declared in both
@@ -480,7 +479,7 @@ Verified in this repo before writing this down:
   protoc ran with `--include_imports`) and **carries `source_code_info`** — a known doc
   comment from `workspace.proto` is present in the bytes. So it links standalone, *and* it
   beats reflection on hovers, which is the entire reason source order is user-controlled
-  (`AGENTS.md`, "Definition sources"). No `rules_proto` helper rule is required; any label
+  No `rules_proto` helper rule is required; any label
   whose default outputs are descriptor sets works, including a `proto_descriptor_set` that
   merges several.
 - **Find the outputs with `bazel cquery --output=files -- <label>`**, run after
@@ -707,7 +706,7 @@ Each is independently verifiable and independently useful.
 **1a–1e are all shipped, so phase 1 is done.** Everything below is still written as it was
 planned — the decisions above cite the code as it stood *before* any of this landed, so
 treat those `file.go:line` references as the premise of a decision rather than a
-description of trunk. `AGENTS.md` is where shipped behavior lives.
+description of trunk. The code is where shipped behavior lives.
 
 | | Step | Status | Contents |
 |---|---|---|---|
@@ -752,13 +751,10 @@ Code extension is its second customer.
 
 - **`readChildren` reads configs for ordering only** (`fs.go:593`). Discovery must not
   route through it, and `ListCollections` must not load trees.
-- **Two processes, one collection, no lock** is currently accepted (`AGENTS.md`, "The CLI").
+- **Two processes, one collection, no lock** is currently accepted.
   1a–1e make concurrent writers *likelier* (more collections, more surfaces); the daemon is
   what actually fixes it by funnelling every surface into one process. Until it lands the
   wart is worse than today, not the same — see [`daemon.md`](../../shipped/daemon.md).
-- **`AGENTS.md` will need editing when the daemon lands**, in two places: "no
-  autodetection" and the no-lock wart. Do not edit it before then — it documents shipped
-  behavior, and these documents are the record of the intent.
 - **`grpcview.work.json` vs `grpcview.json`** differ by five characters in a listing —
   accepted, after `go.work`. Both names carry the product name, and **the product is going
   to be renamed**, so keep the two filenames in *one* place (`layout.go:14-29` already
@@ -777,7 +773,7 @@ Code extension is its second customer.
 - `bazel test //...` — not `//service/...`. The rename touches the UI, and the generated
   TypeScript declarations are committed.
 - **After any `.proto` edit:** `bazel run //grpcview/v1:grpcviewv1_ts_proto.copy`,
-  then the three frontend gates from `AGENTS.md` — `cd ui && ./node_modules/.bin/tsc
+  then the three frontend gates — `cd ui && ./node_modules/.bin/tsc
   --noEmit -p tsconfig.json`, `bazel test //ui:test`, `bazel build //ui:ui`.
 - Scratch dirs: traversal rejection (`..`, absolute), case-fold handle identity
   (`requests` and `Requests` are one handle), scan pruning and the cap, a collection at the
@@ -789,7 +785,7 @@ Code extension is its second customer.
 - **Dogfood in this repo**, which the old plan could not: workspace root = the repo (it has
   `.git`), collection = `requests/`, and confirm nothing lands at the root or in
   `~/.config`.
-- **Bazel source, end to end, through the CLI** (`AGENTS.md`: verify through the CLI):
+- **Bazel source, end to end, through the CLI** (verify through the CLI):
   point a collection at `//proto/echo/v1:echov1_proto`, `grpcview sources refresh`, then
   `grpcview describe echo.v1.EchoService/Unary -o proto` — it must resolve without any
   reflection source, and **name the bazel source** as where the descriptors came from. Add

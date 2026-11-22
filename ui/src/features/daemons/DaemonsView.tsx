@@ -1,5 +1,5 @@
 // Lists every grpcview daemon registered on this machine (ServerService.ListServers, not
-// WorkspaceService — see AGENTS.md "The workspace daemon"), and lets the user open one in a
+// WorkspaceService — see `service/daemon`), and lets the user open one in a
 // new tab or stop it. Scope is deliberately exactly that: no "forget", no "start by path", no
 // restart-on-skew action.
 import { useState } from "react";

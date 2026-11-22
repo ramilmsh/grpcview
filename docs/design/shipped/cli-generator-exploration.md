@@ -1,7 +1,7 @@
 # grpcview — CLI surface: implementation plan
 
-**Status:** **Shipped** (all nine phases, on `trunk` 2026-08-03). Behavior is documented
-in `AGENTS.md` §"The CLI"; this doc is kept for the decisions behind it, not as a
+**Status:** **Shipped** (all nine phases, on `trunk` 2026-08-03). Behavior is
+`service/cli/`; this doc is kept for the decisions behind it, not as a
 worklist. Everything below is written in the present tense about the tree as it stood on
 **2026-08-03** (third-party claims 2026-07-30) — read its `file.go:line` citations as the
 premise of a decision, not as a description of trunk.

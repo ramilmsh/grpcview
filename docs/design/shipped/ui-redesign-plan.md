@@ -4,7 +4,7 @@
 dark, compact Nocturne UI, and the core request → invoke → response loop is live and
 browser-verified. What this doc is *for* now is §1 (the design source of truth) and
 §2 (the invariants that must not be violated) — build detail for what shipped lives
-in the code and `AGENTS.md`. What was left over went to
+in the code. What was left over went to
 [`roadmap.md`](../planned/roadmap.md).
 
 **Companion:** [`scripting-ui-plan.md`](./scripting-ui-plan.md) (the scripts half of

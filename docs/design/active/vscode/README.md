@@ -1,6 +1,6 @@
 # grpcview — VS Code compatibility track
 
-**Status:** Phases 1 and 2 are **shipped** — on trunk, behavior documented in `AGENTS.md`.
+**Status:** Phases 1 and 2 are **shipped** — on trunk; the code is the behavior.
 Phases 3–6 are planning only.
 
 **The track spans folders**, sorted per doc rather than as a block: phases 1 and 2 sit in
@@ -10,7 +10,7 @@ The table below is the map; every link works from here.
 
 Every phase doc, phase 1 included, is written in the present tense about the code as it
 stood when the doc was written. Its `file.go:line` citations are the *premise* of a
-decision, not a description of trunk — for what the code does now, read `AGENTS.md`.
+decision, not a description of trunk — for what the code does now, read the code.
 
 **Goal.** Run grpcview as a VS Code extension while keeping the standalone web UI as
 a first-class frontend, and borrow VS Code's *request management* model (document

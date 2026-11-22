@@ -62,7 +62,7 @@ Its symbol index stays.
 
 This is the on-disk layout as it is (`service/store/layout.go:15-45`): `grpcview.json`,
 `tree/**/{folder.json, request.json, body.ts, metadata.ts}`, `scripts/**/*.ts`. History lives
-in the state root, not in the collection (`store/AGENTS.md`), so it is not in this tree.
+in the state root, not in the collection, so it is not in this tree.
 
 What opening a file does, like VS Code `customEditors`:
 
@@ -74,7 +74,7 @@ What opening a file does, like VS Code `customEditors`:
 | `grpcview.json` | Sources view |
 
 The explorer displays an item's name from `ItemMeta.name`, not its slug: a rename never moves
-the directory (`store/AGENTS.md`). The slug is the identity. That is
+the directory (`service/store/fs.go`). The slug is the identity. That is
 [phase 4](../active/vscode/phase-4-request-management.md) §1's key, now spelled as a path.
 
 ---
@@ -85,14 +85,17 @@ the directory (`store/AGENTS.md`). The slug is the identity. That is
 has semantics.**
 
 - **FS writes** are allowed only to `.ts` files: `body.ts`, `metadata.ts`, `scripts/**`. These
-  are opaque text the store already writes verbatim and never normalizes (`workspace/AGENTS.md`).
-- **JSON manifests are read-only over FS.** A `request.json` carrying `draftBody` "fails to load
-  loudly" (`workspace/AGENTS.md`). Creating a request means making a directory and a slug.
+  are opaque text; the store only normalizes the trailing newline (`writeSourceFile`,
+  `service/store/codec.go`).
+- **JSON manifests are read-only over FS.** A `request.json` carrying `draftBody` fails to load
+  (`readRequestMessage`, `service/store/codec.go`). Creating a request means making a directory and a slug.
   Renaming writes `meta.Name` and leaves the directory alone. Moving reorders the parent's
   `folder.json`. Raw writes would have to re-derive all of that. `CreateRequest`, `MoveItem`,
   `UpdateRequest` and the source RPCs keep owning it.
-- **FS `rename`/`delete`** apply only under `scripts/`, where the path is the identity
-  (`store/AGENTS.md`). In the tree they return `FailedPrecondition` naming the typed RPC. VS Code
+- **Scripts are plain files.** FS `mkdir`/`rm`/`rename` apply only under `scripts/`, where the path
+  is the identity; there are no typed script RPCs. A symlink or rename never crosses kinds: the
+  policy classifies the resolved path ([#87](https://github.com/ramilmsh/grpcview/issues/87) D3).
+  In `tree/` they return `FailedPrecondition` naming the typed RPC. VS Code
   shows that as an ordinary error.
 
 Revisit when the extension wants VS Code's native JSON editor on `request.json`. Until then,
@@ -178,9 +181,8 @@ a `Watch` subscriber; a write to `request.json` is refused.
 
 - **Tree:** names, slugs, kind, request `service`/`method`/`middleware`/`target`.
 - **Sources and `services`.**
-- **Script paths.**
 
-It drops `draft_body`, `draft_metadata_script`, `history`, `Script.source` and `descriptor_set`.
+It drops `draft_body`, `draft_metadata_script`, `history`, `scripts` (listed by `readdir`) and `descriptor_set`.
 Every mutating response shrinks with it, and `mcp/trim.go`'s `fieldOwners` table mostly deletes
 itself.
 
@@ -202,7 +204,7 @@ history read.
 
 ### P4 — the two explorers
 
-- Reuse `components/tree` for both: it is domain-agnostic (`components/tree/AGENTS.md`). It
+- Reuse `components/tree` for both: it is domain-agnostic (`ui/src/components/tree/`). It
   needs the async `getChildren` that file lists as unbuilt, but only if a directory is fetched
   lazily. The listing makes the Requests tree eager anyway.
 - Rail entries: **Requests** replaces today's request tree. **Definitions** is new.
