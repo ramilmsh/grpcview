@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 var ErrInvalidPath = errors.New("invalid workspace path")
@@ -139,7 +141,9 @@ func classifyInCollection(collRoot string, rest []string) (PathKind, []string) {
 	case MountDirName:
 		return PathMount, nil
 	case scriptsDir:
-		if isScript(rest[1:]) {
+		// A *.ts with no dot-named segment below scripts/.
+		rel := rest[1:]
+		if len(rel) > 0 && path.Ext(rel[len(rel)-1]) == ".ts" && !slices.ContainsFunc(rel, func(seg string) bool { return strings.HasPrefix(seg, ".") }) {
 			return PathScript, nil
 		}
 	case treeDir:
@@ -148,18 +152,28 @@ func classifyInCollection(collRoot string, rest []string) (PathKind, []string) {
 	return PathOther, nil
 }
 
-// isScript: rel (segments below scripts/) names a *.ts with no dot-named segment — the rule
-// readScripts lists by.
-func isScript(rel []string) bool {
-	if len(rel) == 0 || path.Ext(rel[len(rel)-1]) != ".ts" {
-		return false
+// resolveFile is rel (collection-relative POSIX) symlink-resolved, when rel and its resolution both
+// classify as want: a link out of the collection or across kinds (scripts/ into tree/, scripts/ itself
+// a link) is refused. The write guard for collection files. Errors name no host path.
+func (c *Collection) resolveFile(rel string, want PathKind) (string, error) {
+	invalid := fmt.Errorf("%w: %q is not a %s", ErrInvalidPath, rel, want)
+	segs, err := splitWorkspacePath("/" + rel)
+	if err != nil || strings.HasPrefix(rel, "/") {
+		return "", invalid
 	}
-	for _, seg := range rel {
-		if strings.HasPrefix(seg, ".") {
-			return false
-		}
+	if k, _ := classifyInCollection(c.root, segs); k != want {
+		return "", invalid
 	}
-	return true
+	abs, err := wsroot.Confine(c.root, filepath.Join(segs...))
+	if err != nil {
+		return "", fmt.Errorf("%w: %q: %w", ErrInvalidPath, rel, err)
+	}
+	// c.root is canonical, the form Confine returns.
+	back, _ := filepath.Rel(c.root, abs)
+	if k, _ := classifyInCollection(c.root, strings.Split(filepath.ToSlash(back), "/")); !wsroot.Within(c.root, abs) || k != want {
+		return "", invalid
+	}
+	return abs, nil
 }
 
 func classifyInTree(treeRoot string, slugs []string) (PathKind, []string) {

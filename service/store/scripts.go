@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
-	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 func (c *Collection) readScripts() ([]*grpcviewv1.Script, error) {
@@ -29,26 +27,28 @@ func (c *Collection) readScripts() ([]*grpcviewv1.Script, error) {
 		if err != nil {
 			return err
 		}
-		// Pruning a dot-directory only skips what isScript would reject.
+		// Pruning a dot-directory only skips what the classifier rejects.
 		if d.IsDir() {
 			if p != root && strings.HasPrefix(d.Name(), ".") {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		rel, err := filepath.Rel(root, p)
+		rel, err := filepath.Rel(c.root, p)
 		if err != nil {
 			return err
 		}
-		if !isScript(strings.Split(filepath.ToSlash(rel), "/")) {
+		rel = filepath.ToSlash(rel)
+		abs, err := c.resolveFile(rel, PathScript)
+		if err != nil {
 			return nil
 		}
-		data, err := os.ReadFile(p)
+		data, err := os.ReadFile(abs)
 		if err != nil {
 			return err
 		}
 		scripts = append(scripts, &grpcviewv1.Script{
-			Path:   "scripts/" + filepath.ToSlash(rel),
+			Path:   rel,
 			Source: string(data),
 		})
 		return nil
@@ -67,7 +67,7 @@ func (c *Collection) CreateScript(_ context.Context, scriptPath string) error {
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
-	abs, err := c.resolveScriptPath(scriptPath)
+	abs, err := c.resolveFile(scriptPath, PathScript)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch Sc
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
-	abs, err := c.resolveScriptPath(scriptPath)
+	abs, err := c.resolveFile(scriptPath, PathScript)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch Sc
 		}
 	}
 	if patch.NewPath != nil {
-		newAbs, err := c.resolveScriptPath(*patch.NewPath)
+		newAbs, err := c.resolveFile(*patch.NewPath, PathScript)
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func (c *Collection) DeleteScript(_ context.Context, scriptPath string) error {
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
-	abs, err := c.resolveScriptPath(scriptPath)
+	abs, err := c.resolveFile(scriptPath, PathScript)
 	if err != nil {
 		return err
 	}
@@ -137,9 +137,8 @@ func (c *Collection) DeleteScript(_ context.Context, scriptPath string) error {
 	return c.pruneEmptyScriptDirs(filepath.Dir(abs))
 }
 
-// Within stops the climb when scripts/ is a link: dir (resolveScriptPath output) lies elsewhere.
 func (c *Collection) pruneEmptyScriptDirs(dir string) error {
-	for root := c.scriptsRoot(); dir != root && wsroot.Within(root, dir); dir = filepath.Dir(dir) {
+	for ; dir != c.scriptsRoot(); dir = filepath.Dir(dir) {
 		entries, err := os.ReadDir(dir)
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -155,29 +154,4 @@ func (c *Collection) pruneEmptyScriptDirs(dir string) error {
 		}
 	}
 	return nil
-}
-
-// resolveScriptPath validates a collection-relative script path and returns its
-// symlink-resolved location, confined to the collection. Used by CreateScript, UpdateScript
-// (both path and new_path) and DeleteScript.
-func (c *Collection) resolveScriptPath(p string) (string, error) {
-	invalid := fmt.Errorf("script path must be under scripts/ and end in .ts, got %q", p)
-	if p == "" || filepath.IsAbs(p) || !strings.HasSuffix(p, ".ts") {
-		return "", invalid
-	}
-	slash := filepath.ToSlash(p)
-	for _, seg := range strings.Split(slash, "/") {
-		if seg == ".." {
-			return "", invalid
-		}
-	}
-	clean := path.Clean(slash)
-	if segments := strings.Split(clean, "/"); segments[0] != "scripts" {
-		return "", invalid
-	}
-	real, err := wsroot.Confine(c.root, filepath.FromSlash(clean))
-	if err != nil {
-		return "", fmt.Errorf("script path %q: %w", p, err)
-	}
-	return real, nil
 }
