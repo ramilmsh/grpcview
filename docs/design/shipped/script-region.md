@@ -6,8 +6,7 @@ by comments, with everything outside the markers owned by the machine.**
 This replaces the hidden-wrapper model in `body-wrapper.ts` / `metadata-wrapper.ts`.
 
 **Shipped 2026-08-09** (W1–W6). The doc below is left in the present tense it was written
-in, as a record of the decisions; what the code does now is in `AGENTS.md` under "Request
-authoring model". Where the implementation contradicted a claim made here, the claim is
+in, as a record of the decisions; the code is what it does now. Where the implementation contradicted a claim made here, the claim is
 left in place and followed by a **Shipped correction** — D6, D7 and D8 each carry one.
 
 ## The problem being solved
@@ -305,8 +304,7 @@ the generated block, deterministic ordering. Verify the D8 fallback question
 **W6 — `example/` and docs.** Rewrite the `body.ts` files and the two `folder.json`
 inline metadata scripts with markers and no standard imports (six `body.ts` files, not
 five — `describemethod-json/body.ts` is bare protojson with no wrapper and stays exactly
-as it is, being the byte-identical-round-trip demo). Rewrite the `AGENTS.md` "Request
-authoring model" section, which currently documents the constant-wrapper model. Move this
+as it is, being the byte-identical-round-trip demo). Move this
 doc to `shipped/`.
 
 ## Starting state
@@ -321,7 +319,6 @@ Trunk plus **uncommitted** work in the tree, which this plan partly supersedes:
   module when an edit breaks the canonical match — **deleted by W2**; D1 removes the
   condition that made promotion necessary.
 - `example/` was rewritten to the two-import wrapper — **rewritten again** by W6.
-- `AGENTS.md` documents all of the above — **rewritten** by W6.
 
 Decide with the user whether to commit that work first as a checkpoint or to build on the
 dirty tree.

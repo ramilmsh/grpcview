@@ -1,7 +1,6 @@
 # The eight things the example rework found
 
-**Status: SHIPPED 2026-08-08 — all eight items.** Behavior lives in `AGENTS.md` (§"The MCP
-server", §"Verify through MCP or the CLI, not the browser") and in the scripting section;
+**Status: SHIPPED 2026-08-08 — all eight items.** Behavior lives in `service/mcp/` and `service/scripting/`;
 this doc is kept for the decisions behind it, not as a worklist. Every claim below was
 measured on trunk at **2026-08-08**, during the rework that made `example/` dogfood
 grpcview against itself (commit `5dd2813`), whose brief said *report* the tool gaps and
@@ -59,8 +58,7 @@ eight items below are things that only hurt when you cannot fall back to an edit
 | 7 | `run_script` can only run inline source, never a saved script | `proto` + `service/workspace` | missing feature | half a day |
 | 8 | A stale committed reflection snapshot makes a *current* field look unknown | — | documentation | minutes |
 
-Items 1–4 are defects and should land first. 5–7 are API shape. 8 is a paragraph in
-`AGENTS.md`.
+Items 1–4 are defects and should land first. 5–7 are API shape. 8 is a doc paragraph.
 
 ---
 
@@ -276,7 +274,7 @@ During the rework, `invoke` on `AddDescriptorSource` answered
 missing, but because the collection's *committed* reflection descriptors predated it.
 `refresh_source` fixed it immediately.
 
-Nothing to fix in code; it belongs in `AGENTS.md` next to the MCP verification recipe: a
+Nothing to fix in code; it belongs next to the MCP verification recipe: a
 collection that reflects grpcview itself is describing a *snapshot* of grpcview, and after
 a proto change the snapshot has to be refreshed before the new field exists on that path.
 

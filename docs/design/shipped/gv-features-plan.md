@@ -1,7 +1,7 @@
 # grpcview — `gv` scripting features plan
 
 **Status:** **Shipped** (on `trunk` 2026-07-29). All three features landed over one
-frozen `gv` global; behavior is documented in `AGENTS.md` §"The `gv` global". The
+frozen `gv` global; behavior is the code. The
 `.proto` descriptor-explorer follow-up split out of feature 2 is still unbuilt —
 [`descriptor-explorer-plan.md`](../planned/descriptor-explorer-plan.md).
 
@@ -20,7 +20,7 @@ scripting global:
 [`scripting-ui-plan.md`](./scripting-ui-plan.md),
 [`storage.md`](./storage.md).
 
-**Grounding:** see `AGENTS.md` §"Request authoring model" and §"Architecture".
+**Grounding:**
 Requests are authored as TypeScript and evaluated in a QuickJS-WASM sandbox at
 invoke time; script globals are injected as deep-frozen POJOs by
 `service/scripting/marshal.go`.

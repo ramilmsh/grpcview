@@ -3,8 +3,7 @@
 **Status:** BUILT (2026-08-05), editor-side only — no RPC, proto or runtime change.
 Shipped as sketched below with D1 open (`string & {}` fallback), D2 resolved by
 *skipping* streaming targets rather than typing them `never`, and D3 left at tier 1
-(`params` stays `Record<string, unknown>`). Behavior is documented in AGENTS.md
-§"Typed `gv.invoke` paths"; this doc is kept for the decisions still open — D3
+(`params` stays `Record<string, unknown>`). Behavior is the code; this doc is kept for the decisions still open — D3
 (`export type Params`), D4 (moving the producer into the phase-3 sink seam), and D6
 (display names containing `/`, still only worked around).
 

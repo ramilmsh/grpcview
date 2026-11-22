@@ -1,6 +1,6 @@
 # The MCP server — decisions, including the ones that were wrong
 
-**Landed 2026-08-06.** What the server *does* is `AGENTS.md` §"The MCP server"; this doc
+**Landed 2026-08-06.** What the server *does* is `service/mcp/`; this doc
 exists for the decisions behind it, and in particular for the three the original four-phase
 plan got wrong, so they are not re-attempted.
 

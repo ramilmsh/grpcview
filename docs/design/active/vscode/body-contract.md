@@ -94,7 +94,7 @@ from a shell, gets layer 4 only. So the form does not determine the checking —
 authoring context does.
 
 What deliberately does *not* happen is generating a JSON Schema per method to drive the
-editor's JSON language service for `body.json`. That is the layer AGENTS.md records as
+editor's JSON language service for `body.json`. That layer was
 removed entirely, and reintroducing it to serve the "I don't want to speak TypeScript"
 escape hatch would trade the reason the escape hatch exists for a validation tier we
 already decided against. A user who wants checking opens the body in an editor that

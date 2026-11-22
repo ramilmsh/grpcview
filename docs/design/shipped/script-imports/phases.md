@@ -14,7 +14,7 @@ commit once the orchestrator has re-run its gates.
 | P3 | workspace: generator machinery deleted, middleware by path, `RunScript` without kind | landed |
 | P4 | CLI + MCP surfaces | landed |
 | P5 | new RPC + Monaco resolution + Scripts view | landed |
-| P6 | `example/` migrated by hand, AGENTS.md rewritten, docs reconciled | landed |
+| P6 | `example/` migrated by hand, docs reconciled | landed |
 | P7 | the two defects the browser pass found: the hidden wrapper, and auto-import | landed |
 
 ## P0 — protos and store
@@ -80,8 +80,6 @@ commit once the orchestrator has re-run its gates.
 ## P6 — dogfood and docs
 
 - `example/`: `scripts/*.ts` files, bodies rewritten to `require(…)`, middleware by path.
-- AGENTS.md: "Request authoring model", "The `gv` global", the scripts parts of "The CLI"
-  and "The MCP server".
 - Move this directory to `docs/design/shipped/`.
 
 ## P7 — what the browser pass found

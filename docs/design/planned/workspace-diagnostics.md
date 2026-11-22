@@ -40,8 +40,7 @@ were not statically resolvable" — in the summary, not the findings list.
 
 ### What must never become a finding
 
-- **`meta.name` drifting from the directory slug for requests and folders.** AGENTS.md
-  documents this as intended: the slug is what UI state and on-disk references key by, and
+- **`meta.name` drifting from the directory slug for requests and folders.** Intended: the slug is what UI state and on-disk references key by, and
   re-slugging would churn git history on every rename. [`script-imports/`](../shipped/script-imports)
   narrows the rule for *scripts* only, by making the filename the identifier. Requests and
   folders keep the split, and flagging it would be flagging the design.

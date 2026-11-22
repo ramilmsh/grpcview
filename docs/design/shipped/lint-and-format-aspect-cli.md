@@ -238,7 +238,7 @@ already runs it.
     Commit (commit 2).
 11. Optional: `.aspect/version.axl` + devcontainer install line, as a separate small commit —
     it changes nothing CI enforces.
-12. Mention the new gates in `AGENTS.md`'s "Frontend gates" / Go sections only if they change
+12. Document the new gates only if they change
     what a contributor runs day-to-day — per the decisions above, they don't (`bazel build
     //...` / `bazel test //...` already cover it), so this may be a one-line addition at most.
 
