@@ -3,6 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "wsroot",
     srcs = [
+        "confine.go",
         "trust.go",
         "wsroot.go",
     ],
@@ -13,6 +14,7 @@ go_library(
 go_test(
     name = "wsroot_test",
     srcs = [
+        "confine_test.go",
         "trust_test.go",
         "wsroot_test.go",
     ],

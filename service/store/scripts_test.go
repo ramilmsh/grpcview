@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
@@ -65,8 +66,8 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 	if err := coll.UpdateScript(ctx, "scripts/uuid.ts", ScriptPatch{Source: &src}); err != nil {
 		t.Fatalf("UpdateScript source: %v", err)
 	}
-	if got := scriptByPath(loadScriptList(t, coll, ctx), "scripts/uuid.ts"); got == nil || got.GetSource() != src {
-		t.Fatalf("source not persisted: %+v", got)
+	if got := scriptByPath(loadScriptList(t, coll, ctx), "scripts/uuid.ts"); got == nil || got.GetSource() != src+"\n" {
+		t.Fatalf("source not persisted with one trailing newline: %+v", got)
 	}
 
 	newPath := "scripts/uuidv4.ts"
@@ -80,7 +81,7 @@ func TestCreateListUpdateDeleteScript(t *testing.T) {
 	if scriptByPath(scripts, "scripts/uuidv4.ts") == nil || scriptByPath(scripts, "scripts/uuid.ts") != nil {
 		t.Errorf("rename not reflected: %v", scripts)
 	}
-	if got := scriptByPath(scripts, "scripts/uuidv4.ts"); got.GetSource() != src {
+	if got := scriptByPath(scripts, "scripts/uuidv4.ts"); got.GetSource() != src+"\n" {
 		t.Errorf("rename dropped source: %+v", got)
 	}
 
@@ -203,7 +204,74 @@ func TestScriptPersistRoundTrip(t *testing.T) {
 			t.Fatalf("reloaded paths = %v, want %v", got, want)
 		}
 	}
-	if b := scriptByPath(scripts, "scripts/bravo.ts"); b.GetSource() != src {
+	if b := scriptByPath(scripts, "scripts/bravo.ts"); b.GetSource() != src+"\n" {
 		t.Errorf("reloaded source lost: %+v", b)
+	}
+}
+
+func TestUpdateScriptOneTrailingNewline(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateScript(ctx, "scripts/a.ts"); err != nil {
+		t.Fatalf("CreateScript: %v", err)
+	}
+	for src, want := range map[string]string{"x": "x\n", "x\n\n\n": "x\n", "": ""} {
+		if err := coll.UpdateScript(ctx, "scripts/a.ts", ScriptPatch{Source: &src}); err != nil {
+			t.Fatalf("UpdateScript(%q): %v", src, err)
+		}
+		data, err := os.ReadFile(filepath.Join(coll.Root(), scriptsDir, "a.ts"))
+		if err != nil || string(data) != want {
+			t.Errorf("UpdateScript(%q) wrote %q, %v; want %q", src, data, err, want)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(coll.Root(), scriptsDir))
+	if err != nil || len(entries) != 1 {
+		t.Errorf("scripts/ = %v, %v; want only a.ts (no atomic-write temp left behind)", entries, err)
+	}
+}
+
+func TestScriptPathSymlinks(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.ts"), []byte("s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scripts := filepath.Join(coll.Root(), scriptsDir)
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.ts"), filepath.Join(scripts, "escape.ts")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(scripts, "out")); err != nil {
+		t.Fatal(err)
+	}
+
+	src := "pwned"
+	for name, err := range map[string]error{
+		"update through file link":  coll.UpdateScript(ctx, "scripts/escape.ts", ScriptPatch{Source: &src}),
+		"delete through file link":  coll.DeleteScript(ctx, "scripts/escape.ts"),
+		"create through dir link":   coll.CreateScript(ctx, "scripts/out/new/x.ts"),
+		"create through dir link 2": coll.CreateScript(ctx, "scripts/out/x.ts"),
+	} {
+		if err == nil {
+			t.Errorf("%s: nil error, want rejection", name)
+			continue
+		}
+		if strings.Contains(err.Error(), outside) || strings.Contains(err.Error(), coll.Root()) {
+			t.Errorf("%s: error %q names a host path", name, err)
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(outside, "secret.ts")); string(data) != "s" {
+		t.Errorf("outside file = %q, want untouched", data)
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 1 {
+		t.Errorf("outside dir = %v, want only secret.ts", entries)
+	}
+
+	if err := coll.CreateScript(ctx, "scripts/missing/deeper/x.ts"); err != nil {
+		t.Fatalf("create under a missing dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(scripts, "missing", "deeper", "x.ts")); err != nil {
+		t.Errorf("created script missing on disk: %v", err)
 	}
 }
