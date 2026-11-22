@@ -30,12 +30,16 @@ go_test(
     srcs = [
         "idle_test.go",
         "logging_test.go",
+        "mount_test.go",
         "service_test.go",
     ],
     embed = [":service"],
     deps = [
         "//grpcview/v1:grpcviewv1_go_proto",
         "//service/daemon",
+        "//service/wire",
         "@com_connectrpc_connect//:connect",
+        "@com_connectrpc_grpcreflect//:grpcreflect",
+        "@org_golang_google_protobuf//reflect/protoreflect",
     ],
 )

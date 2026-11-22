@@ -55,6 +55,28 @@ type Options struct {
 
 const drainTimeout = 30 * time.Second
 
+// workspaceHandler is what one workspace serves: its collections and its files.
+type workspaceHandler interface {
+	grpcviewv1.WorkspaceServiceHandler
+	grpcviewv1.FileServiceHandler
+}
+
+// mountWorkspace registers reflection and ws's services on mux. ServerService is mounted
+// later, once the listener's port is known.
+func mountWorkspace(mux *http.ServeMux, ws workspaceHandler, logger *slog.Logger) {
+	reflector := grpcreflect.NewStaticReflector(
+		"grpcview.v1.WorkspaceService",
+		"grpcview.v1.FileService",
+		"grpcview.v1.ServerService",
+	)
+	mux.Handle(grpcreflect.NewHandlerV1(reflector))
+	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+
+	logging := connect.WithInterceptors(loggingInterceptor{logger: logger})
+	mux.Handle(grpcviewv1.NewWorkspaceServiceHandler(ws, logging))
+	mux.Handle(grpcviewv1.NewFileServiceHandler(ws, logging))
+}
+
 // withETags precomputes a content-hash ETag for every file in dist and sets it, alongside a
 // must-revalidate Cache-Control, ahead of next on every request whose path matches a known
 // file. http.FileServer (next) honors an ETag the caller already set when checking
@@ -122,21 +144,7 @@ func Run(
 	defer ws.Close(ctx)
 
 	mux := http.NewServeMux()
-
-	reflector := grpcreflect.NewStaticReflector(
-		"grpcview.v1.WorkspaceService",
-		"grpcview.v1.ServerService",
-	)
-
-	mux.Handle(grpcreflect.NewHandlerV1(reflector))
-	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
-
-	mux.Handle(grpcviewv1.NewWorkspaceServiceHandler(
-		&ws,
-		connect.WithInterceptors(
-			loggingInterceptor{logger: logger},
-		),
-	))
+	mountWorkspace(mux, &ws, logger)
 
 	stop := make(chan struct{})
 	var once sync.Once
