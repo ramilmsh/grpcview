@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 var (
@@ -63,21 +64,20 @@ type Store struct {
 	blobMu sync.Mutex
 
 	hub hub
-
-	realRootOnce sync.Once
-	realRootPath string
 }
 
+// New canonicalizes root (wsroot.Canonical), so every path the store derives from it is in the
+// symlink-resolved form wsroot.Confine returns.
 func New(root, stateRoot string, logger *slog.Logger) *Store {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Store{
-		root:      root,
+		root:      wsroot.Canonical(root),
 		stateRoot: stateRoot,
 		logger:    logger,
 		colls:     make(map[string]*Collection),
-		hub:       hub{subs: make(map[*subscriber]struct{})},
+		hub:       hub{subs: make(map[chan Event]struct{})},
 	}
 }
 

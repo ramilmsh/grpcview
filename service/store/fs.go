@@ -160,7 +160,7 @@ func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error
 // metadata.ts is seeded empty, as for a request.
 func (c *Collection) CreateFolder(_ context.Context, parent []string, name string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
-		if err := c.tx.writeMessage(filepath.Join(itemDir, FolderFileName), &grpcviewstorev1.Folder{
+		if err := c.tx.writeMessage(filepath.Join(itemDir, folderFileName), &grpcviewstorev1.Folder{
 			Meta: &grpcviewstorev1.ItemMeta{Name: name},
 		}); err != nil {
 			return err
@@ -175,7 +175,7 @@ func (c *Collection) CreateFolder(_ context.Context, parent []string, name strin
 // seed would silently break folder-metadata inheritance for every new request.
 func (c *Collection) CreateRequest(_ context.Context, parent []string, name, service, method string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
-		if err := c.tx.writeMessage(filepath.Join(itemDir, RequestFileName), &grpcviewstorev1.Request{
+		if err := c.tx.writeMessage(filepath.Join(itemDir, requestFileName), &grpcviewstorev1.Request{
 			Meta:    &grpcviewstorev1.ItemMeta{Name: name},
 			Service: service,
 			Method:  method,
@@ -288,7 +288,7 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	if patch.Name == nil && patch.Service == nil && patch.Method == nil && !patch.SetMiddleware && !patch.SetTarget {
 		return nil
 	}
-	return c.tx.writeMessage(filepath.Join(itemDir, RequestFileName), dr)
+	return c.tx.writeMessage(filepath.Join(itemDir, requestFileName), dr)
 }
 
 func (c *Collection) UpdateFolder(_ context.Context, parent []string, name string, patch FolderPatch) error {
@@ -333,7 +333,7 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 		ff.Meta = &grpcviewstorev1.ItemMeta{}
 	}
 	ff.Meta.Name = *patch.Name
-	return c.tx.writeMessage(filepath.Join(itemDir, FolderFileName), ff)
+	return c.tx.writeMessage(filepath.Join(itemDir, folderFileName), ff)
 }
 
 func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]string, error) {
@@ -717,20 +717,21 @@ func (c *Collection) readChildren(dir string) ([]childEntry, error) {
 			continue
 		}
 		slug := e.Name()
-		if strings.HasPrefix(slug, ".") || isReserved(slug) {
+		kind, ok := itemKindAt(dir, slug)
+		if !ok {
 			continue
 		}
 		sub := filepath.Join(dir, slug)
-		switch {
-		case fileExists(filepath.Join(sub, FolderFileName)):
+		switch kind {
+		case kindFolder:
 			ff := &grpcviewstorev1.Folder{}
-			if err := readFolderMessage(filepath.Join(sub, FolderFileName), ff); err != nil {
+			if err := readFolderMessage(filepath.Join(sub, folderFileName), ff); err != nil {
 				return nil, err
 			}
 			children = append(children, childEntry{slug: slug, name: cmp.Or(ff.GetMeta().GetName(), slug), kind: kindFolder, folder: ff})
-		case fileExists(filepath.Join(sub, RequestFileName)):
+		case kindRequest:
 			rf := &grpcviewstorev1.Request{}
-			if err := readRequestMessage(filepath.Join(sub, RequestFileName), rf); err != nil {
+			if err := readRequestMessage(filepath.Join(sub, requestFileName), rf); err != nil {
 				return nil, err
 			}
 			children = append(children, childEntry{slug: slug, name: cmp.Or(rf.GetMeta().GetName(), slug), kind: kindRequest, request: rf})
@@ -813,7 +814,7 @@ func (c *Collection) readOrder(dir string) ([]string, error) {
 		return col.GetItems(), nil
 	}
 	ff := &grpcviewstorev1.Folder{}
-	if err := readFolderMessage(filepath.Join(dir, FolderFileName), ff); err != nil {
+	if err := readFolderMessage(filepath.Join(dir, folderFileName), ff); err != nil {
 		return nil, err
 	}
 	return ff.GetItems(), nil
@@ -831,7 +832,7 @@ func (c *Collection) writeOrder(dir string, slugs []string) error {
 		col.Items = slugs
 		return c.writeCollection(col)
 	}
-	p := filepath.Join(dir, FolderFileName)
+	p := filepath.Join(dir, folderFileName)
 	ff := &grpcviewstorev1.Folder{}
 	if err := readFolderMessage(p, ff); err != nil {
 		return err

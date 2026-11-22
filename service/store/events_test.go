@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -65,15 +64,13 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 		must(t, c.CreateFolder(ctx, nil, "users"))
 		must(t, c.CreateRequest(ctx, []string{"users"}, "get", "S", "M"))
 	}
-	sidecar := func(c *Collection) string {
-		return "/test/descriptors/" + filepath.Base(c.descriptorSidecarPath(srcID))
-	}
+	sidecar := "/test/descriptors/" + hashedName(srcID) + descriptorSidecarExt
 
 	for _, tc := range []struct {
 		name  string
 		setup func(*testing.T, *Collection, context.Context)
 		op    func(*Collection, context.Context) error
-		want  func(*Collection) []string
+		want  []string
 	}{
 		{
 			name: "Create",
@@ -84,19 +81,17 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 				}
 				return fresh.Create(ctx, "")
 			},
-			want: func(*Collection) []string { return []string{"/fresh", "/fresh/grpcview.json", "/fresh/tree"} },
+			want: []string{"/fresh", "/fresh/grpcview.json", "/fresh/tree"},
 		},
 		{
 			name: "SetName",
 			op:   func(c *Collection, ctx context.Context) error { return c.SetName(ctx, "n") },
-			want: func(*Collection) []string { return []string{"/test/grpcview.json"} },
+			want: []string{"/test/grpcview.json"},
 		},
 		{
 			name: "CreateFolder",
 			op:   func(c *Collection, ctx context.Context) error { return c.CreateFolder(ctx, nil, "users") },
-			want: func(*Collection) []string {
-				return []string{"/test/grpcview.json", "/test/tree/users", "/test/tree/users/folder.json", "/test/tree/users/metadata.ts"}
-			},
+			want: []string{"/test/grpcview.json", "/test/tree/users", "/test/tree/users/folder.json", "/test/tree/users/metadata.ts"},
 		},
 		{
 			name:  "CreateRequest",
@@ -104,11 +99,9 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 			op: func(c *Collection, ctx context.Context) error {
 				return c.CreateRequest(ctx, []string{"users"}, "get", "S", "M")
 			},
-			want: func(*Collection) []string {
-				return []string{
-					"/test/tree/users/folder.json", "/test/tree/users/get", "/test/tree/users/get/body.ts",
-					"/test/tree/users/get/metadata.ts", "/test/tree/users/get/request.json",
-				}
+			want: []string{
+				"/test/tree/users/folder.json", "/test/tree/users/get", "/test/tree/users/get/body.ts",
+				"/test/tree/users/get/metadata.ts", "/test/tree/users/get/request.json",
 			},
 		},
 		{
@@ -117,9 +110,7 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 			op: func(c *Collection, ctx context.Context) error {
 				return c.UpdateRequest(ctx, []string{"users"}, "get", RequestPatch{Name: str("got"), DraftBody: str("{}"), DraftMetadataScript: str("x")})
 			},
-			want: func(*Collection) []string {
-				return []string{"/test/tree/users/get/body.ts", "/test/tree/users/get/metadata.ts", "/test/tree/users/get/request.json"}
-			},
+			want: []string{"/test/tree/users/get/body.ts", "/test/tree/users/get/metadata.ts", "/test/tree/users/get/request.json"},
 		},
 		{
 			name:  "UpdateFolder",
@@ -127,25 +118,19 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 			op: func(c *Collection, ctx context.Context) error {
 				return c.UpdateFolder(ctx, nil, "users", FolderPatch{Name: str("people"), DraftMetadataScript: str("x")})
 			},
-			want: func(*Collection) []string {
-				return []string{"/test/tree/users/folder.json", "/test/tree/users/metadata.ts"}
-			},
+			want: []string{"/test/tree/users/folder.json", "/test/tree/users/metadata.ts"},
 		},
 		{
 			name:  "Delete",
 			setup: withRequest,
 			op:    func(c *Collection, ctx context.Context) error { return c.Delete(ctx, []string{"users"}, "get") },
-			want: func(*Collection) []string {
-				return []string{"/test/tree/users/folder.json", "/test/tree/users/get"}
-			},
+			want:  []string{"/test/tree/users/folder.json", "/test/tree/users/get"},
 		},
 		{
 			name:  "Move across folders",
 			setup: withRequest,
 			op:    func(c *Collection, ctx context.Context) error { return c.Move(ctx, []string{"users"}, "get", nil, nil) },
-			want: func(*Collection) []string {
-				return []string{"/test/grpcview.json", "/test/tree/get", "/test/tree/users/folder.json", "/test/tree/users/get"}
-			},
+			want:  []string{"/test/grpcview.json", "/test/tree/get", "/test/tree/users/folder.json", "/test/tree/users/get"},
 		},
 		{
 			name: "Move within a folder",
@@ -154,23 +139,27 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 				must(t, c.CreateFolder(ctx, nil, "b"))
 			},
 			op:   func(c *Collection, ctx context.Context) error { return c.Move(ctx, nil, "b", nil, str("a")) },
-			want: func(*Collection) []string { return []string{"/test/grpcview.json"} },
+			want: []string{"/test/grpcview.json"},
 		},
 		{
 			name: "PutDescriptorState commits a sidecar",
-			op:   func(c *Collection, ctx context.Context) error { return c.PutDescriptorState(ctx, committedState(srcID)) },
-			want: func(c *Collection) []string { return []string{"/test/descriptors", sidecar(c), "/test/grpcview.json"} },
+			op: func(c *Collection, ctx context.Context) error {
+				return c.PutDescriptorState(ctx, committedState(srcID))
+			},
+			want: []string{"/test/descriptors", sidecar, "/test/grpcview.json"},
 		},
 		{
-			name:  "PutDescriptorState prunes a sidecar",
-			setup: func(t *testing.T, c *Collection, ctx context.Context) { must(t, c.PutDescriptorState(ctx, committedState(srcID))) },
-			op:    func(c *Collection, ctx context.Context) error { return c.PutDescriptorState(ctx, DescriptorState{}) },
-			want:  func(c *Collection) []string { return []string{"/test/descriptors", sidecar(c), "/test/grpcview.json"} },
+			name: "PutDescriptorState prunes a sidecar",
+			setup: func(t *testing.T, c *Collection, ctx context.Context) {
+				must(t, c.PutDescriptorState(ctx, committedState(srcID)))
+			},
+			op:   func(c *Collection, ctx context.Context) error { return c.PutDescriptorState(ctx, DescriptorState{}) },
+			want: []string{"/test/descriptors", sidecar, "/test/grpcview.json"},
 		},
 		{
 			name: "CreateScript",
 			op:   func(c *Collection, ctx context.Context) error { return c.CreateScript(ctx, "scripts/a/b.ts") },
-			want: func(*Collection) []string { return []string{"/test/scripts", "/test/scripts/a", "/test/scripts/a/b.ts"} },
+			want: []string{"/test/scripts", "/test/scripts/a", "/test/scripts/a/b.ts"},
 		},
 		{
 			name:  "UpdateScript with NewPath",
@@ -178,17 +167,15 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 			op: func(c *Collection, ctx context.Context) error {
 				return c.UpdateScript(ctx, "scripts/a/b.ts", ScriptPatch{Source: str("x"), NewPath: str("scripts/c/d.ts")})
 			},
-			want: func(*Collection) []string {
-				return []string{"/test/scripts/a/b.ts", "/test/scripts/c", "/test/scripts/c/d.ts"}
-			},
+			want: []string{"/test/scripts/a/b.ts", "/test/scripts/c", "/test/scripts/c/d.ts"},
 		},
 		{
-			name:  "DeleteScript prunes dirs",
-			setup: func(t *testing.T, c *Collection, ctx context.Context) { must(t, c.CreateScript(ctx, "scripts/a/b/c.ts")) },
-			op:    func(c *Collection, ctx context.Context) error { return c.DeleteScript(ctx, "scripts/a/b/c.ts") },
-			want: func(*Collection) []string {
-				return []string{"/test/scripts/a", "/test/scripts/a/b", "/test/scripts/a/b/c.ts"}
+			name: "DeleteScript prunes dirs",
+			setup: func(t *testing.T, c *Collection, ctx context.Context) {
+				must(t, c.CreateScript(ctx, "scripts/a/b/c.ts"))
 			},
+			op:   func(c *Collection, ctx context.Context) error { return c.DeleteScript(ctx, "scripts/a/b/c.ts") },
+			want: []string{"/test/scripts/a", "/test/scripts/a/b", "/test/scripts/a/b/c.ts"},
 		},
 		{
 			name: "Store.Rename",
@@ -196,11 +183,14 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 				_, err := c.store.Rename(ctx, "test", "moved/test")
 				return err
 			},
-			want: func(*Collection) []string { return []string{"/moved", "/moved/test", "/test"} },
+			want: []string{"/moved", "/moved/test", "/test"},
 		},
 		{
-			name:  "partial failure",
-			setup: func(t *testing.T, c *Collection, ctx context.Context) { must(t, c.CreateScript(ctx, "scripts/a.ts")); must(t, c.CreateScript(ctx, "scripts/b.ts")) },
+			name: "partial failure",
+			setup: func(t *testing.T, c *Collection, ctx context.Context) {
+				must(t, c.CreateScript(ctx, "scripts/a.ts"))
+				must(t, c.CreateScript(ctx, "scripts/b.ts"))
+			},
 			op: func(c *Collection, ctx context.Context) error {
 				err := c.UpdateScript(ctx, "scripts/a.ts", ScriptPatch{Source: str("x"), NewPath: str("scripts/b.ts")})
 				if !errors.Is(err, ErrAlreadyExists) {
@@ -208,7 +198,7 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 				}
 				return nil
 			},
-			want: func(*Collection) []string { return []string{"/test/scripts/a.ts"} },
+			want: []string{"/test/scripts/a.ts"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -224,8 +214,8 @@ func TestMutationsPublishOneEventNamingEveryTouchedPath(t *testing.T) {
 			if len(got) != 1 {
 				t.Fatalf("events = %v, want exactly one", got)
 			}
-			if want := tc.want(c); got[0].Resync || !slices.Equal(got[0].Paths, want) {
-				t.Errorf("paths = %v, want %v", got[0].Paths, want)
+			if got[0].Resync || !slices.Equal(got[0].Paths, tc.want) {
+				t.Errorf("paths = %v, want %v", got[0].Paths, tc.want)
 			}
 		})
 	}

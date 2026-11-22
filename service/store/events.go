@@ -6,11 +6,10 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
-
-	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 // Event names the workspace paths one mutation touched.
@@ -27,76 +26,24 @@ const subscriberQueue = 64
 
 type hub struct {
 	mu   sync.Mutex
-	subs map[*subscriber]struct{}
-}
-
-type subscriber struct {
-	mu    sync.Mutex
-	queue []Event
-	wake  chan struct{}
+	subs map[chan Event]struct{}
 }
 
 // Subscribe delivers one Event per mutation, in commit order, until ctx is done; then the channel
 // closes. Publishing never blocks: a subscriber that falls subscriberQueue events behind gets one
 // Resync in place of them, then resumes.
 func (s *Store) Subscribe(ctx context.Context) <-chan Event {
-	sub := &subscriber{wake: make(chan struct{}, 1)}
+	ch := make(chan Event, subscriberQueue)
 	s.hub.mu.Lock()
-	s.hub.subs[sub] = struct{}{}
+	s.hub.subs[ch] = struct{}{}
 	s.hub.mu.Unlock()
-
-	out := make(chan Event)
-	go func() {
-		defer close(out)
-		defer func() {
-			s.hub.mu.Lock()
-			delete(s.hub.subs, sub)
-			s.hub.mu.Unlock()
-		}()
-		for {
-			ev, ok := sub.pop()
-			if !ok {
-				select {
-				case <-sub.wake:
-					continue
-				case <-ctx.Done():
-					return
-				}
-			}
-			select {
-			case out <- ev:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out
-}
-
-func (sub *subscriber) push(ev Event) {
-	sub.mu.Lock()
-	if len(sub.queue) >= subscriberQueue {
-		// ev is dropped too: the re-read a Resync triggers happens after it committed.
-		sub.queue = []Event{{Resync: true}}
-	} else {
-		sub.queue = append(sub.queue, ev)
-	}
-	sub.mu.Unlock()
-	select {
-	case sub.wake <- struct{}{}:
-	default:
-	}
-}
-
-func (sub *subscriber) pop() (Event, bool) {
-	sub.mu.Lock()
-	defer sub.mu.Unlock()
-	if len(sub.queue) == 0 {
-		return Event{}, false
-	}
-	ev := sub.queue[0]
-	sub.queue = sub.queue[1:]
-	return ev, true
+	context.AfterFunc(ctx, func() {
+		s.hub.mu.Lock()
+		defer s.hub.mu.Unlock()
+		delete(s.hub.subs, ch)
+		close(ch)
+	})
+	return ch
 }
 
 func (s *Store) publish(paths []string) {
@@ -107,80 +54,68 @@ func (s *Store) publish(paths []string) {
 	ev := Event{Paths: slices.Compact(paths)}
 	s.hub.mu.Lock()
 	defer s.hub.mu.Unlock()
-	for sub := range s.hub.subs {
-		sub.push(ev)
+	for ch := range s.hub.subs {
+		select {
+		case ch <- ev:
+			continue
+		default:
+		}
+		// Full: ev is dropped too, since the re-read a Resync triggers happens after it committed.
+		// Only publish sends, under hub.mu, so after the drain the Resync fits.
+		for len(ch) > 0 {
+			select {
+			case <-ch:
+			default:
+			}
+		}
+		ch <- Event{Resync: true}
 	}
 }
 
 // workspacePath maps abs into the workspace namespace; false when it lies outside (the state root).
-// Lexical against the root first, then its symlink-resolved form, which wsroot.Confine output is in.
+// s.root is canonical, the form wsroot.Confine output is in.
 func (s *Store) workspacePath(abs string) (string, bool) {
-	for _, root := range []string{s.root, s.realRoot()} {
-		if !wsroot.Within(root, abs) {
-			continue
-		}
-		rel, err := filepath.Rel(root, abs)
-		if err != nil {
-			continue
-		}
-		return path.Join("/", filepath.ToSlash(rel)), true
+	rel, err := filepath.Rel(s.root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
 	}
-	return "", false
-}
-
-func (s *Store) realRoot() string {
-	s.realRootOnce.Do(func() {
-		s.realRootPath = s.root
-		if abs, err := filepath.Abs(s.root); err == nil {
-			if real, err := filepath.EvalSymlinks(abs); err == nil {
-				s.realRootPath = real
-			}
-		}
-	})
-	return s.realRootPath
+	return path.Join("/", filepath.ToSlash(rel)), true
 }
 
 // touched records the workspace paths one mutation writes, for exactly one Event. Every workspace
-// write goes through its methods; a nil *touched writes without recording. State-root writes
-// (history, descriptor index, blobs) bypass it: they are not in the workspace.
+// write goes through its methods. State-root writes (history, descriptor index, blobs) bypass it:
+// they are not in the workspace.
 type touched struct {
 	s     *Store
 	paths []string
 }
 
 func (t *touched) add(abs string) {
-	if t == nil {
-		return
-	}
 	if p, ok := t.s.workspacePath(abs); ok {
 		t.paths = append(t.paths, p)
 	}
 }
 
+// record adds ps when err is nil, and returns err.
+func (t *touched) record(err error, ps ...string) error {
+	if err == nil {
+		for _, p := range ps {
+			t.add(p)
+		}
+	}
+	return err
+}
+
 func (t *touched) publish() { t.s.publish(t.paths) }
 
 func (t *touched) writeMessage(p string, m proto.Message) error {
-	err := writeMessage(p, m)
-	if err == nil {
-		t.add(p)
-	}
-	return err
+	return t.record(writeMessage(p, m), p)
 }
 
-func (t *touched) writeSource(p, src string) error {
-	err := writeSourceFile(p, src)
-	if err == nil {
-		t.add(p)
-	}
-	return err
-}
+func (t *touched) writeSource(p, src string) error { return t.record(writeSourceFile(p, src), p) }
 
 func (t *touched) writeFile(p string, data []byte) error {
-	err := writeFileAtomic(p, data, 0o644)
-	if err == nil {
-		t.add(p)
-	}
-	return err
+	return t.record(writeFileAtomic(p, data, 0o644), p)
 }
 
 // mkdirAll records each directory it creates.
@@ -201,13 +136,7 @@ func (t *touched) mkdirAll(dir string) error {
 	return err
 }
 
-func (t *touched) remove(p string) error {
-	err := os.Remove(p)
-	if err == nil {
-		t.add(p)
-	}
-	return err
-}
+func (t *touched) remove(p string) error { return t.record(os.Remove(p), p) }
 
 // removeAll records p even on failure: part of the tree may already be gone.
 func (t *touched) removeAll(p string) error {
@@ -216,14 +145,7 @@ func (t *touched) removeAll(p string) error {
 	return err
 }
 
-func (t *touched) rename(from, to string) error {
-	err := os.Rename(from, to)
-	if err == nil {
-		t.add(from)
-		t.add(to)
-	}
-	return err
-}
+func (t *touched) rename(from, to string) error { return t.record(os.Rename(from, to), from, to) }
 
 // lockWrite takes c.mu for a mutation; the returned unlock publishes what it touched, then releases.
 // Publishing under c.mu keeps one collection's events in commit order.

@@ -16,13 +16,10 @@ const (
 	WorkspaceFileName  = "grpcview.work.json"
 	CollectionFileName = "grpcview.json"
 
-	// FolderFileName, RequestFileName, BodyFileName and MetadataFileName are exported for
-	// service/workspace's ListWorkspaceModules walk, which excludes item scripts from the
-	// module list by checking for the sibling manifest.
-	FolderFileName   = "folder.json"
-	RequestFileName  = "request.json"
-	BodyFileName     = "body.ts"
-	MetadataFileName = "metadata.ts"
+	folderFileName   = "folder.json"
+	requestFileName  = "request.json"
+	bodyFileName     = "body.ts"
+	metadataFileName = "metadata.ts"
 
 	historyFileName = "history.json"
 
@@ -81,10 +78,10 @@ type slugNamed interface {
 
 var reservedSlugs = map[string]bool{
 	CollectionFileName: true,
-	FolderFileName:     true,
-	RequestFileName:    true,
-	BodyFileName:       true,
-	MetadataFileName:   true,
+	folderFileName:     true,
+	requestFileName:    true,
+	bodyFileName:       true,
+	metadataFileName:   true,
 }
 
 func isReserved(slug string) bool {

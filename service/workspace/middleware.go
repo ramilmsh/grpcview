@@ -123,7 +123,7 @@ func resolveMiddlewareSpecifier(specifier, workspaceRoot, collectionRoot string)
 	if root == "" {
 		return "", specifierError(specifier, "the "+which+" root is not configured")
 	}
-	real, err := wsroot.Confine(root, filepath.Join(root, filepath.FromSlash(specifier[2:])))
+	real, err := wsroot.Confine(root, filepath.Join(".", filepath.FromSlash(specifier[2:])))
 	if errors.Is(err, wsroot.ErrEscapes) {
 		return "", specifierError(specifier, "resolves outside the "+which)
 	}

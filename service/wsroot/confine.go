@@ -55,6 +55,23 @@ func Within(dir, p string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// Canonical is dir absolute and symlink-resolved through its deepest existing ancestor — the one
+// spelling of a root every consumer compares against. Falls back to the absolute, cleaned dir when
+// that cannot be resolved; "" stays "" (no root).
+func Canonical(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return filepath.Clean(dir)
+	}
+	if real, err := resolveExisting(abs); err == nil {
+		return real
+	}
+	return abs
+}
+
 // resolveExisting symlink-resolves the deepest ancestor of abs that exists and re-appends
 // the missing tail. A dangling link is refused: its target could be created later.
 func resolveExisting(abs string) (string, error) {

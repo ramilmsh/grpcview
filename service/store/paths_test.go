@@ -201,25 +201,24 @@ func TestWriteItemFile(t *testing.T) {
 	if err := coll.UpdateRequest(ctx, []string{"Users"}, "Get", RequestPatch{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
-	manifest := filepath.Join(coll.treeRoot(), "users", "get", RequestFileName)
+	manifest := filepath.Join(coll.treeRoot(), "users", "get", requestFileName)
 	before, err := os.ReadFile(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	coll.mu.Lock()
-	defer coll.mu.Unlock()
+	defer coll.lockWrite()()
 	for _, w := range []struct {
 		slugs, name string
 		wantErr     error
 	}{
-		{"users/get", BodyFileName, nil},
-		{"users/get", MetadataFileName, nil},
-		{"users", MetadataFileName, nil},
-		{"users", BodyFileName, errNotItemFile},
-		{"users/get", RequestFileName, errNotItemFile},
-		{"users/nope", BodyFileName, ErrItemNotFound},
-		{"../users", BodyFileName, ErrItemNotFound},
+		{"users/get", bodyFileName, nil},
+		{"users/get", metadataFileName, nil},
+		{"users", metadataFileName, nil},
+		{"users", bodyFileName, errNotItemFile},
+		{"users/get", requestFileName, errNotItemFile},
+		{"users/nope", bodyFileName, ErrItemNotFound},
+		{"../users", bodyFileName, ErrItemNotFound},
 	} {
 		err := coll.writeItemFile(strings.Split(w.slugs, "/"), w.name, "x")
 		if !errors.Is(err, w.wantErr) {

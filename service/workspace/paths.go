@@ -34,7 +34,16 @@ func resolveWorkspacePath(root, p string) (real string, rel string, isDir bool, 
 	if strings.TrimSpace(p) == "" {
 		return "", "", false, fmt.Errorf("empty path")
 	}
-	real, err = wsroot.Confine(root, p)
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
+	}
+	abs := p
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(absRoot, abs)
+	}
+	abs = anchorAt(absRoot, filepath.Clean(abs))
+	real, err = wsroot.Confine(absRoot, abs)
 	if errors.Is(err, wsroot.ErrEscapes) {
 		return "", "", false, fmt.Errorf("%q is outside the workspace: sources have to live in the workspace", p)
 	}
@@ -45,20 +54,30 @@ func resolveWorkspacePath(root, p string) (real string, rel string, isDir bool, 
 	if err != nil {
 		return "", "", false, fmt.Errorf("cannot read %q: no such file or directory", p)
 	}
-
 	// Confine proved lexical containment, so the recorded recipe is root-relative.
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
-	}
-	abs := p
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(absRoot, abs)
-	}
 	if rel, err = filepath.Rel(absRoot, abs); err != nil {
 		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
 	}
 	return real, filepath.ToSlash(rel), info.IsDir(), nil
+}
+
+// An absolute path may spell root through a symlink (the CLI sends its cwd's spelling; the store's root
+// is canonical): re-anchor it at root from the ancestor that IS root, keeping the spelling below it.
+func anchorAt(root, abs string) string {
+	if wsroot.Within(root, abs) {
+		return abs
+	}
+	canonRoot := wsroot.Canonical(root)
+	for dir := abs; filepath.Dir(dir) != dir; dir = filepath.Dir(dir) {
+		if wsroot.Canonical(dir) != canonRoot {
+			continue
+		}
+		if rel, err := filepath.Rel(dir, abs); err == nil {
+			return filepath.Join(root, rel)
+		}
+		break
+	}
+	return abs
 }
 
 // The weaker cousin of resolveWorkspaceFile, for the one input that legitimately sits ABOVE root

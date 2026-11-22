@@ -31,6 +31,8 @@ type Workspace struct {
 }
 
 func New(ctx context.Context, root string) (Workspace, error) {
+	// One spelling of the root for store, scripting and w.root alike.
+	root = wsroot.Canonical(root)
 	stateRoot, err := wsroot.StateDir(root)
 	if err != nil {
 		return Workspace{}, fmt.Errorf("failed to resolve workspace state dir: %w", err)
@@ -207,7 +209,7 @@ func (w Workspace) AddDescriptorSource(ctx context.Context, request *connect.Req
 	var (
 		src    *grpcviewv1.DescriptorSource
 		upload *descriptorpb.FileDescriptorSet // the uploaded bytes, which resolveOne cannot re-read
-		layout *protosLayout                  // already resolved: resolveOne would resolve it again
+		layout *protosLayout                   // already resolved: resolveOne would resolve it again
 	)
 	switch source := request.Msg.GetSource().(type) {
 	case *grpcviewv1.AddDescriptorSourceRequest_DescriptorSet:

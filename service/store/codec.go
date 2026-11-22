@@ -47,10 +47,10 @@ func readMessage(path string, m proto.Message) error {
 	return nil
 }
 
-func requestBodyPath(itemDir string) string { return filepath.Join(itemDir, BodyFileName) }
+func requestBodyPath(itemDir string) string { return filepath.Join(itemDir, bodyFileName) }
 
 // Request and folder directories alike keep their metadata script here.
-func metadataFilePath(itemDir string) string { return filepath.Join(itemDir, MetadataFileName) }
+func metadataFilePath(itemDir string) string { return filepath.Join(itemDir, metadataFileName) }
 
 // An absent file is legal: the request-body contract reads it as EmptyBody.
 func readSourceFile(path string) (string, error) {
@@ -102,7 +102,7 @@ func readManifest(path string, m proto.Message, stale ...string) error {
 			return fmt.Errorf(
 				"%s: stale key %q — request bodies and metadata scripts now live in sibling %s / %s files; "+
 					"move the value into the matching file in this directory and delete this key",
-				path, key, BodyFileName, MetadataFileName,
+				path, key, bodyFileName, metadataFileName,
 			)
 		}
 	}

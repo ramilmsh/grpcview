@@ -382,8 +382,8 @@ func (b *bundler) plugins(g Grant, collRoot string) []api.Plugin {
 // both /tmp and /var behind one), so an un-resolved root would fail wsroot.Confine's lexical step
 // against its own, symlink-resolved r.Path even for a file that is genuinely inside it.
 func pathResolverPlugin(wsRoot, collRoot string) api.Plugin {
-	wsRoot = canonicalDir(wsRoot)
-	collRoot = canonicalDir(collRoot)
+	wsRoot = wsroot.Canonical(wsRoot)
+	collRoot = wsroot.Canonical(collRoot)
 	return api.Plugin{
 		Name: "grpcview-path-sigils",
 		Setup: func(build api.PluginBuild) {
@@ -410,18 +410,8 @@ func pathResolverPlugin(wsRoot, collRoot string) api.Plugin {
 	}
 }
 
-func canonicalDir(dir string) string {
-	if dir == "" {
-		return dir
-	}
-	if canon, err := filepath.EvalSymlinks(dir); err == nil {
-		return canon
-	}
-	return dir
-}
-
 func registryResolverPlugin(registryDir string) api.Plugin {
-	registryDir = canonicalDir(registryDir)
+	registryDir = wsroot.Canonical(registryDir)
 	return api.Plugin{
 		Name: "grpcview-npm-registry",
 		Setup: func(build api.PluginBuild) {

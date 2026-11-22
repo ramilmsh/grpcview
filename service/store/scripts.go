@@ -29,18 +29,19 @@ func (c *Collection) readScripts() ([]*grpcviewv1.Script, error) {
 		if err != nil {
 			return err
 		}
+		// Pruning a dot-directory only skips what isScript would reject.
 		if d.IsDir() {
 			if p != root && strings.HasPrefix(d.Name(), ".") {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if strings.HasPrefix(d.Name(), ".") || filepath.Ext(d.Name()) != ".ts" {
-			return nil
-		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return err
+		}
+		if !isScript(strings.Split(filepath.ToSlash(rel), "/")) {
+			return nil
 		}
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -136,13 +137,9 @@ func (c *Collection) DeleteScript(_ context.Context, scriptPath string) error {
 	return c.pruneEmptyScriptDirs(filepath.Dir(abs))
 }
 
-// dir is resolveScriptPath output, so it is compared against the resolved root.
+// Within stops the climb when scripts/ is a link: dir (resolveScriptPath output) lies elsewhere.
 func (c *Collection) pruneEmptyScriptDirs(dir string) error {
-	root, err := wsroot.Confine(c.scriptsRoot(), ".")
-	if err != nil {
-		return err
-	}
-	for dir != root && wsroot.Within(root, dir) {
+	for root := c.scriptsRoot(); dir != root && wsroot.Within(root, dir); dir = filepath.Dir(dir) {
 		entries, err := os.ReadDir(dir)
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -156,7 +153,6 @@ func (c *Collection) pruneEmptyScriptDirs(dir string) error {
 		if err := c.tx.remove(dir); err != nil {
 			return err
 		}
-		dir = filepath.Dir(dir)
 	}
 	return nil
 }

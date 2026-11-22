@@ -148,7 +148,8 @@ func classifyInCollection(collRoot string, rest []string) (PathKind, []string) {
 	return PathOther, nil
 }
 
-// Mirrors readScripts: *.ts, no dot-named segment below scripts/.
+// isScript: rel (segments below scripts/) names a *.ts with no dot-named segment — the rule
+// readScripts lists by.
 func isScript(rel []string) bool {
 	if len(rel) == 0 || path.Ext(rel[len(rel)-1]) != ".ts" {
 		return false
@@ -162,54 +163,78 @@ func isScript(rel []string) bool {
 }
 
 func classifyInTree(treeRoot string, slugs []string) (PathKind, []string) {
-	if len(slugs) == 0 {
-		return PathOther, nil
-	}
-	if _, _, ok := slugItem(treeRoot, slugs); ok {
-		return PathOther, slugs
-	}
-	parent, name := slugs[:len(slugs)-1], slugs[len(slugs)-1]
-	_, kind, ok := slugItem(treeRoot, parent)
-	if !ok {
-		return PathOther, nil
-	}
+	_, kind, n := walkSlugs(treeRoot, slugs)
 	switch {
-	case kind == kindRequest && name == RequestFileName, kind == kindFolder && name == FolderFileName:
+	case n == 0:
+		return PathOther, nil
+	case n == len(slugs):
+		return PathOther, slugs
+	case n < len(slugs)-1:
+		return PathOther, nil
+	}
+	parent, name := slugs[:n], slugs[n]
+	switch {
+	case kind == kindRequest && name == requestFileName, kind == kindFolder && name == folderFileName:
 		return PathManifest, parent
-	case kind == kindRequest && name == BodyFileName:
+	case kind == kindRequest && name == bodyFileName:
 		return PathRequestBody, parent
-	case kind == kindRequest && name == MetadataFileName:
+	case kind == kindRequest && name == metadataFileName:
 		return PathRequestMetadata, parent
-	case kind == kindFolder && name == MetadataFileName:
+	case kind == kindFolder && name == metadataFileName:
 		return PathFolderMetadata, parent
 	}
 	return PathOther, parent
 }
 
-// Walks slugs below treeRoot as readChildren sees them: every ancestor a folder, the last any item.
-func slugItem(treeRoot string, slugs []string) (dir string, kind itemKind, ok bool) {
-	if len(slugs) == 0 {
-		return "", 0, false
-	}
+// Walks slugs below treeRoot as readChildren sees them, every ancestor a folder; returns the deepest
+// item reached and how many slugs led to it.
+func walkSlugs(treeRoot string, slugs []string) (dir string, kind itemKind, n int) {
 	dir = treeRoot
-	for i, slug := range slugs {
-		if slug == "" || strings.HasPrefix(slug, ".") || isReserved(slug) || strings.ContainsRune(slug, filepath.Separator) {
-			return "", 0, false
+	for _, slug := range slugs {
+		if (n > 0 && kind != kindFolder) || slug == "" || strings.ContainsRune(slug, filepath.Separator) {
+			break
 		}
-		dir = filepath.Join(dir, slug)
-		switch {
-		case fileExists(filepath.Join(dir, FolderFileName)):
-			kind = kindFolder
-		case fileExists(filepath.Join(dir, RequestFileName)):
-			kind = kindRequest
-		default:
-			return "", 0, false
+		k, ok := itemKindAt(dir, slug)
+		if !ok {
+			break
 		}
-		if i < len(slugs)-1 && kind != kindFolder {
-			return "", 0, false
-		}
+		dir, kind, n = filepath.Join(dir, slug), k, n+1
 	}
-	return dir, kind, true
+	return dir, kind, n
+}
+
+// slugItem is the item slugs addresses: every ancestor a folder, the last any item.
+func slugItem(treeRoot string, slugs []string) (dir string, kind itemKind, ok bool) {
+	dir, kind, n := walkSlugs(treeRoot, slugs)
+	return dir, kind, n > 0 && n == len(slugs)
+}
+
+// itemKindAt is the item parent/slug holds: none for a dot-named or reserved slug; folder.json wins
+// over request.json. The one predicate readChildren and ResolvePath share.
+func itemKindAt(parent, slug string) (itemKind, bool) {
+	if strings.HasPrefix(slug, ".") || isReserved(slug) {
+		return 0, false
+	}
+	dir := filepath.Join(parent, slug)
+	switch {
+	case fileExists(filepath.Join(dir, folderFileName)):
+		return kindFolder, true
+	case fileExists(filepath.Join(dir, requestFileName)):
+		return kindRequest, true
+	}
+	return 0, false
+}
+
+// IsItemScript reports whether name in dir is an item's own script, not a module: body.ts or
+// metadata.ts beside request.json, metadata.ts beside folder.json.
+func IsItemScript(dir, name string) bool {
+	switch name {
+	case bodyFileName:
+		return fileExists(filepath.Join(dir, requestFileName))
+	case metadataFileName:
+		return fileExists(filepath.Join(dir, requestFileName)) || fileExists(filepath.Join(dir, folderFileName))
+	}
+	return false
 }
 
 var errNotItemFile = errors.New("not a writable item file")
@@ -221,7 +246,7 @@ func (c *Collection) writeItemFile(slugPath []string, name, src string) error {
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrItemNotFound, strings.Join(slugPath, "/"))
 	}
-	if name != MetadataFileName && (name != BodyFileName || kind != kindRequest) {
+	if name != metadataFileName && (name != bodyFileName || kind != kindRequest) {
 		return fmt.Errorf("%w: %q", errNotItemFile, name)
 	}
 	return c.tx.writeSource(filepath.Join(dir, name), src)

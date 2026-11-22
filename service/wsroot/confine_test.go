@@ -104,3 +104,25 @@ func TestWithin(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonical(t *testing.T) {
+	root := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[string]string{
+		"":                                  "",
+		link:                                realRoot,
+		filepath.Join(link, "missing", "x"): filepath.Join(realRoot, "missing", "x"),
+		filepath.Join(link, "a", "..", "b"): filepath.Join(realRoot, "b"),
+	} {
+		if got := Canonical(in); got != want {
+			t.Errorf("Canonical(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
