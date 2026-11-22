@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"syscall"
 
 	"connectrpc.com/connect"
 
@@ -31,6 +33,7 @@ type Workspace struct {
 	engine *scripting.Engine
 	defs   *definitionsCache
 	gen    *generator
+	files  *fileMounts
 	root   string
 }
 
@@ -52,16 +55,19 @@ func New(ctx context.Context, root string) (Workspace, error) {
 	if cacheRoot, err := wsroot.CacheRoot(); err == nil {
 		codegenDir = filepath.Join(cacheRoot, "codegen")
 	}
+	st := store.New(root, stateRoot, slog.Default())
 	return Workspace{
-		store:  store.New(root, stateRoot, slog.Default()),
+		store:  st,
 		engine: engine,
 		defs:   newDefinitionsCache(),
 		gen:    newGenerator(codegenDir),
+		files:  newFileMounts(st),
 		root:   root,
 	}, nil
 }
 
 func (w Workspace) Close(ctx context.Context) error {
+	w.files.close()
 	err := w.gen.Close(ctx)
 	if w.engine != nil {
 		err = errors.Join(err, w.engine.Close(ctx))
@@ -87,6 +93,58 @@ func toConnectError(err error) error {
 	default:
 		return err
 	}
+}
+
+// toFileError is err as the FileError for path p; unmapped errors are EIO. Callers scrub host paths.
+func toFileError(p string, err error) *grpcviewv1.FileError {
+	fe := &grpcviewv1.FileError{Path: p, Code: grpcviewv1.FileError_CODE_EIO, Message: err.Error()}
+	var (
+		e  *fileError
+		pe *fs.PathError
+	)
+	switch {
+	case errors.As(err, &e):
+		fe.Code, fe.Message = e.code, e.msg
+	case errors.Is(err, store.ErrInvalidPath), errors.Is(err, wsroot.ErrEscapes):
+		fe.Code = grpcviewv1.FileError_CODE_EACCES
+	case errors.Is(err, fs.ErrNotExist):
+		fe.Code, fe.Message = grpcviewv1.FileError_CODE_ENOENT, "no such file or directory"
+	case errors.Is(err, syscall.ENOTDIR):
+		fe.Code, fe.Message = grpcviewv1.FileError_CODE_ENOTDIR, "not a directory"
+	case errors.Is(err, syscall.EISDIR):
+		fe.Code, fe.Message = grpcviewv1.FileError_CODE_EISDIR, "is a directory"
+	case errors.Is(err, fs.ErrPermission):
+		fe.Code, fe.Message = grpcviewv1.FileError_CODE_EACCES, "permission denied"
+	case errors.As(err, &pe):
+		fe.Message = pe.Err.Error() // its Path is a host path
+	}
+	return fe
+}
+
+var fileErrorCodes = map[grpcviewv1.FileError_Code]connect.Code{
+	grpcviewv1.FileError_CODE_ENOENT:    connect.CodeNotFound,
+	grpcviewv1.FileError_CODE_ENOTDIR:   connect.CodeFailedPrecondition,
+	grpcviewv1.FileError_CODE_EISDIR:    connect.CodeFailedPrecondition,
+	grpcviewv1.FileError_CODE_EEXIST:    connect.CodeAlreadyExists,
+	grpcviewv1.FileError_CODE_ENOTEMPTY: connect.CodeFailedPrecondition,
+	grpcviewv1.FileError_CODE_EACCES:    connect.CodePermissionDenied,
+	grpcviewv1.FileError_CODE_EROFS:     connect.CodePermissionDenied,
+	grpcviewv1.FileError_CODE_EPERM:     connect.CodePermissionDenied,
+	grpcviewv1.FileError_CODE_ESTALE:    connect.CodeFailedPrecondition,
+	grpcviewv1.FileError_CODE_EIO:       connect.CodeInternal,
+}
+
+// fileConnectError is fe as a Connect error carrying fe as its detail.
+func fileConnectError(fe *grpcviewv1.FileError) error {
+	code, ok := fileErrorCodes[fe.GetCode()]
+	if !ok {
+		code = connect.CodeInternal
+	}
+	ce := connect.NewError(code, fmt.Errorf("%s: %s", fe.GetPath(), fe.GetMessage()))
+	if detail, err := connect.NewErrorDetail(fe); err == nil {
+		ce.AddDetail(detail)
+	}
+	return ce
 }
 
 func (w Workspace) Get(ctx context.Context, request *connect.Request[grpcviewv1.GetRequest]) (*connect.Response[grpcviewv1.GetResponse], error) {
