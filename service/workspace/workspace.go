@@ -22,7 +22,11 @@ import (
 
 const scriptingMaxPages = 4096
 
+var _ grpcviewv1.FileServiceHandler = Workspace{}
+
 type Workspace struct {
+	grpcviewv1.UnimplementedFileServiceHandler
+
 	store  *store.Store
 	engine *scripting.Engine
 	defs   *definitionsCache

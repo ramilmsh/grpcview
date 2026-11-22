@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package grpcview.v1;
+
+option go_package = "codeberg.org/ramilmsh/grpcview/grpcview/v1;grpcviewv1";
+
+// What a path names.
+enum FileType {
+  // Unset; never on a served Stat.
+  FILE_TYPE_UNSPECIFIED = 0;
+  // A regular file.
+  FILE_TYPE_FILE        = 1;
+  // A directory.
+  FILE_TYPE_DIRECTORY   = 2;
+}
+
+// Metadata of one path.
+message Stat {
+  // File or directory.
+  FileType type     = 1;
+  // Modification time, ns since epoch. Display only; never a version.
+  int64    mtime_ns = 2;
+  // Content length in bytes.
+  int64    size     = 3;
+  // Hex sha256 of the content as stored, real and virtual files alike. Empty for directories.
+  string   version  = 4;
+  // Winning source id. Set only on .grpcview/proto files.
+  string   label    = 5;
+}
+
+// A failed file operation, errno-style. Attached as a Connect error detail to every
+// FileService error, and returned inline per path by ReadFiles.
+message FileError {
+  // Node errno code; the UI rethrows it as an ErrnoException.
+  enum Code {
+    // Unset; never on a served error.
+    CODE_UNSPECIFIED = 0;
+    // No such file or directory.
+    CODE_ENOENT      = 1;
+    // A path component is not a directory.
+    CODE_ENOTDIR     = 2;
+    // A directory where a file was expected.
+    CODE_EISDIR      = 3;
+    // The path already exists.
+    CODE_EEXIST      = 4;
+    // The directory is not empty and recursive is unset.
+    CODE_ENOTEMPTY   = 5;
+    // The path escapes the workspace, by .. or a symlink.
+    CODE_EACCES      = 6;
+    // A write under a read-only mount.
+    CODE_EROFS       = 7;
+    // A refused semantic write; message names the typed RPC to use instead.
+    CODE_EPERM       = 8;
+    // expected_version does not match the stored version.
+    CODE_ESTALE      = 9;
+    // Any other failure, e.g. a merge error or a scan cap; message says which.
+    CODE_EIO         = 10;
+  }
+
+  // Errno code.
+  Code   code    = 1;
+  // Workspace-relative path the error is about.
+  string path    = 2;
+  // Human-readable detail.
+  string message = 3;
+}
+
+// Watch notification for one path.
+message WatchEvent {
+  // What happened.
+  enum Kind {
+    // Unset; never sent.
+    KIND_UNSPECIFIED = 0;
+    // Content changed.
+    KIND_CHANGED     = 1;
+    // Path appeared.
+    KIND_CREATED     = 2;
+    // Path disappeared.
+    KIND_DELETED     = 3;
+    // Events were lost; re-read everything under path.
+    KIND_RESYNC      = 4;
+  }
+
+  // Workspace-relative path.
+  string path = 1;
+  // What happened.
+  Kind   kind = 2;
+}
+
+// Stats one path.
+message StatRequest {
+  // Workspace-relative path.
+  string path = 1;
+}
+
+// The path's metadata.
+message StatResponse {
+  // The path's metadata.
+  Stat stat = 1;
+}
+
+// Lists a directory.
+message ReadDirectoryRequest {
+  // Workspace-relative directory path.
+  string path      = 1;
+  // List every descendant, not only direct children.
+  bool   recursive = 2;
+}
+
+// The directory's entries.
+message ReadDirectoryResponse {
+  // One directory entry.
+  message Entry {
+    // Relative to the requested path, e.g. "a/b.ts", as Node's recursive readdir.
+    string   name = 1;
+    // File or directory.
+    FileType type = 2;
+  }
+
+  // Entries, hidden ones excluded.
+  repeated Entry entries = 1;
+}
+
+// Reads one file.
+message ReadFileRequest {
+  // Workspace-relative file path.
+  string path = 1;
+}
+
+// The file's content and metadata.
+message ReadFileResponse {
+  // File content.
+  string content = 1;
+  // The file's metadata; version hashes content.
+  Stat   stat    = 2;
+}
+
+// Reads several files; each mount is read at one snapshot.
+message ReadFilesRequest {
+  // Workspace-relative file paths.
+  repeated string paths = 1;
+}
+
+// One result per requested path, in request order.
+message ReadFilesResponse {
+  // A read file.
+  message File {
+    // File content.
+    string content = 1;
+    // The file's metadata; version hashes content.
+    Stat   stat    = 2;
+  }
+
+  // One path's outcome.
+  message Result {
+    // The requested path.
+    string path = 1;
+    // The file, or why it could not be read.
+    oneof result {
+      // The file.
+      File      file  = 2;
+      // Why it could not be read.
+      FileError error = 3;
+    }
+  }
+
+  // Results, in request order.
+  repeated Result results = 1;
+}
+
+// Creates or overwrites a file, as Node "w". The parent must exist.
+message WriteFileRequest {
+  // Workspace-relative file path.
+  string          path             = 1;
+  // New content.
+  string          content          = 2;
+  // Fails with ESTALE unless the stored version matches. Unset writes unconditionally.
+  optional string expected_version = 3;
+}
+
+// The written file's metadata.
+message WriteFileResponse {
+  // The written file's metadata.
+  Stat stat = 1;
+}
+
+// Creates a directory, as Node mkdir.
+message MakeDirectoryRequest {
+  // Workspace-relative directory path.
+  string path      = 1;
+  // Create missing parents; an existing directory is not an error.
+  bool   recursive = 2;
+}
+
+// The directory was created.
+message MakeDirectoryResponse {}
+
+// Removes a path, as Node rm.
+message RemoveRequest {
+  // Workspace-relative path.
+  string          path             = 1;
+  // Remove a directory and everything under it.
+  bool            recursive        = 2;
+  // Fails with ESTALE unless the stored version matches. Unset removes unconditionally.
+  optional string expected_version = 3;
+}
+
+// The path was removed.
+message RemoveResponse {}
+
+// Moves a path, as Node rename.
+message RenameRequest {
+  // Workspace-relative source path.
+  string old_path = 1;
+  // Workspace-relative destination path.
+  string new_path = 2;
+}
+
+// The moved path's metadata.
+message RenameResponse {
+  // Metadata at new_path.
+  Stat stat = 1;
+}
+
+// Watches paths, each recursively.
+message WatchRequest {
+  // Workspace-relative paths.
+  repeated string paths = 1;
+}
+
+// A batch of events.
+message WatchResponse {
+  // Events, in order. Empty is a ping.
+  repeated WatchEvent events = 1;
+}
+
+// The workspace as a filesystem: real files on disk, plus read-only virtual mounts
+// under .grpcview/. Every error carries a FileError detail.
+service FileService {
+  // Metadata of one path.
+  rpc Stat(StatRequest) returns (StatResponse);
+  // Lists a directory.
+  rpc ReadDirectory(ReadDirectoryRequest) returns (ReadDirectoryResponse);
+  // Reads one file.
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+  // Reads several files at one snapshot of each mount. Per-path failures are FileError
+  // results, not a call error.
+  rpc ReadFiles(ReadFilesRequest) returns (ReadFilesResponse);
+  // Creates or overwrites a file, as Node "w".
+  rpc WriteFile(WriteFileRequest) returns (WriteFileResponse);
+  // Creates a directory, as Node mkdir.
+  rpc MakeDirectory(MakeDirectoryRequest) returns (MakeDirectoryResponse);
+  // Removes a path, as Node rm.
+  rpc Remove(RemoveRequest) returns (RemoveResponse);
+  // Moves a path, as Node rename.
+  rpc Rename(RenameRequest) returns (RenameResponse);
+  // Streams change events under paths. An empty events batch is a ping.
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
+}

@@ -6,6 +6,7 @@ load("@rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "grpcviewv1_proto",
     srcs = [
+        "files.proto",
         "service.proto",
         "workspace.proto",
     ],
@@ -33,6 +34,7 @@ ts_proto_library(
     name = "grpcviewv1_proto_ts",
     gen_connect_query = True,
     gen_connect_query_service_mapping = {
+        "files.proto": ["FileService"],
         "service.proto": [
             "WorkspaceService",
             "ServerService",
@@ -41,6 +43,7 @@ ts_proto_library(
     node_modules = "//:node_modules",
     proto = ":grpcviewv1_proto",
     proto_srcs = [
+        "files.proto",
         "service.proto",
         "workspace.proto",
     ],
