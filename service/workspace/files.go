@@ -193,14 +193,20 @@ func hiddenSegment(seg string) bool { return seg == store.MountDirName || store.
 // lookup resolves a workspace-rooted path. Errors are *fileError or map through toFileError.
 func (v *fsView) lookup(p string) (*fsNode, error) {
 	r, err := v.w.store.ResolvePath(p)
-	if err != nil {
+	if errors.Is(err, store.ErrInvalidPath) {
 		return nil, err
 	}
-	if r.Kind == store.PathMount {
+	if err == nil && r.Kind == store.PathMount {
 		return v.mount(r)
 	}
 	rel := strings.TrimPrefix(path.Clean(p), "/")
-	if slices.ContainsFunc(strings.Split(rel, "/"), hiddenSegment) {
+	segs := strings.Split(rel, "/")
+	// A failed collection discovery (say, a malformed grpcview.json) leaves real files readable, so
+	// the broken manifest can still be opened and fixed.
+	if err != nil && slices.Contains(segs, store.MountDirName) {
+		return nil, eio(err)
+	}
+	if slices.ContainsFunc(segs, hiddenSegment) {
 		return nil, errNoEntry
 	}
 	abs, err := wsroot.Confine(v.w.store.Root(), filepath.FromSlash(rel))
@@ -366,7 +372,7 @@ func (v *fsView) modulesJSON() ([]byte, error) {
 	return v.modules, v.modulesErr
 }
 
-// read is n's content and Stat. Text only: content travels as a proto string.
+// read is n's content and Stat, any bytes: readFile is the text-only gate.
 func (v *fsView) read(n *fsNode) ([]byte, *grpcviewv1.Stat, error) {
 	st := &grpcviewv1.Stat{Type: n.typ, Label: n.label}
 	if n.info != nil {
@@ -381,9 +387,6 @@ func (v *fsView) read(n *fsNode) ([]byte, *grpcviewv1.Stat, error) {
 		if content, err = os.ReadFile(n.abs); err != nil {
 			return nil, nil, err
 		}
-	}
-	if !utf8.Valid(content) {
-		return nil, nil, &fileError{errnoEIO, "not UTF-8 text"}
 	}
 	sum := sha256.Sum256(content)
 	st.Size, st.Version = int64(len(content)), hex.EncodeToString(sum[:])
@@ -473,9 +476,8 @@ func (v *fsView) walk(p string, n *fsNode, prefix string, recursive bool, out *[
 		} else {
 			child = &fsNode{typ: dirFile, abs: filepath.Join(n.abs, e.name)}
 		}
-		if err := v.walk(childPath, child, name+"/", true, out); err != nil {
-			return err
-		}
+		// Like a failed mount: a subdirectory gone or unreadable mid-walk is listed, not descended.
+		_ = v.walk(childPath, child, name+"/", true, out)
 	}
 	return nil
 }
@@ -485,8 +487,10 @@ func (w Workspace) fail(p string, err error) error { return fileConnectError(w.f
 
 func (w Workspace) fileError(p string, err error) *grpcviewv1.FileError {
 	fe := toFileError(p, err)
-	if root := w.store.Root(); root != "" {
-		fe.Message = strings.ReplaceAll(fe.GetMessage(), root, "")
+	for _, root := range []string{w.store.StateRoot(), w.store.Root()} {
+		if root != "" {
+			fe.Message = strings.ReplaceAll(fe.GetMessage(), root, "")
+		}
 	}
 	return fe
 }
@@ -527,7 +531,12 @@ func (v *fsView) readFile(p string) ([]byte, *grpcviewv1.Stat, error) {
 	if n.typ == dirFile {
 		return nil, nil, &fileError{errnoEISDIR, "is a directory"}
 	}
-	return v.read(n)
+	content, st, err := v.read(n)
+	// Text only: content travels as a proto string.
+	if err == nil && !utf8.Valid(content) {
+		return nil, nil, &fileError{errnoEIO, "not UTF-8 text"}
+	}
+	return content, st, err
 }
 
 func (w Workspace) ReadFile(ctx context.Context, request *connect.Request[grpcviewv1.ReadFileRequest]) (*connect.Response[grpcviewv1.ReadFileResponse], error) {

@@ -443,3 +443,64 @@ func TestFileMountsEpochs(t *testing.T) {
 		t.Errorf("modules.json after an event = %s, want two.ts listed", got)
 	}
 }
+
+func TestFilesBinaryStatsButDoesNotRead(t *testing.T) {
+	root := t.TempDir()
+	w := newFilesWorkspace(t, root)
+	if err := os.WriteFile(filepath.Join(root, "logo.png"), []byte{0xff, 0xfe}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := w.Stat(context.Background(), connect.NewRequest(&grpcviewv1.StatRequest{Path: "/logo.png"}))
+	if err != nil || resp.Msg.GetStat().GetSize() != 2 {
+		t.Fatalf("Stat(binary) = %v, %v; want size 2", resp, err)
+	}
+	_, err = w.ReadFile(context.Background(), connect.NewRequest(&grpcviewv1.ReadFileRequest{Path: "/logo.png"}))
+	if fe := fileErrorOf(t, err); fe.GetCode() != grpcviewv1.FileError_CODE_EIO {
+		t.Errorf("ReadFile(binary) = %v, want EIO", fe)
+	}
+}
+
+func TestFilesBrokenManifestStaysReadable(t *testing.T) {
+	root := t.TempDir()
+	w := newFilesWorkspace(t, root)
+	if err := os.WriteFile(filepath.Join(root, store.WorkspaceFileName), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, w, "/"+store.WorkspaceFileName).GetContent(); got != "{" {
+		t.Errorf("ReadFile(broken manifest) = %q", got)
+	}
+	_, err := w.ReadFile(context.Background(), connect.NewRequest(&grpcviewv1.ReadFileRequest{Path: "/.grpcview/modules.json"}))
+	if fe := fileErrorOf(t, err); fe.GetCode() != grpcviewv1.FileError_CODE_EIO {
+		t.Errorf("modules.json with a broken manifest = %v, want EIO", fe)
+	}
+}
+
+// A directory past PATH_MAX lists in its parent but fails os.ReadDir (ENAMETOOLONG), even as root.
+func TestFilesRecursiveWalkSkipsUnreadableDir(t *testing.T) {
+	root := t.TempDir()
+	w := newFilesWorkspace(t, root)
+	writeModuleFile(t, root, "open/y.txt", "y")
+	t.Chdir(root)
+	seg := strings.Repeat("d", 200)
+	for range 4096/len(seg) + 1 {
+		if err := os.Mkdir(seg, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chdir(seg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := readDir(t, w, "/", true)
+	if got[seg] != grpcviewv1.FileType_FILE_TYPE_DIRECTORY || got["open/y.txt"] == 0 {
+		t.Errorf("recursive listing lacks %s… or open/y.txt", seg[:8])
+	}
+}
+
+func TestFilesErrorScrubsStateRoot(t *testing.T) {
+	w := newFilesWorkspace(t, t.TempDir())
+	state := w.store.StateRoot()
+	fe := w.fileError("/x", eio(errors.New("open "+filepath.Join(state, "blobs", "ab")+": boom")))
+	if strings.Contains(fe.GetMessage(), state) {
+		t.Errorf("FileError message %q names the state root", fe.GetMessage())
+	}
+}
