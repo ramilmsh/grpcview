@@ -215,7 +215,7 @@ func slugItem(treeRoot string, slugs []string) (dir string, kind itemKind, ok bo
 var errNotItemFile = errors.New("not a writable item file")
 
 // writeItemFile writes name (body.ts or metadata.ts) in the item slugPath addresses. body.ts needs a
-// request; metadata.ts either kind. Callers must hold c.mu.
+// request; metadata.ts either kind. Callers must hold c.lockWrite.
 func (c *Collection) writeItemFile(slugPath []string, name, src string) error {
 	dir, kind, ok := slugItem(c.treeRoot(), slugPath)
 	if !ok {
@@ -224,5 +224,5 @@ func (c *Collection) writeItemFile(slugPath []string, name, src string) error {
 	if name != MetadataFileName && (name != BodyFileName || kind != kindRequest) {
 		return fmt.Errorf("%w: %q", errNotItemFile, name)
 	}
-	return writeSourceFile(filepath.Join(dir, name), src)
+	return c.tx.writeSource(filepath.Join(dir, name), src)
 }

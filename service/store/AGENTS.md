@@ -28,3 +28,6 @@ bridges the two, so a storage-format change never touches the wire proto.
 
 `ResolvePath` maps a workspace-rooted path (`/` = root) to `{collection, kind, slugPath, file}`
 by slug, never display name; `kind` is #90's write-policy key.
+
+`Subscribe` yields one `Event` per mutation, naming every workspace path it touched (same form);
+workspace writes go through `touched` (`events.go`) under `lockWrite`, state-root writes never do.

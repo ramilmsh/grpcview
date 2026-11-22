@@ -61,6 +61,11 @@ type Store struct {
 	// workspace-wide, so a GC could delete a blob a writer in another collection had written but not yet
 	// indexed.
 	blobMu sync.Mutex
+
+	hub hub
+
+	realRootOnce sync.Once
+	realRootPath string
 }
 
 func New(root, stateRoot string, logger *slog.Logger) *Store {
@@ -72,6 +77,7 @@ func New(root, stateRoot string, logger *slog.Logger) *Store {
 		stateRoot: stateRoot,
 		logger:    logger,
 		colls:     make(map[string]*Collection),
+		hub:       hub{subs: make(map[*subscriber]struct{})},
 	}
 }
 
@@ -122,6 +128,28 @@ func (s *Store) Rename(ctx context.Context, id, newID string) (*Collection, erro
 		return nil, fmt.Errorf("%w: the collection at %q is the workspace root and cannot be moved", ErrInvalidCollectionID, ".")
 	}
 
+	// Under both handles' mu, so the move never interleaves with a write to either address.
+	oldColl, err := s.Open(ctx, oldCleaned)
+	if err != nil {
+		return nil, err
+	}
+	newColl, err := s.Open(ctx, newCleaned)
+	if err != nil {
+		return nil, err
+	}
+	locks := []*Collection{oldColl, newColl}
+	if newColl == oldColl {
+		locks = locks[:1]
+	} else if newColl.key < oldColl.key {
+		locks[0], locks[1] = newColl, oldColl
+	}
+	for _, c := range locks {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
+	t := &touched{s: s}
+	defer t.publish()
+
 	srcAbs := filepath.Join(s.root, oldCleaned)
 	destAbs := filepath.Join(s.root, newCleaned)
 	if !fileExists(filepath.Join(srcAbs, CollectionFileName)) {
@@ -143,10 +171,10 @@ func (s *Store) Rename(ctx context.Context, id, newID string) (*Collection, erro
 		return nil, err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(destAbs), 0o755); err != nil {
+	if err := t.mkdirAll(filepath.Dir(destAbs)); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(srcAbs, destAbs); err != nil {
+	if err := t.rename(srcAbs, destAbs); err != nil {
 		return nil, err
 	}
 
@@ -233,6 +261,8 @@ type Collection struct {
 	logger *slog.Logger
 
 	mu sync.Mutex
+	// tx records what the mutation holding mu writes; nil outside lockWrite.
+	tx *touched
 }
 
 func (c *Collection) Root() string  { return c.root }

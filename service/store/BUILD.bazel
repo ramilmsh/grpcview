@@ -7,6 +7,7 @@ go_library(
         "codec.go",
         "convert.go",
         "discover.go",
+        "events.go",
         "fs.go",
         "layout.go",
         "paths.go",
@@ -32,6 +33,7 @@ go_test(
     name = "store_test",
     srcs = [
         "discover_test.go",
+        "events_test.go",
         "paths_test.go",
         "scripts_test.go",
         "sources_test.go",

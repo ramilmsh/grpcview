@@ -97,12 +97,11 @@ func (c *Collection) Scripts(_ context.Context) ([]*grpcviewv1.Script, error) {
 }
 
 func (c *Collection) Create(_ context.Context, name string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if fileExists(c.collectionFilePath()) {
 		return fmt.Errorf("%w: %q", ErrCollectionExists, c.id)
 	}
-	if err := os.MkdirAll(c.treeRoot(), 0o755); err != nil {
+	if err := c.tx.mkdirAll(c.treeRoot()); err != nil {
 		return err
 	}
 	if name == "" {
@@ -116,8 +115,7 @@ func (c *Collection) Create(_ context.Context, name string) error {
 }
 
 func (c *Collection) SetName(_ context.Context, name string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	col, err := c.readCollection()
 	if errors.Is(err, os.ErrNotExist) {
 		return ErrNotFound
@@ -162,12 +160,12 @@ func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error
 // metadata.ts is seeded empty, as for a request.
 func (c *Collection) CreateFolder(_ context.Context, parent []string, name string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
-		if err := writeMessage(filepath.Join(itemDir, FolderFileName), &grpcviewstorev1.Folder{
+		if err := c.tx.writeMessage(filepath.Join(itemDir, FolderFileName), &grpcviewstorev1.Folder{
 			Meta: &grpcviewstorev1.ItemMeta{Name: name},
 		}); err != nil {
 			return err
 		}
-		return writeSourceFile(metadataFilePath(itemDir), "")
+		return c.tx.writeSource(metadataFilePath(itemDir), "")
 	})
 }
 
@@ -177,23 +175,22 @@ func (c *Collection) CreateFolder(_ context.Context, parent []string, name strin
 // seed would silently break folder-metadata inheritance for every new request.
 func (c *Collection) CreateRequest(_ context.Context, parent []string, name, service, method string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
-		if err := writeMessage(filepath.Join(itemDir, RequestFileName), &grpcviewstorev1.Request{
+		if err := c.tx.writeMessage(filepath.Join(itemDir, RequestFileName), &grpcviewstorev1.Request{
 			Meta:    &grpcviewstorev1.ItemMeta{Name: name},
 			Service: service,
 			Method:  method,
 		}); err != nil {
 			return err
 		}
-		if err := writeSourceFile(requestBodyPath(itemDir), EmptyBody); err != nil {
+		if err := c.tx.writeSource(requestBodyPath(itemDir), EmptyBody); err != nil {
 			return err
 		}
-		return writeSourceFile(metadataFilePath(itemDir), "")
+		return c.tx.writeSource(metadataFilePath(itemDir), "")
 	})
 }
 
 func (c *Collection) createItem(parent []string, name string, write func(itemDir string) error) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -215,7 +212,7 @@ func (c *Collection) createItem(parent []string, name string, write func(itemDir
 		return err
 	}
 	itemDir := filepath.Join(parentDir, slug)
-	if err := os.MkdirAll(itemDir, 0o755); err != nil {
+	if err := c.tx.mkdirAll(itemDir); err != nil {
 		return err
 	}
 	if err := write(itemDir); err != nil {
@@ -225,8 +222,7 @@ func (c *Collection) createItem(parent []string, name string, write func(itemDir
 }
 
 func (c *Collection) UpdateRequest(_ context.Context, parent []string, name string, patch RequestPatch) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -277,12 +273,12 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	}
 
 	if patch.DraftBody != nil {
-		if err := writeSourceFile(requestBodyPath(itemDir), *patch.DraftBody); err != nil {
+		if err := c.tx.writeSource(requestBodyPath(itemDir), *patch.DraftBody); err != nil {
 			return err
 		}
 	}
 	if patch.DraftMetadataScript != nil {
-		if err := writeSourceFile(metadataFilePath(itemDir), *patch.DraftMetadataScript); err != nil {
+		if err := c.tx.writeSource(metadataFilePath(itemDir), *patch.DraftMetadataScript); err != nil {
 			return err
 		}
 	}
@@ -292,12 +288,11 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 	if patch.Name == nil && patch.Service == nil && patch.Method == nil && !patch.SetMiddleware && !patch.SetTarget {
 		return nil
 	}
-	return writeMessage(filepath.Join(itemDir, RequestFileName), dr)
+	return c.tx.writeMessage(filepath.Join(itemDir, RequestFileName), dr)
 }
 
 func (c *Collection) UpdateFolder(_ context.Context, parent []string, name string, patch FolderPatch) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -326,7 +321,7 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 		}
 	}
 	if patch.DraftMetadataScript != nil {
-		if err := writeSourceFile(metadataFilePath(itemDir), *patch.DraftMetadataScript); err != nil {
+		if err := c.tx.writeSource(metadataFilePath(itemDir), *patch.DraftMetadataScript); err != nil {
 			return err
 		}
 	}
@@ -338,7 +333,7 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 		ff.Meta = &grpcviewstorev1.ItemMeta{}
 	}
 	ff.Meta.Name = *patch.Name
-	return writeMessage(filepath.Join(itemDir, FolderFileName), ff)
+	return c.tx.writeMessage(filepath.Join(itemDir, FolderFileName), ff)
 }
 
 func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]string, error) {
@@ -488,8 +483,7 @@ func (c *Collection) AppendHistory(_ context.Context, parent []string, name stri
 }
 
 func (c *Collection) Delete(_ context.Context, parent []string, name string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -504,15 +498,14 @@ func (c *Collection) Delete(_ context.Context, parent []string, name string) err
 	if err != nil {
 		return err
 	}
-	if err := os.RemoveAll(filepath.Join(parentDir, ch.slug)); err != nil {
+	if err := c.tx.removeAll(filepath.Join(parentDir, ch.slug)); err != nil {
 		return err
 	}
 	return c.writeOrder(parentDir, slices.DeleteFunc(base, func(s string) bool { return s == ch.slug }))
 }
 
 func (c *Collection) Move(_ context.Context, parent []string, name string, newParent []string, before *string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -565,7 +558,7 @@ func (c *Collection) Move(_ context.Context, parent []string, name string, newPa
 	}
 	// The directory must move FIRST: "moved, order not" is the half-applied state reconcileOrder
 	// self-heals on the next load.
-	if err := os.Rename(srcDir, filepath.Join(destDir, newSlug)); err != nil {
+	if err := c.tx.rename(srcDir, filepath.Join(destDir, newSlug)); err != nil {
 		return err
 	}
 	if err := c.writeOrder(parentDir, slices.DeleteFunc(srcBase, func(s string) bool { return s == ch.slug })); err != nil {
@@ -595,8 +588,7 @@ type DescriptorState struct {
 // place, chosen by its commit_descriptors flag, which is what makes toggling that flag a move rather
 // than a copy.
 func (c *Collection) PutDescriptorState(_ context.Context, state DescriptorState) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -845,7 +837,7 @@ func (c *Collection) writeOrder(dir string, slugs []string) error {
 		return err
 	}
 	ff.Items = slugs
-	return writeMessage(p, ff)
+	return c.tx.writeMessage(p, ff)
 }
 
 func (c *Collection) reconciledSlugsFrom(dir string, present []childEntry) ([]string, error) {
@@ -882,7 +874,7 @@ func (c *Collection) writeCollection(col *grpcviewstorev1.Collection) error {
 	if col.SchemaVersion == 0 {
 		col.SchemaVersion = schemaVersion
 	}
-	return writeMessage(c.collectionFilePath(), col)
+	return c.tx.writeMessage(c.collectionFilePath(), col)
 }
 
 func (c *Collection) historyFilePath(itemDir string) (string, error) {

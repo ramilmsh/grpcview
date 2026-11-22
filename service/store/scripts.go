@@ -62,8 +62,7 @@ func (c *Collection) readScripts() ([]*grpcviewv1.Script, error) {
 }
 
 func (c *Collection) CreateScript(_ context.Context, scriptPath string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -74,15 +73,14 @@ func (c *Collection) CreateScript(_ context.Context, scriptPath string) error {
 	if fileExists(abs) {
 		return fmt.Errorf("%w: %q", ErrAlreadyExists, scriptPath)
 	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+	if err := c.tx.mkdirAll(filepath.Dir(abs)); err != nil {
 		return err
 	}
-	return writeSourceFile(abs, "")
+	return c.tx.writeSource(abs, "")
 }
 
 func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch ScriptPatch) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -98,7 +96,7 @@ func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch Sc
 	}
 
 	if patch.Source != nil {
-		if err := writeSourceFile(abs, *patch.Source); err != nil {
+		if err := c.tx.writeSource(abs, *patch.Source); err != nil {
 			return err
 		}
 	}
@@ -110,10 +108,10 @@ func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch Sc
 		if fileExists(newAbs) {
 			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.NewPath)
 		}
-		if err := os.MkdirAll(filepath.Dir(newAbs), 0o755); err != nil {
+		if err := c.tx.mkdirAll(filepath.Dir(newAbs)); err != nil {
 			return err
 		}
-		if err := os.Rename(abs, newAbs); err != nil {
+		if err := c.tx.rename(abs, newAbs); err != nil {
 			return err
 		}
 	}
@@ -121,8 +119,7 @@ func (c *Collection) UpdateScript(_ context.Context, scriptPath string, patch Sc
 }
 
 func (c *Collection) DeleteScript(_ context.Context, scriptPath string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.lockWrite()()
 	if err := c.ensureExists(); err != nil {
 		return err
 	}
@@ -133,7 +130,7 @@ func (c *Collection) DeleteScript(_ context.Context, scriptPath string) error {
 	if !fileExists(abs) {
 		return nil
 	}
-	if err := os.Remove(abs); err != nil {
+	if err := c.tx.remove(abs); err != nil {
 		return err
 	}
 	return c.pruneEmptyScriptDirs(filepath.Dir(abs))
@@ -156,7 +153,7 @@ func (c *Collection) pruneEmptyScriptDirs(dir string) error {
 		if len(entries) > 0 {
 			return nil
 		}
-		if err := os.Remove(dir); err != nil {
+		if err := c.tx.remove(dir); err != nil {
 			return err
 		}
 		dir = filepath.Dir(dir)
