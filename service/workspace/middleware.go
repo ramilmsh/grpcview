@@ -16,6 +16,7 @@ import (
 	grpcviewv1 "codeberg.org/ramilmsh/grpcview/grpcview/v1"
 	"codeberg.org/ramilmsh/grpcview/service/scripting"
 	"codeberg.org/ramilmsh/grpcview/service/store"
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 func (w Workspace) applyRequestMiddleware(ctx context.Context, workspaceName string, path []string, itemName, service string, target *grpcviewv1.Server, bodies []string, md *structpb.Struct, params map[string]any) ([]string, *structpb.Struct, error) {
@@ -108,36 +109,28 @@ func (w Workspace) loadAttachedMiddleware(ctx context.Context, workspaceName str
 }
 
 // resolveMiddlewareSpecifier mirrors decisions.md §2's two sigils: `@/` resolves against the
-// workspace root, `#/` against the collection root, each guarded against escaping its root.
+// workspace root, `#/` against the collection root, each confined to its root (wsroot.Confine).
 func resolveMiddlewareSpecifier(specifier, workspaceRoot, collectionRoot string) (string, error) {
+	var root, which string
 	switch {
 	case strings.HasPrefix(specifier, "@/"):
-		if workspaceRoot == "" {
-			return "", specifierError(specifier, "the workspace root is not configured")
-		}
-		abs := filepath.Join(workspaceRoot, filepath.FromSlash(strings.TrimPrefix(specifier, "@/")))
-		if !withinMiddlewareRoot(workspaceRoot, abs) {
-			return "", specifierError(specifier, "resolves outside the workspace")
-		}
-		return abs, nil
+		root, which = workspaceRoot, "workspace"
 	case strings.HasPrefix(specifier, "#/"):
-		abs := filepath.Join(collectionRoot, filepath.FromSlash(strings.TrimPrefix(specifier, "#/")))
-		if !withinMiddlewareRoot(collectionRoot, abs) {
-			return "", specifierError(specifier, "resolves outside the collection")
-		}
-		return abs, nil
+		root, which = collectionRoot, "collection"
 	default:
 		return "", specifierError(specifier, `must start with "@/" or "#/"`)
 	}
-}
-
-// withinMiddlewareRoot mirrors service/scripting/bundler.go's containment guard.
-func withinMiddlewareRoot(dir, path string) bool {
-	rel, err := filepath.Rel(dir, path)
-	if err != nil {
-		return false
+	if root == "" {
+		return "", specifierError(specifier, "the "+which+" root is not configured")
 	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	real, err := wsroot.Confine(root, filepath.Join(root, filepath.FromSlash(specifier[2:])))
+	if errors.Is(err, wsroot.ErrEscapes) {
+		return "", specifierError(specifier, "resolves outside the "+which)
+	}
+	if err != nil {
+		return "", specifierError(specifier, err.Error())
+	}
+	return real, nil
 }
 
 func loadMiddlewareSource(specifier, workspaceRoot, collectionRoot string) (string, error) {

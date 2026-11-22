@@ -19,6 +19,7 @@ go_library(
         "//grpcview/store/v1:grpcviewstorev1_go_proto",
         "//grpcview/v1:grpcviewv1_go_proto",
         "//service/bazelbuild",
+        "//service/wsroot",
         "@com_github_go_git_go_git_v5//plumbing/format/gitignore",
         "@org_golang_google_protobuf//encoding/protojson",
         "@org_golang_google_protobuf//proto",

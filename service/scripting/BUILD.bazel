@@ -39,6 +39,7 @@ go_library(
     importpath = "codeberg.org/ramilmsh/grpcview/service/scripting",
     visibility = ["//visibility:public"],
     deps = [
+        "//service/wsroot",
         "@com_github_evanw_esbuild//pkg/api",
         "@com_github_tetratelabs_wazero//:wazero",
         "@com_github_tetratelabs_wazero//api",
