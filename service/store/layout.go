@@ -15,12 +15,12 @@ import (
 const (
 	WorkspaceFileName  = "grpcview.work.json"
 	CollectionFileName = "grpcview.json"
-	folderFileName     = "folder.json"
 
-	// RequestFileName, BodyFileName and MetadataFileName are exported for service/workspace's
-	// ListWorkspaceModules walk, which excludes a request's body.ts/metadata.ts from the
-	// module list by checking for the sibling request.json (the same reason
-	// NodeModulesDirName/BazelSymlinkPrefix below are exported).
+	// FolderFileName, RequestFileName, BodyFileName and MetadataFileName are exported for
+	// service/workspace's ListWorkspaceModules walk, which excludes a request's
+	// body.ts/metadata.ts and a folder's metadata.ts from the module list by checking for the
+	// sibling manifest (the same reason NodeModulesDirName/BazelSymlinkPrefix below are exported).
+	FolderFileName   = "folder.json"
 	RequestFileName  = "request.json"
 	BodyFileName     = "body.ts"
 	MetadataFileName = "metadata.ts"
@@ -81,7 +81,7 @@ type slugNamed interface {
 
 var reservedSlugs = map[string]bool{
 	CollectionFileName: true,
-	folderFileName:     true,
+	FolderFileName:     true,
 	RequestFileName:    true,
 	BodyFileName:       true,
 	MetadataFileName:   true,

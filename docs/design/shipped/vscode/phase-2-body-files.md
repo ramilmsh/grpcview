@@ -15,7 +15,8 @@ differently, and each is a decision rather than an omission:
   read on every ancestor walk — the same second-read cost the "Watch out" section
   forbids for `readChildren`. The cost is that one authoring surface persists two ways
   until someone budgets that walk; §Settled's "Metadata splits too" holds for *request*
-  metadata only.
+  metadata only. **Reversed (#88):** folder metadata is now `metadata.ts` beside
+  `folder.json`, read by `FolderMetadataChain` and the wire walk, not by `readChildren`.
 - **Layer 4's delta was only the file name.** Wrap-unless-default-export → evaluate →
   `protojson` unmarshal already shipped with the body contract; what this phase added is
   `Collection.ResolveRequestFiles` and the store-root-relative path threaded into the

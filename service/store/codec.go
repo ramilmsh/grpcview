@@ -49,7 +49,8 @@ func readMessage(path string, m proto.Message) error {
 
 func requestBodyPath(itemDir string) string { return filepath.Join(itemDir, BodyFileName) }
 
-func requestMetadataPath(itemDir string) string { return filepath.Join(itemDir, MetadataFileName) }
+// Request and folder directories alike keep their metadata script here.
+func metadataFilePath(itemDir string) string { return filepath.Join(itemDir, MetadataFileName) }
 
 // An absent file is legal: the request-body contract reads it as EmptyBody.
 func readSourceFile(path string) (string, error) {
@@ -74,12 +75,20 @@ func writeSourceFile(path, src string) error {
 	return writeFileAtomic(path, data, 0o644)
 }
 
-// The loud hard break for the request.json -> body.ts/metadata.ts migration: unmarshalOpts
-// discards unknown fields, so a stale request.json with draftBody/draftMetadataScript would
-// otherwise load "successfully" with an empty body and the next write would silently drop
-// it. Checked as top-level JSON keys, not a substring scan: a request body legitimately
-// contains the string "draftBody" inside its own payload.
+// The loud hard break for the move of scripts out of request.json/folder.json into sibling
+// body.ts/metadata.ts files: unmarshalOpts discards unknown fields, so a stale key would
+// otherwise load "successfully" empty and the next write would silently drop it. Checked as
+// top-level JSON keys, not a substring scan: a request body legitimately contains the string
+// "draftBody" inside its own payload.
 func readRequestMessage(path string, rf *grpcviewstorev1.Request) error {
+	return readManifest(path, rf, "draftBody", "draft_body", "draftMetadataScript", "draft_metadata_script")
+}
+
+func readFolderMessage(path string, ff *grpcviewstorev1.Folder) error {
+	return readManifest(path, ff, "draftMetadataScript", "draft_metadata_script")
+}
+
+func readManifest(path string, m proto.Message, stale ...string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -88,16 +97,16 @@ func readRequestMessage(path string, rf *grpcviewstorev1.Request) error {
 	if err := json.Unmarshal(data, &top); err != nil {
 		return fmt.Errorf("unmarshal %s: %w", path, err)
 	}
-	for _, stale := range []string{"draftBody", "draft_body", "draftMetadataScript", "draft_metadata_script"} {
-		if _, ok := top[stale]; ok {
+	for _, key := range stale {
+		if _, ok := top[key]; ok {
 			return fmt.Errorf(
 				"%s: stale key %q — request bodies and metadata scripts now live in sibling %s / %s files; "+
 					"move the value into the matching file in this directory and delete this key",
-				path, stale, BodyFileName, MetadataFileName,
+				path, key, BodyFileName, MetadataFileName,
 			)
 		}
 	}
-	if err := unmarshalOpts.Unmarshal(data, rf); err != nil {
+	if err := unmarshalOpts.Unmarshal(data, m); err != nil {
 		return fmt.Errorf("unmarshal %s: %w", path, err)
 	}
 	return nil

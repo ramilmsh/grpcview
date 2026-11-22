@@ -86,6 +86,11 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 				return nil
 			}
 		}
+		if name == store.MetadataFileName {
+			if _, err := os.Stat(filepath.Join(filepath.Dir(path), store.FolderFileName)); err == nil {
+				return nil
+			}
+		}
 
 		info, err := d.Info()
 		if err != nil {

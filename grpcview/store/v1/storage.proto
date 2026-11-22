@@ -54,14 +54,13 @@ message Collection {
   repeated DescriptorSource sources = 4;
 }
 
-// folder.json inside a (non-root) folder directory.
+// folder.json inside a (non-root) folder directory. The metadata script is NOT here:
+// it is the sibling metadata.ts, as for a request.
 message Folder {
   // This folder's display name and stable slug.
   ItemMeta meta = 1;
   // Ordered child slugs.
   repeated string items = 2;
-  // TypeScript module feeding the gv.metadata.inherit() chain; inline UTF-8.
-  string draft_metadata_script = 3;
 }
 
 // request.json inside a request directory. The body and the metadata script are
