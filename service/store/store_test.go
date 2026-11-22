@@ -131,7 +131,7 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 		t.Errorf("root items = %v, want [users]", col.GetItems())
 	}
 	ff := &grpcviewstorev1.Folder{}
-	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	mustRead(t, filepath.Join(tree, "users", FolderFileName), ff)
 	if len(ff.GetItems()) != 1 || ff.GetItems()[0] != "get-user" {
 		t.Errorf("Users folder items = %v, want [get-user]", ff.GetItems())
 	}
@@ -497,7 +497,7 @@ func TestMoveSlugCollision(t *testing.T) {
 		t.Errorf("Dst after move = %v, want [Get User, get user]", got)
 	}
 	ff := &grpcviewstorev1.Folder{}
-	mustRead(t, filepath.Join(coll.Root(), treeDir, "dst", folderFileName), ff)
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "dst", FolderFileName), ff)
 	if got := ff.GetItems(); len(got) != 2 || got[0] != "get-user" || got[1] != "get-user-2" {
 		t.Errorf("Dst slug order = %v, want [get-user get-user-2]", got)
 	}
@@ -1225,9 +1225,18 @@ func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
 	if err := coll.CreateFolder(ctx, []string{"a"}, "b"); err != nil {
 		t.Fatalf("CreateFolder a/b: %v", err)
 	}
+	tree := filepath.Join(coll.Root(), treeDir)
+	if data, err := os.ReadFile(filepath.Join(tree, "a", MetadataFileName)); err != nil || len(data) != 0 {
+		t.Fatalf("CreateFolder metadata.ts = %q (err %v), want a zero-byte file", data, err)
+	}
+	folderJSON := filepath.Join(tree, "a", FolderFileName)
+	manifest, err := os.ReadFile(folderJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	scriptA := "export default () => ({ ...inherit(), fromA: ['1'] })"
-	scriptB := "export default () => ({ ...inherit(), fromB: ['2'] })"
+	scriptA := "export default () => ({ ...inherit(), fromA: ['1'] })\n"
+	scriptB := "export default () => ({ ...inherit(), fromB: ['2'] })\n"
 	if err := coll.UpdateFolder(ctx, nil, "a", FolderPatch{DraftMetadataScript: &scriptA}); err != nil {
 		t.Fatalf("UpdateFolder a: %v", err)
 	}
@@ -1251,15 +1260,14 @@ func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
 		t.Errorf("folder a/b script = %q, want %q", got, scriptB)
 	}
 
-	tree := filepath.Join(coll.Root(), treeDir)
-	ff := &grpcviewstorev1.Folder{}
-	mustRead(t, filepath.Join(tree, "a", folderFileName), ff)
-	if ff.GetDraftMetadataScript() != scriptA {
-		t.Errorf("a/folder.json draftMetadataScript = %q, want %q", ff.GetDraftMetadataScript(), scriptA)
+	if got := mustReadSource(t, filepath.Join(tree, "a", MetadataFileName)); got != scriptA {
+		t.Errorf("a/metadata.ts = %q, want %q", got, scriptA)
 	}
-	mustRead(t, filepath.Join(tree, "a", "b", folderFileName), ff)
-	if ff.GetDraftMetadataScript() != scriptB {
-		t.Errorf("a/b/folder.json draftMetadataScript = %q, want %q", ff.GetDraftMetadataScript(), scriptB)
+	if got := mustReadSource(t, filepath.Join(tree, "a", "b", MetadataFileName)); got != scriptB {
+		t.Errorf("a/b/metadata.ts = %q, want %q", got, scriptB)
+	}
+	if after, err := os.ReadFile(folderJSON); err != nil || !bytes.Equal(manifest, after) {
+		t.Errorf("script-only UpdateFolder rewrote folder.json:\nbefore %s\nafter  %s", manifest, after)
 	}
 
 	chain, err := coll.FolderMetadataChain(ctx, []string{"a", "b"})
@@ -1339,7 +1347,7 @@ func TestUpdateFolderRename(t *testing.T) {
 		t.Errorf("slug dir should be stable across rename: %v", err)
 	}
 	ff := &grpcviewstorev1.Folder{}
-	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	mustRead(t, filepath.Join(tree, "users", FolderFileName), ff)
 	if ff.GetMeta().GetName() != newName {
 		t.Errorf("folder.json meta.name = %q, want %q", ff.GetMeta().GetName(), newName)
 	}
@@ -1369,7 +1377,7 @@ func TestUpdateFolderRename(t *testing.T) {
 			t.Errorf("rename onto %q = %v, want ErrAlreadyExists", collide, err)
 		}
 	}
-	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
+	mustRead(t, filepath.Join(tree, "users", FolderFileName), ff)
 	if ff.GetMeta().GetName() != newName {
 		t.Errorf("failed rename must not mutate meta.name, got %q", ff.GetMeta().GetName())
 	}
@@ -1378,9 +1386,9 @@ func TestUpdateFolderRename(t *testing.T) {
 	if err := coll.UpdateFolder(ctx, nil, newName, FolderPatch{Name: &newName, DraftMetadataScript: &script}); err != nil {
 		t.Fatalf("no-op rename + script patch: %v", err)
 	}
-	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
-	if ff.GetMeta().GetName() != newName || ff.GetDraftMetadataScript() != script {
-		t.Errorf("after no-op rename + script: name=%q script=%q", ff.GetMeta().GetName(), ff.GetDraftMetadataScript())
+	mustRead(t, filepath.Join(tree, "users", FolderFileName), ff)
+	if got := mustReadSource(t, filepath.Join(tree, "users", MetadataFileName)); ff.GetMeta().GetName() != newName || got != script+"\n" {
+		t.Errorf("after no-op rename + script: name=%q script=%q", ff.GetMeta().GetName(), got)
 	}
 
 	final := "Humans"
@@ -1388,9 +1396,9 @@ func TestUpdateFolderRename(t *testing.T) {
 	if err := coll.UpdateFolder(ctx, nil, newName, FolderPatch{Name: &final, DraftMetadataScript: &script2}); err != nil {
 		t.Fatalf("rename + script patch: %v", err)
 	}
-	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
-	if ff.GetMeta().GetName() != final || ff.GetDraftMetadataScript() != script2 {
-		t.Errorf("after rename + script: name=%q script=%q", ff.GetMeta().GetName(), ff.GetDraftMetadataScript())
+	mustRead(t, filepath.Join(tree, "users", FolderFileName), ff)
+	if got := mustReadSource(t, filepath.Join(tree, "users", MetadataFileName)); ff.GetMeta().GetName() != final || got != script2+"\n" {
+		t.Errorf("after rename + script: name=%q script=%q", ff.GetMeta().GetName(), got)
 	}
 }
 
@@ -1791,6 +1799,37 @@ func TestStaleRequestJSONFailsLoud(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), BodyFileName) {
 		t.Errorf("error = %v, want it to name the fix (%q)", err, BodyFileName)
+	}
+}
+
+func TestStaleFolderJSONFailsLoud(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Users"); err != nil {
+		t.Fatalf("CreateFolder: %v", err)
+	}
+	p := filepath.Join(coll.Root(), treeDir, "users", FolderFileName)
+	stale := []byte(`{
+  "meta": {"name": "Users"},
+  "items": [],
+  "draftMetadataScript": "export default () => ({})"
+}
+`)
+	if err := os.WriteFile(p, stale, 0o644); err != nil {
+		t.Fatalf("write stale folder.json: %v", err)
+	}
+
+	_, err := coll.Load(ctx)
+	if err == nil {
+		t.Fatal("expected Load to fail loudly on a stale folder.json carrying draftMetadataScript")
+	}
+	if !strings.Contains(err.Error(), p) || !strings.Contains(err.Error(), MetadataFileName) {
+		t.Errorf("error = %v, want it to name the file %q and the fix (%q)", err, p, MetadataFileName)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get", "s.S", "Unary"); err == nil {
+		t.Error("CreateRequest under a stale folder.json succeeded; writeOrder would drop the script")
+	}
+	if got, _ := os.ReadFile(p); !bytes.Equal(got, stale) {
+		t.Errorf("stale folder.json was rewritten:\n%s", got)
 	}
 }
 

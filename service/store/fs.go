@@ -159,11 +159,15 @@ func (c *Collection) seededSources() ([]*grpcviewstorev1.DescriptorSource, error
 	return out, nil
 }
 
+// metadata.ts is seeded empty, as for a request.
 func (c *Collection) CreateFolder(_ context.Context, parent []string, name string) error {
 	return c.createItem(parent, name, func(itemDir string) error {
-		return writeMessage(filepath.Join(itemDir, folderFileName), &grpcviewstorev1.Folder{
+		if err := writeMessage(filepath.Join(itemDir, FolderFileName), &grpcviewstorev1.Folder{
 			Meta: &grpcviewstorev1.ItemMeta{Name: name},
-		})
+		}); err != nil {
+			return err
+		}
+		return writeSourceFile(metadataFilePath(itemDir), "")
 	})
 }
 
@@ -183,7 +187,7 @@ func (c *Collection) CreateRequest(_ context.Context, parent []string, name, ser
 		if err := writeSourceFile(requestBodyPath(itemDir), EmptyBody); err != nil {
 			return err
 		}
-		return writeSourceFile(requestMetadataPath(itemDir), "")
+		return writeSourceFile(metadataFilePath(itemDir), "")
 	})
 }
 
@@ -278,7 +282,7 @@ func (c *Collection) UpdateRequest(_ context.Context, parent []string, name stri
 		}
 	}
 	if patch.DraftMetadataScript != nil {
-		if err := writeSourceFile(requestMetadataPath(itemDir), *patch.DraftMetadataScript); err != nil {
+		if err := writeSourceFile(metadataFilePath(itemDir), *patch.DraftMetadataScript); err != nil {
 			return err
 		}
 	}
@@ -313,24 +317,28 @@ func (c *Collection) UpdateFolder(_ context.Context, parent []string, name strin
 		return fmt.Errorf("%w: %q", ErrNotAFolder, name)
 	}
 
-	if patch.Name == nil && patch.DraftMetadataScript == nil {
-		return nil
-	}
-	p := filepath.Join(parentDir, ch.slug, folderFileName)
-	ff := ch.folder
-	if patch.Name != nil && *patch.Name != name {
+	itemDir := filepath.Join(parentDir, ch.slug)
+	// Validate the rename before any write, as UpdateRequest does.
+	rename := patch.Name != nil && *patch.Name != name
+	if rename {
 		if _, exists := findByName(present, *patch.Name); exists {
 			return fmt.Errorf("%w: %q", ErrAlreadyExists, *patch.Name)
 		}
-		if ff.Meta == nil {
-			ff.Meta = &grpcviewstorev1.ItemMeta{}
-		}
-		ff.Meta.Name = *patch.Name
 	}
 	if patch.DraftMetadataScript != nil {
-		ff.DraftMetadataScript = *patch.DraftMetadataScript
+		if err := writeSourceFile(metadataFilePath(itemDir), *patch.DraftMetadataScript); err != nil {
+			return err
+		}
 	}
-	return writeMessage(p, ff)
+	if !rename {
+		return nil
+	}
+	ff := ch.folder
+	if ff.Meta == nil {
+		ff.Meta = &grpcviewstorev1.ItemMeta{}
+	}
+	ff.Meta.Name = *patch.Name
+	return writeMessage(filepath.Join(itemDir, FolderFileName), ff)
 }
 
 func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]string, error) {
@@ -353,8 +361,12 @@ func (c *Collection) FolderMetadataChain(_ context.Context, path []string) ([]st
 		if ch.kind != kindFolder {
 			return nil, fmt.Errorf("%w: %q", ErrNotAFolder, name)
 		}
-		scripts = append(scripts, ch.folder.GetDraftMetadataScript())
 		dir = filepath.Join(dir, ch.slug)
+		script, err := readSourceFile(metadataFilePath(dir))
+		if err != nil {
+			return nil, err
+		}
+		scripts = append(scripts, script)
 	}
 	return scripts, nil
 }
@@ -411,7 +423,7 @@ func (c *Collection) ResolveRequestFiles(_ context.Context, parent []string, nam
 	if err != nil {
 		return nil, "", "", err
 	}
-	metadataScript, err := readSourceFile(requestMetadataPath(itemDir))
+	metadataScript, err := readSourceFile(metadataFilePath(itemDir))
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -419,7 +431,7 @@ func (c *Collection) ResolveRequestFiles(_ context.Context, parent []string, nam
 	if err != nil {
 		return nil, "", "", err
 	}
-	metadataPath, err = c.storeRelPath(requestMetadataPath(itemDir))
+	metadataPath, err = c.storeRelPath(metadataFilePath(itemDir))
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -718,9 +730,9 @@ func (c *Collection) readChildren(dir string) ([]childEntry, error) {
 		}
 		sub := filepath.Join(dir, slug)
 		switch {
-		case fileExists(filepath.Join(sub, folderFileName)):
+		case fileExists(filepath.Join(sub, FolderFileName)):
 			ff := &grpcviewstorev1.Folder{}
-			if err := readMessage(filepath.Join(sub, folderFileName), ff); err != nil {
+			if err := readFolderMessage(filepath.Join(sub, FolderFileName), ff); err != nil {
 				return nil, err
 			}
 			children = append(children, childEntry{slug: slug, name: cmp.Or(ff.GetMeta().GetName(), slug), kind: kindFolder, folder: ff})
@@ -768,12 +780,16 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 		if err != nil {
 			return nil, err
 		}
+		metadataScript, err := readSourceFile(metadataFilePath(dir))
+		if err != nil {
+			return nil, err
+		}
 		return &grpcviewv1.Item{
 			Name: ch.name,
 			Slug: ch.slug,
 			Content: &grpcviewv1.Item_Folder{Folder: &grpcviewv1.Folder{
 				Items:               children,
-				DraftMetadataScript: ch.folder.GetDraftMetadataScript(),
+				DraftMetadataScript: metadataScript,
 			}},
 		}, nil
 	case kindRequest:
@@ -781,7 +797,7 @@ func (c *Collection) readItem(parentDir string, ch childEntry) (*grpcviewv1.Item
 		if err != nil {
 			return nil, err
 		}
-		metadataScript, err := readSourceFile(requestMetadataPath(dir))
+		metadataScript, err := readSourceFile(metadataFilePath(dir))
 		if err != nil {
 			return nil, err
 		}
@@ -805,7 +821,7 @@ func (c *Collection) readOrder(dir string) ([]string, error) {
 		return col.GetItems(), nil
 	}
 	ff := &grpcviewstorev1.Folder{}
-	if err := readMessage(filepath.Join(dir, folderFileName), ff); err != nil {
+	if err := readFolderMessage(filepath.Join(dir, FolderFileName), ff); err != nil {
 		return nil, err
 	}
 	return ff.GetItems(), nil
@@ -823,9 +839,9 @@ func (c *Collection) writeOrder(dir string, slugs []string) error {
 		col.Items = slugs
 		return c.writeCollection(col)
 	}
-	p := filepath.Join(dir, folderFileName)
+	p := filepath.Join(dir, FolderFileName)
 	ff := &grpcviewstorev1.Folder{}
-	if err := readMessage(p, ff); err != nil {
+	if err := readFolderMessage(p, ff); err != nil {
 		return err
 	}
 	ff.Items = slugs

@@ -129,3 +129,18 @@ func TestListWorkspaceModulesSkipsOversizedFiles(t *testing.T) {
 		t.Fatalf("paths = %v, want only keep.ts (an over-size file must be dropped)", got)
 	}
 }
+
+func TestListWorkspaceModulesSkipsItemScripts(t *testing.T) {
+	root := t.TempDir()
+	writeModuleFile(t, root, "keep.ts", "export const k = 1")
+	writeModuleFile(t, root, "req/request.json", "{}")
+	writeModuleFile(t, root, "req/body.ts", "{}")
+	writeModuleFile(t, root, "req/metadata.ts", "export default () => ({})")
+	writeModuleFile(t, root, "dir/folder.json", "{}")
+	writeModuleFile(t, root, "dir/metadata.ts", "export default () => ({})")
+
+	got := modulePaths(listWorkspaceModules(t, root))
+	if len(got) != 1 || got[0] != "keep.ts" {
+		t.Fatalf("paths = %v, want only keep.ts (request and folder scripts are not modules)", got)
+	}
+}

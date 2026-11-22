@@ -431,7 +431,7 @@ func TestUpdateFolderRPC(t *testing.T) {
 		t.Fatalf("CreateRequest: %v", err)
 	}
 
-	script := "import { inherit } from \"grpcview:metadata\";\nexport default () => ({ ...inherit(), team: ['users'] })"
+	script := "import { inherit } from \"grpcview:metadata\";\nexport default () => ({ ...inherit(), team: ['users'] })\n"
 	updResp, err := w.UpdateFolder(ctx, connect.NewRequest(&grpcviewv1.UpdateFolderRequest{
 		Collection:          testWorkspace,
 		ItemName:            "Users",
