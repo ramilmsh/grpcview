@@ -13,7 +13,7 @@ this doc offered a choice, what shipped was: #1 option 2 (clear `history` on eve
 not document. #4 needed one thing this doc did not anticipate — an isolated run has *no* resolve
 cache, so `--isolated` builds the bazel source first, and it moves `GRPCVIEW_CONFIG_DIR` rather
 than `HOME`, because moving `HOME` also moves the output base of that build. The behaviour now
-lives in `AGENTS.md`; what is kept below is the measurement and the reasoning.
+lives in the code; what is kept below is the measurement and the reasoning.
 
 ---
 
@@ -40,7 +40,7 @@ a payload problem.
 **Suggested shape**, in preference order:
 
 1. **A mutation should not return the collection at all.** The CLI already decided this:
-   "a mutation prints nothing and exits 0 — silence is success" (`AGENTS.md` §The CLI).
+   "a mutation prints nothing and exits 0 — silence is success" (`service/cli/`).
    Return the mutated node (the `Script`, the `Item`) or an empty response. This is an RPC
    contract change, so it touches the UI's query invalidation too — check whether
    `ui/src/features/workspace/` relies on the returned collection to reseed its cache
@@ -103,7 +103,7 @@ middleware (stamp a trace id, sign a request) is exactly what a generator is for
 
 **Decide, then write it down**: either compose generators into the middleware path too
 (`compileMiddleware` would need the same `buildEntryBundleComposed` treatment
-`compileRequestBody` gets), or state the restriction in `AGENTS.md` §"The `gv` global" and in
+`compileRequestBody` gets), or state the restriction in
 the middleware editor's placeholder text.
 
 ---
@@ -150,6 +150,6 @@ but requests (`fs.go:245`) and folders (`fs.go:305`) do exactly the same thing: 
 the on-disk identity and the display name is data**. Changing it for scripts alone would break
 that invariant and churn git history on every rename.
 
-What is missing is one line in `AGENTS.md` §"The workspace and its collections" saying so —
+What is missing is one line saying so —
 an agent that creates `requestId` and then sees `scripts/requestid/` has no way to tell
 whether the drift is intentional.

@@ -63,7 +63,7 @@ environment where an equivalent exists. The longer-term goal they serve is emula
 enough of the Node/browser environment to run third-party libraries unmodified; a
 library that calls `console.log` must not need a grpcview-specific import.
 
-So the claim to write into AGENTS.md is precisely: **no grpcview-specific identifier is
+So the claim is precisely: **no grpcview-specific identifier is
 global.** Not "nothing is global" — `console`, `fetch`, and the internal `__grpcview_*`
 host bridges all are.
 

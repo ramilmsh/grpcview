@@ -1,24 +1,23 @@
 package workspace
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 // Resolves p to a file inside root and returns (the path to READ, the root-relative path to RECORD).
 // Every path that reads a user-supplied file goes through it.
 //
-// The first return is SYMLINK-RESOLVED deliberately: confinement is proved about the resolved path, so
-// returning the unresolved spelling would leave a check-then-read window in which a link inside root
-// is re-pointed out of it. The second is the recipe a manifest records — never a path to read, because
-// it is re-resolved and re-checked every time it is used: a RECORDED path is wire input again at
-// refresh time, not only at add time.
-//
-// Three ways out of root are refused: an absolute path not under root; any ".." surviving Clean; and a
-// SYMLINK escape, which the two textual checks miss. root itself is resolved first, so a workspace
-// reached through a symlink is legal.
+// The first return is SYMLINK-RESOLVED (wsroot.Confine) deliberately: confinement is proved about the
+// resolved path, so returning the unresolved spelling would leave a check-then-read window in which a
+// link inside root is re-pointed out of it. The second is the recipe a manifest records — never a path
+// to read, because it is re-resolved and re-checked every time it is used: a RECORDED path is wire
+// input again at refresh time, not only at add time.
 func resolveWorkspaceFile(root, p string) (real string, rel string, err error) {
 	real, rel, isDir, err := resolveWorkspacePath(root, p)
 	if err != nil {
@@ -37,38 +36,48 @@ func resolveWorkspacePath(root, p string) (real string, rel string, isDir bool, 
 	}
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return "", "", false, fmt.Errorf("failed to resolve workspace root %q: %w", root, err)
+		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
 	}
-	absRoot = filepath.Clean(absRoot)
-
 	abs := p
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(absRoot, abs)
 	}
-	abs = filepath.Clean(abs)
-
-	rel, err = containedIn(absRoot, abs)
-	if err != nil {
-		return "", "", false, fmt.Errorf("%q is outside the workspace %s: sources have to live in the workspace", p, absRoot)
+	abs = anchorAt(absRoot, filepath.Clean(abs))
+	real, err = wsroot.Confine(absRoot, abs)
+	if errors.Is(err, wsroot.ErrEscapes) {
+		return "", "", false, fmt.Errorf("%q is outside the workspace: sources have to live in the workspace", p)
 	}
-
-	realRoot, err := filepath.EvalSymlinks(absRoot)
-	if err != nil {
-		return "", "", false, fmt.Errorf("failed to resolve workspace root %q: %w", absRoot, err)
-	}
-	realPath, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
 	}
-	if _, err := containedIn(realRoot, realPath); err != nil {
-		return "", "", false, fmt.Errorf("%q resolves through a symlink to %s, outside the workspace %s", p, realPath, absRoot)
-	}
-
-	info, err := os.Stat(realPath)
+	info, err := os.Stat(real)
 	if err != nil {
+		return "", "", false, fmt.Errorf("cannot read %q: no such file or directory", p)
+	}
+	// Confine proved lexical containment, so the recorded recipe is root-relative.
+	if rel, err = filepath.Rel(absRoot, abs); err != nil {
 		return "", "", false, fmt.Errorf("cannot read %q: %w", p, err)
 	}
-	return realPath, filepath.ToSlash(rel), info.IsDir(), nil
+	return real, filepath.ToSlash(rel), info.IsDir(), nil
+}
+
+// An absolute path may spell root through a symlink (the CLI sends its cwd's spelling; the store's root
+// is canonical): re-anchor it at root from the ancestor that IS root, keeping the spelling below it.
+func anchorAt(root, abs string) string {
+	if wsroot.Within(root, abs) {
+		return abs
+	}
+	canonRoot := wsroot.Canonical(root)
+	for dir := abs; filepath.Dir(dir) != dir; dir = filepath.Dir(dir) {
+		if wsroot.Canonical(dir) != canonRoot {
+			continue
+		}
+		if rel, err := filepath.Rel(dir, abs); err == nil {
+			return filepath.Join(root, rel)
+		}
+		break
+	}
+	return abs
 }
 
 // The weaker cousin of resolveWorkspaceFile, for the one input that legitimately sits ABOVE root
@@ -84,23 +93,8 @@ func relatedToRoot(root, dir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve %q: %w", dir, err)
 	}
-	absRoot, absDir = filepath.Clean(absRoot), filepath.Clean(absDir)
-	if _, err := containedIn(absRoot, absDir); err == nil {
-		return nil
-	}
-	if _, err := containedIn(absDir, absRoot); err == nil {
+	if wsroot.Within(absRoot, absDir) || wsroot.Within(absDir, absRoot) {
 		return nil
 	}
 	return fmt.Errorf("%s is neither inside %s nor an ancestor of it", absDir, absRoot)
-}
-
-func containedIn(root, path string) (string, error) {
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s escapes %s", path, root)
-	}
-	return rel, nil
 }

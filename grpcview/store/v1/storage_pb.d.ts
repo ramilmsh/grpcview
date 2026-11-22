@@ -162,7 +162,8 @@ export declare type Collection = Message<"grpcview.store.v1.Collection"> & {
 export declare const CollectionSchema: GenMessage<Collection>;
 
 /**
- * folder.json inside a (non-root) folder directory.
+ * folder.json inside a (non-root) folder directory. The metadata script is NOT here:
+ * it is the sibling metadata.ts, as for a request.
  *
  * @generated from message grpcview.store.v1.Folder
  */
@@ -180,13 +181,6 @@ export declare type Folder = Message<"grpcview.store.v1.Folder"> & {
    * @generated from field: repeated string items = 2;
    */
   items: string[];
-
-  /**
-   * TypeScript module feeding the gv.metadata.inherit() chain; inline UTF-8.
-   *
-   * @generated from field: string draft_metadata_script = 3;
-   */
-  draftMetadataScript: string;
 };
 
 /**

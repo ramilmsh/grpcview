@@ -234,10 +234,10 @@ func (c *Collection) writeDescriptorSidecar(r *grpcviewstorev1.ResolvedSource) e
 	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, data) {
 		return nil
 	}
-	if err := os.MkdirAll(c.descriptorSidecarsRoot(), 0o755); err != nil {
+	if err := c.tx.mkdirAll(c.descriptorSidecarsRoot()); err != nil {
 		return err
 	}
-	return writeFileAtomic(path, data, 0o644)
+	return c.tx.writeFile(path, data)
 }
 
 // An unparseable sidecar is nil, not an error: the source reads as unresolved and a refresh rewrites
@@ -272,14 +272,14 @@ func (c *Collection) pruneDescriptorSidecars(keep map[string]bool) error {
 			remaining++
 			continue
 		}
-		if err := os.Remove(filepath.Join(root, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := c.tx.remove(filepath.Join(root, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
 	if remaining > 0 {
 		return nil
 	}
-	if err := os.Remove(root); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := c.tx.remove(root); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

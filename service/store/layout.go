@@ -15,15 +15,11 @@ import (
 const (
 	WorkspaceFileName  = "grpcview.work.json"
 	CollectionFileName = "grpcview.json"
-	folderFileName     = "folder.json"
 
-	// RequestFileName, BodyFileName and MetadataFileName are exported for service/workspace's
-	// ListWorkspaceModules walk, which excludes a request's body.ts/metadata.ts from the
-	// module list by checking for the sibling request.json (the same reason
-	// NodeModulesDirName/BazelSymlinkPrefix below are exported).
-	RequestFileName  = "request.json"
-	BodyFileName     = "body.ts"
-	MetadataFileName = "metadata.ts"
+	folderFileName   = "folder.json"
+	requestFileName  = "request.json"
+	bodyFileName     = "body.ts"
+	metadataFileName = "metadata.ts"
 
 	historyFileName = "history.json"
 
@@ -49,10 +45,11 @@ const (
 	gitignoreFileName = ".gitignore"
 	gitExcludeRelPath = ".git/info/exclude"
 
-	// NodeModulesDirName and BazelSymlinkPrefix are exported for service/workspace's
-	// ListWorkspaceModules walk, which skips the same directories this scan does.
-	NodeModulesDirName = "node_modules"
-	BazelSymlinkPrefix = "bazel-"
+	nodeModulesDirName = "node_modules"
+	bazelSymlinkPrefix = "bazel-"
+
+	// MountDirName holds the virtual mounts: <coll>/.grpcview/ and the workspace's /.grpcview/.
+	MountDirName = ".grpcview"
 )
 
 type itemKind int
@@ -82,9 +79,9 @@ type slugNamed interface {
 var reservedSlugs = map[string]bool{
 	CollectionFileName: true,
 	folderFileName:     true,
-	RequestFileName:    true,
-	BodyFileName:       true,
-	MetadataFileName:   true,
+	requestFileName:    true,
+	bodyFileName:       true,
+	metadataFileName:   true,
 }
 
 func isReserved(slug string) bool {

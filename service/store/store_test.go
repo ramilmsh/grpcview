@@ -118,11 +118,11 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 
 	tree := filepath.Join(coll.Root(), treeDir)
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(tree, "users", "get-user", RequestFileName), rf)
+	mustRead(t, filepath.Join(tree, "users", "get-user", requestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("request.json meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
-	if got := mustReadSource(t, filepath.Join(tree, "users", "get-user", BodyFileName)); got != body {
+	if got := mustReadSource(t, filepath.Join(tree, "users", "get-user", bodyFileName)); got != body {
 		t.Errorf("body.ts = %q, want %q", got, body)
 	}
 	col := &grpcviewstorev1.Collection{}
@@ -240,7 +240,7 @@ func TestUpdateRequestRename(t *testing.T) {
 		t.Errorf("slug dir should be stable across rename: %v", err)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(tree, "get-user", RequestFileName), rf)
+	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
 	if rf.GetMeta().GetName() != newName {
 		t.Errorf("meta.name = %q, want %q", rf.GetMeta().GetName(), newName)
 	}
@@ -256,7 +256,7 @@ func TestUpdateRequestRename(t *testing.T) {
 	if err := coll.UpdateRequest(ctx, nil, newName, RequestPatch{Name: &collide}); !errors.Is(err, ErrAlreadyExists) {
 		t.Errorf("rename collision = %v, want ErrAlreadyExists", err)
 	}
-	mustRead(t, filepath.Join(tree, "get-user", RequestFileName), rf)
+	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
 	if rf.GetMeta().GetName() != newName {
 		t.Errorf("failed rename must not mutate meta.name, got %q", rf.GetMeta().GetName())
 	}
@@ -265,8 +265,8 @@ func TestUpdateRequestRename(t *testing.T) {
 	if err := coll.UpdateRequest(ctx, nil, newName, RequestPatch{Name: &newName, DraftBody: &body}); err != nil {
 		t.Fatalf("no-op rename + body patch: %v", err)
 	}
-	mustRead(t, filepath.Join(tree, "get-user", RequestFileName), rf)
-	gotBody := mustReadSource(t, filepath.Join(tree, "get-user", BodyFileName))
+	mustRead(t, filepath.Join(tree, "get-user", requestFileName), rf)
+	gotBody := mustReadSource(t, filepath.Join(tree, "get-user", bodyFileName))
 	if rf.GetMeta().GetName() != newName || gotBody != body+"\n" {
 		t.Errorf("after no-op rename + body: name=%q body=%q", rf.GetMeta().GetName(), gotBody)
 	}
@@ -1039,7 +1039,7 @@ func TestAppendHistoryCapAndReload(t *testing.T) {
 		t.Fatalf("history sidecar missing at %s: %v", histFile, err)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(root, "test", treeDir, "get-user", RequestFileName), rf)
+	mustRead(t, filepath.Join(root, "test", treeDir, "get-user", requestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("request.json meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
@@ -1121,7 +1121,7 @@ func TestUpdateRequestMiddleware(t *testing.T) {
 		t.Fatalf("middleware after set = %v, want [sign trace]", got)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", RequestFileName), rf)
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
 	if len(rf.GetMiddleware()) != 2 || rf.GetMiddleware()[0] != "sign" {
 		t.Fatalf("request.json middleware = %v, want [sign trace]", rf.GetMiddleware())
 	}
@@ -1188,7 +1188,7 @@ func TestUpdateRequestTarget(t *testing.T) {
 		t.Fatalf("target after set = %+v, want api.example.com:8443 tls", got)
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", RequestFileName), rf)
+	mustRead(t, filepath.Join(coll.Root(), treeDir, "echo", requestFileName), rf)
 	if rf.GetTarget().GetAddress() != "api.example.com:8443" || !rf.GetTarget().GetTls() {
 		t.Fatalf("request.json target = %+v, want api.example.com:8443 tls", rf.GetTarget())
 	}
@@ -1225,9 +1225,18 @@ func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
 	if err := coll.CreateFolder(ctx, []string{"a"}, "b"); err != nil {
 		t.Fatalf("CreateFolder a/b: %v", err)
 	}
+	tree := filepath.Join(coll.Root(), treeDir)
+	if data, err := os.ReadFile(filepath.Join(tree, "a", metadataFileName)); err != nil || len(data) != 0 {
+		t.Fatalf("CreateFolder metadata.ts = %q (err %v), want a zero-byte file", data, err)
+	}
+	folderJSON := filepath.Join(tree, "a", folderFileName)
+	manifest, err := os.ReadFile(folderJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	scriptA := "export default () => ({ ...inherit(), fromA: ['1'] })"
-	scriptB := "export default () => ({ ...inherit(), fromB: ['2'] })"
+	scriptA := "export default () => ({ ...inherit(), fromA: ['1'] })\n"
+	scriptB := "export default () => ({ ...inherit(), fromB: ['2'] })\n"
 	if err := coll.UpdateFolder(ctx, nil, "a", FolderPatch{DraftMetadataScript: &scriptA}); err != nil {
 		t.Fatalf("UpdateFolder a: %v", err)
 	}
@@ -1251,15 +1260,14 @@ func TestFolderDraftMetadataScriptRoundTrip(t *testing.T) {
 		t.Errorf("folder a/b script = %q, want %q", got, scriptB)
 	}
 
-	tree := filepath.Join(coll.Root(), treeDir)
-	ff := &grpcviewstorev1.Folder{}
-	mustRead(t, filepath.Join(tree, "a", folderFileName), ff)
-	if ff.GetDraftMetadataScript() != scriptA {
-		t.Errorf("a/folder.json draftMetadataScript = %q, want %q", ff.GetDraftMetadataScript(), scriptA)
+	if got := mustReadSource(t, filepath.Join(tree, "a", metadataFileName)); got != scriptA {
+		t.Errorf("a/metadata.ts = %q, want %q", got, scriptA)
 	}
-	mustRead(t, filepath.Join(tree, "a", "b", folderFileName), ff)
-	if ff.GetDraftMetadataScript() != scriptB {
-		t.Errorf("a/b/folder.json draftMetadataScript = %q, want %q", ff.GetDraftMetadataScript(), scriptB)
+	if got := mustReadSource(t, filepath.Join(tree, "a", "b", metadataFileName)); got != scriptB {
+		t.Errorf("a/b/metadata.ts = %q, want %q", got, scriptB)
+	}
+	if after, err := os.ReadFile(folderJSON); err != nil || !bytes.Equal(manifest, after) {
+		t.Errorf("script-only UpdateFolder rewrote folder.json:\nbefore %s\nafter  %s", manifest, after)
 	}
 
 	chain, err := coll.FolderMetadataChain(ctx, []string{"a", "b"})
@@ -1379,8 +1387,8 @@ func TestUpdateFolderRename(t *testing.T) {
 		t.Fatalf("no-op rename + script patch: %v", err)
 	}
 	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
-	if ff.GetMeta().GetName() != newName || ff.GetDraftMetadataScript() != script {
-		t.Errorf("after no-op rename + script: name=%q script=%q", ff.GetMeta().GetName(), ff.GetDraftMetadataScript())
+	if got := mustReadSource(t, filepath.Join(tree, "users", metadataFileName)); ff.GetMeta().GetName() != newName || got != script+"\n" {
+		t.Errorf("after no-op rename + script: name=%q script=%q", ff.GetMeta().GetName(), got)
 	}
 
 	final := "Humans"
@@ -1389,8 +1397,8 @@ func TestUpdateFolderRename(t *testing.T) {
 		t.Fatalf("rename + script patch: %v", err)
 	}
 	mustRead(t, filepath.Join(tree, "users", folderFileName), ff)
-	if ff.GetMeta().GetName() != final || ff.GetDraftMetadataScript() != script2 {
-		t.Errorf("after rename + script: name=%q script=%q", ff.GetMeta().GetName(), ff.GetDraftMetadataScript())
+	if got := mustReadSource(t, filepath.Join(tree, "users", metadataFileName)); ff.GetMeta().GetName() != final || got != script2+"\n" {
+		t.Errorf("after rename + script: name=%q script=%q", ff.GetMeta().GetName(), got)
 	}
 }
 
@@ -1536,7 +1544,7 @@ func TestRenameMovesDirectoryAndState(t *testing.T) {
 		t.Errorf("manifest name after rename = %q, want %q", col.GetName(), "Payments")
 	}
 	rf := &grpcviewstorev1.Request{}
-	mustRead(t, filepath.Join(root, "b", "c", treeDir, "get-user", RequestFileName), rf)
+	mustRead(t, filepath.Join(root, "b", "c", treeDir, "get-user", requestFileName), rf)
 	if rf.GetMeta().GetName() != "Get User" {
 		t.Errorf("tree content after rename: request meta.name = %q, want %q", rf.GetMeta().GetName(), "Get User")
 	}
@@ -1680,11 +1688,11 @@ func TestCreateRequestSeedsBodyAndMetadataFiles(t *testing.T) {
 	}
 	dir := filepath.Join(coll.Root(), treeDir, "echo")
 
-	if got := mustReadSource(t, filepath.Join(dir, BodyFileName)); got != EmptyBody+"\n" {
+	if got := mustReadSource(t, filepath.Join(dir, bodyFileName)); got != EmptyBody+"\n" {
 		t.Errorf("body.ts = %q, want %q", got, EmptyBody+"\n")
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, MetadataFileName))
+	data, err := os.ReadFile(filepath.Join(dir, metadataFileName))
 	if err != nil {
 		t.Fatalf("read metadata.ts: %v", err)
 	}
@@ -1692,7 +1700,7 @@ func TestCreateRequestSeedsBodyAndMetadataFiles(t *testing.T) {
 		t.Errorf("metadata.ts = %q, want a zero-byte file (an EmptyBody seed would break folder-metadata inheritance)", data)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, RequestFileName))
+	raw, err := os.ReadFile(filepath.Join(dir, requestFileName))
 	if err != nil {
 		t.Fatalf("read request.json: %v", err)
 	}
@@ -1712,7 +1720,7 @@ func TestUpdateRequestBodyOnlyLeavesRequestJSONByteIdentical(t *testing.T) {
 	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
-	p := filepath.Join(coll.Root(), treeDir, "echo", RequestFileName)
+	p := filepath.Join(coll.Root(), treeDir, "echo", requestFileName)
 	before, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatalf("read request.json: %v", err)
@@ -1730,7 +1738,7 @@ func TestUpdateRequestBodyOnlyLeavesRequestJSONByteIdentical(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Errorf("request.json changed on a body-only patch:\nbefore: %s\nafter:  %s", before, after)
 	}
-	if got := mustReadSource(t, filepath.Join(coll.Root(), treeDir, "echo", BodyFileName)); got != body+"\n" {
+	if got := mustReadSource(t, filepath.Join(coll.Root(), treeDir, "echo", bodyFileName)); got != body+"\n" {
 		t.Errorf("body.ts = %q, want %q", got, body+"\n")
 	}
 }
@@ -1770,7 +1778,7 @@ func TestStaleRequestJSONFailsLoud(t *testing.T) {
 	if err := coll.CreateRequest(ctx, nil, "Echo", "s.S", "Unary"); err != nil {
 		t.Fatalf("CreateRequest: %v", err)
 	}
-	p := filepath.Join(coll.Root(), treeDir, "echo", RequestFileName)
+	p := filepath.Join(coll.Root(), treeDir, "echo", requestFileName)
 	stale := []byte(`{
   "meta": {"name": "Echo"},
   "service": "s.S",
@@ -1789,8 +1797,39 @@ func TestStaleRequestJSONFailsLoud(t *testing.T) {
 	if !strings.Contains(err.Error(), p) {
 		t.Errorf("error = %v, want it to name the file %q", err, p)
 	}
-	if !strings.Contains(err.Error(), BodyFileName) {
-		t.Errorf("error = %v, want it to name the fix (%q)", err, BodyFileName)
+	if !strings.Contains(err.Error(), bodyFileName) {
+		t.Errorf("error = %v, want it to name the fix (%q)", err, bodyFileName)
+	}
+}
+
+func TestStaleFolderJSONFailsLoud(t *testing.T) {
+	coll, ctx := newTestCollection(t)
+	if err := coll.CreateFolder(ctx, nil, "Users"); err != nil {
+		t.Fatalf("CreateFolder: %v", err)
+	}
+	p := filepath.Join(coll.Root(), treeDir, "users", folderFileName)
+	stale := []byte(`{
+  "meta": {"name": "Users"},
+  "items": [],
+  "draftMetadataScript": "export default () => ({})"
+}
+`)
+	if err := os.WriteFile(p, stale, 0o644); err != nil {
+		t.Fatalf("write stale folder.json: %v", err)
+	}
+
+	_, err := coll.Load(ctx)
+	if err == nil {
+		t.Fatal("expected Load to fail loudly on a stale folder.json carrying draftMetadataScript")
+	}
+	if !strings.Contains(err.Error(), p) || !strings.Contains(err.Error(), metadataFileName) {
+		t.Errorf("error = %v, want it to name the file %q and the fix (%q)", err, p, metadataFileName)
+	}
+	if err := coll.CreateRequest(ctx, []string{"Users"}, "Get", "s.S", "Unary"); err == nil {
+		t.Error("CreateRequest under a stale folder.json succeeded; writeOrder would drop the script")
+	}
+	if got, _ := os.ReadFile(p); !bytes.Equal(got, stale) {
+		t.Errorf("stale folder.json was rewritten:\n%s", got)
 	}
 }
 
@@ -1812,25 +1851,25 @@ func TestStaleRequestJSONDoesNotFalsePositiveOnAPayloadContainingTheSubstring(t 
 }
 
 func TestBodyAndMetadataFileNamesAreReservedSlugs(t *testing.T) {
-	if !isReserved(BodyFileName) || !isReserved(MetadataFileName) {
-		t.Fatalf("BodyFileName (%q) and MetadataFileName (%q) must be reserved so no child directory can collide with them", BodyFileName, MetadataFileName)
+	if !isReserved(bodyFileName) || !isReserved(metadataFileName) {
+		t.Fatalf("bodyFileName (%q) and metadataFileName (%q) must be reserved so no child directory can collide with them", bodyFileName, metadataFileName)
 	}
 
 	coll, ctx := newTestCollection(t)
 	if err := coll.CreateRequest(ctx, nil, "body.ts", "s.S", "Unary"); err != nil {
-		t.Fatalf("CreateRequest named %q: %v", BodyFileName, err)
+		t.Fatalf("CreateRequest named %q: %v", bodyFileName, err)
 	}
 	req := childByName(rootItems(t, coll, ctx), "body.ts")
 	if req == nil || req.GetRequest() == nil {
-		t.Fatalf("expected a request named %q", BodyFileName)
+		t.Fatalf("expected a request named %q", bodyFileName)
 	}
-	if req.GetSlug() == BodyFileName {
+	if req.GetSlug() == bodyFileName {
 		t.Errorf("slug = %q must not collide with the reserved body file name", req.GetSlug())
 	}
 
 	// The slug directory and the real body.ts sibling file it contains must not be confused
 	// with each other.
-	if got := mustReadSource(t, filepath.Join(coll.Root(), treeDir, req.GetSlug(), BodyFileName)); got != EmptyBody+"\n" {
+	if got := mustReadSource(t, filepath.Join(coll.Root(), treeDir, req.GetSlug(), bodyFileName)); got != EmptyBody+"\n" {
 		t.Errorf("body.ts sibling file = %q, want %q", got, EmptyBody+"\n")
 	}
 }

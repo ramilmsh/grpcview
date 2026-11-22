@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 //go:embed npm
@@ -44,10 +46,7 @@ func materializeNpmRegistry() (string, error) {
 		_ = os.RemoveAll(root)
 		return "", fmt.Errorf("scripting: extract npm registry: %w", err)
 	}
-	if canon, err := filepath.EvalSymlinks(root); err == nil {
-		return canon, nil
-	}
-	return root, nil
+	return wsroot.Canonical(root), nil
 }
 
 func (e *Engine) provisionNpmRegistry() error {

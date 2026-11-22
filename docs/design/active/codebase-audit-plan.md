@@ -18,8 +18,8 @@ duplication**.
 
 **Not in scope:** bug hunting (that is `/code-review`), behavior changes, new
 features, perf rewrites, new tests. A finding that changes what the program does
-is out, with one exception: deleting dead code, which `AGENTS.md` §Project Stage
-explicitly licenses ("Dead and legacy code should be deleted on sight").
+is out, with one exception: deleting dead code, which pre-release
+licenses.
 
 ---
 
@@ -93,7 +93,7 @@ So the plan is three layers, and the middle one is the point:
    glance. The TS side has no such gap.
 
 3. Read the outputs and pre-slice them per module, so each brief carries its own
-   evidence inline (per `AGENTS.md`: pasting 40 lines beats a 15-turn grep
+   evidence inline (pasting 40 lines beats a 15-turn grep
    expedition).
 
 Already found while sizing this plan, no agent needed:
@@ -121,7 +121,7 @@ has to be deleted later: `audit/go/main.go` (stdlib `go/parser`, subcommands
 They are pure functions of the tree, so a later wave can re-run them to verify
 a deletion actually removed the last reference. Both run offline; the Go one via
 the `bazel_env` toolchain on a throwaway stdlib-only module, which keeps the
-`AGENTS.md` ban on repo-touching bare `go` commands intact.
+`CLAUDE.md` ban on repo-touching bare `go` commands intact.
 
 | scan | Go + proto | TypeScript |
 |---|---|---|
@@ -250,9 +250,8 @@ Sorted by blast radius, then delta. One file per slice in the scratchpad.
 
 ### Agent settings
 
-`effort: medium` (one tier below session, floored at medium — `AGENTS.md`
-§Delegating). Read-only; no Edit/Write except the report. Briefs carry the file
-list, the relevant `AGENTS.md` sections, and the pre-sliced scan evidence, so no
+`effort: medium` (one tier below session, floored at medium). Read-only; no Edit/Write except the report. Briefs carry the file
+list and the pre-sliced scan evidence, so no
 agent spends turns discovering its own context.
 
 ---
@@ -268,8 +267,7 @@ Each is fed *all seventeen* module reports plus the global scan output.
 - **X2 · Duplication & reuse.** `dupes` clusters + every duplication/reuse
   finding. Decides for each cluster: extract, inline, or leave (three similar
   things that will diverge are not duplication).
-- **X3 · Layering & surface.** `dead` output + the module map + `AGENTS.md`
-  §Architecture. Asks: is any stated boundary no longer true, does any package
+- **X3 · Layering & surface.** `dead` output + the module map. Asks: is any stated boundary no longer true, does any package
   still earn its existence, does the UI reimplement backend logic, is
   `convert.go` still the only store↔wire bridge?
 
@@ -337,18 +335,12 @@ carrying one `metadata` field where `Request.Response` has the request/response
 split, so recorded history silently loses one direction. `D-X2-8` and `D-X2-5`
 fix the last two as side effects — **review those two as behavior changes.**
 
-`AGENTS.md` corrections now total ten plus one new paragraph (the UI layering
-rule the doc has never stated, which is why three slices independently found
-violations of it). Two were already being reasoned from by Phase-1 agents, and
-one had generated a proposed 15-line patch to make correct code match an
-incorrect sentence — the cost of a stale doc, measured.
-
 ---
 
 ## Phase 3 — triage (you)
 
 The ledger lands as a checklist. Some "inconsistencies" are deliberate and only
-you know which — `AGENTS.md` §VS Code familiarity, for one, makes some
+you know which — VS Code familiarity, for one, makes some
 non-obvious naming intentional. Nothing gets applied without a tick.
 
 ### Triage decisions (2026-08-03)
@@ -378,9 +370,8 @@ it is needed. **Nothing is renamed in either direction.** The counts show why
 this matters: `workspace` appears ~940 times against `collection`'s ~225, so the
 rejected change was also the most expensive one in the audit.
 
-What survives: `AGENTS.md:92-93` still contradicts itself ("persists the
-**workspace** to disk" / "a filesystem-backed **collection**"), but the fix is to
-**define both terms**, not collapse them. The store's Go type `Collection` is
+What survives: the fix is to **define both terms** (workspace, collection), not
+collapse them. The store's Go type `Collection` is
 today a handle to a whole workspace directory, which is the one place the words
 are genuinely misapplied — left alone for now, deliberately, until the workspace
 model is decided.
@@ -426,7 +417,7 @@ Grouped by blast radius so conflicts are structural, not accidental:
 - **W3 · Extractions.** Serial, largest blast last.
 
 Gates after every wave, run by the main thread (agents cap their own verify loop
-at two runs then report verbatim, per `AGENTS.md`):
+at two runs then report verbatim):
 
 ```bash
 bazel test //... --nocache_test_results
@@ -445,10 +436,8 @@ Checkpoint commit per wave.
 
 ## Phase 5 — reconcile the docs
 
-`AGENTS.md` names specific files, directories, and terms throughout. Any rename
-or deletion invalidates it, and it is the file every future agent reads first.
-One agent, handed the cumulative diff, updates `AGENTS.md` and the design docs
-that reference moved code.
+One agent, handed the cumulative diff, updates the design docs that reference moved
+code.
 
 ---
 

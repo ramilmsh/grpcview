@@ -1,7 +1,7 @@
 # grpcview — collection tree rewrite plan
 
 **Status:** **shipped.** T0–T2, T4, T5 and T6 are on `trunk` (2026-08-01) and the
-component's behavior is documented in `AGENTS.md` §"The collection tree". The three
+component's behavior is `ui/src/components/tree/`. The three
 milestones that were never built — **T3** (typeahead), **T7** (polish) and **T8**
 (async children) — are carried in [`roadmap.md`](../planned/roadmap.md), which is what
 this doc's closing note demanded before it could be deleted.
@@ -988,7 +988,7 @@ bazel run //ui:dev              # vite on :5173
 ```
 
 Add `env HOME=<tmpdir>` to the backend for a throwaway workspace. Browser-verify each
-phase per `AGENTS.md` § "Browser verification hook".
+phase.
 
 **Three gates, and the trap in the obvious one.** `bazel build //ui:ui` does **NOT** typecheck
 — proven twice during T0 by injecting a hard type error into `Tree.tsx` and watching the build
@@ -1003,7 +1003,7 @@ bazel build //ui:ui                                           # the real release
 ```
 
 Run all three. The first one is not optional — it is the gate that catches an unused import or
-a wrong generic, and this rewrite hit both. `AGENTS.md`'s claim that the build "catches TS
+a wrong generic, and this rewrite hit both. The claim that the build "catches TS
 errors" is true only for syntax and unresolved imports. Pass `--nocache_test_results` when
 checking someone else's claimed pass: a cached `PASSED` proves only that the inputs hash-match
 an earlier run.
@@ -1143,15 +1143,14 @@ identified — neither is an app bug:
   inert. Arm a `window` keydown listener and confirm events arrive before believing a keyboard
   finding; a real mouse click somewhere in the page revives it.
 
-Fold the shipped behavior into `AGENTS.md` and delete this doc when T6 lands, per the
-convention used by the request-body and definition-sources tracks.
+Delete this doc when T6 lands.
 
 **Carried, 2026-08-06.** T3, T7 and T8 now live in
 [`roadmap.md`](../planned/roadmap.md), including T3's compose-with-the-filter-box
 requirement and T8's ownership by the descriptor-explorer track. The condition below is
 met; what remains here is rationale, not a worklist.
 
-**Half done, 2026-08-01.** `AGENTS.md` gained a §"The collection tree" describing the
+**Half done, 2026-08-01.** A doc section was written describing the
 component as it now is — the contract, the two tiers, the flat-array decision, controlled
 state, the pure-decision/thin-interpreter split, the keyboard/mouse model, rename, the
 context menu, drag and drop, and the `moveSubtree` identity hazard — plus what is still

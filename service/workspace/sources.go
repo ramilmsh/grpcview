@@ -223,11 +223,6 @@ func (w Workspace) resolveProtos(ctx context.Context, id string, l *protosLayout
 	invalid := func(err error) error {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source %q: %w", id, err))
 	}
-	realRoot, err := filepath.EvalSymlinks(w.store.Root())
-	if err != nil {
-		return nil, invalid(err)
-	}
-
 	roots := l.roots
 	if len(roots) == 0 {
 		if l.isDir {
@@ -239,6 +234,7 @@ func (w Workspace) resolveProtos(ctx context.Context, id string, l *protosLayout
 
 	paths := []string{l.target}
 	if l.isDir {
+		var err error
 		if paths, err = protofiles.Find(l.target); err != nil {
 			return nil, invalid(err)
 		}
@@ -255,14 +251,13 @@ func (w Workspace) resolveProtos(ctx context.Context, id string, l *protosLayout
 		names = append(names, name)
 	}
 
-	// Every read, imports included, is confined: a symlink out of the workspace is refused. Roots are
-	// symlink-resolved, so confinement is checked against the resolved root.
+	// Every read, imports included, is confined: a symlink out of the workspace is refused.
 	confined := func(name string) ([]byte, error) {
 		found, err := roots.Locate(name)
 		if err != nil {
 			return nil, err
 		}
-		real, _, err := resolveWorkspaceFile(realRoot, found)
+		real, _, err := resolveWorkspaceFile(w.store.Root(), found)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}

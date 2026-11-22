@@ -3,8 +3,7 @@
 // features/workspace/delete-confirm.ts is its own module.
 import type { ServerEntry } from "@grpcview/v1/service_pb";
 
-// A registration file outliving its process is the ordinary case (AGENTS.md "The workspace
-// daemon"), so "not running" is a normal state and not an error — the status dot just dims.
+// A registration file outliving its process is the ordinary case (`service/daemon`), so "not running" is a normal state and not an error — the status dot just dims.
 export type DaemonStatus = "running" | "stale";
 
 export function daemonStatus(entry: ServerEntry): DaemonStatus {

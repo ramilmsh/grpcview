@@ -120,7 +120,7 @@ Bruno-exact ergonomics; then reserved names become forbidden folder names.
   place, and this was it. Being real files also makes them `tsc`-checkable, editable by
   anything, and usable as esbuild entry points. See
   [`shipped/vscode/phase-2-body-files.md`](./vscode/phase-2-body-files.md). Folder
-  metadata still lives inline in `folder.json`.
+  metadata followed (#88): `metadata.ts` beside `folder.json`.
 - **Naming / identity (LOCKED — slug dir + display name in config):** each item's
   directory is named by a **stable slug**; the human display name lives in
   `meta.name` inside the item's config file. No separate mapping file — the dir name

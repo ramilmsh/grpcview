@@ -49,7 +49,7 @@ func TestScriptCRUDHandlers(t *testing.T) {
 		t.Fatalf("UpdateScript: %v", err)
 	}
 	renamed := scriptByPath(upd.Msg.GetCollection().GetScripts(), "scripts/uuidv4.ts")
-	if renamed == nil || renamed.GetSource() != src {
+	if renamed == nil || renamed.GetSource() != src+"\n" {
 		t.Fatalf("rename+source not applied: %+v", upd.Msg.GetCollection().GetScripts())
 	}
 

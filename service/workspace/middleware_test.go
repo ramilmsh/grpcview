@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -266,5 +268,43 @@ func TestInvokeMiddlewareCallsAnImportedScript(t *testing.T) {
 	}
 	if got := resp.Msg.GetResponse().GetRequestMetadata().GetFields()["x-trace"].GetStringValue(); got != "t-42" {
 		t.Fatalf("sent metadata x-trace = %q, want t-42 (middleware could not call the imported script)", got)
+	}
+}
+
+func TestLoadMiddlewareSourceThroughSymlink(t *testing.T) {
+	base := t.TempDir()
+	ws := filepath.Join(base, "ws")
+	coll := filepath.Join(ws, "coll")
+	writeFile(t, filepath.Join(coll, "scripts", "real.ts"), []byte("in"))
+	writeFile(t, filepath.Join(base, "secret.ts"), []byte("out"))
+	for link, target := range map[string]string{
+		filepath.Join(coll, "scripts", "inlink.ts"): filepath.Join(coll, "scripts", "real.ts"),
+		filepath.Join(coll, "scripts", "escape.ts"): filepath.Join(base, "secret.ts"),
+		filepath.Join(coll, "up"):                   base,
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+
+	for _, spec := range []string{"#/scripts/inlink.ts", "@/coll/scripts/inlink.ts"} {
+		if src, err := loadMiddlewareSource(spec, ws, coll); err != nil || src != "in" {
+			t.Errorf("loadMiddlewareSource(%q) = %q, %v; want the link target", spec, src, err)
+		}
+	}
+	for _, tc := range []struct{ spec, want string }{
+		{"#/scripts/escape.ts", "resolves outside the collection"},
+		{"@/coll/scripts/escape.ts", "resolves outside the workspace"},
+		{"#/up/secret.ts", "resolves outside the collection"},
+		{"#/../../secret.ts", "resolves outside the collection"},
+	} {
+		_, err := loadMiddlewareSource(tc.spec, ws, coll)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("loadMiddlewareSource(%q) = %v, want %q", tc.spec, err, tc.want)
+			continue
+		}
+		if strings.Contains(err.Error(), base) {
+			t.Errorf("loadMiddlewareSource(%q) error %q names a host path", tc.spec, err)
+		}
 	}
 }

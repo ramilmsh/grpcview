@@ -94,8 +94,7 @@ CLI's `--collection`-plus-path form and the label form cannot drift.
 
 ## Collection slugs
 
-A slug is a **third** identifier, on top of a split AGENTS.md already documents as
-deliberate: the directory slug is identity, the display name is data. Its justification is
+A slug is a **third** identifier, on top of a deliberate split: the directory slug is identity, the display name is data. Its justification is
 not brevity — it is **move-stability**. Today a collection's id *is* its
 workspace-relative path, so `Store.Rename` changes it, and every `//old/path:Req` written
 in every script would silently break on a directory move. A slug in the manifest survives
@@ -154,7 +153,7 @@ The rest of the special-casing it already forces, all of which deletes with it:
 - The per-collection state directory needs a carve-out, since
   `<stateRoot>/collections/./cache` cleans to a path that collides (`store.go:220`).
 - `Collection.id` and `CollectionSummary.id` both carry `"." is the root` in their proto
-  comments, and AGENTS.md documents `.` as a legal address.
+  comments.
 
 **Migration:** a `grpcview.json` found at the workspace root becomes an error row in the
 listing — "a collection cannot be the workspace root; move it into a subdirectory" — and
@@ -322,7 +321,7 @@ different feature with a different consent story.
   writing a label means knowing one. The TopBar picker already appends the id when two
   collections share a name; the slug wants similar treatment somewhere.
 - **Who owns removing the root collection?** It is listed here as a prerequisite, but its
-  blast radius (store, proto comments, AGENTS.md, the UI empty state that offers the path
+  blast radius (store, proto comments, the UI empty state that offers the path
   a `NotFound` just came back for) is wider than this track. It may want its own doc.
 - **What `definitionsCacheSize` should be**, given the two opposite pressures above.
 - **Narrowing `fileToGenerate`.** `generateWorkspaceTypes` currently generates *every*

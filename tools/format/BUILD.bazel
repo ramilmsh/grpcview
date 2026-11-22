@@ -1,7 +1,7 @@
 load("@aspect_rules_lint//format:defs.bzl", "format_multirun", "format_test")
 load("@multitool//:tools.bzl", "TOOLS")
 
-# gofumpt is wired as a formatter only — Go *linting* stays nogo's job (AGENTS.md).
+# gofumpt is wired as a formatter only — Go *linting* stays nogo's job.
 format_multirun(
     name = "format",
     go = TOOLS["gofumpt"],

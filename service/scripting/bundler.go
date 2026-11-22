@@ -13,6 +13,8 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
+
+	"codeberg.org/ramilmsh/grpcview/service/wsroot"
 )
 
 const authorSource = "script.ts"
@@ -377,11 +379,11 @@ func (b *bundler) plugins(g Grant, collRoot string) []api.Plugin {
 // and is empty whenever a run has none, which `#/` then reports as unresolvable.
 //
 // Both roots are canonicalized once here, up front: esbuild resolves through symlinks (macOS puts
-// both /tmp and /var behind one), so an un-resolved root would never satisfy withinDir against its
-// own, symlink-resolved r.Path even for a file that is genuinely inside it.
+// both /tmp and /var behind one), so an un-resolved root would fail wsroot.Confine's lexical step
+// against its own, symlink-resolved r.Path even for a file that is genuinely inside it.
 func pathResolverPlugin(wsRoot, collRoot string) api.Plugin {
-	wsRoot = canonicalDir(wsRoot)
-	collRoot = canonicalDir(collRoot)
+	wsRoot = wsroot.Canonical(wsRoot)
+	collRoot = wsroot.Canonical(collRoot)
 	return api.Plugin{
 		Name: "grpcview-path-sigils",
 		Setup: func(build api.PluginBuild) {
@@ -398,26 +400,18 @@ func pathResolverPlugin(wsRoot, collRoot string) api.Plugin {
 					if len(r.Errors) > 0 {
 						return api.OnResolveResult{Errors: r.Errors}, nil
 					}
-					if !withinDir(root, r.Path) {
+					real, err := wsroot.Confine(root, r.Path)
+					if err != nil {
 						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: resolves outside the %s", args.Path, which)
 					}
-					return api.OnResolveResult{Path: r.Path}, nil
+					return api.OnResolveResult{Path: real}, nil
 				})
 		},
 	}
 }
 
-func canonicalDir(dir string) string {
-	if dir == "" {
-		return dir
-	}
-	if canon, err := filepath.EvalSymlinks(dir); err == nil {
-		return canon
-	}
-	return dir
-}
-
 func registryResolverPlugin(registryDir string) api.Plugin {
+	registryDir = wsroot.Canonical(registryDir)
 	return api.Plugin{
 		Name: "grpcview-npm-registry",
 		Setup: func(build api.PluginBuild) {
@@ -436,10 +430,11 @@ func registryResolverPlugin(registryDir string) api.Plugin {
 					if len(r.Errors) > 0 {
 						return api.OnResolveResult{Errors: r.Errors}, nil
 					}
-					if !withinDir(registryDir, r.Path) {
+					real, err := wsroot.Confine(registryDir, r.Path)
+					if err != nil {
 						return api.OnResolveResult{}, fmt.Errorf("cannot resolve %q: resolves outside the npm registry", args.Path)
 					}
-					return api.OnResolveResult{Path: r.Path}, nil
+					return api.OnResolveResult{Path: real}, nil
 				})
 		},
 	}
@@ -458,15 +453,6 @@ func npmPackageName(importPath string) string {
 		return importPath[:i]
 	}
 	return importPath
-}
-
-// Containment guard: stops a vendored package prefix from reaching a host file via `..`.
-func withinDir(dir, path string) bool {
-	rel, err := filepath.Rel(dir, path)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 const grpcviewNamespace = "grpcview-modules"

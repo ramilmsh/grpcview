@@ -1,6 +1,6 @@
 # One daemon per workspace
 
-**Status: SHIPPED 2026-08-08.** The behavior lives in `AGENTS.md`, "The workspace daemon";
+**Status: SHIPPED 2026-08-08.** The behavior lives in `service/daemon/`;
 this doc is kept for the calls it closes — why not a registered name, why not a token, why
 a unix socket is a second transport and not a replacement. Research on the discovery
 mechanism is closed:
@@ -148,7 +148,7 @@ of it.
 ## Connect, or start one
 
 **The CLI's binding rule changes — and it is a safety improvement, not a regression.**
-`AGENTS.md` records that "dial the local server if one happens to be listening" was
+It was recorded that "dial the local server if one happens to be listening" was
 deliberately rejected, so that *which process wrote my history* never depends on ambient
 state. That was written when there was nothing to identify a server *by*: any listener on
 10000 might belong to a different workspace. A registration keyed by workspace root and
@@ -170,7 +170,7 @@ server that is always this workspace's**. New rule:
   probing, dropped once the first request is in flight. Holding it for the command's duration
   instead would serialize every concurrent invocation, which is a performance bug wearing a
   correctness costume. With this in place, "two processes can write one collection directory
-  without a lock" (`AGENTS.md`, "The CLI") stops being an accepted risk on the default path.
+  without a lock" stops being an accepted risk on the default path.
 - **Spawning is a detached self-exec:** `os/exec` on `os.Executable()` with
   `serve --workspace <abs root> --idle-timeout <d>`, a new session (`Setsid`), stdio to
   `<cache>/grpcview/servers/<hash>.log`, then `Process.Release()`.

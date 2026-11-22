@@ -72,6 +72,10 @@ func TestResolveWorkspaceFileAccepts(t *testing.T) {
 		if _, rel, err := resolveWorkspaceFile(link, "protos/image.binpb"); err != nil || rel != "protos/image.binpb" {
 			t.Errorf("resolveWorkspaceFile through a symlinked root = %q, %v; want the file accepted", rel, err)
 		}
+		// The CLI sends absolute paths in its cwd's spelling; the store's root is canonical.
+		if _, rel, err := resolveWorkspaceFile(realRoot, filepath.Join(link, "protos", "image.binpb")); err != nil || rel != "protos/image.binpb" {
+			t.Errorf("resolveWorkspaceFile(canonical root, path through a link to it) = %q, %v; want the file accepted", rel, err)
+		}
 	})
 }
 

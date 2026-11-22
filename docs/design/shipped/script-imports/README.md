@@ -93,7 +93,7 @@ drift by design:
   name.
 - `Request.middleware` is *"Ordered display names of the MIDDLEWARE scripts run before the
   call"* (`storage.proto:80`).
-- AGENTS.md documents the drift as intended: renaming `test-goals` to `smoke` leaves
+- The drift is intended: renaming `test-goals` to `smoke` leaves
   `scripts/test-goals/script.json` holding `"name": "smoke"`.
 
 Collapsing them into one key — the filename — is strictly better here:
@@ -105,7 +105,7 @@ Collapsing them into one key — the filename — is strictly better here:
 - Renaming becomes a file move. Git records a rename; importers must move with it. That is
   a refactor, caught by diagnostics — consistent with the premise above.
 
-**This is a narrowing of the AGENTS.md rule, not a repeal.** Requests and folders keep the
+**This is a narrowing of the slug rule, not a repeal.** Requests and folders keep the
 slug-is-identity / name-is-data split, because a request's display name is prose that
 appears in a tree and in an invoke path. A script's name is an identifier. Different
 things.
@@ -154,7 +154,7 @@ This is the largest deletion in the design, and it is the point rather than a si
 | `ScriptKind` (both protos), `wireToDiskScriptKind`, `CreateScript`'s kind arg, MCP `create_script`'s kind param | kinds |
 | `script.json`, `Collection.scripts`, `writeScriptOrder` | see above |
 
-The ergonomic AGENTS.md defends — `{"userId": uuid()}` with **no ceremony**, the reason the
+The ergonomics the design defends — `{"userId": uuid()}` with **no ceremony**, the reason the
 whole TS-body design exists — survives, delivered by **Monaco auto-import** instead of a
 backend prelude. Type `uuid`, take the completion, the import line writes itself. Which is
 the standing rule anyway: copy VS Code where an equivalent exists.
@@ -177,7 +177,7 @@ never be a file path or an npm package name.
 
 What that buys:
 
-- The freeze choreography deletes. AGENTS.md currently has to explain that `gv` is *"frozen
+- The freeze choreography deletes. The docs currently have to explain that `gv` is *"frozen
   exactly once"*, that the two callables are *"hung off the containers before the single
   `__ff` freeze pass, which recurses only on `typeof === 'object'` and so leaves them
   callable"*, and that a second `globalThis.gv =` would clobber the first. Modules are not
@@ -205,7 +205,7 @@ still reports the author's line.
 The prelude does not vanish, it becomes **entirely internal**: `__ff`,
 `__grpcview_invoke`, `__grpcview_fs_read`, `__grpcview_net_fetch`, `__grpcview_console`,
 `__grpcview_entry`. Those are host bridges the shims call. The exact claim is that **no
-user-visible identifier is global** — worth writing into AGENTS.md in those words, because
+user-visible identifier is global** — worth writing down in those words, because
 "nothing is global" read literally is false and the next reader will find `__ff` and file
 a bug.
 
@@ -234,7 +234,7 @@ map threaded alongside `gens`, and no layering inversion — `service/scripting`
 about `service/store`.
 
 **Imports resolve from disk, so unsaved editor edits do not take effect.** That is not a new
-concept to explain: AGENTS.md already states it for the adjacent case — *"Ancestor scripts
+concept to explain: it already holds for the adjacent case — *"Ancestor scripts
 are read from the store, so folder edits only take effect after saving."* Same rule, one
 sentence.
 

@@ -3,7 +3,7 @@
 **Status:** **shipped** — S1–S3 landed 2026-07-23 on `trunk` and the
 "author a script, then use it in a request" loop is live. What this doc is *for* now
 is the enduring decisions the shipped work rests on (§"Enduring decisions"), not a
-worklist; implementation detail lives in the code and `AGENTS.md`. The deferred
+worklist; implementation detail lives in the code. The deferred
 S4–S6 milestones moved to [`roadmap.md`](../planned/roadmap.md).
 **Companion to:** [`ui-redesign-plan.md`](./ui-redesign-plan.md) (client track) and
 the QuickJS·WASM spikes ([`quickjs-wasm-spike.md`](./quickjs-wasm-spike.md),
@@ -29,8 +29,7 @@ The "author a script, then use it in a request" loop is live:
   `{{ name(args?) }}` token syntax plus a binding-editor modal. That mechanism was
   **replaced** by the TypeScript request-body model: a body/metadata is authored as
   typed TS and can **call saved generators directly** (they are resolved into the
-  bundle at eval time), so there are no `{{ }}` tokens and no binding editor. See
-  the "Request authoring model" section of `AGENTS.md`; the old backend `tokens.go`
+  bundle at eval time), so there are no `{{ }}` tokens and no binding editor. The old backend `tokens.go`
   and UI `tokens.ts` / `BindingEditor` have been removed.
 
 ---

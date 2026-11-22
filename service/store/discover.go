@@ -116,7 +116,7 @@ func isGlob(entry string) bool { return strings.ContainsAny(entry, `*?[`) }
 
 // Walks the workspace for grpcview.json. The rules, in the order they matter:
 //
-//   - Prune dot-directories, node_modules, bazel-* and anything gitignored, so a build step that
+//   - Prune Hidden entries and anything gitignored, so a build step that
 //     copied a collection into dist/ does not produce a second, real-looking one.
 //   - Never follow a symlink. fs.DirEntry.IsDir is false for one, so descending is not reachable —
 //     that is the reason to walk DirEntries rather than stat results.
@@ -124,13 +124,10 @@ func isGlob(entry string) bool { return strings.ContainsAny(entry, `*?[`) }
 //     load-bearing well beyond the scan — because no collection id can be a path prefix of another,
 //     "<collection id>/<slug path>" is an unambiguous key with a plain "/".
 func (s *Store) scan() ([]string, error) {
-	// The ROOT's own symlinks, resolved once: WalkDir Lstats the path it is handed, so a symlinked
-	// workspace root would otherwise present as a non-directory and yield an empty workspace with no error
-	// at all. The entries BELOW it are still never followed.
-	base, err := filepath.EvalSymlinks(s.root)
-	if err != nil {
-		return nil, err
-	}
+	// s.root is canonical (New): WalkDir Lstats the path it is handed, so a symlinked workspace root
+	// would otherwise present as a non-directory and yield an empty workspace with no error at all. The
+	// entries BELOW it are still never followed.
+	base := s.root
 
 	scopes := map[string]dirIgnore{}
 	parentScope := func(dir string) dirIgnore {
@@ -142,7 +139,7 @@ func (s *Store) scan() ([]string, error) {
 
 	var ids []string
 	visited := 0
-	err = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == base {
 				return err
@@ -156,8 +153,7 @@ func (s *Store) scan() ([]string, error) {
 
 		segments := relSegments(base, path)
 		if len(segments) > 0 {
-			name := d.Name()
-			if strings.HasPrefix(name, ".") || name == NodeModulesDirName || strings.HasPrefix(name, BazelSymlinkPrefix) {
+			if Hidden(d.Name()) {
 				return fs.SkipDir
 			}
 			if scope := parentScope(path); scope.matcher != nil && scope.matcher.Match(segments, true) {

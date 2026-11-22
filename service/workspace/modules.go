@@ -62,12 +62,15 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 
 		isRoot := path == absRoot
 		name := d.Name()
+		if !isRoot && store.Hidden(name) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if d.IsDir() {
 			if isRoot {
 				return nil
-			}
-			if strings.HasPrefix(name, ".") || name == store.NodeModulesDirName || strings.HasPrefix(name, store.BazelSymlinkPrefix) {
-				return fs.SkipDir
 			}
 			// A directory declaring its own package.json is a JS/TS project of its own (ui/, most
 			// notably), not grpcview script material. The workspace root is exempt: a repo root
@@ -81,10 +84,8 @@ func scanWorkspaceModules(root string) ([]*grpcviewv1.WorkspaceModule, error) {
 		if !strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".d.ts") {
 			return nil
 		}
-		if name == store.BodyFileName || name == store.MetadataFileName {
-			if _, err := os.Stat(filepath.Join(filepath.Dir(path), store.RequestFileName)); err == nil {
-				return nil
-			}
+		if store.IsItemScript(filepath.Dir(path), name) {
+			return nil
 		}
 
 		info, err := d.Info()

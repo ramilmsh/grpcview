@@ -82,6 +82,18 @@ func TestListWorkspaceModulesSkipsDotDirs(t *testing.T) {
 	}
 }
 
+func TestListWorkspaceModulesSkipsDotFiles(t *testing.T) {
+	root := t.TempDir()
+	writeModuleFile(t, root, "keep.ts", "export const k = 1")
+	writeModuleFile(t, root, ".tmp-123.ts", "export const nope = 1")
+	writeModuleFile(t, root, ".grpcview/gen.ts", "export const g = 1")
+
+	got := modulePaths(listWorkspaceModules(t, root))
+	if len(got) != 2 || got[0] != ".grpcview/gen.ts" || got[1] != "keep.ts" {
+		t.Fatalf("paths = %v, want .grpcview/gen.ts and keep.ts (dot-files hidden, .grpcview not)", got)
+	}
+}
+
 func TestListWorkspaceModulesSkipsBazelSymlinkDirs(t *testing.T) {
 	root := t.TempDir()
 	writeModuleFile(t, root, "keep.ts", "export const k = 1")
@@ -127,5 +139,20 @@ func TestListWorkspaceModulesSkipsOversizedFiles(t *testing.T) {
 	got := modulePaths(listWorkspaceModules(t, root))
 	if len(got) != 1 || got[0] != "keep.ts" {
 		t.Fatalf("paths = %v, want only keep.ts (an over-size file must be dropped)", got)
+	}
+}
+
+func TestListWorkspaceModulesSkipsItemScripts(t *testing.T) {
+	root := t.TempDir()
+	writeModuleFile(t, root, "keep.ts", "export const k = 1")
+	writeModuleFile(t, root, "req/request.json", "{}")
+	writeModuleFile(t, root, "req/body.ts", "{}")
+	writeModuleFile(t, root, "req/metadata.ts", "export default () => ({})")
+	writeModuleFile(t, root, "dir/folder.json", "{}")
+	writeModuleFile(t, root, "dir/metadata.ts", "export default () => ({})")
+
+	got := modulePaths(listWorkspaceModules(t, root))
+	if len(got) != 1 || got[0] != "keep.ts" {
+		t.Fatalf("paths = %v, want only keep.ts (request and folder scripts are not modules)", got)
 	}
 }
