@@ -19,9 +19,12 @@ collection is `grpcview.json` + `tree/` + `scripts/`.
   therefore 100% committed content.
 - Discovery is declared-or-scanned: a non-empty `grpcview.work.json` `collections` list wins
   (globs allowed); otherwise the root is scanned for `grpcview.json`, pruning
-  dot-dirs/`node_modules`/`bazel-*`/gitignored paths. **Not cached** — a mtime cache
+  `Hidden` (dot-entries but `.grpcview`, `node_modules`, `bazel-*`) and gitignored paths. **Not cached** — a mtime cache
   previously missed collections created below the root. `ListCollections` reads manifests
   only, never trees.
 
 On-disk schema (`grpcview.store.v1`) is decoupled from wire (`grpcview.v1`); `convert.go`
 bridges the two, so a storage-format change never touches the wire proto.
+
+`ResolvePath` maps a workspace-rooted path (`/` = root) to `{collection, kind, slugPath, file}`
+by slug, never display name; `kind` is #90's write-policy key.

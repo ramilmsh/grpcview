@@ -116,7 +116,7 @@ func isGlob(entry string) bool { return strings.ContainsAny(entry, `*?[`) }
 
 // Walks the workspace for grpcview.json. The rules, in the order they matter:
 //
-//   - Prune dot-directories, node_modules, bazel-* and anything gitignored, so a build step that
+//   - Prune Hidden entries and anything gitignored, so a build step that
 //     copied a collection into dist/ does not produce a second, real-looking one.
 //   - Never follow a symlink. fs.DirEntry.IsDir is false for one, so descending is not reachable —
 //     that is the reason to walk DirEntries rather than stat results.
@@ -156,8 +156,7 @@ func (s *Store) scan() ([]string, error) {
 
 		segments := relSegments(base, path)
 		if len(segments) > 0 {
-			name := d.Name()
-			if strings.HasPrefix(name, ".") || name == NodeModulesDirName || strings.HasPrefix(name, BazelSymlinkPrefix) {
+			if Hidden(d.Name()) {
 				return fs.SkipDir
 			}
 			if scope := parentScope(path); scope.matcher != nil && scope.matcher.Match(segments, true) {
