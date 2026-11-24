@@ -7,7 +7,7 @@ require (
 	connectrpc.com/cors v0.1.0
 	connectrpc.com/grpcreflect v1.3.1
 	github.com/bufbuild/protocompile v0.14.1
-	github.com/jhump/protoreflect v1.18.0
+	github.com/jhump/protoreflect v1.19.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20260430225748-67e0bd25a988
 	github.com/rs/cors v1.11.1
@@ -15,7 +15,7 @@ require (
 	golang.org/x/net v0.58.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260715232425-e75dac1f907d
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
