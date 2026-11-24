@@ -30,7 +30,7 @@
     "eslint-plugin-react-refresh": "^0.5.5",
     "expect": "^30.5.0",
     "jest-mock": "^30.5.1",
-    "prettier": "^3.9.6",
+    "prettier": "^3.10.1",
     "tailwindcss": "^4.3.5",
     "tsconfig-to-swcconfig": "^2.4.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
